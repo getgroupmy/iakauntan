@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0580",
+    "version": "0581",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -19753,8 +19753,8 @@
     "/rpc/approve_budget": {
       "post": {
         "operationId": "approve_budget",
-        "summary": "Approve budget",
-        "description": "`public.approve_budget(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Agrees a draft budget, which is the act that makes it the thing variances are measured against",
+        "description": "Agrees a draft budget, which is the act that makes it the thing variances are measured against. NEEDS `can_post`, not merely the right to edit \u2014 a figure everything will be reported against is a posting-weight decision. Refuses a budget that is not still draft, and refuses an empty one: an empty budget is not something to agree to. There is no un-approve; a budget that should not have been agreed is archived and replaced.\n\n`public.approve_budget(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -19807,8 +19807,8 @@
     "/rpc/archive_budget": {
       "post": {
         "operationId": "archive_budget",
-        "summary": "Archive budget",
-        "description": "`public.archive_budget(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
+        "summary": "Puts a budget out of use",
+        "description": "Puts a budget out of use. ARCHIVED RATHER THAN DELETED \u2014 last year's budget is what last year's variance report was run against, and deleting it would make a report somebody has already circulated impossible to reproduce. Works on a draft or an approved budget, which makes it the only way back from `approve_budget`. Refuses one already archived. Needs `can_write_module('accounting')`, which is lighter than approving: putting a budget beyond use breaks nothing that was posted.\n\n`public.archive_budget(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
         "tags": [
           "accounting"
         ],
@@ -29545,8 +29545,8 @@
     "/rpc/decide_approval": {
       "post": {
         "operationId": "decide_approval",
-        "summary": "Decide approval",
-        "description": "`public.decide_approval(p_request_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Decides the next undecided step of a document approval chain and returns where the request now stands \u2014\u2026",
+        "description": "Decides the next undecided step of a document approval chain and returns where the request now stands \u2014 pending, approved or rejected. Only the step at the front: approving out of order would let the last signatory clear a document the first has not seen, which is the entire point of having steps. A single rejection ends the whole request. A step naming a person may be decided only by that person; a step naming a role, only by somebody holding it. REFUSES SELF-APPROVAL OUTRIGHT \u2014 the commonest way an approval chain becomes decoration is the person who raised the document also holding the role that clears it. Refuses a request already decided.\n\n`public.decide_approval(p_request_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -29612,8 +29612,8 @@
     "/rpc/decide_claim_step": {
       "post": {
         "operationId": "decide_claim_step",
-        "summary": "Decide claim step",
-        "description": "`public.decide_claim_step(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` Writes. Requires a signed-in user.",
+        "summary": "Decides the ONE step at the front of a claim's approval chain \u2014 approving out of order would make the chain a\u2026",
+        "description": "Decides the ONE step at the front of a claim's approval chain \u2014 approving out of order would make the chain a list of opinions rather than a sequence. A rejection at any step rejects the whole claim and zeroes the approved amount; an approval only marks that step, and the claim becomes approved when nothing is left pending. `p_approved_amount` is read only on the last approval, and defaults to the full total \u2014 a figure passed at an earlier step is silently not the one that lands. Who may decide is `app.may_decide_claim_step`: the named approver for a manager or unit-head stage, anyone who can manage HR or post for those stages, AND ANY OWNER OR ADMIN AT ANY STAGE \u2014 not a loophole so much as the way out of one, since a manager who has left would otherwise strand every claim behind them. The row records who actually decided.\n\n`public.decide_claim_step(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -29676,8 +29676,8 @@
     "/rpc/decide_expense_claim": {
       "post": {
         "operationId": "decide_expense_claim",
-        "summary": "Decide expense claim",
-        "description": "`public.decide_expense_claim(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` Writes. Requires a signed-in user.",
+        "summary": "AN ALIAS",
+        "description": "AN ALIAS. Calls `decide_claim_step` with the same arguments and adds nothing \u2014 same chain, same permissions, same refusals. Kept because callers name it; read `decide_claim_step` for what it does.\n\n`public.decide_expense_claim(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -29740,8 +29740,8 @@
     "/rpc/decide_leave_request": {
       "post": {
         "operationId": "decide_leave_request",
-        "summary": "Decide leave request",
-        "description": "`public.decide_leave_request(p_request_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Approves or rejects a filed leave request",
+        "description": "Approves or rejects a filed leave request. THE HOLD COMES OFF EITHER WAY and only an approval consumes the balance, which is the other half of what `submit_leave_request` put on. HR or the employee's own manager may decide. DOES NOT REFUSE SELF-APPROVAL, unlike `decide_approval` and `decide_payslip_access` \u2014 an HR manager can approve their own leave, because the alternative is a company whose only HR manager cannot take a holiday; the balance arithmetic is the control instead. Refuses a request that is not still submitted, so a decision cannot be made twice or reversed here.\n\n`public.decide_leave_request(p_request_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -29801,8 +29801,8 @@
     "/rpc/decide_mailbox": {
       "post": {
         "operationId": "decide_mailbox",
-        "summary": "Decide mailbox",
-        "description": "`public.decide_mailbox(p_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Platform staff approve or refuse a company's request for an email address",
+        "description": "Platform staff approve or refuse a company's request for an email address. `app.is_platform_admin()` only. Like `decide_subdomain` and for the same reason, this DOES NOT CHECK THE CURRENT STATUS \u2014 re-deciding is how an operator withdraws an address that should not have been approved.\n\n`public.decide_mailbox(p_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -29862,8 +29862,8 @@
     "/rpc/decide_payslip_access": {
       "post": {
         "operationId": "decide_payslip_access",
-        "summary": "Decide payslip access",
-        "description": "`public.decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` Writes. Requires a signed-in user.",
+        "summary": "Approves or refuses an auditor's request to see payslips",
+        "description": "Approves or refuses an auditor's request to see payslips. An approval ALWAYS EXPIRES: `p_days` must be positive, so there is no way to grant sight of payroll that does not end by itself. Only a company admin may decide, and REFUSES SELF-APPROVAL \u2014 an auditor who could approve their own request has not been granted access, they have taken it. Refuses a request already decided, so access cannot be quietly extended by deciding twice; ask again instead.\n\n`public.decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -29927,8 +29927,8 @@
     "/rpc/decide_subdomain": {
       "post": {
         "operationId": "decide_subdomain",
-        "summary": "Decide subdomain",
-        "description": "`public.decide_subdomain(p_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Platform staff approve or refuse a company's request for a name on our domain",
+        "description": "Platform staff approve or refuse a company's request for a name on our domain. `app.is_platform_admin()` only \u2014 no company administrator can approve their own company's address. NOTE THAT THIS DOES NOT CHECK THE CURRENT STATUS: calling it again on a decided request re-decides it, which is how an operator withdraws an address that should not have been approved. That is the intended route for a change, and it is why `request_subdomain` refuses to swap an approved one.\n\n`public.decide_subdomain(p_id uuid, p_approve boolean, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -55792,8 +55792,8 @@
     "/rpc/request_mailbox": {
       "post": {
         "operationId": "request_mailbox",
-        "summary": "Request mailbox",
-        "description": "`public.request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Asks the platform for an address on our mail domain, personal to somebody when `p_owner_id` is given",
+        "description": "Asks the platform for an address on our mail domain, personal to somebody when `p_owner_id` is given. That person must be an active member of the company \u2014 an address for somebody who does not work here would be an address its owner could not read. Needs `can_admin` and the `mailbox` module. Unlike `request_subdomain` this does NOT replace a standing request: a company has many addresses, so each ask is its own row, and a local part already taken is refused.\n\n`public.request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -55854,8 +55854,8 @@
     "/rpc/request_payslip_access": {
       "post": {
         "operationId": "request_payslip_access",
-        "summary": "Request payslip access",
-        "description": "`public.request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Asks a company admin for temporary sight of payslips, and returns the request",
+        "description": "Asks a company admin for temporary sight of payslips, and returns the request. ONLY AN AUDITOR MAY ASK: somebody who can already run payroll is told they have access rather than given a second route to it, and anybody else is refused. A reason is required \u2014 an unexplained request for other people's pay is the one nobody should be able to file. One live request at a time, which keeps the admin's queue honest.\n\n`public.request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -55929,8 +55929,8 @@
     "/rpc/request_subdomain": {
       "post": {
         "operationId": "request_subdomain",
-        "summary": "Request subdomain",
-        "description": "`public.request_subdomain(p_org_id uuid, p_subdomain text)` Writes. Requires a signed-in user.",
+        "summary": "Asks the platform for a name on our domain",
+        "description": "Asks the platform for a name on our domain. ASKING AGAIN REPLACES THE STANDING REQUEST, which is what somebody who has been refused will do \u2014 the previous decision and note are cleared with it. An address already APPROVED is not quietly swapped: it is a live door, and changing it is an operator's decision rather than a form submission, so this refuses and says to ask. Needs `can_admin` and the `workspace_address` module. The name is normalised and checked before it is stored; a name already taken is refused rather than queued behind the company that has it.\n\n`public.request_subdomain(p_org_id uuid, p_subdomain text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -62316,8 +62316,8 @@
     "/rpc/submit_leave_request": {
       "post": {
         "operationId": "submit_leave_request",
-        "summary": "Submit leave request",
-        "description": "`public.submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` Writes. Requires a signed-in user.",
+        "summary": "Files a leave request and HOLDS THE DAYS against the balance while it waits \u2014 which is what stops two\u2026",
+        "description": "Files a leave request and HOLDS THE DAYS against the balance while it waits \u2014 which is what stops two requests each passing a check the pair of them would fail. Only HR may file for somebody else, and only for an employee of this company: the composite key held the leave type to the organization but not the employee, so without that check HR in one company could file against another company's staff. Paid leave is refused when it exceeds what is left; unpaid leave has no balance to check. NO BALANCE ROW AT ALL IS NOT A REFUSAL \u2014 it means nobody has set an entitlement for this type and year yet, and refusing until somebody does would stop a company using the module on the day it starts.\n\n`public.submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

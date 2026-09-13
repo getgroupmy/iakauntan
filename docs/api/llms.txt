@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0580` (the highest applied migration).
+Schema version `0581` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**425 of 662 functions carry a `comment on
+**438 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -87,7 +87,7 @@ needs a user token.
 
 Refused unless the company has the `accounting` module switched on and the caller may use it.
 
-- `archive_budget(p_id uuid)` *(writes)*
+- `archive_budget(p_id uuid)` *(writes)* — Puts a budget out of use.
 - `budget_lines_for(p_budget uuid)`
 - `budgets_list(p_org uuid)`
 - `build_budget_from_actual(p_budget uuid, p_from_year uuid, p_uplift_percent numeric)` *(writes)* — Fills a draft budget from a previous year's actuals, period by period, with an optional uplift.
@@ -378,7 +378,7 @@ Not gated on any module.
 - `apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` *(writes)* — Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation.
 - `apply_statutory_leave_bands(p_leave_type_id uuid, p_preset text)` *(writes)*
 - `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
-- `approve_budget(p_id uuid)` *(writes)*
+- `approve_budget(p_id uuid)` *(writes)* — Agrees a draft budget, which is the act that makes it the thing variances are measured against.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
 - `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)*
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
@@ -491,13 +491,13 @@ Not gated on any module.
 - `custom_field_lookup_options(p_org_id uuid, p_target_entity text, p_search text, p_limit integer)`
 - `customer_credit_status(p_contact_id uuid)` — What the document editor needs to know before an invoice is typed: the credit-control mode, the limit, what is outstanding against it, and whether the customer is on credit hold.
 - `dashboard_summary(p_org_id uuid, p_from date, p_to date)`
-- `decide_approval(p_request_id uuid, p_approve boolean, p_note text)` *(writes)*
-- `decide_claim_step(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` *(writes)*
-- `decide_expense_claim(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` *(writes)*
-- `decide_leave_request(p_request_id uuid, p_approve boolean, p_note text)` *(writes)*
-- `decide_mailbox(p_id uuid, p_approve boolean, p_note text)` *(writes)*
-- `decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` *(writes)*
-- `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)*
+- `decide_approval(p_request_id uuid, p_approve boolean, p_note text)` *(writes)* — Decides the next undecided step of a document approval chain and returns where the request now stands — pending, approved or rejected.
+- `decide_claim_step(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` *(writes)* — Decides the ONE step at the front of a claim's approval chain — approving out of order would make the chain a list of opinions rather than a sequence.
+- `decide_expense_claim(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` *(writes)* — AN ALIAS.
+- `decide_leave_request(p_request_id uuid, p_approve boolean, p_note text)` *(writes)* — Approves or rejects a filed leave request.
+- `decide_mailbox(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for an email address.
+- `decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` *(writes)* — Approves or refuses an auditor's request to see payslips.
+- `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for a name on our domain.
 - `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)*
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
@@ -729,9 +729,9 @@ Not gated on any module.
 - `report_who_is_away(p_org_id uuid, p_from date, p_to date)` — Approved leave overlapping the window, with the contact `0027` has had a column for since the beginning and nothing wrote until `0395`.
 - `report_win_loss(p_org_id uuid, p_from date, p_to date)` — Why deals closed, by outcome and reason, with the money and the competitors named.
 - `report_withholding(p_org_id uuid, p_from date, p_to date)`
-- `request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` *(writes)*
-- `request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` *(writes)*
-- `request_subdomain(p_org_id uuid, p_subdomain text)` *(writes)*
+- `request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` *(writes)* — Asks the platform for an address on our mail domain, personal to somebody when `p_owner_id` is given.
+- `request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` *(writes)* — Asks a company admin for temporary sight of payslips, and returns the request.
+- `request_subdomain(p_org_id uuid, p_subdomain text)` *(writes)* — Asks the platform for a name on our domain.
 - `resync_bank_balance(p_bank_account_id uuid)` *(writes)* — Rebuilds bank_accounts.current_balance from posted ledger lines.
 - `retire_account(p_id uuid)` *(writes)* — Removes an account from the chart if it can be removed and switches it off if it cannot, returning 'deleted' or 'deactivated' so the caller can say which happened.
 - `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)* — Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss.
@@ -784,7 +784,7 @@ Not gated on any module.
 - `strata_arrears(p_scheme_id uuid, p_as_at date)`
 - `strata_charge_preview(p_scheme_id uuid, p_period_from date, p_period_to date)`
 - `submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` *(writes)* — Opens an approval request over a sales document, a purchase document or a journal, and builds one step per matching rule in the rules' own step order.
-- `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)*
+- `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)* — Files a leave request and HOLDS THE DAYS against the balance while it waits — which is what stops two requests each passing a check the pair of them would fail.
 - `submit_manager_appraisal(p_appraisal uuid, p_rating numeric, p_comments text, p_increment numeric, p_bonus numeric, p_promotion boolean, p_development_plan text)` *(writes)* — The reviewer's half.
 - `submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` *(writes)*
 - `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)`

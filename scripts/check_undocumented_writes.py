@@ -67,8 +67,11 @@ if hasattr(signal, 'SIGPIPE'):
 # regulator reads. `0580` took the second such slice, the twenty-eight
 # the restaurant runs on -- where the interesting thing written down is
 # not the arithmetic but WHICH REFUSALS ARE HARD, because a refusal a
-# cashier cannot act on instantly is a queue.
-BUDGET = 89
+# cashier cannot act on instantly is a queue. `0581` took the thirteen
+# approval gates, where the only question worth publishing is who may
+# say yes -- and three of them refuse self-approval while two
+# deliberately do not.
+BUDGET = 76
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
