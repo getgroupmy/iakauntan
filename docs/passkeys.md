@@ -30,8 +30,18 @@ somebody to work out why and there is nothing they can do about any of them.
 
 ## 1. Supabase dashboard
 
-Authentication → Sign In / Providers → **Passkeys**. Turn it on and set the
-relying party ID to the site's own domain — `iakauntan.com`, no scheme, no
+Authentication → **Configuration** → **Passkeys**. Not under Sign In /
+Providers, which is where this document sent people at first and is the
+wrong menu: passkeys are not a provider, they are a project-level
+setting, and they are a BETA feature — the `gotrue` package's own
+documentation is the authority on where the switch lives.
+
+`passkey_disabled` is a refusal from GoTrue, not from this app. If the
+button still reports it after you have been to Configuration, then the
+server still has the feature off — the sign-in screen has no way to
+report anything else, and no amount of reloading changes it.
+
+Turn it on and set the relying party ID to the site's own domain — `iakauntan.com`, no scheme, no
 path, no port. Until this is done GoTrue answers `passkey_disabled` to every
 call and the sign-in screen says so in as many words.
 
