@@ -45,11 +45,14 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
   String? _error;
   String? _notice;
 
-  /// Whether this build and this device can run the ceremony.
+  /// Whether this browser can run the ceremony at all.
   ///
-  /// Asked once. A machine with no fingerprint reader, face camera or
-  /// screen lock cannot make a passkey, and offering to save one there
-  /// is offering something that will fail at the moment it is pressed.
+  /// Asked once, and deliberately NOT "does this machine have a
+  /// fingerprint reader". A passkey does not have to live on the
+  /// machine you are sitting at: it can go to iCloud Keychain, to
+  /// Google Password Manager, to a phone over a QR code, or to a
+  /// security key on USB. Asking about the machine hid every one of
+  /// those, which is exactly the complaint this answers.
   bool _usable = false;
 
   @override
@@ -174,10 +177,23 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
           children: [
             const SectionHeader('Passkeys'),
             const Text(
-              'A passkey signs you in with the fingerprint, face or PIN '
-              'this device already uses. Nothing to type and nothing to '
+              'A passkey signs you in with a fingerprint, a face or a '
+              'PIN instead of a password. Nothing to type and nothing to '
               'remember, and it cannot be phished: the browser will only '
               'ever offer it back to this site.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            // Said out loud because the browser's chooser is the part
+            // people do not expect, and somebody who thinks this only
+            // works on the machine in front of them will not press the
+            // button on a desktop.
+            const Text(
+              'Where it is kept is your choice when you press the '
+              'button: iCloud Keychain or Apple Passwords, Google '
+              'Password Manager, your phone by scanning a code, or a '
+              'security key. A passkey saved to your phone signs you in '
+              'on any computer.',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -218,8 +234,11 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
               )
             else
               Text(
-                'This device cannot save one. It needs a fingerprint '
-                'reader, a face camera or a screen lock.',
+                // Only when the browser has no WebAuthn at all, which
+                // means something genuinely old. It is no longer said
+                // about a desktop with no fingerprint reader, because
+                // that desktop can still save one to a phone.
+                'This browser is too old to save a passkey.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             if (_notice != null) ...[

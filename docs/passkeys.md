@@ -62,6 +62,28 @@ Sign in with a password once, then Settings → Your account → Passkeys →
 already uses, and from then on "Sign in with a passkey" on the sign-in
 screen will offer that account.
 
+### Where the passkey is kept is the browser's question, not ours
+
+When the prompt appears, the browser offers wherever it can put one:
+**iCloud Keychain / Apple Passwords** on a Mac or iPhone, **Google
+Password Manager** on Android and from a desktop Chrome, **a phone by QR
+code** — which is the answer for a shared or locked-down desktop — or a
+**security key** on USB or NFC.
+
+None of that is this app's decision, and it must not become one. The
+first version of `passkeysUsable()` required
+`isUserVerifyingPlatformAuthenticatorAvailable()` — "is there a
+fingerprint reader on THIS machine" — and drew no button when the answer
+was no. That hid all four options from anybody on a desktop without
+Touch ID or Windows Hello, including everybody who wanted to save the
+passkey to the phone in their pocket. It was reported as the app having
+no Apple or Google option, which is exactly what it looked like.
+
+The check now asks only whether the browser can run the ceremony. The
+cost is a prompt somebody can cancel on a machine with genuinely nothing
+available; the alternative was silently hiding the feature from every
+iPhone owner.
+
 The order matters and is not obvious: a passkey can only be created by
 somebody already signed in, so the password is not replaced, it becomes
 the thing you use on a new device and then stop using. Until somebody

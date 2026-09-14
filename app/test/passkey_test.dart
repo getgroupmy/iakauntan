@@ -122,4 +122,29 @@ void main() {
       expect(enrolPasskey, isA<Function>());
     });
   });
+
+  group('where a passkey may be kept', () {
+    test('is the browser to decide, not this code', () {
+      // `passkeysUsable` used to require
+      // `isUserVerifyingPlatformAuthenticatorAvailable()` — a question
+      // about the machine you happen to be sitting at. A passkey does
+      // not have to live there, and that check hid all four of the
+      // places it usually goes: iCloud Keychain, Google Password
+      // Manager, a phone over a QR code, and a security key on USB.
+      //
+      // The test runner is not a browser, so the answer here is false
+      // either way. What is asserted is the SHAPE: one question, about
+      // the browser, answered without asking the machine anything —
+      // which is what stops the narrow check coming back.
+      expect(passkeysAvailable, isFalse);
+      expect(passkeysUsable, isA<Function>());
+    });
+
+    test('and a build that cannot ask still says so honestly', () async {
+      // Widening the check must not turn into claiming a build can do
+      // something it cannot. Under the runner there is no WebAuthn at
+      // all, and the answer stays no.
+      expect(await passkeysUsable(), isFalse);
+    });
+  });
 }

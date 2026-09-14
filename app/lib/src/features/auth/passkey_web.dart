@@ -53,30 +53,44 @@ bool _has(JSObject o, String name) => o.getProperty<JSAny?>(name.toJS) != null;
 /// Three questions, and all three have to be yes:
 ///
 ///   * `PublicKeyCredential` exists at all — no WebAuthn otherwise;
-///   * it carries the JSON converters this file depends on;
-///   * a user-verifying platform authenticator is available, which is
-///     what "there is a fingerprint reader, a face camera or a device
-///     PIN on this machine" comes to.
+///   * it carries the JSON converters this file depends on.
 ///
-/// The third is asked of the browser rather than assumed, because a
-/// desktop with no authenticator is a real and common case, and drawing
-/// the button there offers somebody a door with nothing behind it.
+/// ## What this deliberately does NOT ask
+///
+/// It used to also require
+/// `isUserVerifyingPlatformAuthenticatorAvailable()` — "is there a
+/// fingerprint reader, a face camera or a device PIN ON THIS MACHINE".
+/// That was wrong, and wrong in the direction that hurts: it is the
+/// question about the machine you happen to be sitting at, and a
+/// passkey does not have to live there.
+///
+/// A browser with no platform authenticator can still offer, and every
+/// one of these was hidden by that check:
+///
+///   * **iCloud Keychain / Apple Passwords**, on a Mac without Touch ID
+///     and on any Mac where the passkey is meant to sync rather than
+///     stay on the machine;
+///   * **Google Password Manager**, which is where an Android user's
+///     passkeys belong and which is reachable from a desktop browser;
+///   * **a phone, by QR code** — the cross-device flow, which is the
+///     whole answer for a shared or locked-down desktop;
+///   * **a security key** on USB or NFC, which needs nothing built into
+///     the machine at all.
+///
+/// So the question is only whether the browser can run the ceremony.
+/// Whether there is anywhere to put the result is the BROWSER'S
+/// chooser to present, and it knows about all four; this code does not,
+/// and guessing on its behalf is what removed the options.
+///
+/// The cost of the looser test is a prompt somebody can cancel on a
+/// machine with genuinely nothing available. That is a far smaller harm
+/// than silently hiding the feature from everybody with an iPhone.
 Future<bool> passkeysUsable() async {
   final pkc = _pkc;
   if (pkc == null) return false;
   if (!_has(pkc, 'parseRequestOptionsFromJSON')) return false;
-  if (!_has(pkc, 'isUserVerifyingPlatformAuthenticatorAvailable')) return false;
-  try {
-    final r =
-        await web
-                .PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-            .toDart;
-    return r.toDart;
-  } catch (_) {
-    // A browser that throws rather than answering is one this cannot
-    // rely on. Same answer as no.
-    return false;
-  }
+  if (!_has(pkc, 'parseCreationOptionsFromJSON')) return false;
+  return true;
 }
 
 /// Ask the browser for an assertion, for signing in.
