@@ -91,16 +91,7 @@ Future<SupplierMatch> resolveSupplier(
       if (!context.mounted) {
         return const SupplierMatch(SupplierOutcome.discarded);
       }
-      // Reviewed and CORRECTED before it is written, not after. See
-      // `_SupplierDraft`.
-      final draft = await showDialog<OcrExtraction>(
-        context: context,
-        builder: (_) => _SupplierDraft(read: read!),
-      );
-      if (draft == null || !context.mounted) {
-        return const SupplierMatch(SupplierOutcome.discarded);
-      }
-      final id = await _create(context, ref, draft);
+      final id = await createSupplierFromScan(context, ref, read);
       return id == null
           ? const SupplierMatch(SupplierOutcome.discarded)
           : SupplierMatch(SupplierOutcome.resolved, id);
@@ -110,6 +101,35 @@ Future<SupplierMatch> resolveSupplier(
     case null:
       return const SupplierMatch(SupplierOutcome.discarded);
   }
+}
+
+/// Create a supplier, reviewing what was read first.
+///
+/// Public because there are two ways to arrive here and they must not
+/// have two ideas of how it is done. One is the "supplier not found"
+/// question, which happens when a name WAS read and matched nothing.
+/// The other is the plain picker, which is where somebody lands when
+/// nothing was read at all — and until this existed that dialog had no
+/// create button and told people to "add the supplier under Contacts
+/// first", which means leaving the scan, going somewhere else, and
+/// starting again.
+///
+/// [read] may be null or empty. A scan that failed still leaves
+/// somebody holding a bill from a supplier who is not on file, and that
+/// is the moment they most need to add one.
+Future<String?> createSupplierFromScan(
+  BuildContext context,
+  WidgetRef ref,
+  OcrExtraction? read,
+) async {
+  // Reviewed and CORRECTED before it is written, not after. See
+  // `_SupplierDraft`.
+  final draft = await showDialog<OcrExtraction>(
+    context: context,
+    builder: (_) => _SupplierDraft(read: read),
+  );
+  if (draft == null || !context.mounted) return null;
+  return _create(context, ref, draft);
 }
 
 /// The part of a printed name worth searching on.
@@ -335,7 +355,7 @@ Future<String?> _create(
       Contact(
         id: '',
         code: '',
-        name: read.supplierName!.trim(),
+        name: clean(read.supplierName) ?? '',
         contactType: 'supplier',
         registrationNo: clean(read.supplierRegistrationNo),
         // The SSM number is also what identifies the party on an
@@ -383,7 +403,10 @@ Future<String?> _create(
 class _SupplierDraft extends StatefulWidget {
   const _SupplierDraft({required this.read});
 
-  final OcrExtraction read;
+  /// What the document said, or null when nothing was read. An empty
+  /// form is still the right place to be: somebody is holding a bill
+  /// from a supplier who is not on file.
+  final OcrExtraction? read;
 
   @override
   State<_SupplierDraft> createState() => _SupplierDraftState();
@@ -392,22 +415,22 @@ class _SupplierDraft extends StatefulWidget {
 class _SupplierDraftState extends State<_SupplierDraft> {
   final _formKey = GlobalKey<FormState>();
   late final _name = TextEditingController(
-    text: widget.read.supplierName?.trim() ?? '',
+    text: widget.read?.supplierName?.trim() ?? '',
   );
   late final _reg = TextEditingController(
-    text: widget.read.supplierRegistrationNo ?? '',
+    text: widget.read?.supplierRegistrationNo ?? '',
   );
   late final _tax = TextEditingController(
-    text: widget.read.supplierTaxId ?? '',
+    text: widget.read?.supplierTaxId ?? '',
   );
   late final _email = TextEditingController(
-    text: widget.read.supplierEmail ?? '',
+    text: widget.read?.supplierEmail ?? '',
   );
   late final _phone = TextEditingController(
-    text: widget.read.supplierPhone ?? '',
+    text: widget.read?.supplierPhone ?? '',
   );
   late final _address = TextEditingController(
-    text: widget.read.supplierAddress ?? '',
+    text: widget.read?.supplierAddress ?? '',
   );
 
   @override
@@ -449,10 +472,18 @@ class _SupplierDraftState extends State<_SupplierDraft> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Read from the document. Correct anything wrong before '
-                  'it is saved — this becomes a permanent contact, and '
-                  'the SSM number goes on every e-Invoice raised against '
-                  'it.',
+                  widget.read?.supplierName == null
+                      // Nothing was read, so there is nothing to
+                      // correct — but the SSM warning still applies,
+                      // and it is the field people leave until later
+                      // and then never fill in.
+                      ? 'Nothing was read from the document, so this is '
+                            'blank. The SSM number goes on every '
+                            'e-Invoice raised against this supplier.'
+                      : 'Read from the document. Correct anything wrong '
+                            'before it is saved — this becomes a '
+                            'permanent contact, and the SSM number goes '
+                            'on every e-Invoice raised against it.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: Space.md),
@@ -534,7 +565,7 @@ class _SupplierDraftState extends State<_SupplierDraft> {
             // deciding that is two places to fix it.
             Navigator.pop(
               context,
-              widget.read.copyWith(
+              (widget.read ?? const OcrExtraction()).copyWith(
                 supplierName: _name.text.trim(),
                 supplierRegistrationNo: _text(_reg),
                 supplierTaxId: _text(_tax),

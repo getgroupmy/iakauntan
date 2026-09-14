@@ -79,4 +79,43 @@ void main() {
       expect(clean('  200201003726 '), '200201003726');
     });
   });
+
+  group('a reading with nothing in it', () {
+    test('is still something the draft can start from', () {
+      // The reported bug: a PDF whose supplier could not be read left
+      // somebody at a bare "Which supplier?" picker with no way to add
+      // one — it told them to go to Contacts and start the scan again.
+      // A blank extraction is now a legitimate starting point, because
+      // somebody holding a bill from a supplier who is not on file is
+      // exactly who needs to add one.
+      const blank = OcrExtraction();
+      expect(blank.supplierName, isNull);
+      expect(blank.lines, isEmpty);
+    });
+
+    test('and an edit on it carries, so nothing typed is lost', () {
+      // What the picker's New supplier button does when the scan read
+      // nothing at all: an empty extraction, then whatever somebody
+      // types into the form.
+      final typed = const OcrExtraction().copyWith(
+        supplierName: 'Kedai Baru Sdn Bhd',
+        supplierRegistrationNo: '202301001234',
+      );
+      expect(typed.supplierName, 'Kedai Baru Sdn Bhd');
+      expect(typed.supplierRegistrationNo, '202301001234');
+    });
+
+    test('and a partial reading keeps what it did find', () {
+      // The other half of the same fix: a scan that found an SSM
+      // number and an address but no name used to throw all of it away
+      // at the picker, which only ever received the name.
+      const partial = OcrExtraction(
+        supplierRegistrationNo: '202301001234',
+        supplierAddress: '12 Jalan Ampang',
+      );
+      final named = partial.copyWith(supplierName: 'Kedai Baru Sdn Bhd');
+      expect(named.supplierRegistrationNo, '202301001234');
+      expect(named.supplierAddress, '12 Jalan Ampang');
+    });
+  });
 }

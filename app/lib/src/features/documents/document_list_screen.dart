@@ -56,7 +56,7 @@ Future<void> _scanInto(
 
   String? contactId = match.contactId;
   if (match.outcome == SupplierOutcome.ask) {
-    contactId = await _pickSupplier(context, ref, read?.supplierName);
+    contactId = await _pickSupplier(context, ref, read);
   }
 
   if (contactId == null) {
@@ -101,20 +101,25 @@ Future<void> _scanInto(
 Future<String?> _pickSupplier(
   BuildContext context,
   WidgetRef ref,
-  String? readName,
+  OcrExtraction? read,
 ) {
   return showDialog<String>(
     context: context,
-    builder: (_) => _SupplierPicker(readName: readName),
+    builder: (_) => _SupplierPicker(read: read),
   );
 }
 
 class _SupplierPicker extends ConsumerStatefulWidget {
-  const _SupplierPicker({this.readName});
+  const _SupplierPicker({this.read});
 
-  /// What the document said, used to seed the search and shown as a
-  /// reminder — never selected automatically.
-  final String? readName;
+  /// What the document said. The name seeds the search and is shown as
+  /// a reminder — never selected automatically. The rest of it is what
+  /// pre-fills a supplier created from here, so the SSM number and the
+  /// address the scan found are not thrown away just because the name
+  /// matched nothing.
+  final OcrExtraction? read;
+
+  String? get readName => read?.supplierName;
 
   @override
   ConsumerState<_SupplierPicker> createState() => _SupplierPickerState();
@@ -183,9 +188,14 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
                     ? const EmptyState(
                         icon: Icons.person_search_outlined,
                         title: 'No supplier matches',
+                        // No longer "add the supplier under Contacts
+                        // first". That meant leaving the scan, going
+                        // somewhere else, and starting again — for the
+                        // commonest case there is, a bill from somebody
+                        // new.
                         message:
-                            'Clear the search to see them all, or add '
-                            'the supplier under Contacts first.',
+                            'Clear the search to see them all, or create '
+                            'this one without leaving the scan.',
                       )
                     : ListView.separated(
                         itemCount: list.length,
@@ -206,6 +216,20 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
         ),
       ),
       actions: [
+        // The way out that did not exist. Somebody scanning a bill
+        // from a supplier who is not on file used to be told to go to
+        // Contacts and start again, which is the commonest case there
+        // is — a new supplier is exactly when a bill needs scanning.
+        TextButton.icon(
+          key: const ValueKey('picker-new-supplier'),
+          onPressed: () async {
+            final id = await createSupplierFromScan(context, ref, widget.read);
+            if (id != null && context.mounted) Navigator.pop(context, id);
+          },
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('New supplier'),
+        ),
+        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
@@ -234,8 +258,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   bool _running = false;
 
   void _toggle(String id) => setState(() {
-        if (!_picked.remove(id)) _picked.add(id);
-      });
+    if (!_picked.remove(id)) _picked.add(id);
+  });
 
   Future<void> _runBatch(
     List<BusinessDocument> docs,
@@ -250,8 +274,9 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       rows = await action([for (final d in docs) d.id]);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$verb failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$verb failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _running = false);
@@ -262,10 +287,14 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     ref.invalidate(documentsProvider);
     refreshLedgerData(ref);
 
-    final failed = [for (final r in rows) if (r[field] != true) r];
+    final failed = [
+      for (final r in rows)
+        if (r[field] != true) r,
+    ];
     if (failed.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(BulkPlan.outcome(rows, field))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(BulkPlan.outcome(rows, field))));
       return;
     }
     // Named, not counted. "2 failed" is not something anybody can act
@@ -287,11 +316,14 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(r['doc_no']?.toString() ?? 'A document',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600)),
-                        Text(r['problem']?.toString() ?? 'Refused.',
-                            style: Theme.of(ctx).textTheme.bodySmall),
+                        Text(
+                          r['doc_no']?.toString() ?? 'A document',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          r['problem']?.toString() ?? 'Refused.',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
                       ],
                     ),
                   ),
@@ -376,7 +408,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           if (widget.docType == 'sales_order')
             Consumer(
               builder: (context, ref, _) {
-                final late = ref.watch(lateOrdersProvider).valueOrNull ?? const [];
+                final late =
+                    ref.watch(lateOrdersProvider).valueOrNull ?? const [];
                 if (late.isEmpty) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(left: 4),
@@ -526,12 +559,20 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                   running: _running,
                   onClear: () => setState(_picked.clear),
                   onPost: canPost
-                      ? (docs) => _runBatch(docs, 'Post',
-                          ref.read(repoProvider)!.bulkPostDocuments, 'posted')
+                      ? (docs) => _runBatch(
+                          docs,
+                          'Post',
+                          ref.read(repoProvider)!.bulkPostDocuments,
+                          'posted',
+                        )
                       : null,
                   onEmail: canWrite
-                      ? (docs) => _runBatch(docs, 'Email',
-                          ref.read(repoProvider)!.bulkEmailDocuments, 'sent')
+                      ? (docs) => _runBatch(
+                          docs,
+                          'Email',
+                          ref.read(repoProvider)!.bulkEmailDocuments,
+                          'sent',
+                        )
                       : null,
                 ),
             ],
@@ -570,40 +611,48 @@ class _BatchBar extends StatelessWidget {
       color: scheme.secondaryContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-            horizontal: Space.lg, vertical: Space.sm),
-        child: Row(children: [
-          Text('${plan.selected.length} selected',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          const Spacer(),
-          if (running)
-            const Padding(
-              padding: EdgeInsets.only(right: Space.md),
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+          horizontal: Space.lg,
+          vertical: Space.sm,
+        ),
+        child: Row(
+          children: [
+            Text(
+              '${plan.selected.length} selected',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            if (running)
+              const Padding(
+                padding: EdgeInsets.only(right: Space.md),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
+            TextButton(
+              onPressed: running ? null : onClear,
+              child: const Text('Clear'),
             ),
-          TextButton(onPressed: running ? null : onClear,
-              child: const Text('Clear')),
-          const SizedBox(width: Space.sm),
-          if (onEmail != null)
-            OutlinedButton(
-              onPressed: running || plan.emailable.isEmpty
-                  ? null
-                  : () => onEmail!(plan.emailable),
-              child: Text(plan.emailLabel()),
-            ),
-          if (onPost != null) ...[
             const SizedBox(width: Space.sm),
-            FilledButton(
-              onPressed: running || plan.postable.isEmpty
-                  ? null
-                  : () => onPost!(plan.postable),
-              child: Text(plan.postLabel()),
-            ),
+            if (onEmail != null)
+              OutlinedButton(
+                onPressed: running || plan.emailable.isEmpty
+                    ? null
+                    : () => onEmail!(plan.emailable),
+                child: Text(plan.emailLabel()),
+              ),
+            if (onPost != null) ...[
+              const SizedBox(width: Space.sm),
+              FilledButton(
+                onPressed: running || plan.postable.isEmpty
+                    ? null
+                    : () => onPost!(plan.postable),
+                child: Text(plan.postLabel()),
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
     );
   }
@@ -632,10 +681,7 @@ class _DocumentTile extends StatelessWidget {
       onTap: () => context.go('${kind.routePrefix}/$docType/${doc.id}'),
       leading: onPick == null
           ? null
-          : Checkbox(
-              value: picked,
-              onChanged: (_) => onPick!(),
-            ),
+          : Checkbox(value: picked, onChanged: (_) => onPick!()),
       contentPadding: const EdgeInsets.symmetric(
         horizontal: Space.lg,
         vertical: Space.xs,
