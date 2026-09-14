@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0587` (the highest applied migration).
+Schema version `0588` (the highest applied migration).
 664 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**470 of 664 functions carry a `comment on
+**478 of 664 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -387,9 +387,9 @@ Not gated on any module.
 - `bank_feed_status(p_bank_account_id uuid)` — What a screen may know about a feed: everything except the secret.
 - `bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)`
 - `bill_credit_remaining(p_bill uuid)` — What is left uncredited on each line of a bill, matched on item and description together so that two lines for the same item are two different things to credit.
-- `bill_matter_time(p_matter_id uuid, p_from date, p_to date, p_due date)` *(writes)*
-- `bill_project_time(p_project_id uuid, p_from date, p_to date, p_due date)` *(writes)*
-- `bill_statutory_charge(p_charge uuid, p_supplier uuid, p_doc_date date, p_supplier_doc_no text, p_account uuid)` *(writes)*
+- `bill_matter_time(p_matter_id uuid, p_from date, p_to date, p_due date)` *(writes)* — Raises one fee note for all unbilled chargeable time on a matter between two dates, marks that time billed, and returns the invoice.
+- `bill_project_time(p_project_id uuid, p_from date, p_to date, p_due date)` *(writes)* — The same for a project, through the same `app.bill_time_internal` — same tax-on-the-period-end rule, same payment terms, same refusals.
+- `bill_statutory_charge(p_charge uuid, p_supplier uuid, p_doc_date date, p_supplier_doc_no text, p_account uuid)` *(writes)* — Raises a supplier bill for a quit rent, assessment or other statutory property charge, and links the charge to it.
 - `bounce_pdc(p_id uuid, p_reason text, p_on date)` *(writes)* — Returns a cheque: the document it settled goes back into the aged listing and the money leaves the cheques account.
 - `bulk_email_documents(p_ids uuid[], p_template_code text)` *(writes)* — Send many sales documents, one savepoint each, and say per document what happened.
 - `bulk_post_documents(p_ids uuid[])` *(writes)* — Post many sales documents, one savepoint each, and say per document what happened.
@@ -438,10 +438,10 @@ Not gated on any module.
 - `clear_platform_ai_key(p_provider text)` *(writes)* — Removes the PLATFORM's key for one AI provider -- ours, not a tenant's.
 - `clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Starts somebody's working day and returns the attendance record.
 - `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Closes the day and returns what it came to — worked, scheduled, overtime split into normal, rest day and holiday, and the lateness from the morning.
-- `close_lead(p_lead uuid, p_reason text)` *(writes)*
+- `close_lead(p_lead uuid, p_reason text)` *(writes)* — Marks a lead lost.
 - `close_matter(p_matter uuid, p_closed_date date, p_note text)` *(writes)* — Closes a file.
 - `close_opportunity(p_opportunity uuid, p_outcome text, p_reason text, p_competitor text, p_closed_on date)` *(writes)* — Closes a deal and insists on a reason for the ones worth learning from.
-- `close_project(p_project uuid, p_write_off boolean)` *(writes)*
+- `close_project(p_project uuid, p_write_off boolean)` *(writes)* — Closes a project.
 - `close_requisition(p_requisition uuid, p_status app.requisition_status, p_closed_on date)` *(writes)*
 - `collection_history(p_contact_id uuid)`
 - `company_export_manifest(p_org_id uuid)` *(writes)* — Every table holding this company's data, with a row count.
@@ -453,7 +453,7 @@ Not gated on any module.
 - `contact_duplicates(p_org_id uuid)` — Live records of one company carrying the same registration number, ID or TIN and not yet linked.
 - `contact_lookalikes(p_org_id uuid, p_contact_type app.contact_type, p_name text, p_registration_no text, p_tin text, p_id_type text, p_id_value text, p_exclude uuid)` — The records already carrying this registration number, ID, TIN or name, and whether each is already in the role being typed.
 - `contact_records(p_contact_id uuid)` — The other records of the same company, and which of customer, supplier and prospect it has no record for yet -- each with the series it would be coded in.
-- `convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` *(writes)*
+- `convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` *(writes)* — Turns a lead into a customer and, unless told not to, opens an opportunity on it; returns both ids.
 - `corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues a link letting a director sign without an account here, and returns the token ONCE -- only a digest is stored, so a link that is lost cannot be recovered, only reissued.
 - `corp_decline_signature(p_signature_id uuid, p_reason text)` *(writes)* — Refusing to sign, with the reason.
 - `corp_decline_with_link(p_token text, p_reason text)` *(writes)* — The other half of `corp_sign_with_link`: lets a director say no.
@@ -556,7 +556,7 @@ Not gated on any module.
 - `line_lots(p_line_table text, p_line_id uuid)`
 - `link_contact_records(p_org_id uuid, p_ids uuid[])` *(writes)* — Makes the given contact records one company, bringing along every record already linked to any of them.
 - `link_group_contact(p_contact_id uuid, p_org_id uuid)` *(writes)*
-- `link_opportunity_quotation(p_opportunity uuid, p_document uuid)` *(writes)*
+- `link_opportunity_quotation(p_opportunity uuid, p_document uuid)` *(writes)* — Ties a deal to the quotation it will be won on, and OVERWRITES THE DEAL'S AMOUNT with the quotation's total.
 - `log_document_download(p_document_id uuid, p_format text)` *(writes)* — Writes that somebody downloaded a document, and returns the row.
 - `mail_domain()` — The domain reserved addresses live on, for screens that have to print one.
 - `mailbox_thread(p_mailbox_id uuid)` — Everything in one mailbox, received and sent, newest first.
@@ -589,7 +589,7 @@ Not gated on any module.
 - `open_appraisal_cycle(p_cycle uuid)` *(writes)* — Creates an appraisal for everybody the cycle covers and returns how many were made.
 - `open_customer_portal(p_token text)` *(writes)* — What one customer owes, for somebody holding their portal token and no account.
 - `open_documents_across_companies(p_kind text, p_search text)` — What is open across every company the caller may post in — the list a group payment is chosen from.
-- `open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` *(writes)*
+- `open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` *(writes)* — Opens a legal matter and returns it.
 - `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)*
 - `open_shared_document(p_token text)` *(writes)* — Opens an invoice or quotation shared by link, for a customer who is not a user of this system.
 - `open_shared_ticket(p_token text)` *(writes)* — Opens a support ticket shared by link, for the customer who raised it.

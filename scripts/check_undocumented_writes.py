@@ -80,8 +80,11 @@ if hasattr(signal, 'SIGPIPE'):
 # has no reason to avoid. `0587` took the nine that write into a
 # person's employment record, where almost every refusal exists to stop
 # a record meaning something it should not -- and `clock_in` upserts
-# the wrong way round on purpose, keeping the EARLIEST punch.
-BUDGET = 46
+# the wrong way round on purpose, keeping the EARLIEST punch. `0588`
+# took the eight that carry work from a name somebody wrote down to an
+# invoice, where `close_project` turns out to be a refusal with money
+# in it rather than the tidy-up its name suggests.
+BUDGET = 38
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0587",
+    "version": "0588",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -20569,8 +20569,8 @@
     "/rpc/bill_matter_time": {
       "post": {
         "operationId": "bill_matter_time",
-        "summary": "Bill matter time",
-        "description": "`public.bill_matter_time(p_matter_id uuid, p_from date, p_to date, p_due date)` Writes. Requires a signed-in user.",
+        "summary": "Raises one fee note for all unbilled chargeable time on a matter between two dates, marks that time billed\u2026",
+        "description": "Raises one fee note for all unbilled chargeable time on a matter between two dates, marks that time billed, and returns the invoice. A thin wrapper: everything that decides the figures is in `app.bill_time_internal`, shared with `bill_project_time`, and the two differ only in which module must be on and which engagement is named. THE TAX IS THE TAX ON THE PERIOD END, not today \u2014 work done before the firm registered for SST is billed without it. The due date comes from the client's agreed payment terms unless one is passed, and a passed date wins because that is a date somebody negotiated. Refuses when there is no unbilled chargeable time in the period, and refuses an engagement with no client to invoice. Needs `can_post` and the legal module.\n\n`public.bill_matter_time(p_matter_id uuid, p_from date, p_to date, p_due date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -20638,8 +20638,8 @@
     "/rpc/bill_project_time": {
       "post": {
         "operationId": "bill_project_time",
-        "summary": "Bill project time",
-        "description": "`public.bill_project_time(p_project_id uuid, p_from date, p_to date, p_due date)` Writes. Requires a signed-in user.",
+        "summary": "The same for a project, through the same `app.bill_time_internal` \u2014 same tax-on-the-period-end rule, same\u2026",
+        "description": "The same for a project, through the same `app.bill_time_internal` \u2014 same tax-on-the-period-end rule, same payment terms, same refusals. Needs `can_post` and the timesheets module. Time on a project whose contact is empty cannot be billed at all, which is worth knowing before a quarter's work is entered against one.\n\n`public.bill_project_time(p_project_id uuid, p_from date, p_to date, p_due date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -20707,8 +20707,8 @@
     "/rpc/bill_statutory_charge": {
       "post": {
         "operationId": "bill_statutory_charge",
-        "summary": "Bill statutory charge",
-        "description": "`public.bill_statutory_charge(p_charge uuid, p_supplier uuid, p_doc_date date, p_supplier_doc_no text, p_account uuid)` Writes. Requires a signed-in user.",
+        "summary": "Raises a supplier bill for a quit rent, assessment or other statutory property charge, and links the charge\u2026",
+        "description": "Raises a supplier bill for a quit rent, assessment or other statutory property charge, and links the charge to it. Refuses a charge already on a bill, naming that bill. REFUSES A CHARGE ALREADY MARKED PAID BY HAND, and says to clear the paid date first \u2014 a typed date and a bill would each claim to be the record of the payment, and clearing it is the deliberate step that says which one is right. Refuses a nil charge: a bill is for something. The link is made LAST because a trigger derives the charge's paid date from the bill the moment it exists, and a bill not yet posted has no balance to derive it from. Needs `can_post` and the property module.\n\n`public.bill_statutory_charge(p_charge uuid, p_supplier uuid, p_doc_date date, p_supplier_doc_no text, p_account uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -25013,8 +25013,8 @@
     "/rpc/close_lead": {
       "post": {
         "operationId": "close_lead",
-        "summary": "Close lead",
-        "description": "`public.close_lead(p_lead uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Marks a lead lost",
+        "description": "Marks a lead lost. A REASON IS REQUIRED and the refusal says why: a list of dead leads with no reasons on it is a list nobody reads twice, and the only value in keeping them is learning what keeps going wrong. Refuses a lead that has already become a customer \u2014 it cannot also be a lost one. Needs `can_write`.\n\n`public.close_lead(p_lead uuid, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -25273,8 +25273,8 @@
     "/rpc/close_project": {
       "post": {
         "operationId": "close_project",
-        "summary": "Close project",
-        "description": "`public.close_project(p_project uuid, p_write_off boolean)` Writes. Requires a signed-in user.",
+        "summary": "Closes a project",
+        "description": "Closes a project. REFUSES WHILE UNBILLED CHARGEABLE TIME REMAINS, naming the amount and how many entries, because hours left on a closed job are hours nobody is looking at. `p_write_off` is the decision to forgo the fee, not a formatting option \u2014 and it marks those entries non-billable RATHER THAN DELETING THEM, so the utilisation report goes on counting hours that were genuinely worked. Needs `can_post`, which is heavier than editing a project: writing off billable time is a decision about revenue.\n\n`public.close_project(p_project uuid, p_write_off boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -26608,8 +26608,8 @@
     "/rpc/convert_lead": {
       "post": {
         "operationId": "convert_lead",
-        "summary": "Convert lead",
-        "description": "`public.convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` Writes. Requires a signed-in user.",
+        "summary": "Turns a lead into a customer and, unless told not to, opens an opportunity on it; returns both ids",
+        "description": "Turns a lead into a customer and, unless told not to, opens an opportunity on it; returns both ids. Starts the deal in the first OPEN stage of the pipeline, not simply the first \u2014 a pipeline whose lowest sort order is \"Closed lost\" would otherwise open every converted lead as already dead. A lead carrying both a company and a person also gets a contact person, which is the row the e-Invoice preparation and every delivery note reach for; before that existed the person was simply lost. Refuses a lead already converted, a lost one (reopen it first), and one with neither a company nor a person to name a customer after. Needs `can_write`.\n\n`public.convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -36253,8 +36253,8 @@
     "/rpc/link_opportunity_quotation": {
       "post": {
         "operationId": "link_opportunity_quotation",
-        "summary": "Link opportunity quotation",
-        "description": "`public.link_opportunity_quotation(p_opportunity uuid, p_document uuid)` Writes. Requires a signed-in user.",
+        "summary": "Ties a deal to the quotation it will be won on, and OVERWRITES THE DEAL'S AMOUNT with the quotation's total",
+        "description": "Ties a deal to the quotation it will be won on, and OVERWRITES THE DEAL'S AMOUNT with the quotation's total. That is the point rather than a side effect: the document is the priced answer and the deal's figure was a guess, so the pipeline should report the number somebody actually worked out. Passing null unlinks and leaves the amount alone. Refuses a document that is not a quotation \u2014 a deal is won on a quotation, not on an invoice \u2014 and refuses one addressed to a different customer, which would report one company's business under another's. Needs `can_write`.\n\n`public.link_opportunity_quotation(p_opportunity uuid, p_document uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -39161,8 +39161,8 @@
     "/rpc/open_matter": {
       "post": {
         "operationId": "open_matter",
-        "summary": "Open matter",
-        "description": "`public.open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` Writes. Requires a signed-in user.",
+        "summary": "Opens a legal matter and returns it",
+        "description": "Opens a legal matter and returns it. CHECKS FOR A CONFLICT before it does: where open or closed files already touch these parties it refuses, names how many and the first of them, and cites Rule 3 of the Legal Profession (Practice and Etiquette) Rules 1978 \u2014 the point being to stop and look, not to make the decision. A conflict considered and cleared is recorded in `p_conflict_note`, which is what turns a refusal into a written judgement somebody signed. The fee earner and the responsible solicitor must both be active members of the practice: the Act's question is who is on the file, and it is not one to answer with somebody who does not work there. Needs `can_write` and the legal module.\n\n`public.open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
