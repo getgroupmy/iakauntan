@@ -274,6 +274,33 @@ main() {
     echo "no assertion files found in .github/workflows/ci.yml" >&2
     exit 1
   fi
+
+  # And the mirror of it. CI has a step asserting that every file in
+  # `supabase/tests/` is named in the list; this script did not, so a
+  # new assertion file could be written, run by hand, reported green,
+  # and never run by either -- which is the hole the CI step exists to
+  # close, arriving from the third side. `ssm_register_lookup.sql` went
+  # that way: fourteen assertions passing locally against a list that
+  # had never heard of it.
+  #
+  # Only on a full run. Given explicit files the caller is iterating on
+  # one, and that is not the moment to be told about another.
+  if [ $# -eq 0 ]; then
+    local listed unlisted=""
+    listed=" $(echo $files) "
+    for f in "$ROOT"/supabase/tests/*.sql; do
+      case "$(basename "$f")" in _*) continue ;; esac
+      case "$listed" in
+        *" supabase/tests/$(basename "$f") "*) ;;
+        *) unlisted="$unlisted supabase/tests/$(basename "$f")" ;;
+      esac
+    done
+    if [ -n "$unlisted" ]; then
+      echo "on disk and not named in .github/workflows/ci.yml:$unlisted" >&2
+      echo "  add them to the list in the database job, or CI never runs them" >&2
+      exit 1
+    fi
+  fi
   for f in $files; do
     # A file named in ci.yml and not on disk. `psql -f` says
     #   psql: error: ... No such file or directory
