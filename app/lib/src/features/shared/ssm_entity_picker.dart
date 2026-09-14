@@ -64,6 +64,21 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
   /// nobody has searched in yet look identical otherwise.
   bool _searched = false;
 
+  /// Searching as the person types, once there is enough to search on.
+  ///
+  /// The pause matters more here than usual: every distinct query that
+  /// is not already cached is a real search against ssmsearch.com, and
+  /// `docs/ssm-lookup.md` asks for that volume to stay modest. Half a
+  /// second of quiet turns "Kabeer Holdings" into one or two searches
+  /// rather than twelve. Enter and the search button still search at
+  /// once.
+  Timer? _debounce;
+  static const _pause = Duration(milliseconds: 500);
+
+  /// Which search is the current one. A slow answer to "Kab" must not
+  /// land on top of the results for "Kabeer Hol".
+  int _seq = 0;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +88,7 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _query.dispose();
     super.dispose();
   }
@@ -88,7 +104,32 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
     }
   }
 
+  /// Every keystroke lands here. Under three characters there is
+  /// nothing to search on (the function refuses it too), so a pending
+  /// search is dropped and the dialog goes back to its opening state;
+  /// from three on, a search is queued for when the typing pauses.
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    final q = value.trim();
+    if (q.length < 3) {
+      // The helper text under the field reads it, so rebuild anyway.
+      setState(() {
+        if (_searched) {
+          _page = null;
+          _error = null;
+          _searched = false;
+        }
+      });
+      return;
+    }
+    setState(() {});
+    _debounce = Timer(_pause, () {
+      if (mounted) unawaited(_run());
+    });
+  }
+
   Future<void> _run({int page = 1}) async {
+    _debounce?.cancel();
     final q = _query.text.trim();
     if (q.length < 3) {
       setState(() {
@@ -103,6 +144,7 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
       return;
     }
 
+    final mine = ++_seq;
     setState(() {
       _busy = true;
       _error = null;
@@ -112,11 +154,11 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
       final result = await ref
           .read(ssmLookupProvider)
           .search(q, typeId: _typeId, page: page);
-      if (mounted) setState(() => _page = result);
+      if (mounted && mine == _seq) setState(() => _page = result);
     } on SsmLookupException catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (mounted && mine == _seq) setState(() => _error = e);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && mine == _seq) setState(() => _busy = false);
     }
   }
 
@@ -135,6 +177,7 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
               controller: _query,
               autofocus: true,
               textInputAction: TextInputAction.search,
+              onChanged: _onChanged,
               onSubmitted: (_) => _run(),
               decoration: InputDecoration(
                 labelText: 'Name or registration number',
