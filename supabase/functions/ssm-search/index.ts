@@ -187,7 +187,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 });
 
-function provider(admin: ReturnType<typeof createClient>): SsmSearchWeb {
+/**
+ * The service-role client, loosely typed on purpose.
+ *
+ * `createClient()`'s return carries the schema it was built for in its
+ * type parameters, and `SsmSearchWeb` only ever calls `.from()` and
+ * `.rpc()` on it. Naming the full generic here made `deno check` reject
+ * the call — `"public"` is not assignable to `never` — while tsc, which
+ * resolves the stub rather than the real package, was perfectly happy.
+ * Exactly the gap `check_locally.sh` warns about in its own output.
+ */
+// deno-lint-ignore no-explicit-any
+function provider(admin: any): SsmSearchWeb {
   const email = Deno.env.get("SSMSEARCH_EMAIL");
   const password = Deno.env.get("SSMSEARCH_PASSWORD");
   if (!email || !password) {
