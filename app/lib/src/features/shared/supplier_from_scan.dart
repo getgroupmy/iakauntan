@@ -47,7 +47,9 @@ Future<SupplierMatch> resolveSupplier(
   OcrExtraction? read,
 ) async {
   final name = read?.supplierName?.trim();
-  if (name == null || name.isEmpty) return const SupplierMatch(SupplierOutcome.ask);
+  if (name == null || name.isEmpty) {
+    return const SupplierMatch(SupplierOutcome.ask);
+  }
 
   final repo = ref.read(repoProvider);
   if (repo == null) return const SupplierMatch(SupplierOutcome.ask);
@@ -58,7 +60,10 @@ Future<SupplierMatch> resolveSupplier(
     // in the database, so a letterhead carrying the registration number
     // after the name finds nothing — hence the narrowing below rather
     // than a single clever query.
-    candidates = await repo.contacts(type: 'supplier', search: _searchable(name));
+    candidates = await repo.contacts(
+      type: 'supplier',
+      search: _searchable(name),
+    );
   } catch (_) {
     // A lookup that failed is not an answer. Ask the usual way rather
     // than offering to create a duplicate of something that is probably
@@ -67,7 +72,9 @@ Future<SupplierMatch> resolveSupplier(
   }
 
   final exact = _bestMatches(candidates, name, read?.supplierRegistrationNo);
-  if (exact.length == 1) return SupplierMatch(SupplierOutcome.resolved, exact.first.id);
+  if (exact.length == 1) {
+    return SupplierMatch(SupplierOutcome.resolved, exact.first.id);
+  }
   if (exact.length > 1) return const SupplierMatch(SupplierOutcome.ask);
 
   // Nothing that could be called a match. Two of these on screen at once
@@ -81,8 +88,19 @@ Future<SupplierMatch> resolveSupplier(
 
   switch (answer) {
     case _NotFoundAnswer.create:
-      if (!context.mounted) return const SupplierMatch(SupplierOutcome.discarded);
-      final id = await _create(context, ref, read!);
+      if (!context.mounted) {
+        return const SupplierMatch(SupplierOutcome.discarded);
+      }
+      // Reviewed and CORRECTED before it is written, not after. See
+      // `_SupplierDraft`.
+      final draft = await showDialog<OcrExtraction>(
+        context: context,
+        builder: (_) => _SupplierDraft(read: read!),
+      );
+      if (draft == null || !context.mounted) {
+        return const SupplierMatch(SupplierOutcome.discarded);
+      }
+      final id = await _create(context, ref, draft);
       return id == null
           ? const SupplierMatch(SupplierOutcome.discarded)
           : SupplierMatch(SupplierOutcome.resolved, id);
@@ -134,8 +152,10 @@ List<Contact> _bestMatches(List<Contact> candidates, String name, String? reg) {
   if (reg != null && reg.trim().isNotEmpty) {
     final wanted = _digits(reg);
     final byReg = candidates
-        .where((c) =>
-            c.registrationNo != null && _digits(c.registrationNo!) == wanted)
+        .where(
+          (c) =>
+              c.registrationNo != null && _digits(c.registrationNo!) == wanted,
+        )
         .toList();
     if (byReg.isNotEmpty) return byReg;
   }
@@ -153,7 +173,8 @@ List<Contact> _bestMatches(List<Contact> candidates, String name, String? reg) {
   }).toList();
 }
 
-String _digits(String s) => s.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
+String _digits(String s) =>
+    s.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
 
 enum _NotFoundAnswer { create, choose, discard }
 
@@ -195,27 +216,32 @@ class _SupplierNotFound extends StatelessWidget {
               const SizedBox(height: Space.md),
               Text(
                 read.supplierName ?? '—',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: Space.sm),
               for (final (label, value) in detail)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    SizedBox(
-                      width: 92,
-                      child: Text(label,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ),
-                    Expanded(
-                      child: Text(value!,
-                          style: const TextStyle(fontSize: 13)),
-                    ),
-                  ]),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 92,
+                        child: Text(
+                          label,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          value!,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               if (near.isNotEmpty) ...[
                 const SizedBox(height: Space.md),
@@ -236,8 +262,10 @@ class _SupplierNotFound extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       for (final c in near.take(4))
-                        Text('• ${c.name}',
-                            style: const TextStyle(fontSize: 13)),
+                        Text(
+                          '• ${c.name}',
+                          style: const TextStyle(fontSize: 13),
+                        ),
                       const SizedBox(height: 4),
                       const Text(
                         'Choose an existing one instead if this is the same '
@@ -254,14 +282,12 @@ class _SupplierNotFound extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () =>
-              Navigator.pop(context, _NotFoundAnswer.discard),
+          onPressed: () => Navigator.pop(context, _NotFoundAnswer.discard),
           child: const Text('Discard'),
         ),
         if (near.isNotEmpty)
           TextButton(
-            onPressed: () =>
-                Navigator.pop(context, _NotFoundAnswer.choose),
+            onPressed: () => Navigator.pop(context, _NotFoundAnswer.choose),
             child: const Text('Choose existing'),
           ),
         FilledButton(
@@ -289,38 +315,238 @@ Future<String?> _create(
   final messenger = ScaffoldMessenger.of(context);
 
   try {
-    final address = read.supplierAddress?.split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+    // '' is a field somebody cleared in `_SupplierDraft`; see `_text`
+    // there. Everywhere else it is simply an absent field, and both
+    // should reach the contact as null rather than as an empty string
+    // that reads on a statement as a blank line somebody typed.
+    String? clean(String? v) {
+      final t = v?.trim() ?? '';
+      return t.isEmpty ? null : t;
+    }
+
+    final address = clean(
+      read.supplierAddress,
+    )?.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
     // The code is generated rather than typed, so a collision with one
     // that reached the table another way is this code's problem to
     // solve and not something to show somebody holding a receipt.
-    final saved = await repo.createContactWithGeneratedCode(Contact(
-      id: '',
-      code: '',
-      name: read.supplierName!.trim(),
-      contactType: 'supplier',
-      registrationNo: read.supplierRegistrationNo,
-      // The SSM number is also what identifies the party on an
-      // e-Invoice, so it seeds the identity field rather than leaving it
-      // for somebody to copy across by hand.
-      idValue: read.supplierRegistrationNo,
-      sstRegistrationNo: read.supplierTaxId,
-      email: read.supplierEmail,
-      phone: read.supplierPhone,
-      addressLine1: address == null || address.isEmpty ? null : address.first,
-      addressLine2: address == null || address.length < 2
-          ? null
-          : address.skip(1).join(', '),
-      currency: read.currency ?? 'MYR',
-    ));
+    final saved = await repo.createContactWithGeneratedCode(
+      Contact(
+        id: '',
+        code: '',
+        name: read.supplierName!.trim(),
+        contactType: 'supplier',
+        registrationNo: clean(read.supplierRegistrationNo),
+        // The SSM number is also what identifies the party on an
+        // e-Invoice, so it seeds the identity field rather than leaving it
+        // for somebody to copy across by hand.
+        idValue: clean(read.supplierRegistrationNo),
+        sstRegistrationNo: clean(read.supplierTaxId),
+        email: clean(read.supplierEmail),
+        phone: clean(read.supplierPhone),
+        addressLine1: address == null || address.isEmpty ? null : address.first,
+        addressLine2: address == null || address.length < 2
+            ? null
+            : address.skip(1).join(', '),
+        currency: read.currency ?? 'MYR',
+      ),
+    );
     return saved.id;
   } catch (e) {
     messenger.showSnackBar(
       SnackBar(content: Text('Could not create the supplier: $e')),
     );
     return null;
+  }
+}
+
+/// The last look before a contact record exists.
+///
+/// The header of this file already says why: a contact is a lasting
+/// thing that turns up in reports, on statements and in the e-Invoice
+/// submission, and creating one because a reader misread a letterhead
+/// is a mess somebody has to clean up later. That argument was written
+/// down and then not acted on — the details were SHOWN and the button
+/// wrote them unchanged, so a misread name became a permanent record
+/// with no moment at which anybody could correct it.
+///
+/// The SSM number makes it more than cosmetic. It seeds `id_value`,
+/// which is what identifies the party on an e-Invoice, so one wrong
+/// digit is a submission LHDN rejects or, worse, attributes to another
+/// company. A letterhead is exactly where a reader loses a digit.
+///
+/// Everything is pre-filled and everything is editable. Only the name
+/// is required, because a contact with no name is not a contact and
+/// everything else can be filled in later from the supplier's own
+/// paperwork.
+class _SupplierDraft extends StatefulWidget {
+  const _SupplierDraft({required this.read});
+
+  final OcrExtraction read;
+
+  @override
+  State<_SupplierDraft> createState() => _SupplierDraftState();
+}
+
+class _SupplierDraftState extends State<_SupplierDraft> {
+  final _formKey = GlobalKey<FormState>();
+  late final _name = TextEditingController(
+    text: widget.read.supplierName?.trim() ?? '',
+  );
+  late final _reg = TextEditingController(
+    text: widget.read.supplierRegistrationNo ?? '',
+  );
+  late final _tax = TextEditingController(
+    text: widget.read.supplierTaxId ?? '',
+  );
+  late final _email = TextEditingController(
+    text: widget.read.supplierEmail ?? '',
+  );
+  late final _phone = TextEditingController(
+    text: widget.read.supplierPhone ?? '',
+  );
+  late final _address = TextEditingController(
+    text: widget.read.supplierAddress ?? '',
+  );
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _reg.dispose();
+    _tax.dispose();
+    _email.dispose();
+    _phone.dispose();
+    _address.dispose();
+    super.dispose();
+  }
+
+  /// Empty string, not null, for a field somebody cleared.
+  ///
+  /// `OcrExtraction.copyWith` is written `supplierTaxId ?? this.supplierTaxId`,
+  /// so passing null means "leave it alone" and there is no way through
+  /// it to say "make this empty". Handing back '' says it, and `_create`
+  /// turns '' back into null on the way into the contact — which keeps
+  /// the one place that decides how a reading becomes a contact still
+  /// the only place.
+  ///
+  /// Without this, clearing a misread SSM number in this dialog would
+  /// silently keep the misread one, which is the exact failure the
+  /// dialog exists to prevent.
+  String _text(TextEditingController c) => c.text.trim();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create this supplier'),
+      content: SizedBox(
+        width: 460,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Read from the document. Correct anything wrong before '
+                  'it is saved — this becomes a permanent contact, and '
+                  'the SSM number goes on every e-Invoice raised against '
+                  'it.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: Space.md),
+                TextFormField(
+                  key: const ValueKey('scan-supplier-name'),
+                  controller: _name,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                  validator: (v) => (v ?? '').trim().isEmpty
+                      ? 'A supplier needs a name.'
+                      : null,
+                ),
+                const SizedBox(height: Space.sm),
+                TextFormField(
+                  key: const ValueKey('scan-supplier-reg'),
+                  controller: _reg,
+                  decoration: const InputDecoration(
+                    labelText: 'SSM registration no.',
+                    helperText: 'Identifies the supplier on an e-Invoice',
+                  ),
+                ),
+                const SizedBox(height: Space.sm),
+                TextFormField(
+                  controller: _tax,
+                  decoration: const InputDecoration(
+                    labelText: 'SST or tax number',
+                  ),
+                ),
+                const SizedBox(height: Space.sm),
+                TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  validator: (v) {
+                    final t = (v ?? '').trim();
+                    // Only a shape check, and only when something was
+                    // typed. A remittance advice goes here, so a
+                    // plainly broken address is worth catching; being
+                    // strict about what an address may contain is not
+                    // this dialog's business.
+                    if (t.isEmpty) return null;
+                    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]{2,}$').hasMatch(t)
+                        ? null
+                        : 'That does not look like an email address.';
+                  },
+                ),
+                const SizedBox(height: Space.sm),
+                TextFormField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone'),
+                ),
+                const SizedBox(height: Space.sm),
+                TextFormField(
+                  controller: _address,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(labelText: 'Address'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('scan-supplier-save'),
+          onPressed: () {
+            if (!(_formKey.currentState?.validate() ?? false)) return;
+            // Handed back as an extraction rather than a Contact so
+            // `_create` stays the one place that decides how a reading
+            // becomes a contact — the address splitting, the currency
+            // default, the SSM number seeding `id_value`. Two places
+            // deciding that is two places to fix it.
+            Navigator.pop(
+              context,
+              widget.read.copyWith(
+                supplierName: _name.text.trim(),
+                supplierRegistrationNo: _text(_reg),
+                supplierTaxId: _text(_tax),
+                supplierEmail: _text(_email),
+                supplierPhone: _text(_phone),
+                supplierAddress: _text(_address),
+              ),
+            );
+          },
+          child: const Text('Create supplier'),
+        ),
+      ],
+    );
   }
 }
