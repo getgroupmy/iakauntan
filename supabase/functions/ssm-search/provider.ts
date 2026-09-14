@@ -1,0 +1,335 @@
+/**
+ * Talking to ssmsearch.com, and the one shape the rest of this cares
+ * about.
+ *
+ * ---------------------------------------------------------------------
+ * Read this before changing anything here
+ *
+ * This signs in to ssmsearch.com the way its own website does and calls
+ * its search endpoint from a server. Their terms of service prohibit
+ * reaching the service "on another website or server … through … any
+ * other technological means", and prohibit sharing login credentials.
+ * It is running while the official SSM Corporate API is arranged, and
+ * `docs/ssm-lookup.md` says so where an operator will read it rather
+ * than only here.
+ *
+ * That is why the cache and the per-user limit are not optimisations.
+ * They are the difference between a modest volume and a conspicuous
+ * one, and removing them changes what this is.
+ *
+ * ---------------------------------------------------------------------
+ * Switching to the real API later
+ *
+ * Everything above `search()` is the contract: a query in, `SsmEntity[]`
+ * out. When Infomina supply the entity-search endpoint, a second class
+ * implementing the same two methods is the whole change, chosen by
+ * `SSM_PROVIDER`. Deliberately not stubbed here — an unimplemented
+ * class that type-checks is a thing somebody switches on by accident.
+ */
+
+export interface SsmEntity {
+  ssm_id: number | null;
+  name: string;
+  slug: string | null;
+  reg_no: string | null;
+  reg_no_old: string | null;
+  entity_type_id: number | null;
+  entity_type: string | null;
+}
+
+export interface SearchResult {
+  items: SsmEntity[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+/** The four kinds SSM registers, by the id its search uses. */
+export const ENTITY_TYPES: Record<number, string> = {
+  1: "Company",
+  2: "Business",
+  3: "Audit Firm",
+  25: "Limited Liability Partnership",
+};
+
+export class SsmError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status = 502,
+  ) {
+    super(message);
+  }
+}
+
+interface SessionRow {
+  token: string | null;
+  logged_in_as: string | null;
+  obtained_at: string | null;
+}
+
+/** Anything with `.from()` and `.rpc()`; the service-role client. */
+// deno-lint-ignore no-explicit-any
+type Db = any;
+
+export class SsmSearchWeb {
+  readonly name = "ssmsearch_web";
+
+  constructor(
+    private readonly db: Db,
+    private readonly email: string,
+    private readonly password: string,
+    private readonly apiRoot = "https://ssmsearch.com/api",
+    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly sleep = (ms: number) =>
+      new Promise<void>((r) => setTimeout(r, ms)),
+  ) {}
+
+  async search(
+    query: string,
+    typeId: number | null,
+    page: number,
+    perPage: number,
+  ): Promise<SearchResult> {
+    let session = await this.session();
+    let res = await this.call(session.token, query, typeId, page, perPage);
+
+    // The token went stale. One fresh login and one retry — not a loop:
+    // a second failure after a successful login is ssmsearch.com saying
+    // no to this account, and retrying that is just asking again.
+    if (this.rejected(res.status, res.body)) {
+      session = await this.login("the token was rejected");
+      res = await this.call(session.token, query, typeId, page, perPage);
+      if (this.rejected(res.status, res.body)) {
+        throw new SsmError(
+          "SSM_AUTH_FAILED",
+          "ssmsearch.com refused the search even after signing in again.",
+        );
+      }
+    }
+
+    if (res.status < 200 || res.status >= 300) {
+      throw new SsmError(
+        "SSM_UPSTREAM_ERROR",
+        `ssmsearch.com answered ${res.status}.`,
+      );
+    }
+
+    await this.db.from("ssm_session")
+      .update({ last_used_at: new Date().toISOString() }).eq("id", 1);
+
+    return normalise(res.body, page, perPage);
+  }
+
+  /** Sign in now and say who we are, for the admin page's Test login. */
+  async testLogin(): Promise<{ logged_in_as: string | null }> {
+    const s = await this.login("asked to test");
+    return { logged_in_as: s.logged_in_as };
+  }
+
+  private async session(): Promise<SessionRow> {
+    const { data } = await this.db.from("ssm_session")
+      .select("token, logged_in_as, obtained_at").eq("id", 1).maybeSingle();
+    if (data?.token) return data as SessionRow;
+    return this.login("there was no session yet");
+  }
+
+  /**
+   * Sign in, once across every instance.
+   *
+   * ssmsearch.com is ONE shared account, so two instances signing in
+   * together can invalidate each other's token — which is a loop, not a
+   * race. `ssm_session_try_lock` decides who goes; the loser waits for
+   * the winner's token rather than signing in behind it.
+   */
+  private async login(reason: string): Promise<SessionRow> {
+    const before = await this.db.from("ssm_session")
+      .select("token, obtained_at").eq("id", 1).maybeSingle();
+
+    const { data: gotLock } = await this.db.rpc("ssm_session_try_lock");
+    if (!gotLock) {
+      for (let i = 0; i < 4; i++) {
+        await this.sleep(1200);
+        const { data } = await this.db.from("ssm_session")
+          .select("token, logged_in_as, obtained_at").eq("id", 1).maybeSingle();
+        if (data?.token && data.obtained_at !== before.data?.obtained_at) {
+          return data as SessionRow;
+        }
+      }
+      // The holder died or is very slow. Going ahead is better than
+      // refusing a search over a lock that expires in seconds anyway.
+    }
+
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${this.apiRoot}/user/login`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "accept": "application/json",
+        },
+        body: JSON.stringify({
+          recaptchaToken: "",
+          email: this.email,
+          password: this.password,
+        }),
+      });
+    } catch (e) {
+      await this.noteError(`Could not reach ssmsearch.com: ${String(e)}`);
+      throw new SsmError("SSM_UNREACHABLE", "Could not reach ssmsearch.com.");
+    }
+
+    const body = await asJson(res);
+    const token = typeof body.token === "string" ? body.token : "";
+    if (!res.ok || !token) {
+      // Their words, not ours. A login refused for a reason only
+      // ssmsearch.com knows is one only their message can explain.
+      const said = typeof body.message === "string"
+        ? body.message
+        : `HTTP ${res.status}`;
+      await this.noteError(`Sign-in failed (${reason}): ${said}`);
+      throw new SsmError(
+        "SSM_LOGIN_FAILED",
+        `ssmsearch.com would not sign in: ${said}`,
+      );
+    }
+
+    const row: SessionRow = {
+      token,
+      logged_in_as: typeof body.email === "string" ? body.email : this.email,
+      obtained_at: new Date().toISOString(),
+    };
+    await this.db.from("ssm_session").update({
+      provider: this.name,
+      ...row,
+      last_error: null,
+      last_error_at: null,
+      refresh_lock_at: null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", 1);
+    return row;
+  }
+
+  private async call(
+    token: string | null,
+    query: string,
+    typeId: number | null,
+    page: number,
+    perPage: number,
+  ) {
+    const url = new URL(`${this.apiRoot}/company/search`);
+    url.searchParams.set("q", query);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("perPage", String(perPage));
+    if (typeId !== null) url.searchParams.set("typeId", String(typeId));
+
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url.toString(), {
+        headers: {
+          "accept": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    } catch (e) {
+      throw new SsmError(
+        "SSM_UNREACHABLE",
+        `Could not reach ssmsearch.com: ${String(e)}`,
+      );
+    }
+    return { status: res.status, body: await asJson(res) };
+  }
+
+  /** Their several ways of saying "sign in again". */
+  private rejected(status: number, body: Record<string, unknown>): boolean {
+    if (status === 401 || status === 403) return true;
+    const code = body.code ?? body.error;
+    return code === "is_not_logged_in";
+  }
+
+  private async noteError(message: string) {
+    await this.db.from("ssm_session").update({
+      last_error: message,
+      last_error_at: new Date().toISOString(),
+      refresh_lock_at: null,
+    }).eq("id", 1);
+  }
+}
+
+async function asJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    const v = JSON.parse(text);
+    return typeof v === "object" && v !== null
+      ? v as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Their answer in the one shape the app knows.
+ *
+ * Written to survive their field names moving: every key is tried in
+ * the several spellings their own frontend uses, and a row that yields
+ * no name is dropped rather than shown as a blank line somebody might
+ * pick.
+ */
+export function normalise(
+  body: Record<string, unknown>,
+  page: number,
+  perPage: number,
+): SearchResult {
+  const raw = firstArray(body, ["data", "items", "results", "companies"]);
+  const items: SsmEntity[] = [];
+
+  for (const r of raw) {
+    if (typeof r !== "object" || r === null) continue;
+    const o = r as Record<string, unknown>;
+    const name = str(o, ["name", "companyName", "title", "entityName"]);
+    if (!name) continue;
+
+    const typeId = num(o, ["typeId", "entityTypeId", "type_id", "type"]);
+    items.push({
+      ssm_id: num(o, ["id", "companyId", "entityId"]),
+      name,
+      slug: str(o, ["slug", "handle"]),
+      reg_no: str(o, ["regNo", "registrationNo", "newRegNo", "reg_no", "brn"]),
+      reg_no_old: str(o, ["oldRegNo", "regNoOld", "oldRegistrationNo"]),
+      entity_type_id: typeId,
+      entity_type: str(o, ["typeName", "entityType", "type_title"]) ??
+        (typeId !== null ? ENTITY_TYPES[typeId] ?? null : null),
+    });
+  }
+
+  const total = num(body, ["total", "totalCount", "count"]) ?? items.length;
+  return { items, total, page, per_page: perPage };
+}
+
+function firstArray(o: Record<string, unknown>, keys: string[]): unknown[] {
+  for (const k of keys) if (Array.isArray(o[k])) return o[k] as unknown[];
+  // Some of their endpoints answer with the array at the top level.
+  return [];
+}
+
+function str(o: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+    if (typeof v === "number") return String(v);
+  }
+  return null;
+}
+
+function num(o: Record<string, unknown>, keys: string[]): number | null {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
+      return Number(v);
+    }
+  }
+  return null;
+}

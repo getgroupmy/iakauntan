@@ -877,6 +877,13 @@ jobs:
       - run: deno check supabase/functions/ask/wire_test.ts
       - run: deno test supabase/functions/ask/wire_test.ts
 
+      # Reading SSM's register. The network and the database halves are
+      # not testable here; `normalise` is, and it is the half that
+      # decides what somebody picks from — which becomes a registration
+      # number on an e-Invoice.
+      - run: deno check supabase/functions/ssm-search/provider_test.ts
+      - run: deno test supabase/functions/ssm-search/provider_test.ts
+
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and
       # nothing else in this file would execute it.

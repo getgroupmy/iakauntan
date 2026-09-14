@@ -199,6 +199,16 @@ def select_literal(d: "Dialect", chain: str, at: int) -> str | None:
 
     Dart concatenates adjacent literals, and the long selects in this
     app are written over several lines that way.
+
+    STOPS AT THE FIRST TOP-LEVEL COMMA, which is where the column list
+    ends and `.select()`'s second argument begins. Adjacent literals are
+    never separated by a comma in either language -- Dart writes `'a'
+    'b'` and a select list's own commas are inside the literal -- so a
+    comma out here is always the options object.
+
+    Without that stop, `.select("id", { count: "exact", head: true })`
+    read as a column called `idexact`, and the check reported a real
+    table as missing a column nobody had written.
     """
     depth, i, parts = 1, at, []
     while i < len(chain) and depth > 0:
@@ -210,9 +220,11 @@ def select_literal(d: "Dialect", chain: str, at: int) -> str | None:
             parts.append(m.group(1))
             i = m.end()
             continue
-        if ch == "(":
+        if ch == "," and depth == 1:
+            break
+        if ch in "({[":
             depth += 1
-        elif ch == ")":
+        elif ch in ")}]":
             depth -= 1
         i += 1
     return "".join(parts) if parts else None

@@ -260,3 +260,10 @@ Nothing below can be done from a commit.
    address, because a reader nobody has deployed is a door with nothing
    behind it. `docs/ocr-self-hosted.md` is the contract and the order.
    Nothing needs this — Tesseract in the browser is free and already on.
+8. **If you want the SSM lookup, set its two secrets.** `SSMSEARCH_EMAIL`
+   and `SSMSEARCH_PASSWORD` in the Supabase dashboard; until then every
+   search answers "not set up yet". `docs/ssm-lookup.md` is the runbook
+   — read its first section before switching it on, because the interim
+   reader reaches ssmsearch.com in a way their terms of service
+   prohibit, and that is a decision somebody should take knowingly.
+

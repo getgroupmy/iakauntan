@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0588` (the highest applied migration).
-664 functions and 329 readable tables, of which
+Schema version `0589` (the highest applied migration).
+665 functions and 330 readable tables, of which
 254 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**478 of 664 functions carry a `comment on
+**479 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -355,7 +355,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)*
 
-### general (457)
+### general (458)
 
 Not gated on any module.
 
@@ -750,6 +750,7 @@ Not gated on any module.
 - `set_ai_credentials(p_org_id uuid, p_provider text, p_api_key text, p_base_url text)` *(writes)* — Stores a company's own key for one AI provider, so the assistant bills them rather than us.
 - `set_ai_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_model text, p_key_source text)` *(writes)* — One company's choice of provider, model and whose key pays.
 - `set_bank_feed_paused(p_bank_account_id uuid, p_paused boolean)` *(writes)* — Pauses or resumes the automatic statement feed on one bank account.
+- `set_contact_ssm_entity(p_contact uuid, p_name text, p_reg_no text, p_reg_no_old text, p_entity_type text, p_slug text)` *(writes)* — Writes what SSM's register answered onto a contact, and stamps `ssm_verified_at`.
 - `set_custom_field_active(p_org_id uuid, p_entity text, p_key text, p_active boolean)` *(writes)* — Switches one custom field on or off for an entity type.
 - `set_document_numbering(p_org_id uuid, p_doc_type text, p_prefix text, p_suffix text, p_padding integer, p_reset_policy text, p_next_value bigint)` *(writes)* — Set a series -- prefix, suffix, padding, reset policy, next number -- and return the sample of the next number.
 - `set_einvoice_credentials(p_org_id uuid, p_environment text, p_client_id text, p_client_secret text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` *(writes)* — Stores a company's MyInvois credentials and signing certificate for one environment, sandbox or production, replacing what was there.
@@ -1119,6 +1120,7 @@ inconsistent.
 - `site_pages`
 - `sla_policies`
 - `sla_targets`
+- `ssm_entity_types`
 - `sst_returns`
 - `statutory_rates`
 - `statutory_remittances`
