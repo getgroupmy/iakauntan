@@ -51,6 +51,53 @@ Optional: `SSM_CACHE_TTL_HOURS` (24) and `SSM_RATE_LIMIT_PER_MIN` (30).
 Until the secrets are set, every search answers `SSM_NOT_CONFIGURED`
 and the app says it is not set up yet — not that it failed.
 
+## The endpoints are a guess, and the first sign-in said so
+
+The login and search paths were read off the package this feature
+arrived in, not off a live browser. The first real **Test the login**
+answered:
+
+```
+Sign-in failed (there was no session yet):
+Page not found: /api/user/login
+```
+
+Read that carefully — it is good news twice. The message is
+ssmsearch.com's own words, so `/api` routes and answers: the root is
+right. And `/user/login` is simply not one of their routes.
+
+So each piece is an optional secret, and correcting one is a **secret
+change rather than a release**:
+
+| Secret | Default |
+| --- | --- |
+| `SSMSEARCH_API_ROOT` | `https://ssmsearch.com/api` |
+| `SSMSEARCH_LOGIN_PATH` | `/user/login` |
+| `SSMSEARCH_SEARCH_PATH` | `/company/search` |
+
+They are endpoints, not credentials — there is nothing secret about a
+URL — but they live beside the login because that is where this
+function's configuration is, and one place beats two. The console page
+shows the URLs currently in use, because once they are overridable the
+repository can no longer answer "which URL did it ask for".
+
+### Finding the real ones
+
+Nobody can do this from CI or from a server; it takes a browser signed
+in to ssmsearch.com.
+
+1. Open ssmsearch.com, then the browser's developer tools, **Network**
+   tab, and tick **Fetch/XHR**.
+2. Sign in. The request that carries the email and password is the
+   login call — its **Request URL** is the path to set, minus the
+   `https://ssmsearch.com/api` root.
+3. Search for a company. The request that carries the query is the
+   search call; same again.
+4. While you are there, note what the login **response** contains — the
+   provider expects a `token` field and reads `email` for display. If
+   theirs is `access_token`, or the token is set as a cookie rather
+   than returned, that is a code change and not a secret, so say so.
+
 ## How the login stays alive
 
 The function keeps the bearer token in `public.ssm_session`, which is
@@ -147,7 +194,9 @@ developer portal renders with RapiDoc, so one exists.
 
 The login call and its response mapping were derived from
 ssmsearch.com's own frontend and verified against a mock, not against
-live credentials. **Test the login** on the console page is the first real
-check. When it fails, ssmsearch.com's own words are shown and kept in
+live credentials. **Test the login** on the console page was the first
+real check, and it found the paths wrong — see "The endpoints are a
+guess" above. The response MAPPING is still unverified: nobody has seen
+a successful login body. When it fails, ssmsearch.com's own words are shown and kept in
 `ssm_session.last_error`, because a refusal only they understand is one
 only their message can explain.

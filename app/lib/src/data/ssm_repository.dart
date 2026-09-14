@@ -264,6 +264,8 @@ class SsmStatus {
     required this.searches24h,
     this.provider,
     this.loggedInAs,
+    this.loginUrl,
+    this.searchUrl,
     this.obtainedAt,
     this.lastUsedAt,
     this.lastError,
@@ -278,6 +280,15 @@ class SsmStatus {
   final int searches24h;
   final String? provider;
   final String? loggedInAs;
+
+  /// Where the function actually sends its requests.
+  ///
+  /// On the page because the defaults are a guess at ssmsearch.com's
+  /// own API and each one is overridable by a dashboard secret -- so
+  /// "which URL did it ask for" stops being answerable from the
+  /// repository, and a failed sign-in raises it first.
+  final String? loginUrl;
+  final String? searchUrl;
   final DateTime? obtainedAt;
   final DateTime? lastUsedAt;
   final String? lastError;
@@ -288,12 +299,22 @@ class SsmStatus {
 
   factory SsmStatus.fromJson(Map<String, dynamic> j) {
     final s = Map<String, dynamic>.from((j['session'] as Map?) ?? const {});
+    final r = Map<String, dynamic>.from((j['routes'] as Map?) ?? const {});
+    final root = (_str(r['apiRoot']) ?? '').replaceAll(RegExp(r'/+$'), '');
+    String? at(Object? path) {
+      final p = _str(path);
+      if (root.isEmpty || p == null) return null;
+      return p.startsWith('/') ? '$root$p' : '$root/$p';
+    }
+
     return SsmStatus(
       configured: j['configured'] == true,
       cacheRows: _int(j['cache_rows']) ?? 0,
       searches24h: _int(j['searches_24h']) ?? 0,
       provider: _str(s['provider']),
       loggedInAs: _str(s['logged_in_as']),
+      loginUrl: at(r['loginPath']),
+      searchUrl: at(r['searchPath']),
       obtainedAt: _date(s['obtained_at']),
       lastUsedAt: _date(s['last_used_at']),
       lastError: _str(s['last_error']),

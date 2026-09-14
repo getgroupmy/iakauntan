@@ -112,6 +112,16 @@ class _SsmLookupAdminTabState extends ConsumerState<SsmLookupAdminTab> {
                           value: '${s.searches24h}',
                         ),
                         _Row(label: 'Answers cached', value: '${s.cacheRows}'),
+                        // The endpoints, because the defaults are a
+                        // guess at ssmsearch.com's own API and each is
+                        // overridable by a dashboard secret. "Which URL
+                        // did it ask for" is the first question a
+                        // failed sign-in raises, and once these are
+                        // overridable the repository cannot answer it.
+                        if (s.loginUrl != null)
+                          _Row(label: 'Signs in at', value: s.loginUrl!),
+                        if (s.searchUrl != null)
+                          _Row(label: 'Searches at', value: s.searchUrl!),
                         if (s.lastError != null)
                           _Row(
                             label: 'Last error',
@@ -245,6 +255,15 @@ class _NotConfigured extends StatelessWidget {
           Text(
             'They are not kept in this database or in this repository, '
             'so there is nothing to key in here.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: Space.sm),
+          Text(
+            'Three more are optional and only matter if the sign-in '
+            'fails with a path: SSMSEARCH_API_ROOT, '
+            'SSMSEARCH_LOGIN_PATH and SSMSEARCH_SEARCH_PATH. The '
+            'defaults are a guess at the provider\u2019s own API, and '
+            'correcting one is a secret change rather than a release.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],

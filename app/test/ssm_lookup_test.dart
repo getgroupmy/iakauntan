@@ -125,7 +125,10 @@ void main() {
       );
       // A reader turns a logo into punctuation, and those characters in
       // a query find nothing at all.
-      expect(SsmQueryHints.cleanName('~|  ACME  ENTERPRISE  '), 'ACME ENTERPRISE');
+      expect(
+        SsmQueryHints.cleanName('~|  ACME  ENTERPRISE  '),
+        'ACME ENTERPRISE',
+      );
     });
 
     test('nothing worth asking produces no query rather than a bad one', () {
@@ -270,7 +273,10 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('No company carries that registration'), findsOneWidget);
+      expect(
+        find.textContaining('No company carries that registration'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -297,6 +303,34 @@ void main() {
       expect(find.byType(TextField), findsNothing);
       expect(find.byType(TextFormField), findsNothing);
       expect(find.textContaining('SSMSEARCH_PASSWORD'), findsOneWidget);
+    });
+
+    testWidgets('says which URL it actually asks', (tester) async {
+      // The defaults are a guess at the provider's own API and each is
+      // a dashboard secret, so the repository cannot answer "which URL
+      // did it ask for" — and that is the first question a sign-in
+      // that failed with "Page not found" raises.
+      await tester.pumpWidget(
+        _wrap(
+          const SsmLookupAdminTab(),
+          _FakeSsm(
+            statusValue: const SsmStatus(
+              configured: true,
+              cacheRows: 0,
+              searches24h: 0,
+              loginUrl: 'https://ssmsearch.com/api/user/login',
+              searchUrl: 'https://ssmsearch.com/api/company/search',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('https://ssmsearch.com/api/user/login'), findsOneWidget);
+      expect(
+        find.text('https://ssmsearch.com/api/company/search'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('testing a login is offered only once it could work', (

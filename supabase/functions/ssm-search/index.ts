@@ -50,7 +50,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { serveFunction } from "../_shared/cors.ts";
-import { SsmError, SsmSearchWeb } from "./provider.ts";
+import { DEFAULT_ROUTES, type Routes, SsmError, SsmSearchWeb } from "./provider.ts";
 
 /**
  * The body shape, and NOT the CORS headers.
@@ -147,6 +147,12 @@ serveFunction("ssm-search", async (req: Request): Promise<Response> => {
           configured: Boolean(
             Deno.env.get("SSMSEARCH_EMAIL") && Deno.env.get("SSMSEARCH_PASSWORD"),
           ),
+          // Endpoints, not credentials. On the page because the
+          // defaults are a guess and "which URL did it actually ask
+          // for" is the first question a failed sign-in raises -- and
+          // one an operator cannot answer from the repository once
+          // these are overridable.
+          routes: routes(),
           session: session ?? null,
           cache_rows: cached ?? 0,
           searches_24h: searches ?? 0,
@@ -216,7 +222,25 @@ function provider(admin: any): SsmSearchWeb {
       503,
     );
   }
-  return new SsmSearchWeb(admin, email, password);
+  return new SsmSearchWeb(admin, email, password, routes());
+}
+
+/**
+ * Where to send the requests.
+ *
+ * Overridable because the defaults are a GUESS -- see `Routes` in
+ * `provider.ts`. An operator who can watch their own browser's network
+ * tab can correct a path here and the next search uses it, with no
+ * deploy of this repository and nobody to wait for.
+ */
+function routes(): Routes {
+  return {
+    apiRoot: Deno.env.get("SSMSEARCH_API_ROOT") || DEFAULT_ROUTES.apiRoot,
+    loginPath: Deno.env.get("SSMSEARCH_LOGIN_PATH") ||
+      DEFAULT_ROUTES.loginPath,
+    searchPath: Deno.env.get("SSMSEARCH_SEARCH_PATH") ||
+      DEFAULT_ROUTES.searchPath,
+  };
 }
 
 async function search(

@@ -68,6 +68,46 @@ interface SessionRow {
   obtained_at: string | null;
 }
 
+/**
+ * Where ssmsearch.com's own website sends its requests.
+ *
+ * THESE ARE A GUESS UNTIL SOMEBODY WATCHES THE REAL ONE. They were read
+ * off the package this feature arrived in, not off a live browser, and
+ * the first real sign-in said so:
+ *
+ *   Sign-in failed (there was no session yet):
+ *   Page not found: /api/user/login
+ *
+ * Which is worth reading carefully, because it is good news twice over.
+ * The message is ssmsearch.com's own, in their words, which means
+ * `/api` routes and answers — the root is right. And `/user/login` is
+ * simply not one of their routes.
+ *
+ * So each piece is overridable by an edge-function secret, and
+ * correcting one is a secret change rather than a deploy of this
+ * repository. An operator who can open their own browser's network tab
+ * can fix this without waiting for anybody:
+ *
+ *   SSMSEARCH_API_ROOT      https://ssmsearch.com/api
+ *   SSMSEARCH_LOGIN_PATH    /user/login
+ *   SSMSEARCH_SEARCH_PATH   /company/search
+ *
+ * They are endpoints and not credentials — nothing secret about a URL —
+ * but they live beside the login because that is where this function's
+ * configuration is, and one place beats two.
+ */
+export interface Routes {
+  apiRoot: string;
+  loginPath: string;
+  searchPath: string;
+}
+
+export const DEFAULT_ROUTES: Routes = {
+  apiRoot: "https://ssmsearch.com/api",
+  loginPath: "/user/login",
+  searchPath: "/company/search",
+};
+
 /** Anything with `.from()` and `.rpc()`; the service-role client. */
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -79,11 +119,16 @@ export class SsmSearchWeb {
     private readonly db: Db,
     private readonly email: string,
     private readonly password: string,
-    private readonly apiRoot = "https://ssmsearch.com/api",
+    private readonly routes: Routes = DEFAULT_ROUTES,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly sleep = (ms: number) =>
       new Promise<void>((r) => setTimeout(r, ms)),
   ) {}
+
+  private url(path: string): string {
+    return this.routes.apiRoot.replace(/\/+$/, "") +
+      (path.startsWith("/") ? path : "/" + path);
+  }
 
   async search(
     query: string,
@@ -162,7 +207,7 @@ export class SsmSearchWeb {
 
     let res: Response;
     try {
-      res = await this.fetchImpl(`${this.apiRoot}/user/login`, {
+      res = await this.fetchImpl(this.url(this.routes.loginPath), {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -187,7 +232,15 @@ export class SsmSearchWeb {
       const said = typeof body.message === "string"
         ? body.message
         : `HTTP ${res.status}`;
-      await this.noteError(`Sign-in failed (${reason}): ${said}`);
+      // The URL as well as their answer. "Page not found: /user/login"
+      // is their words about a path, and the useful question is which
+      // path THIS deployment asked for -- which is a secret now, and
+      // therefore not something the reader of this log can assume.
+      await this.noteError(
+        `Sign-in failed (${reason}): ${said} [POST ${
+          this.url(this.routes.loginPath)
+        }]`,
+      );
       throw new SsmError(
         "SSM_LOGIN_FAILED",
         `ssmsearch.com would not sign in: ${said}`,
@@ -217,7 +270,7 @@ export class SsmSearchWeb {
     page: number,
     perPage: number,
   ) {
-    const url = new URL(`${this.apiRoot}/company/search`);
+    const url = new URL(this.url(this.routes.searchPath));
     url.searchParams.set("q", query);
     url.searchParams.set("page", String(page));
     url.searchParams.set("perPage", String(perPage));
