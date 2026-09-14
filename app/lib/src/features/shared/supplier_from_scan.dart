@@ -5,6 +5,9 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/ssm_repository.dart';
+import 'ssm_entity_picker.dart';
+import 'ssm_query_hints.dart';
 
 /// Finding the supplier a scanned document came from, and offering to
 /// create it when there isn't one.
@@ -124,12 +127,26 @@ Future<String?> createSupplierFromScan(
 ) async {
   // Reviewed and CORRECTED before it is written, not after. See
   // `_SupplierDraft`.
-  final draft = await showDialog<OcrExtraction>(
+  final draft = await showDialog<_Draft>(
     context: context,
     builder: (_) => _SupplierDraft(read: read),
   );
   if (draft == null || !context.mounted) return null;
-  return _create(context, ref, draft);
+  return _create(context, ref, draft.read, draft.ssm);
+}
+
+/// What the review dialog hands back.
+///
+/// The extraction is what gets written; [ssm] is only there so a
+/// supplier confirmed against the register can be STAMPED as confirmed
+/// after it exists. Two values rather than one because a reading and a
+/// registry match are different kinds of fact, and merging them here
+/// would lose which was which.
+class _Draft {
+  const _Draft(this.read, this.ssm);
+
+  final OcrExtraction read;
+  final SsmEntity? ssm;
 }
 
 /// The part of a printed name worth searching on.
@@ -330,6 +347,7 @@ Future<String?> _create(
   BuildContext context,
   WidgetRef ref,
   OcrExtraction read,
+  SsmEntity? ssm,
 ) async {
   final repo = ref.read(repoProvider)!;
   final messenger = ScaffoldMessenger.of(context);
@@ -372,6 +390,31 @@ Future<String?> _create(
         currency: read.currency ?? 'MYR',
       ),
     );
+    // Confirmed against the register while the draft was being
+    // reviewed, so the contact records that it was checked rather than
+    // only carrying a number somebody agreed with. After the create,
+    // because the function needs an id.
+    //
+    // Its own failure, deliberately. The supplier exists by this point
+    // and the bill can be captured against it; a stamp that did not
+    // land leaves `ssm_verified_at` null and nothing else. Letting it
+    // fall into the catch below would report "could not create the
+    // supplier" about a supplier that had just been created, and the
+    // person would create a second one.
+    if (ssm != null) {
+      try {
+        await ref.read(ssmLookupProvider).saveToContact(saved.id, ssm);
+      } on SsmLookupException catch (e) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Supplier created, but the register check was not '
+              'recorded: ${e.userMessage}',
+            ),
+          ),
+        );
+      }
+    }
     return saved.id;
   } catch (e) {
     messenger.showSnackBar(
@@ -433,6 +476,11 @@ class _SupplierDraftState extends State<_SupplierDraft> {
     text: widget.read?.supplierAddress ?? '',
   );
 
+  /// What the register answered, when somebody asked it. Carried out
+  /// of the dialog so the contact can be stamped as confirmed; see
+  /// `_Draft`.
+  SsmEntity? _ssm;
+
   @override
   void dispose() {
     _name.dispose();
@@ -457,6 +505,32 @@ class _SupplierDraftState extends State<_SupplierDraft> {
   /// silently keep the misread one, which is the exact failure the
   /// dialog exists to prevent.
   String _text(TextEditingController c) => c.text.trim();
+
+  /// Asks the register, seeded with the best of what is on screen.
+  ///
+  /// A registration number first if there is one, because the register
+  /// matches a number exactly; failing that the name; failing that
+  /// whatever the reader saw, which on a bill whose supplier block was
+  /// missed is the only place the company is named at all. That last
+  /// case is the one somebody hits when a scan produced no supplier
+  /// details and the dialog opened empty.
+  Future<void> _lookUpSsm() async {
+    final seed = SsmQueryHints.bestQuery(
+      [
+        if (_reg.text.trim().isNotEmpty) _reg.text.trim(),
+        if (_name.text.trim().isNotEmpty) _name.text.trim(),
+        widget.read?.rawText ?? '',
+      ].firstWhere((s) => s.trim().isNotEmpty, orElse: () => ''),
+    );
+
+    final chosen = await showSsmEntityPicker(context, initialQuery: seed);
+    if (chosen == null || !mounted) return;
+    setState(() {
+      _ssm = chosen;
+      _name.text = chosen.name;
+      if (chosen.regNo != null) _reg.text = chosen.regNo!;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -506,6 +580,38 @@ class _SupplierDraftState extends State<_SupplierDraft> {
                     helperText: 'Identifies the supplier on an e-Invoice',
                   ),
                 ),
+                // The moment this is most worth doing. A number about
+                // to seed `id_value` has come off a letterhead through
+                // a reader, which is two chances to lose a digit, and
+                // the register will say in one search whether it is a
+                // real company's number.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const ValueKey('scan-supplier-ssm'),
+                    onPressed: _lookUpSsm,
+                    icon: const Icon(Icons.travel_explore_outlined, size: 18),
+                    label: const Text('Check the SSM register'),
+                  ),
+                ),
+                if (_ssm != null)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.verified_outlined,
+                        size: 16,
+                        color: context.colors.success,
+                      ),
+                      const SizedBox(width: Space.xs),
+                      Expanded(
+                        child: Text(
+                          'From the register: ${_ssm!.registrationDisplay}'
+                          '${_ssm!.entityType == null ? '' : ' \u00b7 ${_ssm!.entityType}'}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: Space.sm),
                 TextFormField(
                   controller: _tax,
@@ -565,13 +671,16 @@ class _SupplierDraftState extends State<_SupplierDraft> {
             // deciding that is two places to fix it.
             Navigator.pop(
               context,
-              (widget.read ?? const OcrExtraction()).copyWith(
-                supplierName: _name.text.trim(),
-                supplierRegistrationNo: _text(_reg),
-                supplierTaxId: _text(_tax),
-                supplierEmail: _text(_email),
-                supplierPhone: _text(_phone),
-                supplierAddress: _text(_address),
+              _Draft(
+                (widget.read ?? const OcrExtraction()).copyWith(
+                  supplierName: _name.text.trim(),
+                  supplierRegistrationNo: _text(_reg),
+                  supplierTaxId: _text(_tax),
+                  supplierEmail: _text(_email),
+                  supplierPhone: _text(_phone),
+                  supplierAddress: _text(_address),
+                ),
+                _ssm,
               ),
             );
           },

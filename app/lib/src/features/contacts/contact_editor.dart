@@ -21,6 +21,9 @@ import '../../data/places_repository.dart';
 // `RepoGroupContacts` is an extension, and a Dart extension is only
 // in scope where its declaring library is imported.
 import '../../data/repository.dart';
+import '../../data/ssm_repository.dart';
+import '../shared/ssm_entity_picker.dart';
+import '../shared/ssm_query_hints.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
 import 'customer_portal_card.dart';
@@ -67,6 +70,15 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   bool _saving = false;
   bool _verifying = false;
   bool? _tinValid;
+
+  /// What the SSM register answered, if anybody asked it.
+  ///
+  /// Held rather than written straight away, because the fields it
+  /// fills are still editable afterwards and a person who overrides
+  /// the registry has not verified anything. `_stampSsm` compares
+  /// before it claims.
+  SsmEntity? _ssmChosen;
+  bool _ssmBusy = false;
   // The codes the series has suggested for this new contact, one per
   // prefix, so that changing the type re-suggests (C- becomes S- or P-)
   // without drawing a second number from a series already drawn on, and
@@ -403,6 +415,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         // companies are related, and 0142 checks both ends before
         // believing it.
         await ref.read(repoProvider)!.linkGroupContact(saved.id, _linkedOrgId);
+        // Last, and only when the form still says what the register
+        // said. See `_ssmStillMatches`.
+        await _stampSsm(saved.id);
       },
       successMessage: 'Contact saved',
     );
@@ -412,6 +427,75 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       ref.invalidate(contactsProvider);
       Navigator.of(context).maybePop();
     }
+  }
+
+  /// Asks SSM's register who this company is.
+  ///
+  /// Seeded with whatever is already on the form — a registration
+  /// number if one is typed, because the register matches a number
+  /// exactly and a name only approximately.
+  ///
+  /// What comes back fills the name and both registration numbers, and
+  /// seeds `idValue` only when it is empty: a TIN somebody entered
+  /// deliberately for e-Invoice is not this button's to replace. The
+  /// same rule the database function follows, so the form and the save
+  /// cannot disagree.
+  Future<void> _lookUpSsm() async {
+    final typed = _nullIfEmpty(_c('registrationNo').text) ?? _c('name').text;
+    setState(() => _ssmBusy = true);
+    final chosen = await showSsmEntityPicker(
+      context,
+      initialQuery: SsmQueryHints.bestQuery(typed),
+    );
+    if (!mounted) return;
+    setState(() => _ssmBusy = false);
+    if (chosen == null) return;
+
+    setState(() {
+      _ssmChosen = chosen;
+      _c('name').text = chosen.name;
+      if (chosen.regNo != null) _c('registrationNo').text = chosen.regNo!;
+      if (_nullIfEmpty(_c('idValue').text) == null && chosen.regNo != null) {
+        _c('idValue').text = chosen.regNo!;
+        _idType = 'BRN';
+      }
+      // A name that came from the registry is the legal name by
+      // definition, and the e-Invoice uses that field when it differs.
+      if (_nullIfEmpty(_c('legalName').text) == null) {
+        _c('legalName').text = chosen.name;
+      }
+      // The TIN was checked against a number that has just changed.
+      _tinValid = null;
+    });
+    _scheduleLookalikes();
+  }
+
+  /// Whether the form still says what the register said.
+  ///
+  /// Somebody may look a company up and then correct the name by hand,
+  /// and stamping `ssm_verified_at` on that would be recording a
+  /// verification that did not happen — which is precisely the
+  /// distinction the column exists to make.
+  bool get _ssmStillMatches {
+    final chosen = _ssmChosen;
+    if (chosen == null) return false;
+    final sameName =
+        _c('name').text.trim().toUpperCase() == chosen.name.toUpperCase();
+    final sameReg =
+        _nullIfEmpty(_c('registrationNo').text) ==
+            (chosen.regNo ?? '').trim() ||
+        (chosen.regNo == null &&
+            _nullIfEmpty(_c('registrationNo').text) == null);
+    return sameName && sameReg;
+  }
+
+  /// Records the registry's answer against the saved contact.
+  ///
+  /// After the save and not instead of it: the function needs a contact
+  /// id, and a new contact has none until `saveContact` returns.
+  Future<void> _stampSsm(String contactId) async {
+    if (!_ssmStillMatches) return;
+    await ref.read(ssmLookupProvider).saveToContact(contactId, _ssmChosen!);
   }
 
   /// Checks the TIN against LHDN so an invoice is not rejected later.
@@ -557,6 +641,50 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         validator: (v) =>
                             (v ?? '').trim().isEmpty ? 'Enter a name' : null,
                       ),
+                      // The registry, offered where the name is typed
+                      // rather than beside the registration number.
+                      // Somebody who knows the number does not need
+                      // this; somebody with a letterhead and a
+                      // half-remembered name is who it is for.
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          key: const ValueKey('contact-ssm-lookup'),
+                          onPressed: _ssmBusy ? null : _lookUpSsm,
+                          icon: const Icon(
+                            Icons.travel_explore_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            _ssmChosen == null
+                                ? 'Check the SSM register'
+                                : 'Check the SSM register again',
+                          ),
+                        ),
+                      ),
+                      if (_ssmChosen != null && _ssmStillMatches)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: Space.sm),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.verified_outlined,
+                                size: 16,
+                                color: context.colors.success,
+                              ),
+                              const SizedBox(width: Space.xs),
+                              Expanded(
+                                child: Text(
+                                  'From the register: '
+                                  '${_ssmChosen!.registrationDisplay}'
+                                  '${_ssmChosen!.entityType == null ? '' : ' · ${_ssmChosen!.entityType}'}'
+                                  '. Saving records that it was checked.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _c('legalName'),

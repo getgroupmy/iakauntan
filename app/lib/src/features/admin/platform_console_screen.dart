@@ -19,6 +19,7 @@ import 'feedback_admin.dart';
 import 'platform_trail_admin.dart';
 import 'reservations_admin.dart';
 import 'site_pages_admin.dart';
+import 'ssm_lookup_admin.dart';
 import 'statutory_rates_admin.dart';
 
 /// One section of the platform console.
@@ -94,6 +95,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/ai',
     primary: false,
     page: AiProvidersAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'SSM register',
+    icon: Icons.travel_explore_outlined,
+    selectedIcon: Icons.travel_explore,
+    path: '/admin/ssm',
+    primary: false,
+    page: SsmLookupAdminTab(),
   ),
   (
     group: 'Service',

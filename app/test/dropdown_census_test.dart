@@ -87,6 +87,13 @@ const dropdownCensus = <String, int>{
   'features/settings/new_account_dialog.dart': 2,
   'features/settings/settings_screen.dart': 1,
   'features/settings/tax_code_dialog.dart': 2,
+  // The four kinds of entity SSM registers: Company, Business, Audit
+  // Firm, Limited Liability Partnership. Not a list that grows -- it is
+  // `ssm_entity_types`, whose four rows are seeded by 0589 and are the
+  // register's own classification, not ours. A fifth would arrive by
+  // Act of Parliament and by migration, and a migration that added one
+  // would have to come here anyway.
+  'features/shared/ssm_entity_picker.dart': 1,
   'features/stock/landed_cost_screen.dart': 1,
   'features/team/team_screen.dart': 1,
   'features/ticketing/ticket_editor.dart': 1,

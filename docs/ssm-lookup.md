@@ -42,8 +42,9 @@ Two consequences that are not negotiable while it is in use:
    read — the same rule as `OCR_KEY_*` and `RESEND_API_KEY`.
 3. Deploy: the function ships with every push, so this is only the
    secrets.
-4. Platform console → SSM lookup → **Test login**. That is the real
-   check; everything before it is arrangement.
+4. Platform console → **SSM register** (`/admin/ssm`) → **Test the
+   login**. That is the real check; everything before it is
+   arrangement.
 
 Optional: `SSM_CACHE_TTL_HOURS` (24) and `SSM_RATE_LIMIT_PER_MIN` (30).
 
@@ -87,6 +88,41 @@ This schema already has `name`, `registration_no` and
 `old_registration_no`, and a second copy of the same fact is two columns
 with nothing to say which one a report should believe.
 
+## Where it turns up in the app
+
+Three places, and each of them is a moment where somebody is about to
+commit a registration number to a record that an e-Invoice will be
+validated against:
+
+* **The contact editor**, under the name — *Check the SSM register*.
+  Seeded with the registration number if one is typed, and with the
+  name otherwise, because the register matches a number exactly and a
+  name only approximately. What comes back fills the name, both
+  registration numbers and the legal name, and seeds `id_value` only
+  when it is empty.
+
+  Saving is what records the check. If the name or the number is edited
+  by hand **after** the lookup, nothing is stamped: the form no longer
+  says what the register said, and `ssm_verified_at` would then be
+  recording a verification that did not happen.
+
+* **The scanned-bill supplier dialog** — the review screen that stands
+  between a reading and a new contact. The same button, seeded from the
+  reading and, failing that, from the raw text the reader returned;
+  that last case is the one somebody hits when a scan produced no
+  supplier details at all and the form opened empty. A supplier created
+  from a confirmed match is stamped after it exists.
+
+  If the stamp fails the supplier is still created and the screen says
+  so. Reporting "could not create the supplier" about a supplier that
+  had just been created is how somebody ends up with two.
+
+* **The platform console**, for the operator: is it configured, is
+  there a live session, what went wrong last, how much is it being
+  used — and four buttons. There is deliberately **no credential form**:
+  the login is a dashboard secret, and a box on that page would put a
+  working third-party login in the database.
+
 ## Only the free search
 
 Name, new and old registration numbers, and entity type. Status,
@@ -111,7 +147,7 @@ developer portal renders with RapiDoc, so one exists.
 
 The login call and its response mapping were derived from
 ssmsearch.com's own frontend and verified against a mock, not against
-live credentials. **Test login** on the admin page is the first real
+live credentials. **Test the login** on the console page is the first real
 check. When it fails, ssmsearch.com's own words are shown and kept in
 `ssm_session.last_error`, because a refusal only they understand is one
 only their message can explain.
