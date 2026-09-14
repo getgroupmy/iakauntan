@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0586",
+    "version": "0587",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -24848,8 +24848,8 @@
     "/rpc/clock_in": {
       "post": {
         "operationId": "clock_in",
-        "summary": "Clock in",
-        "description": "`public.clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Starts somebody's working day and returns the attendance record",
+        "description": "Starts somebody's working day and returns the attendance record. THE EARLIEST PUNCH WINS: a second clock-in on the same day does not overwrite the first, because tapping again at the door is not a correction and a record that took the later time would turn an on-time arrival into a late one. Lateness is worked out here, once, against the shift rostered for the day and after its grace period. No shift rostered means no lateness rather than lateness from midnight. Punching for somebody else needs `can_manage_hr` \u2014 it is an HR action and not a self-service one. The day is Kuala Lumpur's, not the server's.\n\n`public.clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24932,8 +24932,8 @@
     "/rpc/clock_out": {
       "post": {
         "operationId": "clock_out",
-        "summary": "Clock out",
-        "description": "`public.clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Closes the day and returns what it came to \u2014 worked, scheduled, overtime split into normal, rest day and\u2026",
+        "description": "Closes the day and returns what it came to \u2014 worked, scheduled, overtime split into normal, rest day and holiday, and the lateness from the morning. RECOMPUTES THE DAY BUT NOT THE LATENESS: clocking out does not make somebody late, and recomputing everything would be the easy way to let it. Refuses when there is no clock-in today to close, rather than inventing one. Clocking out for somebody else needs `can_manage_hr`. Repeated calls move the clock-out later, unlike `clock_in` \u2014 the last time somebody left is the one that counts.\n\n`public.clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -32350,8 +32350,8 @@
     "/rpc/finalise_appraisal": {
       "post": {
         "operationId": "finalise_appraisal",
-        "summary": "Finalise appraisal",
-        "description": "`public.finalise_appraisal(p_appraisal uuid, p_final_rating numeric, p_calibration_note text)` Writes. Requires a signed-in user.",
+        "summary": "Settles the final rating and completes the appraisal",
+        "description": "Settles the final rating and completes the appraisal. Three refusals, each about a rating meaning what it appears to mean. It will not finalise before THE MANAGER HAS WRITTEN THEIR HALF \u2014 a final rating over one half of a conversation is just the other half again. It will not finalise when the goal weights do not come to 100, because the overall rating is a weighted judgement about them and weights that miss make it mean whatever the reader assumes. And DEPARTING FROM THE MANAGER'S RATING REQUIRES A NOTE: calibration is the act of departing, so departing without a word is the one thing it cannot be, and that difference is the only thing calibration leaves behind. Refuses an appraisal already completed. HR only.\n\n`public.finalise_appraisal(p_appraisal uuid, p_final_rating numeric, p_calibration_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -37012,8 +37012,8 @@
     "/rpc/mark_payroll_paid": {
       "post": {
         "operationId": "mark_payroll_paid",
-        "summary": "Mark payroll paid",
-        "description": "`public.mark_payroll_paid(p_run_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Records that a posted payroll run has actually been paid out",
+        "description": "Records that a posted payroll run has actually been paid out. MOVES NO MONEY and writes no journal \u2014 the posting did that; this is the note that the transfer left the bank, which is what a statutory remittance is later recorded against. Only from `posted`: a draft run marked paid would be a payment of figures that can still change. Needs `can_run_payroll`.\n\n`public.mark_payroll_paid(p_run_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -38958,8 +38958,8 @@
     "/rpc/open_appraisal_cycle": {
       "post": {
         "operationId": "open_appraisal_cycle",
-        "summary": "Open appraisal cycle",
-        "description": "`public.open_appraisal_cycle(p_cycle uuid)` Writes. Requires a signed-in user.",
+        "summary": "Creates an appraisal for everybody the cycle covers and returns how many were made",
+        "description": "Creates an appraisal for everybody the cycle covers and returns how many were made. Membership is decided at the PERIOD END, not today: somebody who left during the period is not appraised, somebody hired during it is, on the part of it they were here for. Idempotent \u2014 running it again after a new joiner adds only the missing ones, which is how a cycle opened early is topped up. Moves a draft cycle to self-review and leaves a cycle further along where it is. Refuses a completed cycle. Needs `can_manage_hr`.\n\n`public.open_appraisal_cycle(p_cycle uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -50224,8 +50224,8 @@
     "/rpc/renew_employee_document": {
       "post": {
         "operationId": "renew_employee_document",
-        "summary": "Renew employee document",
-        "description": "`public.renew_employee_document(p_document uuid, p_expires_date date, p_issued_date date, p_title text, p_notes text)` Writes. Requires a signed-in user.",
+        "summary": "Files the replacement for a permit, visa or certificate and returns it, carrying the type, title and notes\u2026",
+        "description": "Files the replacement for a permit, visa or certificate and returns it, carrying the type, title and notes across unless new ones are given, and linking it to what it supersedes. Refuses to renew a document THAT HAS ALREADY BEEN RENEWED \u2014 renew the one that replaced it, not the one it replaced \u2014 which is what stops a chain forking into two current permits. Refuses a renewal expiring on or before the document it replaces: that is a different document, and treating it as a renewal would retire the permit that is still the current one. The issue date defaults to the old expiry, so a chain has no gap in it. Needs `can_manage_hr`.\n\n`public.renew_employee_document(p_document uuid, p_expires_date date, p_issued_date date, p_title text, p_notes text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -61641,8 +61641,8 @@
     "/rpc/start_onboarding": {
       "post": {
         "operationId": "start_onboarding",
-        "summary": "Start onboarding",
-        "description": "`public.start_onboarding(p_employee_id uuid, p_template_id uuid, p_start_date date, p_kind text)` Writes. Requires a signed-in user.",
+        "summary": "Raises an onboarding or offboarding checklist from a template and returns it, with each task dated from the\u2026",
+        "description": "Raises an onboarding or offboarding checklist from a template and returns it, with each task dated from the start by the template's own offsets. An onboarding starts on the HIRE DATE, usually in the future when somebody sets this up; an offboarding starts today. Refuses a second open checklist of the same kind for the same person, and refuses a template with no items in it \u2014 an empty checklist looks finished from every angle without anybody having done anything, which is the worst possible thing for a list of statutory tasks to look like. A template from another company is refused rather than ignored. Needs `can_manage_hr`.\n\n`public.start_onboarding(p_employee_id uuid, p_template_id uuid, p_start_date date, p_kind text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -62480,8 +62480,8 @@
     "/rpc/submit_self_appraisal": {
       "post": {
         "operationId": "submit_self_appraisal",
-        "summary": "Submit self appraisal",
-        "description": "`public.submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` Writes. Requires a signed-in user.",
+        "summary": "Writes the employee's own half and moves the appraisal to the manager",
+        "description": "Writes the employee's own half and moves the appraisal to the manager. ONLY THE PERSON BEING APPRAISED may call it \u2014 not their manager, not HR \u2014 because a self review written by somebody else is not one. Refuses a second submission and says to ask HR to reopen it, since the point of the record is what they said at the time. Refuses a rating with no comment: a number with nothing written beside it is one the manager has to guess the meaning of.\n\n`public.submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63435,8 +63435,8 @@
     "/rpc/unverify_person_identity": {
       "post": {
         "operationId": "unverify_person_identity",
-        "summary": "Unverify person identity",
-        "description": "`public.unverify_person_identity(p_person uuid)` Writes. Requires a signed-in user.",
+        "summary": "Withdraws the identity verification on a director, shareholder or officer \u2014 for a document found to be false\u2026",
+        "description": "Withdraws the identity verification on a director, shareholder or officer \u2014 for a document found to be false, or a check done against the wrong person. Clears the DATE only; the table's own check constraint clears the verifier with it, because a verifier with no date is the same broken record the other way round, and the rule belongs where every write passes rather than restated here where a direct UPDATE would miss it. Needs `can_write`, which is lighter than verifying: withdrawing a claim is the safe direction.\n\n`public.unverify_person_identity(p_person uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

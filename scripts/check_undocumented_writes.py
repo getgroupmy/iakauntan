@@ -77,8 +77,11 @@ if hasattr(signal, 'SIGPIPE'):
 # which data reaches somebody outside the company -- where the surprise
 # is that `audit_trail` and `security_log` are reads that WRITE, because
 # a log that does not record who read it is the one record an insider
-# has no reason to avoid.
-BUDGET = 55
+# has no reason to avoid. `0587` took the nine that write into a
+# person's employment record, where almost every refusal exists to stop
+# a record meaning something it should not -- and `clock_in` upserts
+# the wrong way round on purpose, keeping the EARLIEST punch.
+BUDGET = 46
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
