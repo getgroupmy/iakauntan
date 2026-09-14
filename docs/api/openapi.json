@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0584",
+    "version": "0585",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -66317,6 +66317,64 @@
         }
       }
     },
+    "/rpc/void_rent_run": {
+      "post": {
+        "operationId": "void_rent_run",
+        "summary": "Undoes a rent run: voids every invoice it raised, reversing each one's journal, and frees the period to be\u2026",
+        "description": "Undoes a rent run: voids every invoice it raised, reversing each one's journal, and frees the period to be raised again. Returns how many invoices were voided. ALL OR NOTHING \u2014 it refuses outright when any invoice has a payment against it or has been accepted by LHDN, and says how many, because voiding the rest would free the period while those invoices still stand and the tenants who hold them would be billed a second time. A reason is required: a billing run undone without one is the one the auditor asks about. The run row stays, marked voided, because it is a record of something that happened. Needs `can_post`, the same bar as raising it.\n\n`public.void_rent_run(p_run uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_run": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_run"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/void_sales_document": {
       "post": {
         "operationId": "void_sales_document",
@@ -66358,6 +66416,64 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/void_strata_charge_run": {
+      "post": {
+        "operationId": "void_strata_charge_run",
+        "summary": "The same for a strata charge run: voids every invoice, reverses every journal, frees the period, returns the\u2026",
+        "description": "The same for a strata charge run: voids every invoice, reverses every journal, frees the period, returns the count. Refuses outright when any invoice is paid or accepted by LHDN, for the same reason \u2014 a partly undone run whose period is free again bills those owners twice. A reason is required. Needs `can_post`.\n\n`public.void_strata_charge_run(p_run uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_run": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_run"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
                 }
               }
             }
@@ -86683,6 +86799,17 @@
           "raised_by": {
             "type": "string",
             "format": "uuid"
+          },
+          "voided_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "voided_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "void_reason": {
+            "type": "string"
           }
         },
         "required": [
@@ -88408,6 +88535,17 @@
           "raised_by": {
             "type": "string",
             "format": "uuid"
+          },
+          "voided_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "voided_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "void_reason": {
+            "type": "string"
           }
         },
         "required": [

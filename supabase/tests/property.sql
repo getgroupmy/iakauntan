@@ -399,6 +399,63 @@ begin
     v_run is not null);
 
   -- ------------------------------------------------------------------
+  -- The way back (0585)
+  -- ------------------------------------------------------------------
+  --
+  -- 0584 refused a second raise and said plainly that it stopped short
+  -- of an exclusion constraint because a wrong period could never be
+  -- corrected. These assert the correction actually works.
+  perform pg_temp.check_refused(
+    'undoing a run without saying why is refused',
+    format('select public.void_rent_run(%L)', v_run),
+    '%Say why%');
+
+  select count(*) into v_count
+    from public.rent_run_lines where run_id = v_run;
+  perform pg_temp.check_eq('February billed two tenancies', v_count, 2);
+
+  perform pg_temp.check_eq(
+    'and undoing it voids both invoices',
+    public.void_rent_run(v_run, 'wrong dates'), 2);
+
+  select count(*) into v_count
+    from public.rent_run_lines l
+    join public.sales_documents d on d.id = l.invoice_id
+   where l.run_id = v_run and d.status = 'void';
+  perform pg_temp.check_eq('both really are void', v_count, 2);
+
+  perform pg_temp.check_refused(
+    'and a run cannot be undone twice',
+    format('select public.void_rent_run(%L, %L)', v_run, 'again'),
+    '%already voided%');
+
+  -- The whole point of the undo, and the assertion that would fail if
+  -- either half of 0585 were missing -- the partial index or the
+  -- voided_at clause in the overlap check.
+  v_run := public.raise_rent_invoices(
+    v_site, date '2026-02-01', date '2026-02-28', date '2026-02-07');
+  perform pg_temp.check_true(
+    'so the corrected period can be raised again', v_run is not null);
+
+  -- And the refusal that keeps the undo from reintroducing the bug it
+  -- exists to fix. One invoice paid, and the run will not come apart.
+  update public.sales_documents d
+     set paid_amount = 1.00
+   where d.id = (select l.invoice_id from public.rent_run_lines l
+                  where l.run_id = v_run limit 1);
+  perform pg_temp.check_refused(
+    'but a run with a paid invoice refuses to come apart at all',
+    format('select public.void_rent_run(%L, %L)', v_run, 'too late'),
+    '%have been paid%');
+
+  select count(*) into v_count
+    from public.rent_run_lines l
+    join public.sales_documents d on d.id = l.invoice_id
+   where l.run_id = v_run and d.status = 'void';
+  perform pg_temp.check_eq(
+    'and nothing was voided on the way to refusing', v_count, 0);
+
+  -- ------------------------------------------------------------------
   -- One unit, one tenant, over any given day
   -- ------------------------------------------------------------------
   begin

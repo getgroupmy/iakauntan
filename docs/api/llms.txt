@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0584` (the highest applied migration).
-662 functions and 329 readable tables, of which
+Schema version `0585` (the highest applied migration).
+664 functions and 329 readable tables, of which
 254 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**459 of 662 functions carry a `comment on
+**461 of 664 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -355,7 +355,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)*
 
-### general (455)
+### general (457)
 
 Not gated on any module.
 
@@ -811,7 +811,9 @@ Not gated on any module.
 - `verify_person_identity(p_person uuid, p_document_type text, p_verified_on date, p_notes text)` *(writes)* — Records a CDD check as what it is — this document, seen by this individual, on this day.
 - `void_bank_transfer(p_id uuid, p_reason text)` *(writes)* — Voids a transfer between the company's own bank accounts and reverses its journal if it had one.
 - `void_deposit(p_id uuid, p_reason text)` *(writes)* — Voids a deposit and reverses its journal.
+- `void_rent_run(p_run uuid, p_reason text)` *(writes)* — Undoes a rent run: voids every invoice it raised, reversing each one's journal, and frees the period to be raised again.
 - `void_sales_document(p_id uuid, p_reason text)` *(writes)* — Voids an invoice or other sales document and reverses its journal if it had one, recording the reason in `internal_notes` where the customer will not see it.
+- `void_strata_charge_run(p_run uuid, p_reason text)` *(writes)* — The same for a strata charge run: voids every invoice, reverses every journal, frees the period, returns the count.
 - `workspace_by_host(p_host text)` — Resolves a company's own subdomain to the door that should be drawn at it: the name, the logo, the module, and the login wording if the company wrote any.
 - `workspace_module_refusal(p_host text)` — Null when the signed-in account may open what this address is confined to, otherwise the name of the module it lacks.
 
