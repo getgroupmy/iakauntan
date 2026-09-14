@@ -11,7 +11,12 @@
  *   -> { ok, provider, cached, items: [...], total, page, per_page }
  *
  * Other actions: `entity_types`, and for a platform administrator
- * `status`, `test_login`, `clear_session`, `clear_cache`.
+ * `status`, `test_login`, `probe`, `clear_session`, `clear_cache`.
+ *
+ * `probe` asks ssmsearch.com which of a short list of paths are routes,
+ * sending no credentials, because the paths this shipped with were a
+ * guess and the first live sign-in proved them wrong. See
+ * `probeRoutes`.
  *
  * ---------------------------------------------------------------------
  * Who is asking, and why that is not the service role
@@ -50,7 +55,13 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { serveFunction } from "../_shared/cors.ts";
-import { DEFAULT_ROUTES, type Routes, SsmError, SsmSearchWeb } from "./provider.ts";
+import {
+  DEFAULT_ROUTES,
+  probeRoutes,
+  type Routes,
+  SsmError,
+  SsmSearchWeb,
+} from "./provider.ts";
 
 /**
  * The body shape, and NOT the CORS headers.
@@ -165,6 +176,18 @@ serveFunction("ssm-search", async (req: Request): Promise<Response> => {
         }
         const who = await provider(admin).testLogin();
         return json({ ok: true, ...who });
+      }
+
+      case "probe": {
+        if (!await isAdmin()) {
+          return fail("FORBIDDEN", "Platform staff only.", 403);
+        }
+        // No credentials are sent; see `probeRoutes`. It does not need
+        // the login to be configured either, which is the point --
+        // this is what somebody reaches for when the configured path
+        // is the thing that is wrong.
+        const found = await probeRoutes(fetch, routes().apiRoot);
+        return json({ ok: true, api_root: routes().apiRoot, ...found });
       }
 
       case "clear_session": {

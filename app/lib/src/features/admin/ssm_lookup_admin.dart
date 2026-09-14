@@ -58,6 +58,29 @@ class _SsmLookupAdminTabState extends ConsumerState<SsmLookupAdminTab> {
     }
   }
 
+  /// Asks the provider which paths are routes, and shows what came
+  /// back.
+  ///
+  /// Its own method rather than another `_act`, because the result is
+  /// a table somebody reads and copies a path out of, not a sentence
+  /// in a snackbar.
+  Future<void> _probe() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      final found = await ref.read(ssmLookupProvider).probe();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _ProbeResult(probe: found),
+      );
+    } on SsmLookupException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(ssmStatusProvider);
@@ -195,6 +218,17 @@ class _SsmLookupAdminTabState extends ConsumerState<SsmLookupAdminTab> {
                             icon: const Icon(Icons.cleaning_services_outlined),
                             label: const Text('Empty the cache'),
                           ),
+                          // Offered whether or not the login works,
+                          // and especially when it does not: this is
+                          // what somebody reaches for when the
+                          // configured path is the thing that is
+                          // wrong.
+                          FilledButton.tonalIcon(
+                            key: const ValueKey('ssm-probe'),
+                            onPressed: _busy ? null : _probe,
+                            icon: const Icon(Icons.travel_explore),
+                            label: const Text('Find the endpoints'),
+                          ),
                           TextButton.icon(
                             key: const ValueKey('ssm-try-search'),
                             onPressed: _busy
@@ -223,6 +257,110 @@ class _SsmLookupAdminTabState extends ConsumerState<SsmLookupAdminTab> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// What the probe found, and what to do with it.
+///
+/// A table rather than a sentence, because the useful output is a path
+/// somebody copies into a secret — and the reason a path is interesting
+/// is what the provider SAID when asked, which a snackbar cannot hold.
+class _ProbeResult extends StatelessWidget {
+  const _ProbeResult({required this.probe});
+
+  final SsmProbe probe;
+
+  @override
+  Widget build(BuildContext context) {
+    final found = probe.found;
+    return AlertDialog(
+      title: const Text('What answered'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                found.isEmpty
+                    // Also an answer, and a more useful one than it
+                    // looks: it rules out every shape the guesses were
+                    // based on rather than leaving somebody to try a
+                    // few more by hand.
+                    ? 'Every path was answered "not found". The provider\u2019s '
+                          'API is not shaped like any of these, so the next '
+                          'step is a browser: developer tools, Network, '
+                          'Fetch/XHR, sign in, and read the request URL.'
+                    : 'These answered something other than "not found", so '
+                          'something is listening. Put the path in '
+                          'SSMSEARCH_LOGIN_PATH or SSMSEARCH_SEARCH_PATH and '
+                          'test the login again.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: Space.sm),
+              Text(probe.apiRoot, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: Space.md),
+              for (final hit in [...probe.login, ...probe.search])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        hit.exists ? Icons.check_circle_outline : Icons.remove,
+                        size: 16,
+                        color: hit.exists
+                            ? context.colors.success
+                            : Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(width: Space.sm),
+                      SizedBox(
+                        width: 170,
+                        child: Text(
+                          '${hit.method} ${hit.path}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: hit.exists
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 44,
+                        child: Text(
+                          hit.status == 0 ? '\u2014' : '${hit.status}',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          hit.said,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: Space.md),
+              Text(
+                'No password was sent. A login route answers an empty body '
+                'with a complaint about the missing fields; a path that is '
+                'not a route answers 404.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

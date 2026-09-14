@@ -386,3 +386,143 @@ function num(o: Record<string, unknown>, keys: string[]): number | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------
+// Finding the endpoints, because guessing them did not work
+// ---------------------------------------------------------------------
+//
+// `DEFAULT_ROUTES` were read off the package this feature arrived in,
+// and the first live sign-in answered `Page not found: /api/user/login`
+// in ssmsearch.com's own words. The paths are now secrets, so an
+// operator CAN correct them -- but only if somebody first finds out
+// what they are, and that took a browser with the developer tools open.
+//
+// It does not have to. This function runs on a server that can reach
+// ssmsearch.com; the machine this repository is edited on cannot. So it
+// asks, once, on an operator's press.
+//
+// ## Nothing is signed in to
+//
+// Every probe sends an EMPTY body. A login route answers a request with
+// no credentials with 422, 400 or 401 -- it validates, or it refuses --
+// and a path that is not a route answers 404 with "Page not found".
+// That is the whole distinction being drawn, and it needs no password.
+//
+// Sending the real one to fifteen guessed paths would be spraying a
+// working credential across a third party's URL space to learn
+// something an empty body answers just as well.
+//
+// ## And it is fifteen requests, once
+//
+// Not a crawl. The list is short, deliberate, and shaped like the
+// conventions of the framework their 404 message comes from; it runs
+// when somebody presses a button, and the result names a path to put in
+// a secret.
+
+export const LOGIN_CANDIDATES = [
+  "/user/login",
+  "/login",
+  "/auth/login",
+  "/users/login",
+  "/user/signin",
+  "/signin",
+  "/account/login",
+  "/v1/user/login",
+  "/v1/login",
+  "/sanctum/token",
+];
+
+export const SEARCH_CANDIDATES = [
+  "/company/search",
+  "/companies/search",
+  "/search",
+  "/search/company",
+  "/entity/search",
+];
+
+export interface ProbeHit {
+  path: string;
+  method: string;
+  status: number;
+
+  /** Whatever they said, trimmed to something a screen can hold. */
+  said: string;
+
+  /**
+   * Whether this looks like a real route.
+   *
+   * 404 is the answer being ruled out. Everything else -- a validation
+   * complaint, a refusal, a redirect, even a 500 -- means something is
+   * listening at that path, which is exactly what is being looked for.
+   */
+  exists: boolean;
+}
+
+/**
+ * Ask which of these paths are routes.
+ *
+ * Pure but for the fetch, which is passed in, so the classification
+ * below can be asserted without a network.
+ */
+export async function probeRoutes(
+  fetchImpl: typeof fetch,
+  apiRoot: string,
+  loginPaths: string[] = LOGIN_CANDIDATES,
+  searchPaths: string[] = SEARCH_CANDIDATES,
+): Promise<{ login: ProbeHit[]; search: ProbeHit[] }> {
+  const root = apiRoot.replace(/\/+$/, "");
+
+  const ask = async (
+    path: string,
+    method: "POST" | "GET",
+  ): Promise<ProbeHit> => {
+    const url = root + (path.startsWith("/") ? path : "/" + path) +
+      (method === "GET" ? "?q=test" : "");
+    try {
+      const res = await fetchImpl(url, {
+        method,
+        headers: {
+          "accept": "application/json",
+          ...(method === "POST" ? { "content-type": "application/json" } : {}),
+        },
+        // Empty on purpose. See the header above.
+        ...(method === "POST" ? { body: "{}" } : {}),
+      });
+      const text = (await res.text()).slice(0, 400);
+      let said = text;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed.message === "string") said = parsed.message;
+      } catch {
+        // Not JSON. Their HTML error page is still a useful answer, and
+        // the first 160 characters of it say which one it is.
+        said = text.replace(/\s+/g, " ").slice(0, 160);
+      }
+      return {
+        path,
+        method,
+        status: res.status,
+        said: said.slice(0, 200),
+        exists: res.status !== 404,
+      };
+    } catch (e) {
+      return {
+        path,
+        method,
+        status: 0,
+        said: String(e).slice(0, 200),
+        exists: false,
+      };
+    }
+  };
+
+  // In series rather than all at once. Ten parallel requests at a
+  // third party from one IP is the shape of something being scanned,
+  // and the whole point of this feature's caution is not to look like
+  // that. Fifteen sequential requests take a couple of seconds.
+  const login: ProbeHit[] = [];
+  for (const p of loginPaths) login.push(await ask(p, "POST"));
+  const search: ProbeHit[] = [];
+  for (const p of searchPaths) search.push(await ask(p, "GET"));
+  return { login, search };
+}

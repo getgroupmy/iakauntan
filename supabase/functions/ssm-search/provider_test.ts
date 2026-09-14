@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { normalise } from "./provider.ts";
+import { normalise, probeRoutes } from "./provider.ts";
 
 /**
  * Reading ssmsearch.com's answer.
@@ -96,4 +96,78 @@ Deno.test("takes a number as a name rather than losing the row", () => {
   // a reader that insisted on a string would drop it.
   const out = normalise({ data: [{ name: 12345, regNo: "202301001234" }] }, 1, 20);
   assertEquals(out.items[0].name, "12345");
+});
+
+
+/**
+ * Finding the endpoints.
+ *
+ * `probeRoutes` exists because the paths this feature shipped with were
+ * read off a package rather than off a live browser, and the first real
+ * sign-in answered "Page not found: /api/user/login" in ssmsearch.com's
+ * own words. The machine this repository is edited on cannot reach
+ * ssmsearch.com at all, so the only thing that can find the real path
+ * is the function itself.
+ *
+ * Two things about it are worth asserting, and neither needs a network.
+ */
+Deno.test("a probe rules out 404 and keeps everything else", async () => {
+  const seen: Array<{ url: string; method: string; body: string | null }> = [];
+  const fake = ((url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    seen.push({
+      url: u,
+      method: init?.method ?? "GET",
+      body: (init?.body as string) ?? null,
+    });
+    // Their 404 shape, and a validation complaint from the one route
+    // that is real.
+    if (u.includes("/auth/login")) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ message: "The email field is required." }), {
+          status: 422,
+        }),
+      );
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify({ message: `Page not found: ${u}` }), {
+        status: 404,
+      }),
+    );
+  }) as unknown as typeof fetch;
+
+  const found = await probeRoutes(
+    fake,
+    "https://ssmsearch.com/api/",
+    ["/user/login", "/auth/login"],
+    ["/company/search"],
+  );
+
+  // The whole point: one path is a route and the others are not.
+  assertEquals(found.login.map((h) => h.exists), [false, true]);
+  assertEquals(found.login[1].path, "/auth/login");
+  assertEquals(found.login[1].status, 422);
+  assertEquals(found.login[1].said, "The email field is required.");
+
+  // A trailing slash on the root must not produce `//auth/login`, which
+  // is a different path and would be answered 404 by a server that has
+  // the route.
+  assertEquals(seen[0].url, "https://ssmsearch.com/api/user/login");
+  assertEquals(seen[2].url, "https://ssmsearch.com/api/company/search?q=test");
+});
+
+Deno.test("a probe sends no credentials", async () => {
+  const bodies: Array<string | null> = [];
+  const fake = ((_url: string | URL, init?: RequestInit) => {
+    bodies.push((init?.body as string) ?? null);
+    return Promise.resolve(new Response("{}", { status: 404 }));
+  }) as unknown as typeof fetch;
+
+  await probeRoutes(fake, "https://ssmsearch.com/api", ["/a", "/b"], ["/c"]);
+
+  // The assertion this test exists for. Distinguishing a route from a
+  // 404 needs no password, and spraying a working credential across a
+  // third party's URL space to learn something an empty body answers
+  // is not a trade worth making.
+  assertEquals(bodies, ["{}", "{}", null]);
 });

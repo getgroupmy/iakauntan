@@ -104,6 +104,15 @@ class SsmLookupRepository {
     return who == null ? null : '$who';
   }
 
+  /// Asks the provider which of a short list of paths are routes.
+  ///
+  /// Exists because the paths this shipped with were a guess and the
+  /// first live sign-in proved them wrong. No credentials are sent —
+  /// a login route answers an empty body with 422 or 401 and a path
+  /// that is not a route answers 404, which is the whole distinction.
+  Future<SsmProbe> probe() async =>
+      SsmProbe.fromJson(await _invoke({'action': 'probe'}));
+
   /// Throws the held token away. The next search signs in again.
   Future<void> clearSession() => _invoke({'action': 'clear_session'});
 
@@ -319,6 +328,70 @@ class SsmStatus {
       lastUsedAt: _date(s['last_used_at']),
       lastError: _str(s['last_error']),
       lastErrorAt: _date(s['last_error_at']),
+    );
+  }
+}
+
+/// One path, and whether anything is listening at it.
+class SsmProbeHit {
+  const SsmProbeHit({
+    required this.path,
+    required this.method,
+    required this.status,
+    required this.said,
+    required this.exists,
+  });
+
+  final String path;
+  final String method;
+  final int status;
+
+  /// Whatever the provider said, which is the useful half: a
+  /// validation complaint names the field a real login wants.
+  final String said;
+
+  /// Not a 404. A refusal, a complaint, even a 500 all mean something
+  /// is there, which is what is being looked for.
+  final bool exists;
+
+  factory SsmProbeHit.fromJson(Map<String, dynamic> j) => SsmProbeHit(
+    path: '${j['path'] ?? ''}',
+    method: '${j['method'] ?? ''}',
+    status: _int(j['status']) ?? 0,
+    said: '${j['said'] ?? ''}',
+    exists: j['exists'] == true,
+  );
+}
+
+/// What the probe found.
+class SsmProbe {
+  const SsmProbe({
+    required this.apiRoot,
+    required this.login,
+    required this.search,
+  });
+
+  final String apiRoot;
+  final List<SsmProbeHit> login;
+  final List<SsmProbeHit> search;
+
+  /// The paths worth putting in a secret. Empty means the list of
+  /// guesses was wrong all the way through, which is itself an answer:
+  /// the API is not shaped like any of them.
+  List<SsmProbeHit> get found => [
+    ...login.where((h) => h.exists),
+    ...search.where((h) => h.exists),
+  ];
+
+  factory SsmProbe.fromJson(Map<String, dynamic> j) {
+    List<SsmProbeHit> hits(Object? v) => [
+      for (final row in (v as List?) ?? const [])
+        if (row is Map) SsmProbeHit.fromJson(Map<String, dynamic>.from(row)),
+    ];
+    return SsmProbe(
+      apiRoot: _str(j['api_root']) ?? '',
+      login: hits(j['login']),
+      search: hits(j['search']),
     );
   }
 }

@@ -83,8 +83,24 @@ repository can no longer answer "which URL did it ask for".
 
 ### Finding the real ones
 
-Nobody can do this from CI or from a server; it takes a browser signed
-in to ssmsearch.com.
+**Press "Find the endpoints" on the console page first.** The function
+runs on a server that can reach ssmsearch.com, so it asks directly: it
+sends an empty body to a short list of candidate paths and reports what
+each one answered. A login route complains about the missing fields
+(422, or 401); a path that is not a route answers 404 "Page not found".
+No password is sent — that distinction does not need one, and spraying
+a working credential across a third party's URL space to learn
+something an empty body answers is not a trade worth making.
+
+Fifteen requests, in series, when somebody presses the button. Not a
+crawl, and the caution at the top of this document still applies.
+
+If it finds one, put the path in `SSMSEARCH_LOGIN_PATH` and press
+**Test the login**.
+
+If every path comes back "not found", that is an answer too: their API
+is not shaped like any of the conventions the list was built from, and
+the next step is a browser signed in to ssmsearch.com.
 
 1. Open ssmsearch.com, then the browser's developer tools, **Network**
    tab, and tick **Fetch/XHR**.

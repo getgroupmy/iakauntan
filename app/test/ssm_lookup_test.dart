@@ -30,6 +30,27 @@ class _FakeSsm implements SsmLookupRepository {
 
   final SsmSearchPage? page;
   final SsmLookupException? error;
+
+  SsmProbe probeResult = const SsmProbe(
+    apiRoot: 'https://ssmsearch.com/api',
+    login: [
+      SsmProbeHit(
+        path: '/user/login',
+        method: 'POST',
+        status: 404,
+        said: 'Page not found: /api/user/login',
+        exists: false,
+      ),
+      SsmProbeHit(
+        path: '/auth/login',
+        method: 'POST',
+        status: 422,
+        said: 'The email field is required.',
+        exists: true,
+      ),
+    ],
+    search: [],
+  );
   final SsmStatus statusValue;
 
   final asked = <String>[];
@@ -76,6 +97,9 @@ class _FakeSsm implements SsmLookupRepository {
 
   @override
   Future<void> clearCache() async => cacheCleared++;
+
+  @override
+  Future<SsmProbe> probe() async => probeResult;
 }
 
 Widget _wrap(Widget child, _FakeSsm fake) => ProviderScope(
@@ -303,6 +327,60 @@ void main() {
       expect(find.byType(TextField), findsNothing);
       expect(find.byType(TextFormField), findsNothing);
       expect(find.textContaining('SSMSEARCH_PASSWORD'), findsOneWidget);
+    });
+
+    testWidgets('can go and find the endpoints itself', (tester) async {
+      // The paths this shipped with were a guess and the first live
+      // sign-in proved them wrong. The machine this repository is
+      // edited on cannot reach the provider at all, so the only thing
+      // that can find the real path is the function — and an operator
+      // pressing a button beats an operator opening developer tools.
+      final fake = _FakeSsm();
+      await tester.pumpWidget(_wrap(const SsmLookupAdminTab(), fake));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('ssm-probe')));
+      await tester.pumpAndSettle();
+
+      // The one that answered something other than "not found", with
+      // what it said — which is the half that identifies it as a real
+      // login route.
+      expect(find.text('POST /auth/login'), findsOneWidget);
+      expect(find.text('The email field is required.'), findsOneWidget);
+      expect(find.textContaining('SSMSEARCH_LOGIN_PATH'), findsOneWidget);
+      // And the promise the probe makes about itself.
+      expect(find.textContaining('No password was sent'), findsOneWidget);
+    });
+
+    testWidgets('and says so plainly when none of them answered', (
+      tester,
+    ) async {
+      final fake = _FakeSsm()
+        ..probeResult = const SsmProbe(
+          apiRoot: 'https://ssmsearch.com/api',
+          login: [
+            SsmProbeHit(
+              path: '/user/login',
+              method: 'POST',
+              status: 404,
+              said: 'Page not found',
+              exists: false,
+            ),
+          ],
+          search: [],
+        );
+      await tester.pumpWidget(_wrap(const SsmLookupAdminTab(), fake));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ssm-probe')));
+      await tester.pumpAndSettle();
+
+      // Not a shrug. It rules out every shape the guesses were based
+      // on, and names the one thing left to try.
+      expect(
+        find.textContaining('not shaped like any of these'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Fetch/XHR'), findsOneWidget);
     });
 
     testWidgets('says which URL it actually asks', (tester) async {
