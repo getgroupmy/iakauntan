@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0589` (the highest applied migration).
+Schema version `0590` (the highest applied migration).
 665 functions and 330 readable tables, of which
 254 functions only read.
 
@@ -482,7 +482,7 @@ Not gated on any module.
 - `create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` *(writes)* — Starts an accounting practice and makes the caller a partner in it -- without that, nobody could do anything with it afterwards.
 - `create_fiscal_year(p_org_id uuid, p_start_date date)` *(writes)* — Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the company's own year-end day.
 - `create_item_variants(p_parent uuid, p_axes jsonb)` *(writes)* — Expands a style into its variants across the axes given -- size and colour and the like -- returning a row per combination saying whether it was created or already existed, so re-running after adding one axis value is safe.
-- `create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text)` *(writes)* — Creates a company, seeds its chart of accounts, and makes the caller its owner.
+- `create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` *(writes)* — Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner.
 - `create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` *(writes)* — Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed.
 - `create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` *(writes)* — Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended.
 - `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` *(writes)* — Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this.

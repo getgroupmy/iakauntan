@@ -354,28 +354,84 @@ main() {
 # first place they are asked.
 schema_checks() {
   local url="postgresql://postgres@localhost/postgres?host=$PGSOCK&port=$PGPORT"
-  local failed=0 out
-  for script in check_stable_writers check_embeds check_query_columns \
-                check_idempotent_calls; do
-    if [ ! -f "$ROOT/scripts/$script.py" ]; then continue; fi
-    if ! out=$(python3 "$ROOT/scripts/$script.py" "$url" 2>&1); then
-      echo "FAIL  scripts/$script.py"
-      echo "$out" | head -12
-      failed=1
+  local failed=0 out script args
+
+  # The list is READ OUT OF ci.yml rather than kept here, for the same
+  # reason `ci_tests` reads the test list out of it: a second copy is a
+  # copy that drifts, and the drift is silent in the direction nobody
+  # looks. This function used to name seven scripts by hand. CI ran
+  # fifteen, and the eight it did not name included
+  # `generate_api_description.py --check` -- which is how a migration
+  # went up with `docs/api/` still describing the schema before it: a
+  # red run over a file that regenerates in one command, with every
+  # gate on this machine green.
+  #
+  # Whether a script takes the database url is decided the same way, by
+  # whether the step in ci.yml passes it one. Nothing here knows what
+  # any particular script wants.
+  while IFS='|' read -r script args; do
+    [ -n "$script" ] || continue
+    [ -f "$ROOT/scripts/$script" ] || continue
+    if [ -z "$args" ]; then
+      out=$(python3 "$ROOT/scripts/$script" 2>&1) || {
+        echo "FAIL  scripts/$script"; echo "$out" | head -12; failed=1; }
+    elif [ "$args" = "db" ]; then
+      out=$(python3 "$ROOT/scripts/$script" "$url" 2>&1) || {
+        echo "FAIL  scripts/$script"; echo "$out" | head -12; failed=1; }
+    else
+      # shellcheck disable=SC2086
+      out=$(python3 "$ROOT/scripts/$script" "$url" $args 2>&1) || {
+        echo "FAIL  scripts/$script $args"; echo "$out" | head -14; failed=1; }
     fi
-  done
-  # These two read the repository rather than the database, so they need
-  # no url -- and they are just as invisible to the four gates.
-  for script in check_narrow_rows check_blind_catches check_edge_authorization; do
-    if [ ! -f "$ROOT/scripts/$script.py" ]; then continue; fi
-    if ! out=$(python3 "$ROOT/scripts/$script.py" 2>&1); then
-      echo "FAIL  scripts/$script.py"
-      echo "$out" | head -12
-      failed=1
-    fi
-  done
+  done <<GUARDS
+$(ci_guards)
+GUARDS
+
   if [ $failed -eq 0 ]; then echo "schema and client agree"; fi
   return $failed
+}
+
+# Every `python3 scripts/<name>.py` step in the workflow, and whether
+# that step hands it the database url.
+#
+# Two are excluded, each with its reason written beside it below:
+# `schema_drift.py`, which compares the LOCAL schema against the HOSTED
+# project and needs credentials this machine has no business holding,
+# and `dependency_audit.py`, which needs api.osv.dev. The `*_test.py`
+# files are excluded too, because they are unit tests OF the scripts
+# rather than checks of this repository. Every exclusion is named
+# rather than inferred, so skipping something is a decision somebody
+# had to write down.
+ci_guards() {
+  python3 - "$ROOT" <<GUARDSPY
+import re, sys
+
+# \`dependency_audit.py\` asks api.osv.dev about every pinned package and
+# treats an unreachable advisory database as a FAILURE rather than a
+# pass -- which is right, and which means it cannot pass on a machine
+# whose egress is a proxy that refuses it. A gate that is always red is
+# a gate people learn to scroll past, so it is CI's to run. Its own
+# unit tests run everywhere and are covered by the \`_test.py\` rule
+# below.
+SKIP = {'schema_drift.py', 'dependency_audit.py'}
+
+text = open(sys.argv[1] + '/.github/workflows/ci.yml').read()
+seen = set()
+for m in re.finditer(r'python3 scripts/([A-Za-z0-9_]+[.]py)([^\n]*)', text):
+    name, rest = m.group(1), m.group(2)
+    if name in SKIP or name.endswith('_test.py'):
+        continue
+    # \`"\$DB"\` is how every workflow step spells the url; what follows
+    # it is the flags that step passes, \`--check\` being the only one
+    # today.
+    takes_db = '"\$DB"' in rest
+    flags = rest.replace('"\$DB"', '').strip()
+    key = (name, takes_db, flags)
+    if key in seen:
+        continue
+    seen.add(key)
+    print(name + '|' + ((flags or 'db') if takes_db else ''))
+GUARDSPY
 }
 
 main "$@"

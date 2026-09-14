@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0589",
+    "version": "0590",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -28634,8 +28634,8 @@
     "/rpc/create_organization": {
       "post": {
         "operationId": "create_organization",
-        "summary": "Creates a company, seeds its chart of accounts, and makes the caller its owner",
-        "description": "Creates a company, seeds its chart of accounts, and makes the caller its owner. The FIRST company is what signing up is for; every one after it needs the Multi-Company module, and the refusal names the way out because somebody who has just typed a company's details into a form is owed better than \"no\" (`0486`). Requires a signed-in user.\n\n`public.create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text)` Writes. Requires a signed-in user.",
+        "summary": "Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal\u2026",
+        "description": "Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner. Refuses a second company without the Multi-Company module, naming the way out. `p_old_registration_no` is optional and always will be -- a company incorporated after 2019 has never had one.\n\n`public.create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28712,6 +28712,9 @@
                     "format": "int16"
                   },
                   "p_country_code": {
+                    "type": "string"
+                  },
+                  "p_old_registration_no": {
                     "type": "string"
                   }
                 },
@@ -85541,6 +85544,12 @@
             "type": "string"
           },
           "use_kind": {
+            "type": "string"
+          },
+          "signup_business_name": {
+            "type": "string"
+          },
+          "signup_entity_type": {
             "type": "string"
           }
         },
