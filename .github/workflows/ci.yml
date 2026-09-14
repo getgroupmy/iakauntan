@@ -607,6 +607,13 @@ jobs:
       - name: Check every way in carries the security check
         run: python3 scripts/check_captcha_tokens.py
 
+      # A Spacer in `AlertDialog.actions` throws at layout, and a
+      # release build draws that as a featureless grey rectangle with
+      # no message. Analyze is happy, no test pumps the dialog, and the
+      # web build compiles it.
+      - name: Check no dialog action asks for a flex
+        run: python3 scripts/check_dialog_actions.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #

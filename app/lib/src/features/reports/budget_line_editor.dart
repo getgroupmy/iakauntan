@@ -54,16 +54,15 @@ bool lineSurvives(num amount) => amount != 0;
 /// set is held whole and sent whole.
 List<Map<String, dynamic>> budgetLinePayload(
   Iterable<Map<String, dynamic>> lines,
-) =>
-    [
-      for (final l in lines)
-        if (lineSurvives(num.tryParse('${l['amount'] ?? 0}') ?? 0))
-          <String, dynamic>{
-            'account': l['account_id'],
-            'period': l['period_id'],
-            'amount': num.tryParse('${l['amount']}') ?? 0,
-          },
-    ];
+) => [
+  for (final l in lines)
+    if (lineSurvives(num.tryParse('${l['amount'] ?? 0}') ?? 0))
+      <String, dynamic>{
+        'account': l['account_id'],
+        'period': l['period_id'],
+        'amount': num.tryParse('${l['amount']}') ?? 0,
+      },
+];
 
 /// One amount replaced, or the row added where the budget had nothing
 /// for that account in that period.
@@ -95,15 +94,14 @@ List<Map<String, dynamic>> withBudgetAmount(
 /// Every line, whatever the account type, because this figure exists to
 /// tell somebody their edit landed -- not to be a revenue total. The
 /// list already reports revenue separately.
-double budgetWorkingTotal(Iterable<Map<String, dynamic>> lines) =>
-    double.parse(
-      lines
-          .fold<double>(
-            0,
-            (a, l) => a + (double.tryParse('${l['amount'] ?? 0}') ?? 0),
-          )
-          .toStringAsFixed(2),
-    );
+double budgetWorkingTotal(Iterable<Map<String, dynamic>> lines) => double.parse(
+  lines
+      .fold<double>(
+        0,
+        (a, l) => a + (double.tryParse('${l['amount'] ?? 0}') ?? 0),
+      )
+      .toStringAsFixed(2),
+);
 
 /// Change the lines of a draft budget.
 Future<bool> showBudgetLineEditor(
@@ -135,12 +133,14 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
   void initState() {
     super.initState();
     // Held whole, because the function replaces the set.
-    _lines = [for (final l in widget.lines) {...l}];
+    _lines = [
+      for (final l in widget.lines) {...l},
+    ];
   }
 
   List<FiscalPeriod> _periods() {
-    final years = ref.watch(fiscalYearsProvider).valueOrNull ??
-        const <FiscalYear>[];
+    final years =
+        ref.watch(fiscalYearsProvider).valueOrNull ?? const <FiscalYear>[];
     for (final y in years) {
       if (y.id == widget.budget['year_id']) return y.periods;
     }
@@ -148,9 +148,7 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
   }
 
   Future<void> _editAmount(Map<String, dynamic> row) async {
-    final controller = TextEditingController(
-      text: '${row['amount'] ?? 0}',
-    );
+    final controller = TextEditingController(text: '${row['amount'] ?? 0}');
     final answer = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -188,7 +186,8 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
   }
 
   Future<void> _addLine() async {
-    final accounts = ref.read(accountsProvider).valueOrNull ?? const <Account>[];
+    final accounts =
+        ref.read(accountsProvider).valueOrNull ?? const <Account>[];
     final periods = _periods();
     if (accounts.isEmpty || periods.isEmpty) return;
 
@@ -243,10 +242,8 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
                 onPressed: accountId == null || periodId == null
                     ? null
                     : () {
-                        final a =
-                            postable.firstWhere((x) => x.id == accountId);
-                        final p =
-                            periods.firstWhere((x) => x.id == periodId);
+                        final a = postable.firstWhere((x) => x.id == accountId);
+                        final p = periods.firstWhere((x) => x.id == periodId);
                         Navigator.of(ctx).pop(<String, dynamic>{
                           'account_id': a.id,
                           'code': a.code,
@@ -303,24 +300,20 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
             Text(
               'Every line is sent together, because the budget is replaced '
               'rather than patched. A line set to zero is removed.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: context.scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: Space.sm),
             Expanded(
               child: _lines.isEmpty
-                  ? const Center(
-                      child: Text('Nothing budgeted yet.'),
-                    )
+                  ? const Center(child: Text('Nothing budgeted yet.'))
                   : ListView.separated(
                       itemCount: _lines.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final l = _lines[i];
-                        final amount =
-                            num.tryParse('${l['amount'] ?? 0}') ?? 0;
+                        final amount = num.tryParse('${l['amount'] ?? 0}') ?? 0;
                         final gone = !lineSurvives(amount);
                         return ListTile(
                           dense: true,
@@ -329,8 +322,9 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
                           title: Text(
                             '${l['code']} ${l['name']}',
                             style: TextStyle(
-                              decoration:
-                                  gone ? TextDecoration.lineThrough : null,
+                              decoration: gone
+                                  ? TextDecoration.lineThrough
+                                  : null,
                             ),
                           ),
                           subtitle: Text(
@@ -367,7 +361,12 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
           onPressed: _saving ? null : _addLine,
           child: const Text('Budget another account'),
         ),
-        const Spacer(),
+        // No `Spacer()`. `AlertDialog.actions` are laid out by an
+        // `OverflowBar`, which is not a Flex, so an `Expanded` — which
+        // is what a Spacer is — throws at layout. A release build draws
+        // that as a featureless grey rectangle filling the dialog, with
+        // no message anywhere. `scripts/check_dialog_actions.py` found
+        // this one while being written for the same mistake elsewhere.
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),

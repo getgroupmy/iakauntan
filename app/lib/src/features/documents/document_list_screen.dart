@@ -229,7 +229,14 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
           icon: const Icon(Icons.add, size: 18),
           label: const Text('New supplier'),
         ),
-        const Spacer(),
+        // No `Spacer()` between these two, however much this wants to
+        // push Cancel to the other end. `AlertDialog.actions` are laid
+        // out by an `OverflowBar`, which is not a Flex, and a `Spacer`
+        // is an `Expanded` — which throws at layout in a parent that
+        // cannot give it a flex. In a release web build that throw is
+        // an `ErrorWidget`, and `ErrorWidget` renders as a plain grey
+        // rectangle filling whatever space it is given. Which is to say
+        // the whole dialog goes grey, with no message anywhere.
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
