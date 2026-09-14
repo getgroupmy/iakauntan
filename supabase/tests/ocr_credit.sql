@@ -462,4 +462,44 @@ begin
       'public.platform_topup_credit(uuid, numeric, text)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A reader you run yourself (0586)
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_bad integer;
+begin
+  perform pg_temp.check_true(
+    'the catalog accepts a self-hosted reader',
+    exists (select 1 from public.ocr_providers
+             where kind = 'self_hosted'));
+
+  -- The three ship switched OFF and with no address. A row offering a
+  -- reader nobody has deployed is a door with nothing behind it, and
+  -- the console would draw it.
+  select count(*) into v_bad
+    from public.ocr_providers
+   where kind = 'self_hosted'
+     and (is_active or endpoint is not null);
+  perform pg_temp.check_eq(
+    'and every one of them ships inactive and unaddressed', v_bad, 0);
+
+  -- The edge function refuses a self-hosted reader with no endpoint,
+  -- and there is no default that would make sense. Asserted here so a
+  -- row added later with `is_active` and no address fails the build
+  -- rather than a scan.
+  perform pg_temp.check_true(
+    'and none of them claims to run on the device',
+    not exists (select 1 from public.ocr_providers
+                 where kind = 'self_hosted' and runs_on_device));
+
+  -- The kind is still closed. A typo in a later insert should be a
+  -- constraint violation and not a reader the function cannot talk to.
+  perform pg_temp.check_refused(
+    'and an unknown kind is still refused by the catalog',
+    $q$insert into public.ocr_providers (code, name, kind)
+       values ('nonsense', 'Nonsense', 'whatever')$q$,
+    '%ocr_providers_kind_check%');
+end $$;
+
 rollback;

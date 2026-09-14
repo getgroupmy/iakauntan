@@ -255,3 +255,8 @@ Nothing below can be done from a commit.
    shipped, and the last section of that runbook says why — the obvious
    plugin takes the web build down with it — and what a second attempt
    has to do first.
+7. **If you want a self-hosted reader, deploy it first.** MinerU,
+   PaddleOCR and OCRmyPDF ship in the catalog switched OFF and with no
+   address, because a reader nobody has deployed is a door with nothing
+   behind it. `docs/ocr-self-hosted.md` is the contract and the order.
+   Nothing needs this — Tesseract in the browser is free and already on.
