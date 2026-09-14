@@ -32,11 +32,13 @@ class _CustomFieldsCardState extends ConsumerState<CustomFieldsCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final entities = ref.watch(customFieldEntitiesProvider).valueOrNull ??
+    final entities =
+        ref.watch(customFieldEntitiesProvider).valueOrNull ??
         const <CustomFieldEntity>[];
     final carriers = entities.where((e) => e.canCarry).toList();
     final fields = ref.watch(customFieldsProvider(_entity));
-    final canAdmin = ref.watch(memberRoleProvider).valueOrNull == 'owner' ||
+    final canAdmin =
+        ref.watch(memberRoleProvider).valueOrNull == 'owner' ||
         ref.watch(memberRoleProvider).valueOrNull == 'admin';
 
     Future<void> edit([CustomFieldDef? existing]) async {
@@ -74,8 +76,7 @@ class _CustomFieldsCardState extends ConsumerState<CustomFieldsCard> {
                 label: 'On which record',
                 value: _entity,
                 helperText: 'A field belongs to one kind of record.',
-                onChanged: (v) =>
-                    setState(() => _entity = v ?? 'contact'),
+                onChanged: (v) => setState(() => _entity = v ?? 'contact'),
                 options: [
                   for (final e in carriers)
                     PickerOption(
@@ -143,8 +144,9 @@ class _CustomFieldsCardState extends ConsumerState<CustomFieldsCard> {
                                     onPressed: () async {
                                       final repo = ref.read(repoProvider);
                                       if (repo == null) return;
-                                      final messenger =
-                                          ScaffoldMessenger.of(context);
+                                      final messenger = ScaffoldMessenger.of(
+                                        context,
+                                      );
                                       try {
                                         await repo.setCustomFieldActive(
                                           _entity,
@@ -343,7 +345,8 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
                 SearchablePicker<String>(
                   label: 'Which kind of record',
                   value: _target,
-                  helperText: 'Only this company’s records may be '
+                  helperText:
+                      'Only this company’s records may be '
                       'chosen, and only ones that still exist.',
                   onChanged: (v) => setState(() => _target = v),
                   options: [
@@ -433,9 +436,7 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
                 const SizedBox(height: Space.md),
                 Text(
                   _error!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
             ],

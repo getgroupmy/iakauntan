@@ -73,10 +73,8 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
 
   double? get _parsedRate => double.tryParse(_rate.text.trim());
 
-  String? get _blocked => exemptionBlockedBecause(
-    isExempt: _exempt,
-    reason: _exemptionReason,
-  );
+  String? get _blocked =>
+      exemptionBlockedBecause(isExempt: _exempt, reason: _exemptionReason);
 
   bool get _valid =>
       _code.text.trim().isNotEmpty &&
@@ -325,6 +323,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
     if (ok) Navigator.of(context).pop(widget.existing!.id);
   }
 }
+
 /// The "it is not on the list" half of every tax code picker.
 ///
 /// Opens [TaxCodeDialog] seeded with whatever was typed, refreshes the

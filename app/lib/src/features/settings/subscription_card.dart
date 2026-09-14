@@ -112,7 +112,8 @@ class _SubscriptionCardState extends ConsumerState<SubscriptionCard> {
           children: [
             const SectionHeader(
               'Your subscription',
-              subtitle: 'What the add-ons on this company cost, and the '
+              subtitle:
+                  'What the add-ons on this company cost, and the '
                   'invoices raised for them.',
             ),
             AsyncView(
@@ -210,8 +211,7 @@ class _SubscriptionCardState extends ConsumerState<SubscriptionCard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        trailing:
-                            subscriptionInvoiceOwing(i) && canPayOnline
+                        trailing: subscriptionInvoiceOwing(i) && canPayOnline
                             ? FilledButton.tonal(
                                 key: ValueKey('pay-invoice-${i['id']}'),
                                 onPressed: _busyId == null

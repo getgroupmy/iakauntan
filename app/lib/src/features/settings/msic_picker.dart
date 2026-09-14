@@ -23,8 +23,7 @@ import '../../core/widgets.dart';
 ///
 /// Five digits, as `0002` says. Checked so a typed code that is not one
 /// is refused here rather than accepted and carried into a filing.
-bool msicLooksValid(String code) =>
-    RegExp(r'^[0-9]{5}$').hasMatch(code.trim());
+bool msicLooksValid(String code) => RegExp(r'^[0-9]{5}$').hasMatch(code.trim());
 
 /// How one reads in a list.
 String msicLabel(Map<String, dynamic> row) =>
@@ -125,7 +124,8 @@ class _MsicPickerState extends ConsumerState<_MsicPicker> {
               autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'The activity, or the code',
-                helperText: 'MSIC 2008 — what SSM registers the business '
+                helperText:
+                    'MSIC 2008 — what SSM registers the business '
                     'under, and what the annual return repeats.',
               ),
             ),
@@ -140,16 +140,14 @@ class _MsicPickerState extends ConsumerState<_MsicPicker> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Nothing in the list matches that.',
-                            style: small),
+                        Text('Nothing in the list matches that.', style: small),
                         // The seed is a working subset rather than the
                         // whole of MSIC 2008, so a real code that is
                         // not in it has to be enterable.
                         if (msicLooksValid(typed))
                           TextButton(
                             key: const ValueKey('msic-use-typed'),
-                            onPressed: () =>
-                                Navigator.of(context).pop(typed),
+                            onPressed: () => Navigator.of(context).pop(typed),
                             child: Text('Use $typed anyway'),
                           ),
                       ],

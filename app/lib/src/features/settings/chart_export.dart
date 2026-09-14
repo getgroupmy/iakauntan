@@ -54,15 +54,17 @@ String chartOfAccountsCsv(List<Account> accounts) {
   final rows = [...accounts]..sort((a, b) => a.code.compareTo(b.code));
   final buffer = StringBuffer()..writeln(chartExportColumns.join(','));
   for (final a in rows) {
-    buffer.writeln([
-      csvField(a.code),
-      csvField(a.name),
-      csvField(a.accountType),
-      csvField(a.accountSubtype),
-      a.isGroup ? 'true' : 'false',
-      a.isActive ? 'true' : 'false',
-      a.currentBalance.toStringAsFixed(2),
-    ].join(','));
+    buffer.writeln(
+      [
+        csvField(a.code),
+        csvField(a.name),
+        csvField(a.accountType),
+        csvField(a.accountSubtype),
+        a.isGroup ? 'true' : 'false',
+        a.isActive ? 'true' : 'false',
+        a.currentBalance.toStringAsFixed(2),
+      ].join(','),
+    );
   }
   return buffer.toString();
 }
@@ -74,7 +76,8 @@ String chartExportFilename(String? companyName, DateTime on) {
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
-  final day = '${on.year.toString().padLeft(4, '0')}-'
+  final day =
+      '${on.year.toString().padLeft(4, '0')}-'
       '${on.month.toString().padLeft(2, '0')}-'
       '${on.day.toString().padLeft(2, '0')}';
   return '${stem.isEmpty ? 'chart' : stem}-chart-of-accounts-$day.csv';

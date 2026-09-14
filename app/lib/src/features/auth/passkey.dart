@@ -55,6 +55,54 @@ enum PasskeyOutcome { signedIn, cancelled, failed }
 /// The result, with the message to show when there is one.
 typedef PasskeyResult = ({PasskeyOutcome outcome, String? message});
 
+/// Enrol a passkey on this device, start to finish.
+///
+/// The other half of [signInWithPasskey], and without it that button is
+/// a door with nothing behind it: `startAuthentication` offers whichever
+/// accounts hold a passkey for this site, and until somebody has saved
+/// one, that is none of them. Shipping the sign-in half alone meant a
+/// button nobody could ever succeed at.
+///
+/// Needs a signed-in session, which is the whole shape of it: you prove
+/// who you are with a password once, and then never again on this
+/// device. GoTrue refuses at `aal1` for a user with verified MFA
+/// factors, so somebody with two-factor on has to be at `aal2` first.
+Future<PasskeyResult> enrolPasskey(GoTrueClient auth) async {
+  if (!passkeysAvailable) {
+    return (outcome: PasskeyOutcome.failed, message: null);
+  }
+
+  final Map<String, dynamic> options;
+  final String challengeId;
+  try {
+    final start = await auth.passkey.startRegistration();
+    options = Map<String, dynamic>.from(start.options);
+    challengeId = start.challengeId;
+  } on AuthException catch (e) {
+    return (
+      outcome: PasskeyOutcome.failed,
+      message: e.code == 'passkey_disabled'
+          ? 'Passkeys are not switched on for this system yet.'
+          : e.message,
+    );
+  }
+
+  final credential = await createPasskeyCredential(options);
+  if (credential == null) {
+    return (outcome: PasskeyOutcome.cancelled, message: null);
+  }
+
+  try {
+    await auth.passkey.verifyRegistration(
+      challengeId: challengeId,
+      credential: credential,
+    );
+    return (outcome: PasskeyOutcome.signedIn, message: null);
+  } on AuthException catch (e) {
+    return (outcome: PasskeyOutcome.failed, message: e.message);
+  }
+}
+
 /// Sign in with a passkey, start to finish.
 ///
 /// [captchaToken] rides along when Turnstile is configured, the same

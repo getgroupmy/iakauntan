@@ -59,10 +59,8 @@ bool creditWentIn(num amount) => amount > 0;
 }
 
 /// Where the credit went.
-Future<void> showCreditLedger(BuildContext context) => showDialog<void>(
-      context: context,
-      builder: (_) => const _LedgerDialog(),
-    );
+Future<void> showCreditLedger(BuildContext context) =>
+    showDialog<void>(context: context, builder: (_) => const _LedgerDialog());
 
 class _LedgerDialog extends ConsumerWidget {
   const _LedgerDialog();
@@ -105,9 +103,7 @@ class _LedgerDialog extends ConsumerWidget {
                         title: Text('${r['description']}'),
                         subtitle: Text(
                           '${creditMovement(r['entry_type'] as String?)} · '
-                          '${Fmt.dateTime(
-                            DateTime.parse('${r['created_at']}').toLocal(),
-                          )}',
+                          '${Fmt.dateTime(DateTime.parse('${r['created_at']}').toLocal())}',
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: Column(
@@ -124,9 +120,7 @@ class _LedgerDialog extends ConsumerWidget {
                               ),
                             ),
                             Text(
-                              'left ${Fmt.money(
-                                num.tryParse('${r['balance_after'] ?? 0}'),
-                              )}',
+                              'left ${Fmt.money(num.tryParse('${r['balance_after'] ?? 0}'))}',
                               style: const TextStyle(fontSize: 11),
                             ),
                           ],

@@ -254,14 +254,16 @@ class _DoorWordsState extends ConsumerState<_DoorWords> {
       _saved = null;
     });
     try {
-      await ref.read(supabaseProvider).rpc(
-        'org_save_login_page',
-        params: {
-          'p_org_id': orgId,
-          'p_title': _title.text,
-          'p_body': _body.text,
-        },
-      );
+      await ref
+          .read(supabaseProvider)
+          .rpc(
+            'org_save_login_page',
+            params: {
+              'p_org_id': orgId,
+              'p_title': _title.text,
+              'p_body': _body.text,
+            },
+          );
       ref.invalidate(orgLoginPageProvider);
       if (mounted) setState(() => _saved = 'Saved.');
     } catch (e) {
@@ -323,8 +325,10 @@ class _DoorWordsState extends ConsumerState<_DoorWords> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ],
           if (_saved != null) ...[
             const SizedBox(height: 8),
@@ -439,7 +443,7 @@ class _AskFor extends ConsumerStatefulWidget {
   final String label;
   final String suffix;
   final Future<void> Function(String orgId, String name, String? ownerId)
-      submit;
+  submit;
   final VoidCallback onDone;
 
   /// The people this address could belong to. Empty for a subdomain,
@@ -521,33 +525,33 @@ class _AskForState extends ConsumerState<_AskFor> {
   @override
   Widget build(BuildContext context) {
     final field = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              enabled: !_busy,
-              decoration: InputDecoration(
-                labelText: widget.label,
-                suffixText: widget.suffix,
-                errorText: _problem,
-                helperText: 'Letters, digits and hyphens',
-              ),
-              onChanged: (_) {
-                if (_problem != null) setState(() => _problem = null);
-              },
-              onSubmitted: (_) => _busy ? null : _send(),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            enabled: !_busy,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              suffixText: widget.suffix,
+              errorText: _problem,
+              helperText: 'Letters, digits and hyphens',
             ),
+            onChanged: (_) {
+              if (_problem != null) setState(() => _problem = null);
+            },
+            onSubmitted: (_) => _busy ? null : _send(),
           ),
-          const SizedBox(width: Space.md),
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: FilledButton(
-              onPressed: _busy ? null : _send,
-              child: const Text('Ask for it'),
-            ),
+        ),
+        const SizedBox(width: Space.md),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FilledButton(
+            onPressed: _busy ? null : _send,
+            child: const Text('Ask for it'),
           ),
-        ],
+        ),
+      ],
     );
 
     if (widget.owners.isEmpty) {
@@ -651,10 +655,7 @@ class _HandOverState extends ConsumerState<_HandOver> {
             ),
             if (_problem != null) ...[
               const SizedBox(height: Space.md),
-              Text(
-                _problem!,
-                style: TextStyle(color: context.colors.danger),
-              ),
+              Text(_problem!, style: TextStyle(color: context.colors.danger)),
             ],
           ],
         ),

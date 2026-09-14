@@ -108,8 +108,10 @@ class _FeedRow extends ConsumerWidget {
       (true, _) => (Icons.error_outline, colors.danger),
       (_, true) => (Icons.schedule_outlined, colors.warning),
       _ when feedIsLive(status) => (Icons.sync, colors.success),
-      _ when hasFeed(status) => (Icons.pause_circle_outline,
-          scheme.onSurfaceVariant),
+      _ when hasFeed(status) => (
+        Icons.pause_circle_outline,
+        scheme.onSurfaceVariant,
+      ),
       _ => (Icons.link_off, scheme.onSurfaceVariant),
     };
 
@@ -170,7 +172,8 @@ class _FeedRow extends ConsumerWidget {
   Future<void> _showRuns(BuildContext context, WidgetRef ref) =>
       showDialog<void>(
         context: context,
-        builder: (_) => _RunsDialog(bankAccountId: _id, name: '${account['name']}'),
+        builder: (_) =>
+            _RunsDialog(bankAccountId: _id, name: '${account['name']}'),
       );
 
   Future<void> _pause(
@@ -183,8 +186,7 @@ class _FeedRow extends ConsumerWidget {
       context,
       doing: pausing ? 'pause the feed' : 'start the feed',
       successMessage: pausing ? 'Paused.' : 'Running again.',
-      action: () =>
-          ref.read(repoProvider)!.setBankFeedPaused(_id, pausing),
+      action: () => ref.read(repoProvider)!.setBankFeedPaused(_id, pausing),
     );
     if (ok) _refresh(ref);
   }
@@ -193,7 +195,8 @@ class _FeedRow extends ConsumerWidget {
     final go = await confirm(
       context,
       title: 'Disconnect ${account['name']}?',
-      message: 'The stored credential is deleted and nothing more '
+      message:
+          'The stored credential is deleted and nothing more '
           'arrives on its own. What has already been imported stays, '
           'and so does the record of when it came in.',
       confirmLabel: 'Disconnect',
@@ -261,9 +264,7 @@ class _RunsDialog extends ConsumerWidget {
                             : context.colors.danger,
                       ),
                       title: Text(
-                        Fmt.dateTime(
-                          DateTime.tryParse('${r['started_at']}'),
-                        ),
+                        Fmt.dateTime(DateTime.tryParse('${r['started_at']}')),
                         style: const TextStyle(fontSize: 13),
                       ),
                       subtitle: Text(
@@ -272,7 +273,7 @@ class _RunsDialog extends ConsumerWidget {
                             // working: an overlapping window re-delivered
                             // should skip everything and import nothing.
                             ? '${r['imported']} imported, '
-                                '${r['skipped']} already had'
+                                  '${r['skipped']} already had'
                             : '${r['error'] ?? 'It failed and said nothing'}',
                         style: TextStyle(
                           fontSize: 12,

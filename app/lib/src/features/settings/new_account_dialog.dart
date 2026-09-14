@@ -156,7 +156,8 @@ class _NewAccountDialogState extends ConsumerState<NewAccountDialog> {
                 autofocus: _code.text.isEmpty,
                 decoration: const InputDecoration(
                   labelText: 'Number',
-                  helperText: 'Four digits, in the range its kind sits in '
+                  helperText:
+                      'Four digits, in the range its kind sits in '
                       '— 6xxx for an expense, 1xxx for an asset.',
                   helperMaxLines: 2,
                 ),
@@ -209,15 +210,13 @@ class _NewAccountDialogState extends ConsumerState<NewAccountDialog> {
                   for (final s in choices)
                     DropdownMenuItem(value: s, child: Text(Fmt.label(s))),
                 ],
-                onChanged: (v) =>
-                    setState(() => _subtype = v ?? choices.first),
+                onChanged: (v) => setState(() => _subtype = v ?? choices.first),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
             ],

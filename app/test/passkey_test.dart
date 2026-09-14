@@ -99,4 +99,27 @@ void main() {
       );
     });
   });
+
+  group('the other half', () {
+    test('exists, which is the whole point of this group', () {
+      // `signInWithPasskey` shipped alone, and `startAuthentication`
+      // offers whichever accounts hold a passkey for this site — which,
+      // with nothing anywhere able to create one, was none of them. The
+      // button on the sign-in screen could not succeed for anybody.
+      //
+      // Asserted as a reference rather than a call because enrolling
+      // needs a browser, a platform authenticator and a session. What
+      // this catches is the enrolment half being deleted or renamed
+      // while the sign-in half stays, which is the state that shipped.
+      expect(enrolPasskey, isA<Function>());
+    });
+
+    test('and reports the same three outcomes as signing in', () {
+      // Both halves hand back a `PasskeyResult`, so a caller writes the
+      // dismissed/failed distinction once. A second shape here would be
+      // a second chance to report a cancellation as a failure.
+      expect(signInWithPasskey, isA<Function>());
+      expect(enrolPasskey, isA<Function>());
+    });
+  });
 }

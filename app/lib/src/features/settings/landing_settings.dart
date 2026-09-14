@@ -28,12 +28,11 @@ List<({String route, String label, String? module})> landingChoicesFor(
 /// staring at nothing. This is the fallback, and it is the important
 /// half of the whole feature: the landing page is the one screen a
 /// person cannot navigate away from if it fails to draw.
-String landingRouteFor(
-  UserPreferences prefs,
-  bool Function(String) holds,
-) {
+String landingRouteFor(UserPreferences prefs, bool Function(String) holds) {
   final allowed = landingChoicesFor(holds).map((c) => c.route).toSet();
-  return allowed.contains(prefs.landingRoute) ? prefs.landingRoute : '/dashboard';
+  return allowed.contains(prefs.landingRoute)
+      ? prefs.landingRoute
+      : '/dashboard';
 }
 
 /// Settings › Landing page.
@@ -70,7 +69,8 @@ class _LandingSettingsCardState extends ConsumerState<LandingSettingsCard> {
               children: [
                 const SectionHeader(
                   'Landing page',
-                  subtitle: 'Where you start, and what you see when you '
+                  subtitle:
+                      'Where you start, and what you see when you '
                       'get there. Yours alone — it follows you to every '
                       'company you keep books for.',
                 ),
@@ -159,8 +159,12 @@ class _LandingSettingsCardState extends ConsumerState<LandingSettingsCard> {
       if (mounted) {
         setState(() => _draft = null);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved. It applies next time you '
-              'sign in.')),
+          const SnackBar(
+            content: Text(
+              'Saved. It applies next time you '
+              'sign in.',
+            ),
+          ),
         );
       }
     } finally {

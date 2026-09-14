@@ -74,7 +74,8 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
     final go = await confirm(
       context,
       title: 'Remove the ${_mode == 'production' ? 'live' : 'sandbox'} keys?',
-      message: 'The stored key and signature are deleted, and no '
+      message:
+          'The stored key and signature are deleted, and no '
           'customer can pay online through this account until new ones '
           'are entered. Invoices and receipts already raised are '
           'untouched.',
@@ -114,8 +115,9 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
           collectionRef: _collection.text.trim().isEmpty
               ? null
               : _collection.text.trim(),
-          signatureKey:
-              _signature.text.trim().isEmpty ? null : _signature.text.trim(),
+          signatureKey: _signature.text.trim().isEmpty
+              ? null
+              : _signature.text.trim(),
           isActive: _active,
         );
         if (_bankAccountId != null) {
@@ -150,14 +152,17 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
           onRetry: () => ref.invalidate(orgPaymentGatewaysProvider),
           builder: (rows) {
             final row = rows
-                .where((r) => r['gateway_code'] == _gateway && r['mode'] == _mode)
+                .where(
+                  (r) => r['gateway_code'] == _gateway && r['mode'] == _mode,
+                )
                 .firstOrNull;
             if (_loadedFor != _mode) {
               _loadedFor = _mode;
               _load(row);
               _bankAccountId = null;
             }
-            final ready = row != null &&
+            final ready =
+                row != null &&
                 row['has_api_key'] == true &&
                 (row['collection_ref']?.toString() ?? '').isNotEmpty;
 
@@ -214,7 +219,7 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
                     helperText: row?['has_signature_key'] == true
                         ? 'One is stored. Leave this empty to keep it.'
                         : 'Without it a payment confirmation cannot be '
-                            'trusted, so none will be accepted',
+                              'trusted, so none will be accepted',
                   ),
                 ),
                 const SizedBox(height: Space.md),
@@ -229,7 +234,8 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
                       createBankAccountFromPicker(context, typed: typed),
                   value: _bankAccountId,
                   label: 'Takings land in',
-                  helperText: 'Required before customers are offered this '
+                  helperText:
+                      'Required before customers are offered this '
                       'way of paying',
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
@@ -243,9 +249,9 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
                   subtitle: Text(
                     ready
                         ? 'A Pay button appears on every invoice link with '
-                            'something still owing'
+                              'something still owing'
                         : 'Nothing is offered until a key and a collection '
-                            'are stored and an account is nominated',
+                              'are stored and an account is nominated',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -303,10 +309,9 @@ class _Status extends StatelessWidget {
     ];
     return Text(
       bits.join(' · '),
-      style: Theme.of(context)
-          .textTheme
-          .bodySmall
-          ?.copyWith(color: context.scheme.onSurfaceVariant),
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(color: context.scheme.onSurfaceVariant),
     );
   }
 }

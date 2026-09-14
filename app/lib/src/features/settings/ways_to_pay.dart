@@ -80,7 +80,10 @@ List<String> methodsOf(Map<String, dynamic> row) {
   final raw = row['methods'];
   if (raw is! List) return const [];
   final have = {for (final m in raw) '$m'};
-  final known = [for (final m in kMethodOrder) if (have.remove(m)) m];
+  final known = [
+    for (final m in kMethodOrder)
+      if (have.remove(m)) m,
+  ];
   // Anything the vocabulary does not know goes last, in the order it
   // arrived, rather than being dropped.
   return [...known, ...have];

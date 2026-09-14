@@ -26,6 +26,7 @@ import 'company_group_card.dart';
 import 'sst_card.dart';
 import 'sst_returns_card.dart';
 import 'notifications_card.dart';
+import 'passkeys_card.dart';
 import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
@@ -73,7 +74,8 @@ class SettingsScreen extends ConsumerWidget {
                     const EmptyState(
                       icon: Icons.business_outlined,
                       title: 'No organization',
-                      message: 'Create a company and its settings appear '
+                      message:
+                          'Create a company and its settings appear '
                           'here. Your own account is below either way.',
                     ),
                     const SizedBox(height: 16),
@@ -174,6 +176,14 @@ class SettingsScreen extends ConsumerWidget {
                   // no role in one, and printing "Viewer" would be a
                   // statement about a company that is not there.
                   _AboutCard(role: organization == null ? null : role),
+                  // Directly under Change password, because it is the
+                  // same decision — how you prove who you are — and
+                  // somebody just told they can change their password is
+                  // exactly who should be offered the thing that means
+                  // they will not have to. Draws nothing when the
+                  // project has passkeys off.
+                  const SizedBox(height: 16),
+                  const PasskeysCard(),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -297,10 +307,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
           await ref
               .read(supabaseProvider)
               .from('organizations')
-              .update({
-                'einvoice_enabled': false,
-                'einvoice_client_id': null,
-              })
+              .update({'einvoice_enabled': false, 'einvoice_client_id': null})
               .eq('id', widget.org.id);
         }
       },
@@ -396,9 +403,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
                 child: TextButton(
                   key: const ValueKey('clear-einvoice-credentials'),
                   onPressed: _saving ? null : _clear,
-                  child: Text(
-                    'Remove the $_environment credentials',
-                  ),
+                  child: Text('Remove the $_environment credentials'),
                 ),
               ),
             if (widget.canEdit)
@@ -1090,7 +1095,8 @@ class _ModulesCard extends ConsumerWidget {
           children: [
             const SectionHeader(
               'Modules',
-              subtitle: 'Switch off what this company does not use. '
+              subtitle:
+                  'Switch off what this company does not use. '
                   'Nothing is cancelled — the screens come back from here.',
             ),
             AsyncView(
@@ -1098,8 +1104,14 @@ class _ModulesCard extends ConsumerWidget {
               onRetry: () => ref.invalidate(moduleSurfaceProvider),
               loading: const LinearProgressIndicator(),
               builder: (modules) {
-                final held = [for (final m in modules) if (m.entitled) m];
-                final rest = [for (final m in modules) if (!m.entitled) m];
+                final held = [
+                  for (final m in modules)
+                    if (m.entitled) m,
+                ];
+                final rest = [
+                  for (final m in modules)
+                    if (!m.entitled) m,
+                ];
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1131,8 +1143,7 @@ class _ModulesCard extends ConsumerWidget {
                                   Icons.remove_circle_outline,
                                   size: 20,
                                 ),
-                                onPressed: () =>
-                                    _removeModule(context, ref, m),
+                                onPressed: () => _removeModule(context, ref, m),
                               ),
                         onChanged: !canAdmin
                             ? null
@@ -1157,8 +1168,9 @@ class _ModulesCard extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Not on this account',
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1209,9 +1221,7 @@ class _ModulesCard extends ConsumerWidget {
                             modulePromoNote(m)!,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                           ),
                         ],
@@ -1222,8 +1232,9 @@ class _ModulesCard extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Legal firm accounting',
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1522,15 +1533,17 @@ class _DeferredRevenueCardState extends ConsumerState<_DeferredRevenueCard> {
                 else ...[
                   for (final row in ready) _DueRow(row: row, base: _base),
                   const Divider(height: 20),
-                  Row(children: [
-                    const Expanded(
-                      child: Text(
-                        'To release',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'To release',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
-                    ),
-                    Money(readyTotal, currency: _base, bold: true),
-                  ]),
+                      Money(readyTotal, currency: _base, bold: true),
+                    ],
+                  ),
                 ],
                 if (later.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -1617,22 +1630,24 @@ class _DueRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(Fmt.date(row.periodEnd)),
-              Text(
-                '${row.lines} line${row.lines == 1 ? '' : 's'} on '
-                '${row.documents} invoice${row.documents == 1 ? '' : 's'}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(Fmt.date(row.periodEnd)),
+                Text(
+                  '${row.lines} line${row.lines == 1 ? '' : 's'} on '
+                  '${row.documents} invoice${row.documents == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
-        ),
-        Money(row.amount, currency: base),
-      ]),
+          Money(row.amount, currency: base),
+        ],
+      ),
     );
   }
 }
@@ -1976,7 +1991,6 @@ class _TaxCodesCard extends ConsumerWidget {
   }
 }
 
-
 class _AboutCard extends ConsumerWidget {
   const _AboutCard({required this.role});
 
@@ -2212,8 +2226,7 @@ class _ChangeEmailDialog extends ConsumerStatefulWidget {
   const _ChangeEmailDialog();
 
   @override
-  ConsumerState<_ChangeEmailDialog> createState() =>
-      _ChangeEmailDialogState();
+  ConsumerState<_ChangeEmailDialog> createState() => _ChangeEmailDialogState();
 }
 
 class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
@@ -2247,10 +2260,7 @@ class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
       // GoTrue verifies the password, by being asked to sign in with
       // it. A check written here would be a check the client could
       // skip.
-      await auth.signInWithPassword(
-        email: current,
-        password: _password.text,
-      );
+      await auth.signInWithPassword(email: current, password: _password.text);
       await auth.updateUser(UserAttributes(email: _email.text.trim()));
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -2259,12 +2269,11 @@ class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
       );
     } on AuthException catch (e) {
       if (mounted) {
-        setState(() => _error = looksWrongPassword(
-              code: e.code,
-              message: e.message,
-            )
-            ? wrongPassword
-            : e.message);
+        setState(
+          () => _error = looksWrongPassword(code: e.code, message: e.message)
+              ? wrongPassword
+              : e.message,
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -2311,10 +2320,7 @@ class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: context.colors.danger),
-                ),
+                Text(_error!, style: TextStyle(color: context.colors.danger)),
               ],
             ],
           ),
@@ -2387,27 +2393,24 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
         email: current,
         password: _password.text,
       );
-      final saved = await client.rpc('update_my_phone', params: {
-        'p_dial': _dialCode,
-        'p_national': _phone.text.trim(),
-      });
+      final saved = await client.rpc(
+        'update_my_phone',
+        params: {'p_dial': _dialCode, 'p_national': _phone.text.trim()},
+      );
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            saved is String ? mobileChanged(saved) : mobileRemoved,
-          ),
+          content: Text(saved is String ? mobileChanged(saved) : mobileRemoved),
         ),
       );
     } on AuthException catch (e) {
       if (mounted) {
-        setState(() => _error = looksWrongPassword(
-              code: e.code,
-              message: e.message,
-            )
-            ? wrongPassword
-            : e.message);
+        setState(
+          () => _error = looksWrongPassword(code: e.code, message: e.message)
+              ? wrongPassword
+              : e.message,
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -2419,8 +2422,9 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
   @override
   Widget build(BuildContext context) {
     final codes = withDialCodes(
-        ref.watch(signupReferenceProvider).valueOrNull?.dialCodes ??
-            const <Map<String, dynamic>>[]);
+      ref.watch(signupReferenceProvider).valueOrNull?.dialCodes ??
+          const <Map<String, dynamic>>[],
+    );
 
     return AlertDialog(
       title: const Text(changeMobileTitle),
@@ -2436,7 +2440,7 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
                 label: countryFieldLabel,
                 value: codes.any((c) => dialOf(c) == _dialCode)
                     ? codes.firstWhere((c) => dialOf(c) == _dialCode)['code']
-                        as String?
+                          as String?
                     : null,
                 options: [
                   for (final c in codes)
@@ -2447,8 +2451,7 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
                       keywords: ['${c['alpha2']}', '+${dialOf(c)}'],
                     ),
                 ],
-                onChanged: (v) =>
-                    setState(() => _dialCode = dialFor(codes, v)),
+                onChanged: (v) => setState(() => _dialCode = dialFor(codes, v)),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -2488,10 +2491,7 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: context.colors.danger),
-                ),
+                Text(_error!, style: TextStyle(color: context.colors.danger)),
               ],
             ],
           ),
@@ -2666,8 +2666,7 @@ class _WaysToPay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final country = ref.watch(currentOrgProvider).valueOrNull?.countryCode;
-    final gateways =
-        ref.watch(gatewaysForCountryProvider(country)).valueOrNull;
+    final gateways = ref.watch(gatewaysForCountryProvider(country)).valueOrNull;
     // Still loading, or the read failed. Either way this block is an
     // aside on a settings screen and must not become the reason it
     // shows an error.

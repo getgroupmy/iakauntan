@@ -36,9 +36,8 @@ String subscriptionRunningLine(SubscriptionMonth s) {
 
 /// One row. The days are shown only where they explain the amount:
 /// a module on for the whole month is simply its price.
-String subscriptionChargeLine(ModuleCharge c) => c.isPartial
-    ? '${c.name} · ${c.days} of ${c.daysInMonth} days'
-    : c.name;
+String subscriptionChargeLine(ModuleCharge c) =>
+    c.isPartial ? '${c.name} · ${c.days} of ${c.daysInMonth} days' : c.name;
 
 /// Whether an invoice is still owed. `void` is neither paid nor owing —
 /// it is withdrawn — so it counts towards nothing.

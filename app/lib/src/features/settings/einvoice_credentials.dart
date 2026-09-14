@@ -22,8 +22,7 @@ bool removingLeavesItLive({
   required bool enabled,
   required String environment,
   required String current,
-}) =>
-    enabled && environment == current;
+}) => enabled && environment == current;
 
 /// What removing them is going to do, said before it happens.
 String removeCredentialsMessage({
@@ -33,11 +32,11 @@ String removeCredentialsMessage({
   final which = environment == 'production' ? 'production' : 'sandbox';
   return alsoDisables
       ? 'The $which client id and secret are deleted, and e-Invoice '
-          'submission is switched off with them — a company left enabled '
-          'with no credentials is one marked live against a submitter '
-          'that cannot log in.'
+            'submission is switched off with them — a company left enabled '
+            'with no credentials is one marked live against a submitter '
+            'that cannot log in.'
       : 'The $which client id and secret are deleted. Submission is '
-          'pointed at the other environment and is left alone.';
+            'pointed at the other environment and is left alone.';
 }
 
 /// Ask before deleting a secret nobody can read back.

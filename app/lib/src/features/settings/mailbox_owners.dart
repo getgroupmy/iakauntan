@@ -47,10 +47,10 @@ String handOverLabel(Map<String, dynamic> row) =>
 /// belongs.
 String handOverWarning(String? newOwnerId) => newOwnerId == null
     ? 'Everything in this mailbox becomes readable by everybody who '
-        'works here. That is what a company address means, and it '
-        'cannot be undone for mail already in it.'
+          'works here. That is what a company address means, and it '
+          'cannot be undone for mail already in it.'
     : 'Only they will be able to read what is in it. You will not, '
-        'and neither will anybody else here.';
+          'and neither will anybody else here.';
 
 /// The people an address can be given to.
 ///
@@ -59,9 +59,9 @@ String handOverWarning(String? newOwnerId) => newOwnerId == null
 /// `assign_mailbox` both refuse one — so offering them here would be
 /// offering a choice the database is about to refuse.
 List<TeamMember> mailboxOwnerCandidates(List<TeamMember> team) => [
-      for (final m in team)
-        if (m.status == 'active' && (m.userId ?? '').isNotEmpty) m,
-    ];
+  for (final m in team)
+    if (m.status == 'active' && (m.userId ?? '').isNotEmpty) m,
+];
 
 /// What to call somebody in the picker.
 String memberLabel(TeamMember m) {
@@ -73,6 +73,6 @@ String memberLabel(TeamMember m) {
 
 /// A user id to display name map, for [mailboxOwnerLabel].
 Map<String, String> namesById(List<TeamMember> team) => {
-      for (final m in team)
-        if ((m.userId ?? '').isNotEmpty) m.userId!: memberLabel(m),
-    };
+  for (final m in team)
+    if ((m.userId ?? '').isNotEmpty) m.userId!: memberLabel(m),
+};

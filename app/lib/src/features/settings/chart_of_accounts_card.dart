@@ -64,7 +64,8 @@ class ChartOfAccountsCard extends ConsumerWidget {
                 children: [
                   TextButton.icon(
                     key: const ValueKey('chart-export'),
-                    onPressed: () => _export(context, ref, accounts.valueOrNull),
+                    onPressed: () =>
+                        _export(context, ref, accounts.valueOrNull),
                     icon: const Icon(Icons.download_outlined, size: 18),
                     label: const Text('Export'),
                   ),

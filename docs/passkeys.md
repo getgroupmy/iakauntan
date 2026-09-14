@@ -18,6 +18,10 @@ presses it. That is why `signin_show_passkey` ships **off**.
 * **The console.** Platform console → Site pages → "Offer a passkey".
 * **The web.** `passkey_web.dart` calls the browser's own WebAuthn JSON
   converters. Nothing to install.
+* **Saving one.** Settings → Your account → Passkeys. Lists what is
+  saved, with the authenticator's own name and when it was last used,
+  and removes one — a passkey on a laptop that has since been sold is a
+  key somebody else is holding, so the list IS the revocation.
 * **The phone.** NOT SHIPPED. See the section at the bottom — the obvious
   plugin cannot be added to this app without taking the web build down
   with it, and it did.
@@ -50,6 +54,20 @@ invalidates every passkey already enrolled, so pick the domain the product
 will still be on in five years. A passkey made for `iakauntan.com` works on
 `app.iakauntan.com` and every other subdomain; one made for
 `app.iakauntan.com` does not work on the apex.
+
+## How somebody actually saves one
+
+Sign in with a password once, then Settings → Your account → Passkeys →
+**Save a passkey**. The device asks for the fingerprint, face or PIN it
+already uses, and from then on "Sign in with a passkey" on the sign-in
+screen will offer that account.
+
+The order matters and is not obvious: a passkey can only be created by
+somebody already signed in, so the password is not replaced, it becomes
+the thing you use on a new device and then stop using. Until somebody
+has done this, the sign-in button is a door with nothing behind it —
+`startAuthentication` offers whichever accounts hold a passkey for this
+site, and that is none of them.
 
 ## 2. The console switch
 
