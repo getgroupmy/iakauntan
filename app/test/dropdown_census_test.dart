@@ -36,6 +36,12 @@ const dropdownCensus = <String, int>{
   'features/admin/promotions_admin.dart': 1,
   'features/admin/statutory_rates_admin.dart': 3,
   'features/approvals/rule_editor.dart': 4,
+  // The entity type a business chooses at REGISTRATION -- the same
+  // eight `app.entity_type` labels the setup form offers, out of the
+  // one map in `onboarding_copy.dart`. Fixed by an enum in the
+  // database: a ninth would arrive by migration, and a migration that
+  // added one would have to come here anyway.
+  'features/auth/sign_in_screen.dart': 1,
   'features/banking/new_bank_account_dialog.dart': 1,
   'features/collections/log_attempt_sheet.dart': 2,
   'features/contacts/contact_editor.dart': 4,

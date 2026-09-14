@@ -35,6 +35,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _registrationNo = TextEditingController();
+  final _oldRegistrationNo = TextEditingController();
   final _tin = TextEditingController();
   final _sstNo = TextEditingController();
   final _address = TextEditingController();
@@ -115,7 +116,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
 
   final Set<String> _ticked = {};
 
-  String _entityType = 'sdn_bhd';
+  String _entityType = defaultEntityType;
   String? _stateCode;
   String? _msicCode;
   bool _sstRegistered = false;
@@ -131,17 +132,6 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// written for them.
   bool get _malaysian => _country == 'MYS';
 
-  static const _entityTypes = {
-    'sdn_bhd': 'Sendirian Berhad (Sdn Bhd)',
-    'bhd': 'Berhad (Bhd)',
-    'enterprise': 'Enterprise',
-    'sole_proprietor': 'Sole Proprietor',
-    'partnership': 'Partnership',
-    'llp': 'Limited Liability Partnership',
-    'association': 'Association / Society',
-    'other': 'Other',
-  };
-
   static const _months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
@@ -150,8 +140,17 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   @override
   void dispose() {
     for (final c in [
-      _name, _registrationNo, _tin, _sstNo,
-      _address, _city, _postcode, _state, _phone, _email,
+      _name,
+      _registrationNo,
+      _oldRegistrationNo,
+      _tin,
+      _sstNo,
+      _address,
+      _city,
+      _postcode,
+      _state,
+      _phone,
+      _email,
     ]) {
       c.dispose();
     }
@@ -167,35 +166,43 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
     });
 
     try {
-      final orgId = await ref.read(supabaseProvider).rpc(
-        'create_organization',
-        params: {
-          'p_name': _name.text.trim(),
-          // Personal use has no entity type to choose: the person IS
-          // the entity, and `0553`'s trigger reads this value to file
-          // them under NRIC or passport rather than under a business
-          // registration number MyInvois would reject.
-          'p_entity_type':
-              _personal ? personalEntityType : _entityType,
-          'p_registration_no': _emptyToNull(_registrationNo.text),
-          'p_tin': _emptyToNull(_tin.text),
-          'p_msic_code': _msicCode,
-          // One argument, two sources: inside Malaysia it is a code
-          // from `ref_states`, and outside it is whatever was typed.
-          // The column is free text, so both are honest; what would not
-          // be is storing a Malaysian code for a Thai province.
-          'p_state_code': _malaysian ? _stateCode : _emptyToNull(_state.text),
-          'p_city': _emptyToNull(_city.text),
-          'p_postcode': _emptyToNull(_postcode.text),
-          'p_address_line1': _emptyToNull(_address.text),
-          'p_phone': _emptyToNull(_phone.text),
-          'p_email': _emptyToNull(_email.text),
-          'p_is_sst_registered': _sstRegistered,
-          'p_sst_registration_no': _emptyToNull(_sstNo.text),
-          'p_fiscal_year_end_month': _fiscalYearEndMonth,
-          'p_country_code': _country,
-        },
-      );
+      final orgId = await ref
+          .read(supabaseProvider)
+          .rpc(
+            'create_organization',
+            params: {
+              'p_name': _name.text.trim(),
+              // Personal use has no entity type to choose: the person IS
+              // the entity, and `0553`'s trigger reads this value to file
+              // them under NRIC or passport rather than under a business
+              // registration number MyInvois would reject.
+              'p_entity_type': _personal ? personalEntityType : _entityType,
+              'p_registration_no': _emptyToNull(_registrationNo.text),
+              // 0590 added this. The column has been there since 0001 and
+              // nothing could fill it, so a company incorporated before
+              // 2019 lost the number half its counterparties file it
+              // under.
+              'p_old_registration_no': _emptyToNull(_oldRegistrationNo.text),
+              'p_tin': _emptyToNull(_tin.text),
+              'p_msic_code': _msicCode,
+              // One argument, two sources: inside Malaysia it is a code
+              // from `ref_states`, and outside it is whatever was typed.
+              // The column is free text, so both are honest; what would not
+              // be is storing a Malaysian code for a Thai province.
+              'p_state_code': _malaysian
+                  ? _stateCode
+                  : _emptyToNull(_state.text),
+              'p_city': _emptyToNull(_city.text),
+              'p_postcode': _emptyToNull(_postcode.text),
+              'p_address_line1': _emptyToNull(_address.text),
+              'p_phone': _emptyToNull(_phone.text),
+              'p_email': _emptyToNull(_email.text),
+              'p_is_sst_registered': _sstRegistered,
+              'p_sst_registration_no': _emptyToNull(_sstNo.text),
+              'p_fiscal_year_end_month': _fiscalYearEndMonth,
+              'p_country_code': _country,
+            },
+          );
 
       // What the company said it is, and the modules it was shown.
       // After the company exists, because both are recorded against it
@@ -231,10 +238,8 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// Matched on the name because that is all Places gives — and left
   /// null when nothing matches rather than guessed, since a wrong state
   /// on a company record is worse than an empty one somebody fills in.
-  String? _stateFor(String? name) => stateCodeFor(
-    ref.read(refStatesProvider).valueOrNull ?? const [],
-    name,
-  );
+  String? _stateFor(String? name) =>
+      stateCodeFor(ref.read(refStatesProvider).valueOrNull ?? const [], name);
 
   /// Go to a step, remembering where from.
   ///
@@ -308,6 +313,12 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   void _chooseUse(UseKind use) {
     setState(() {
       _use = use;
+      // A practice that cannot open a second set of books has been
+      // sold the wrong thing, so the module the whole answer is about
+      // is ticked for them. Ticked and not hidden: the next screen
+      // shows it with its price, because a paid module nobody saw
+      // arrive is a charge somebody disputes. They can untick it.
+      if (use == UseKind.accountant) _ticked.addAll(accountantModules);
       // A person has no business type, and leaving a stale one would
       // file them as a restaurant. The ticks stay either way: they are
       // things somebody said they wanted, and that does not stop being
@@ -368,10 +379,24 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
       if (c['code'] == theirCountry) theirRow = c;
     }
 
+    // What a business typed at registration, offered back rather than
+    // asked for again. `0590` files both on the profile; null for
+    // everybody else, and for accounts made before the question
+    // existed.
+    final theirName = '${profile['signup_business_name'] ?? ''}'.trim();
+    final theirEntity = '${profile['signup_entity_type'] ?? ''}'.trim();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
         _use = said;
+        if (theirName.isNotEmpty && _name.text.trim().isEmpty) {
+          _name.text = theirName;
+        }
+        if (entityTypes.containsKey(theirEntity)) _entityType = theirEntity;
+        // The same tick `_chooseUse` applies, for somebody who
+        // answered at registration and never sees that screen.
+        if (said == UseKind.accountant) _ticked.addAll(accountantModules);
         if (theirRow != null) {
           _country = theirCountry;
           _alpha2 = '${theirRow['alpha2']}';
@@ -476,12 +501,17 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                       ListTile(
                         key: const ValueKey('org-use'),
                         leading: Icon(
-                          _personal ? Icons.person_outline : Icons.storefront,
+                          switch (_use ?? UseKind.business) {
+                            UseKind.personal => Icons.person_outline,
+                            UseKind.accountant => Icons.account_balance_outlined,
+                            UseKind.business => Icons.storefront,
+                          },
                           size: 20,
                         ),
                         title: const Text(useFieldLabel),
                         subtitle: Text(
-                            useAnswer(_use ?? UseKind.business, _audience)),
+                          useAnswer(_use ?? UseKind.business, _audience),
+                        ),
                         trailing: TextButton(
                           key: const ValueKey('org-use-change'),
                           onPressed:
@@ -489,13 +519,18 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                           child: const Text(countryChangeLabel),
                         ),
                       ),
-                      // A person has no business type, so there is no
-                      // line for one.
-                      if (!_personal)
+                      // See `showsBusinessTypeLine`: a person has no
+                      // business type and a practice is never asked
+                      // for one, so neither gets a line and neither
+                      // gets a way back into a screen they were
+                      // deliberately not shown.
+                      if (showsBusinessTypeLine(_use))
                         ListTile(
                           key: const ValueKey('org-business-type'),
-                          leading: const Icon(Icons.category_outlined,
-                              size: 20),
+                          leading: const Icon(
+                            Icons.category_outlined,
+                            size: 20,
+                          ),
                           title: const Text(businessTypeFieldLabel),
                           subtitle: Text(_businessTypeName ?? '—'),
                           trailing: TextButton(
@@ -527,8 +562,11 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                     padding: const EdgeInsets.all(Space.lg),
                     child: Row(
                       children: [
-                        Icon(Icons.auto_awesome,
-                            color: context.colors.success, size: 20),
+                        Icon(
+                          Icons.auto_awesome,
+                          color: context.colors.success,
+                          size: 20,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -575,14 +613,19 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 // right answer hidden in it.
                 if (!_personal) ...[
                   DropdownButtonFormField<String>(
+                    // Same reason as the sign-up form's copy of this
+                    // dropdown: the longest label overflows a narrow
+                    // column rather than ellipsising, and a phone is
+                    // narrow.
+                    isExpanded: true,
                     value: _entityType,
                     decoration: const InputDecoration(labelText: 'Entity type'),
                     items: [
-                      for (final e in _entityTypes.entries)
+                      for (final e in entityTypes.entries)
                         DropdownMenuItem(value: e.key, child: Text(e.value)),
                     ],
                     onChanged: (v) =>
-                        setState(() => _entityType = v ?? 'sdn_bhd'),
+                        setState(() => _entityType = v ?? defaultEntityType),
                   ),
                   const SizedBox(height: 14),
                 ],
@@ -599,9 +642,9 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                     return ListTile(
                       key: const ValueKey('org-msic'),
                       contentPadding: EdgeInsets.zero,
-                      title: Text(_personal
-                          ? 'What you do'
-                          : 'What the business does'),
+                      title: Text(
+                        _personal ? 'What you do' : 'What the business does',
+                      ),
                       subtitle: Text(msicSummary(all, _msicCode)),
                       trailing: const Icon(Icons.search, size: 18),
                       onTap: _busy
@@ -654,6 +697,23 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                     ),
                   ),
                 ),
+                // Only where there could be one. A person has a MyKad
+                // and not a registration history, and the box would be
+                // a question about a company in front of somebody who
+                // has not got one.
+                if (!_personal && _malaysian) ...[
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    key: const ValueKey('org-old-registration'),
+                    controller: _oldRegistrationNo,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: oldIdentificationLabel,
+                      hintText: oldIdentificationHint,
+                      helperText: oldIdentificationHelp,
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 24),
                 const SectionHeader('Address'),
@@ -710,8 +770,9 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                   TextFormField(
                     controller: _state,
                     textCapitalization: TextCapitalization.words,
-                    decoration:
-                        const InputDecoration(labelText: 'State or province'),
+                    decoration: const InputDecoration(
+                      labelText: 'State or province',
+                    ),
                   ),
 
                 const SizedBox(height: 24),
@@ -792,8 +853,12 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(createButtonLabel(_use ?? UseKind.business,
-                          audience: _audience)),
+                      : Text(
+                          createButtonLabel(
+                            _use ?? UseKind.business,
+                            audience: _audience,
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 40),
               ],
@@ -874,10 +939,7 @@ class _UseStep extends ConsumerWidget {
         title: Text(useQuestion(audience)),
         leading: onBack == null
             ? null
-            : BackButton(
-                key: const ValueKey('use-back'),
-                onPressed: onBack,
-              ),
+            : BackButton(key: const ValueKey('use-back'), onPressed: onBack),
         actions: [
           TextButton.icon(
             onPressed: () => ref.read(supabaseProvider).auth.signOut(),
@@ -917,6 +979,15 @@ class _UseStep extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               _UseCard(
+                tileKey: const ValueKey('use-accountant'),
+                icon: Icons.account_balance_outlined,
+                title: accountantTitle,
+                blurb: accountantBlurb,
+                current: chosen == UseKind.accountant,
+                onTap: () => onChosen(UseKind.accountant),
+              ),
+              const SizedBox(height: 12),
+              _UseCard(
                 tileKey: const ValueKey('use-personal'),
                 icon: Icons.person_outline,
                 title: personalTitle(audience),
@@ -933,7 +1004,7 @@ class _UseStep extends ConsumerWidget {
   }
 }
 
-/// One of the two answers, big enough to read before choosing.
+/// One of the three answers, big enough to read before choosing.
 class _UseCard extends StatelessWidget {
   const _UseCard({
     required this.tileKey,
@@ -1021,9 +1092,7 @@ class _BusinessTypeStep extends ConsumerWidget {
     final types = ref.watch(businessTypesProvider);
     final modules = ref.watch(onboardingModulesProvider).valueOrNull ??
         const <Map<String, dynamic>>[];
-    final names = {
-      for (final m in modules) '${m['code']}': '${m['name']}',
-    };
+    final names = {for (final m in modules) '${m['code']}': '${m['name']}'};
 
     return Scaffold(
       appBar: AppBar(
@@ -1075,12 +1144,14 @@ class _BusinessTypeStep extends ConsumerWidget {
                                 ListTile(
                                   key: ValueKey('business-type-${t['code']}'),
                                   title: Text('${t['name']}'),
-                                  subtitle: Text(modulesAdded([
-                                    for (final c
-                                        in (t['module_codes'] as List? ??
-                                            const []))
-                                      names['$c'] ?? '$c',
-                                  ])),
+                                  subtitle: Text(
+                                    modulesAdded([
+                                      for (final c
+                                          in (t['module_codes'] as List? ??
+                                              const []))
+                                        names['$c'] ?? '$c',
+                                    ]),
+                                  ),
                                   trailing: Icon(
                                     chosen == '${t['code']}'
                                         ? Icons.check_circle
@@ -1090,16 +1161,13 @@ class _BusinessTypeStep extends ConsumerWidget {
                                         ? context.colors.success
                                         : null,
                                   ),
-                                  onTap: () => onChosen(
-                                    '${t['code']}',
-                                    '${t['name']}',
-                                    [
-                                      for (final c
-                                          in (t['module_codes'] as List? ??
-                                              const []))
-                                        '$c',
-                                    ],
-                                  ),
+                                  onTap: () =>
+                                      onChosen('${t['code']}', '${t['name']}', [
+                                        for (final c
+                                            in (t['module_codes'] as List? ??
+                                                const []))
+                                          '$c',
+                                      ]),
                                 ),
                             ],
                           ),

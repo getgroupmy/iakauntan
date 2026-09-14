@@ -49,18 +49,26 @@
  * optimisations to tune away.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { serveFunction } from "../_shared/cors.ts";
 import { SsmError, SsmSearchWeb } from "./provider.ts";
 
-const CORS = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, content-type",
-  "access-control-allow-methods": "POST, OPTIONS",
-};
-
+/**
+ * The body shape, and NOT the CORS headers.
+ *
+ * `serveFunction` answers the preflight and stamps the cross-origin
+ * headers onto every response on the way out, which is why this
+ * function no longer carries a `CORS` constant of its own. The one it
+ * had allowed `authorization, content-type` and nothing else, and
+ * supabase-js sends `x-client-info` and `apikey` on every call — so
+ * the browser's preflight was refused and the app showed
+ * "ClientException: Load failed" with no status and no body to read.
+ * `_shared/cors.ts` has the full list, and is also where
+ * `ALLOWED_ORIGINS` is honoured.
+ */
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json" },
+    headers: { "content-type": "application/json" },
   });
 }
 
@@ -74,8 +82,7 @@ function env(name: string): string {
   return v;
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+serveFunction("ssm-search", async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return fail("METHOD", "POST only", 405);
 
   const auth = req.headers.get("Authorization");

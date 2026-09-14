@@ -27,7 +27,30 @@ enum UseKind {
 
   /// A registered business, whatever its legal form.
   business,
+
+  /// A practice keeping OTHER people's books.
+  ///
+  /// Not a kind of business, which is why it is a third answer rather
+  /// than a row in the business-type list. What follows from it is
+  /// different from what follows from "a business": Multi-Company from
+  /// the start, because a firm with one company is a firm that has not
+  /// started yet, and no "what kind of business?" question, because the
+  /// kind of business is not what they came to tell us.
+  ///
+  /// Everything else about the form is the business form. A practice is
+  /// a registered company with a name, an SSM number and a TIN, and its
+  /// own books are a company's books.
+  accountant,
 }
+
+/// Whether the company half of the form applies.
+///
+/// The opposite of [UseKind.personal] rather than equality with
+/// [UseKind.business], said once here. Written the other way round in
+/// seven places, adding a third answer would have quietly filed every
+/// accounting practice as an individual -- entity type hidden, name box
+/// asking for a MyKad, and LHDN told the firm was a person.
+bool isCompany(UseKind? use) => use != UseKind.personal;
 
 /// Whose books these are.
 ///
@@ -59,14 +82,19 @@ UseKind? useKindFrom(String? stored) {
       return UseKind.personal;
     case 'business':
       return UseKind.business;
+    case 'accountant':
+      return UseKind.accountant;
     default:
       return null;
   }
 }
 
 /// The same value on its way out, for the registration metadata.
-String storedUseKind(UseKind use) =>
-    use == UseKind.personal ? 'personal' : 'business';
+String storedUseKind(UseKind use) => switch (use) {
+  UseKind.personal => 'personal',
+  UseKind.business => 'business',
+  UseKind.accountant => 'accountant',
+};
 
 /// The question at the top of the first step.
 String useQuestion(SetupAudience audience) => audience == SetupAudience.own
@@ -92,12 +120,32 @@ const businessBlurb =
     'A registered company, enterprise, partnership or society. '
     'Invoices carry the registered name and the SSM number.';
 
+/// The practice, said in the words of somebody who keeps books for a
+/// living rather than in the words of a product.
+const accountantTitle = 'Accountant';
+const accountantBlurb =
+    'A firm keeping books for clients. Comes with Multi-Company, so '
+    'each client is their own set of books on this one sign-in.';
+
+/// What an accounting practice gets switched on without being asked.
+///
+/// One module, and it is the one the whole answer is about: a practice
+/// that cannot open a second set of books has been sold the wrong
+/// thing. Named rather than ticked silently -- the module step still
+/// shows it, with its price, because it is a paid module and a charge
+/// nobody saw arrive is a charge somebody disputes.
+const accountantModules = ['multi_company'];
+
 /// The heading over the form once the questions are answered.
 String setupTitle(UseKind use, {SetupAudience audience = SetupAudience.own}) {
   if (audience == SetupAudience.other) {
     return use == UseKind.personal ? 'Set up these books' : 'Add a company';
   }
-  return use == UseKind.personal ? 'Set up your details' : 'Set up your company';
+  return use == UseKind.accountant
+      ? 'Set up your practice'
+      : use == UseKind.personal
+      ? 'Set up your details'
+      : 'Set up your company';
 }
 
 /// What the name box is called.
@@ -110,6 +158,7 @@ String nameLabel(
   required bool malaysian,
   SetupAudience audience = SetupAudience.own,
 }) {
+  if (use == UseKind.accountant) return 'Practice name *';
   if (use == UseKind.business) return 'Company name *';
   final whose = audience == SetupAudience.own ? 'your' : 'their';
   return malaysian
@@ -124,13 +173,13 @@ String nameLabel(
 /// is which number belongs in it, and a box labelled "SSM registration
 /// no." in front of somebody who has never had one is a box left empty.
 String identificationLabel(UseKind use, {required bool malaysian}) {
-  if (use == UseKind.business) return 'SSM registration no.';
+  if (isCompany(use)) return 'SSM registration no.';
   return malaysian ? 'MyKad number' : 'Passport number';
 }
 
 /// The example under it.
 String identificationHint(UseKind use, {required bool malaysian}) {
-  if (use == UseKind.business) return '202301234567';
+  if (isCompany(use)) return '202301234567';
   return malaysian ? '900101015555' : 'A12345678';
 }
 
@@ -140,11 +189,55 @@ String identificationHelp(
   SetupAudience audience = SetupAudience.own,
 }) {
   final whose = audience == SetupAudience.own ? 'your' : 'their';
-  return use == UseKind.business
+  return isCompany(use)
       ? 'Goes on $whose invoices and to LHDN'
       : 'Goes on $whose invoices and to LHDN, in place of a business '
           'registration number';
 }
+
+/// The legal forms `app.entity_type` recognises, in the words a
+/// Malaysian company would use for itself.
+///
+/// Here rather than in a screen because two screens ask for it now --
+/// registration and setup -- and the danger of a second copy is not
+/// that the words drift but that the KEYS do: these are enum labels,
+/// and one that is not a label is a company that cannot be created,
+/// discovered at the last press of the last screen.
+///
+/// `individual` and `government` are deliberately absent. A person is
+/// filed as `individual` by answering "Myself", which is a different
+/// question, and nobody sets a government body up through a self-serve
+/// form.
+const entityTypes = <String, String>{
+  'sdn_bhd': 'Sendirian Berhad (Sdn Bhd)',
+  'bhd': 'Berhad (Bhd)',
+  'enterprise': 'Enterprise',
+  'sole_proprietor': 'Sole Proprietor',
+  'partnership': 'Partnership',
+  'llp': 'Limited Liability Partnership',
+  'association': 'Association / Society',
+  'other': 'Other',
+};
+
+/// The one a form starts on.
+const defaultEntityType = 'sdn_bhd';
+
+/// The number the register issued BEFORE 2019, which half the country
+/// still has on file.
+///
+/// A company incorporated before the Companies Act 2016 numbering
+/// change carries two: `200201003726` and `(571389-H)`. A business
+/// registered under ROB likewise -- `JM0167410-V`. Both are printed on
+/// the letterhead, and a counterparty searching for one will not find
+/// the other.
+///
+/// Never required, and the helper says so where somebody is looking at
+/// the box. A company incorporated after 2019 has never had one, and a
+/// mandatory box in front of somebody with nothing to put in it is a
+/// box that gets a made-up number -- which then goes out on an invoice.
+const oldIdentificationLabel = 'Old SSM registration no.';
+const oldIdentificationHint = '571389-H';
+const oldIdentificationHelp = 'Only if registered before 2019. Optional.';
 
 /// The entity type a personal setup files under.
 ///
@@ -164,6 +257,11 @@ String setupPromise({
       ? 'a Malaysian chart of accounts, SST tax codes'
       : 'a chart of accounts';
   final own = audience == SetupAudience.own;
+  if (use == UseKind.accountant) {
+    return 'We will create $chart, a fiscal calendar and a sales '
+        'pipeline for the practice itself. Client books are added '
+        'afterwards, one company at a time.';
+  }
   return use == UseKind.personal
       ? 'We will create $chart and a fiscal calendar, so '
           '${own ? 'you' : 'they'} can invoice and be paid under '
@@ -184,6 +282,7 @@ String createButtonLabel(
   UseKind use, {
   SetupAudience audience = SetupAudience.own,
 }) {
+  if (use == UseKind.accountant) return 'Create practice';
   if (use == UseKind.business) return 'Create company';
   return audience == SetupAudience.own ? 'Open my books' : 'Open these books';
 }
@@ -281,7 +380,13 @@ enum SetupStep {
 /// same question the same way must not make it answer the next one
 /// again.
 SetupStep stepAfterUse(UseKind use, {String? businessType}) {
-  if (use == UseKind.personal) return SetupStep.modules;
+  // A practice is not asked what kind of business it is. The question
+  // exists to decide which modules to offer, and the answer for a firm
+  // keeping other people's books is already known -- see
+  // `accountantModules`. Asking anyway would be asking somebody to
+  // classify themselves as a restaurant or a workshop before being
+  // shown a list that had nothing to do with either answer.
+  if (use != UseKind.business) return SetupStep.modules;
   return businessType == null ? SetupStep.businessType : SetupStep.form;
 }
 
@@ -302,7 +407,7 @@ SetupStep stepAfterBusinessType(String code) =>
 /// restaurant. It does not otherwise — and re-picking the same answer
 /// changes nothing at all, which is the difference between a back
 /// button and starting again.
-bool clearsBusinessType(UseKind use) => use == UseKind.personal;
+bool clearsBusinessType(UseKind use) => use != UseKind.business;
 
 /// Whether choosing a business type replaces the ticks.
 ///
@@ -318,9 +423,27 @@ const useFieldLabel = 'What this is for';
 const businessTypeFieldLabel = 'Business type';
 const modulesFieldLabel = 'Add-ons';
 
+/// Whether the form's summary carries a "Business type" line, with a
+/// way back to the screen that set it.
+///
+/// Only for a business. A person has no business type; a practice is
+/// never asked for one, and the line read "Business type \u2014" with a
+/// Change button beside it \u2014 an answer nobody gave, and a door back
+/// into a question they were deliberately not shown.
+///
+/// Here rather than in the widget because it is a rule with a right
+/// answer, and the version inside `build` was `!_personal`, which was
+/// correct while there were two answers and silently wrong the moment
+/// there were three.
+bool showsBusinessTypeLine(UseKind? use) => use == UseKind.business;
+
 /// Which answer was given to the first question.
 String useAnswer(UseKind use, [SetupAudience audience = SetupAudience.own]) =>
-    use == UseKind.personal ? personalTitle(audience) : businessTitle;
+    switch (use) {
+      UseKind.personal => personalTitle(audience),
+      UseKind.business => businessTitle,
+      UseKind.accountant => accountantTitle,
+    };
 
 /// What the add-ons line says.
 ///

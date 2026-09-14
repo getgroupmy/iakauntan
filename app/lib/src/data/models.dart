@@ -158,6 +158,7 @@ class Contact {
     this.legalName,
     this.tin,
     this.registrationNo,
+    this.oldRegistrationNo,
     this.idType,
     this.idValue,
     this.sstRegistrationNo,
@@ -197,6 +198,15 @@ class Contact {
   final String? legalName;
   final String? tin;
   final String? registrationNo;
+
+  /// The number the register issued before 2019 -- `571389-H`,
+  /// `JM0167410-V`. A company or business registered before the
+  /// numbering changed carries both, and a counterparty searching for
+  /// one will not find the other. `set_contact_ssm_entity` has written
+  /// this column since 0589 and nothing in the app could show it, so a
+  /// lookup filled a field nobody could read or correct.
+  final String? oldRegistrationNo;
+
   final String? idType;
   final String? idValue;
   final String? sstRegistrationNo;
@@ -270,6 +280,7 @@ class Contact {
     legalName: j['legal_name'] as String?,
     tin: j['tin'] as String?,
     registrationNo: j['registration_no'] as String?,
+    oldRegistrationNo: j['old_registration_no'] as String?,
     idType: j['id_type'] as String?,
     idValue: j['id_value'] as String?,
     sstRegistrationNo: j['sst_registration_no'] as String?,
@@ -290,8 +301,9 @@ class Contact {
     payableAccountId: j['payable_account_id'] as String?,
     paymentTermId: j['payment_term_id'] as String?,
     priceLevelId: j['price_level_id'] as String?,
-    customFields:
-        Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
+    customFields: Map<String, dynamic>.from(
+      (j['custom_fields'] as Map?) ?? const {},
+    ),
     isActive: j['is_active'] != false,
     entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
   );
@@ -307,6 +319,7 @@ class Contact {
     legalName: legalName,
     tin: tin,
     registrationNo: registrationNo,
+    oldRegistrationNo: oldRegistrationNo,
     idType: idType,
     idValue: idValue,
     sstRegistrationNo: sstRegistrationNo,
@@ -339,6 +352,7 @@ class Contact {
     'legal_name': legalName,
     'tin': tin,
     'registration_no': registrationNo,
+    'old_registration_no': oldRegistrationNo,
     'id_type': idType,
     'id_value': idValue,
     'sst_registration_no': sstRegistrationNo,
@@ -730,8 +744,9 @@ class Item {
     purchaseTaxCodeId: j['purchase_tax_code_id'] as String?,
     categoryId: j['category_id'] as String?,
     barcode: j['barcode'] as String?,
-    customFields:
-        Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
+    customFields: Map<String, dynamic>.from(
+      (j['custom_fields'] as Map?) ?? const {},
+    ),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1054,8 +1069,9 @@ class BusinessDocument {
     final rawLines =
         (j['sales_document_lines'] ?? j['purchase_document_lines']) as List?;
     return BusinessDocument(
-      customFields:
-          Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
+      customFields: Map<String, dynamic>.from(
+        (j['custom_fields'] as Map?) ?? const {},
+      ),
       id: j['id'] as String,
       docType: j['doc_type']?.toString() ?? 'invoice',
       docNo: j['doc_no']?.toString() ?? '',
@@ -1172,8 +1188,9 @@ class DocumentLine {
   final Map<String, dynamic> customFields;
 
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
-    customFields:
-        Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
+    customFields: Map<String, dynamic>.from(
+      (j['custom_fields'] as Map?) ?? const {},
+    ),
     id: j['id'] as String?,
     lineNo: Fmt.toInt(j['line_no']),
     itemId: j['item_id'] as String?,
@@ -1427,8 +1444,11 @@ class Todo {
   bool isOverdue(DateTime today) {
     final due = dueDate;
     if (due == null || isDone) return false;
-    return DateTime(due.year, due.month, due.day)
-        .isBefore(DateTime(today.year, today.month, today.day));
+    return DateTime(
+      due.year,
+      due.month,
+      due.day,
+    ).isBefore(DateTime(today.year, today.month, today.day));
   }
 }
 
@@ -2201,8 +2221,9 @@ class Employee {
     final dept = j['departments'];
     final pos = j['positions'];
     return Employee(
-      customFields:
-          Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
+      customFields: Map<String, dynamic>.from(
+        (j['custom_fields'] as Map?) ?? const {},
+      ),
       id: j['id'] as String,
       employeeNo: j['employee_no']?.toString() ?? '',
       fullName: j['full_name']?.toString() ?? '',

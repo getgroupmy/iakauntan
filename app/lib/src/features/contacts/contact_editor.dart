@@ -14,6 +14,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
+import '../onboarding/onboarding_copy.dart'
+    show oldIdentificationHelp, oldIdentificationHint, oldIdentificationLabel;
 import '../../data/ocr_repository.dart';
 import 'scanned_address.dart';
 import 'control_account.dart';
@@ -104,6 +106,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       'legalName',
       'tin',
       'registrationNo',
+      'oldRegistrationNo',
       'idValue',
       'sstNo',
       'email',
@@ -137,10 +140,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   void _scheduleLookalikes() {
     if (!_lookalikesArmed) return;
     _lookalikeTimer?.cancel();
-    _lookalikeTimer = Timer(
-      const Duration(milliseconds: 400),
-      _askLookalikes,
-    );
+    _lookalikeTimer = Timer(const Duration(milliseconds: 400), _askLookalikes);
   }
 
   /// What is on file under what has been typed so far. Nothing said
@@ -180,9 +180,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       );
       // A later question has been asked; its answer is the one to show.
       if (!mounted || ask != _lookalikeAsk) return;
-      setState(
-        () => _lookalikes = rows.map(Lookalike.fromJson).toList(),
-      );
+      setState(() => _lookalikes = rows.map(Lookalike.fromJson).toList());
     } catch (_) {
       // Left as it was.
     }
@@ -256,6 +254,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _c('legalName').text = contact.legalName ?? '';
         _c('tin').text = contact.tin ?? '';
         _c('registrationNo').text = contact.registrationNo ?? '';
+        _c('oldRegistrationNo').text = contact.oldRegistrationNo ?? '';
         _c('idValue').text = contact.idValue ?? '';
         _c('sstNo').text = contact.sstRegistrationNo ?? '';
         _c('email').text = contact.email ?? '';
@@ -376,6 +375,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     legalName: _nullIfEmpty(_c('legalName').text),
     tin: _nullIfEmpty(_c('tin').text.toUpperCase()),
     registrationNo: _nullIfEmpty(_c('registrationNo').text),
+    oldRegistrationNo: _nullIfEmpty(_c('oldRegistrationNo').text),
     idType: _idType,
     idValue:
         _nullIfEmpty(_c('idValue').text) ??
@@ -455,6 +455,13 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       _ssmChosen = chosen;
       _c('name').text = chosen.name;
       if (chosen.regNo != null) _c('registrationNo').text = chosen.regNo!;
+      // Only when the registry returned one. An older number already
+      // on file is still true when a search result is silent about it
+      // — the same rule `set_contact_ssm_entity` follows, so the form
+      // and the save cannot disagree.
+      if (chosen.regNoOld != null) {
+        _c('oldRegistrationNo').text = chosen.regNoOld!;
+      }
       if (_nullIfEmpty(_c('idValue').text) == null && chosen.regNo != null) {
         _c('idValue').text = chosen.regNo!;
         _idType = 'BRN';
@@ -767,6 +774,17 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                             labelText: 'SSM registration no.',
                             hintText: '202301234567',
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        key: const ValueKey('contact-old-registration'),
+                        controller: _c('oldRegistrationNo'),
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(
+                          labelText: oldIdentificationLabel,
+                          hintText: oldIdentificationHint,
+                          helperText: oldIdentificationHelp,
                         ),
                       ),
                       const SizedBox(height: 14),

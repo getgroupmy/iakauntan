@@ -18,8 +18,15 @@ final myProfileProvider =
   if (id == null) return null;
   final row = await client
       .from('profiles')
-      .select('id, full_name, email, salutation, phone, country_code, '
-          'state_code, use_kind')
+      // The two `signup_` columns are 0590's: what a business typed at
+      // registration, kept so setup can offer it back rather than ask
+      // again. Named here because `check_query_columns.py` checks this
+      // list against the schema, and because a `*` would hand the app
+      // columns nothing reads.
+      .select(
+        'id, full_name, email, salutation, phone, country_code, '
+        'state_code, use_kind, signup_business_name, signup_entity_type',
+      )
       .eq('id', id)
       .maybeSingle();
   return row == null ? null : Map<String, dynamic>.from(row);

@@ -460,6 +460,20 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// answer and the one the product is named for.
   UseKind _use = UseKind.business;
 
+  /// What a business is asked on top of the five everybody gives.
+  ///
+  /// Setup asked for both of these as its first act, of somebody who
+  /// had typed their company's name into the form above ten seconds
+  /// earlier. They ride along on the registration metadata,
+  /// `handle_new_user` files them on the profile, and setup offers
+  /// them back — see `0590`.
+  ///
+  /// Not asked of a person, who has no company, and not of a practice:
+  /// an accountant's own firm is set up like any company, on the setup
+  /// form, and registration is not the moment to start collecting it.
+  final _businessName = TextEditingController();
+  String _entityType = defaultEntityType;
+
   /// The Turnstile token, when a captcha is configured.
   ///
   /// Null means "not passed yet", and null again when Turnstile says it
@@ -583,6 +597,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     _fullName.dispose();
     _phone.dispose();
     _confirmPassword.dispose();
+    _businessName.dispose();
     _stateText.dispose();
     super.dispose();
   }
@@ -778,6 +793,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             'phone_dial': _dialCode,
             'phone_national': _phone.text.trim(),
             'use_kind': storedUseKind(_use),
+            // Only what was actually asked. An empty string for a
+            // person would be a person with a blank company name on
+            // their profile, and `handle_new_user` would have to
+            // decide what that meant.
+            if (_use == UseKind.business) ...{
+              'business_name': _businessName.text.trim(),
+              'entity_type': _entityType,
+            },
             'country_code': _country,
             // A `ref_states` code inside Malaysia and whatever was
             // typed outside it, which is what `create_organization`
@@ -1363,24 +1386,87 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
+                  // Three answers and no icons. Two fitted a phone
+                  // with a glyph each; three do not, and a
+                  // SegmentedButton does not wrap -- it clips, so the
+                  // third answer would be a truncated word somebody
+                  // taps without being able to read. The words carry
+                  // it on their own.
                   SegmentedButton<UseKind>(
                     key: const ValueKey('signup-use'),
+                    showSelectedIcon: false,
                     segments: [
                       ButtonSegment(
                         value: UseKind.business,
                         label: Text(businessTitle),
-                        icon: const Icon(Icons.storefront, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: UseKind.accountant,
+                        label: Text(accountantTitle),
                       ),
                       ButtonSegment(
                         value: UseKind.personal,
                         label: Text(personalTitle(SetupAudience.own)),
-                        icon: const Icon(Icons.person_outline, size: 18),
                       ),
                     ],
                     selected: {_use},
                     onSelectionChanged: (v) => setState(() => _use = v.first),
                   ),
+                  // What the answer means, in one line. A word on a
+                  // segment cannot say that "Accountant" brings
+                  // Multi-Company with it, and somebody choosing
+                  // between three answers is entitled to know what
+                  // each one does before they choose.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(switch (_use) {
+                      UseKind.business => businessBlurb,
+                      UseKind.accountant => accountantBlurb,
+                      UseKind.personal => personalBlurb(SetupAudience.own),
+                    }, style: Theme.of(context).textTheme.bodySmall),
+                  ),
                   const SizedBox(height: 14),
+                  // Asked here rather than on the first screen of
+                  // setup, for the same reason the question above is:
+                  // setup's opening act was to ask a company for its
+                  // name, which is the one thing somebody registering
+                  // a company has certainly got to hand.
+                  if (_use == UseKind.business) ...[
+                    TextFormField(
+                      key: const ValueKey('signup-business-name'),
+                      controller: _businessName,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Company name *',
+                        hintText: 'e.g. Sinar Teknologi Sdn Bhd',
+                      ),
+                      validator: (v) => (v ?? '').trim().isEmpty
+                          ? 'Enter the company name'
+                          : null,
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('signup-entity-type'),
+                      // Without this the longest label -- "Limited
+                      // Liability Partnership" -- is laid out at its
+                      // natural width and overflows the sign-up
+                      // column, which in a release web build is not a
+                      // striped bar but a line of text running off the
+                      // card. It ellipsises instead.
+                      isExpanded: true,
+                      value: _entityType,
+                      decoration: const InputDecoration(
+                        labelText: 'Entity type',
+                      ),
+                      items: [
+                        for (final e in entityTypes.entries)
+                          DropdownMenuItem(value: e.key, child: Text(e.value)),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _entityType = v ?? defaultEntityType),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   Consumer(
                     builder: (context, ref, _) {
                       final titles =

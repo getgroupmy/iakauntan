@@ -15,7 +15,7 @@ void main() {
     test('is not the same question as what kind of company', () {
       // The distinction the whole flow rests on: a sole proprietor is a
       // business with a registration number, and a freelancer is not.
-      expect(UseKind.values.length, 2);
+      expect(UseKind.values.length, 3);
       expect(personalEntityType, 'individual');
     });
 
@@ -199,6 +199,56 @@ void main() {
     });
   });
 
+  group('a practice is a company, not a person', () {
+    test('every box that splits on it splits the same way', () {
+      // Written as `use == UseKind.business` in seven places before a
+      // third answer existed. Each one of those would have filed an
+      // accounting practice as an individual: entity type hidden, name
+      // box asking for a MyKad, and LHDN told the firm is a person.
+      expect(isCompany(UseKind.accountant), isTrue);
+      expect(isCompany(UseKind.business), isTrue);
+      expect(isCompany(UseKind.personal), isFalse);
+
+      expect(
+        identificationLabel(UseKind.accountant, malaysian: true),
+        'SSM registration no.',
+      );
+      expect(
+        identificationHint(UseKind.accountant, malaysian: true),
+        identificationHint(UseKind.business, malaysian: true),
+      );
+      expect(nameLabel(UseKind.accountant, malaysian: true), 'Practice name *');
+      expect(
+        nameLabel(UseKind.accountant, malaysian: true).contains('MyKad'),
+        isFalse,
+      );
+      expect(createButtonLabel(UseKind.accountant), 'Create practice');
+    });
+
+    test('and the old number is offered without being demanded', () {
+      // A company incorporated after 2019 has never had one. A
+      // required box in front of somebody with nothing to put in it is
+      // a box that gets a made-up number, and that number goes out on
+      // an invoice.
+      expect(oldIdentificationHelp.toLowerCase(), contains('optional'));
+      expect(oldIdentificationHelp, contains('2019'));
+      expect(oldIdentificationHint, '571389-H');
+    });
+
+    test('and the entity types are the enum labels, not prose', () {
+      // The keys reach `app.entity_type`. A key that is not a label is
+      // a company that cannot be created, found out about at the last
+      // press of the last screen — and two screens ask for this now.
+      expect(entityTypes.containsKey(defaultEntityType), isTrue);
+      for (final key in entityTypes.keys) {
+        expect(RegExp(r'^[a-z_]+$').hasMatch(key), isTrue, reason: key);
+      }
+      // A person answers "Myself"; nobody registers a ministry here.
+      expect(entityTypes.containsKey('individual'), isFalse);
+      expect(entityTypes.containsKey('government'), isFalse);
+    });
+  });
+
   group('what a business type says it adds', () {
     test('names them rather than counting them', () {
       // "Adds 3 modules" tells nobody whether the answer is right for
@@ -283,10 +333,18 @@ void main() {
     test('is read back as the same answer', () {
       // Asked once, on the registration form, so setup does not ask it
       // one screen later.
-      expect(useKindFrom('personal'), UseKind.personal);
-      expect(useKindFrom('business'), UseKind.business);
+      for (final use in UseKind.values) {
+        // Round-tripped rather than listed, so a fourth answer cannot
+        // be added with a spelling the database has never heard of.
+        // `profiles_use_kind_known` refuses anything else, and
+        // `handle_new_user` files null rather than failing a
+        // registration over it — which would look like the answer
+        // simply not sticking.
+        expect(useKindFrom(storedUseKind(use)), use);
+      }
       expect(storedUseKind(UseKind.personal), 'personal');
       expect(storedUseKind(UseKind.business), 'business');
+      expect(storedUseKind(UseKind.accountant), 'accountant');
     });
 
     test('and an account that was never asked is asked', () {
@@ -334,7 +392,42 @@ void main() {
       );
     });
 
-    test('"Something else" goes to the list, everything else to the form', () {
+    test('a practice is never asked what kind of business it is', () {
+      // The question exists to decide which modules to offer, and for
+      // a firm keeping other people's books the answer is already
+      // known. Asking anyway would make somebody classify their
+      // practice as a restaurant or a workshop before showing them a
+      // list that had nothing to do with either answer.
+      expect(stepAfterUse(UseKind.accountant), SetupStep.modules);
+      expect(
+        stepAfterUse(UseKind.accountant, businessType: 'law_firm'),
+        SetupStep.modules,
+      );
+      // And a stale type from a changed answer does not survive: it
+      // would file the practice as whatever was picked before.
+      expect(clearsBusinessType(UseKind.accountant), isTrue);
+      expect(clearsBusinessType(UseKind.personal), isTrue);
+      expect(clearsBusinessType(UseKind.business), isFalse);
+    });
+
+    test('and the form does not offer a door back into it', () {
+      // The summary line carried "Business type —" and a Change
+      // button, which is an answer nobody gave beside a way into a
+      // question nobody was asked. It was written `!_personal`, which
+      // was right while there were two answers.
+      expect(showsBusinessTypeLine(UseKind.business), isTrue);
+      expect(showsBusinessTypeLine(UseKind.accountant), isFalse);
+      expect(showsBusinessTypeLine(UseKind.personal), isFalse);
+      expect(showsBusinessTypeLine(null), isFalse);
+    });
+
+        test('and it comes with the one module the answer is about', () {
+      // A practice that cannot open a second set of books has been
+      // sold the wrong thing.
+      expect(accountantModules, contains('multi_company'));
+    });
+
+        test('"Something else" goes to the list, everything else to the form', () {
       expect(stepAfterBusinessType(otherBusinessType), SetupStep.modules);
       expect(stepAfterBusinessType('restaurant'), SetupStep.form);
     });
