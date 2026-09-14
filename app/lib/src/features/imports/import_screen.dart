@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/csv.dart';
+import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'file_shape.dart';
 import 'import_file.dart';
+import 'import_template.dart';
 
 /// Bringing a company's books across from whatever was in use before.
 ///
@@ -274,15 +276,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   bool get _openItems => importNeedsPosting(_kind);
 
-  Map<String, List<String>> get _aliases => switch (_kind) {
-    ImportKind.contacts => contactColumns,
-    ImportKind.items => itemColumns,
-    ImportKind.accounts => accountColumns,
-    ImportKind.openInvoices => openInvoiceColumns,
-    ImportKind.openBills => openBillColumns,
-    ImportKind.openingBalances => openingBalanceColumns,
-    ImportKind.openingStock => openingStockColumns,
-  };
+  Map<String, List<String>> get _aliases => importColumnsFor(_kind);
 
   List<String> get _required => switch (_kind) {
     // A contact file may leave the code blank: the database draws one
@@ -385,6 +379,36 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   /// is fixed in place in ten seconds, and a screen that swallowed the
   /// file and reported a verdict about it would send them back to the
   /// spreadsheet.
+  /// Hand over a blank file with the right headings.
+  ///
+  /// Not `exportTextFile`: that records a security event, and this file
+  /// holds no company data at all. Writing "somebody exported" every
+  /// time a person downloads an empty template would put noise in the
+  /// one log that has to stay readable — `security_log` is where an
+  /// auditor looks for a copy that actually left.
+  Future<void> _downloadTemplate() async {
+    final saved = await saveTextFile(
+      importTemplateFilename(_kind),
+      'text/csv',
+      importTemplateCsv(_kind),
+    );
+    if (!mounted) return;
+    // A build that cannot hand over a file says so rather than doing
+    // nothing: the column chips above are the same information, and
+    // somebody who pressed a button deserves to know why nothing
+    // happened.
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This app cannot save a file here. The column names are '
+            'listed above.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _upload() async {
     final file = await openFile(
       acceptedTypeGroups: const [
@@ -554,21 +578,41 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       const SizedBox(height: Space.sm),
                       _Columns(aliases: _aliases, required: _required),
                       const SizedBox(height: Space.md),
-                      Row(children: [
-                        OutlinedButton.icon(
-                          key: const ValueKey('import-upload'),
-                          onPressed: _busy ? null : _upload,
-                          icon: const Icon(Icons.upload_file, size: 18),
-                          label: const Text('Upload a file'),
-                        ),
-                        const SizedBox(width: Space.md),
-                        Expanded(
-                          child: Text(
-                            'CSV, saved as UTF-8. Or paste it below.',
-                            style: Theme.of(context).textTheme.bodySmall,
+                      Wrap(
+                        spacing: Space.md,
+                        runSpacing: Space.sm,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            key: const ValueKey('import-upload'),
+                            onPressed: _busy ? null : _upload,
+                            icon: const Icon(Icons.upload_file, size: 18),
+                            label: const Text('Upload a file'),
                           ),
-                        ),
-                      ]),
+                          // Beside the upload button rather than buried
+                          // in help, because the moment somebody needs
+                          // it is the moment they are looking at this
+                          // row wondering what to upload.
+                          OutlinedButton.icon(
+                            key: const ValueKey('import-template'),
+                            onPressed: _busy ? null : _downloadTemplate,
+                            icon: const Icon(Icons.download, size: 18),
+                            label: const Text('Download template'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: Space.sm),
+                      Text(
+                        // The three formats worth stating. Dates lead
+                        // because they are the one that fails silently:
+                        // `31/01/2026` is not a date Postgres reads in
+                        // this order, so it becomes null and the row is
+                        // rejected for a missing date nobody left out.
+                        'CSV, saved as UTF-8. Or paste it below. Dates as '
+                        'YYYY-MM-DD. Numbers may carry RM and thousands '
+                        'separators. Yes/no columns take yes, y, true or 1.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                       const SizedBox(height: Space.sm),
                       TextField(
                         controller: _text,
@@ -644,8 +688,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                                     // pressed on a file the screen has
                                     // just called wrong is a button
                                     // somebody will press.
-                                    (_shape != null &&
-                                        fileShapeBlocks(_shape!))
+                                    (_shape != null && fileShapeBlocks(_shape!))
                                 ? null
                                 : () => _run(commit: true),
                             icon: const Icon(Icons.upload, size: 18),
@@ -679,9 +722,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.swap_horiz,
-                                size: 18,
-                                color: Theme.of(context).colorScheme.error),
+                            Icon(
+                              Icons.swap_horiz,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                             const SizedBox(width: Space.sm),
                             Text(
                               fileShapeBlocks(_shape!)
@@ -709,8 +754,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             icon: const Icon(Icons.arrow_forward, size: 18),
                             label: Text(
                               'Import it as '
-                              '${importKindLabel(_shape!.looksLike!)
-                                  .toLowerCase()}',
+                              '${importKindLabel(_shape!.looksLike!).toLowerCase()}',
                             ),
                           ),
                         ),

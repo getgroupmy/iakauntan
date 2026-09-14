@@ -69,8 +69,7 @@ ImportFileRead readImportFile(Uint8List bytes, {String? name}) {
   }
 
   try {
-    final text = const Utf8Decoder(allowMalformed: false)
-        .convert(bytes, start);
+    final text = const Utf8Decoder(allowMalformed: false).convert(bytes, start);
     if (text.trim().isEmpty) {
       return (text: null, problem: 'There is nothing in that file.');
     }
