@@ -714,6 +714,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
               .signInWithPassword(
                 email: _email.text.trim(),
                 password: password,
+                captchaToken: _captchaToken,
               );
         } on AuthException catch (e) {
           await _noteRefusal(e);
@@ -1115,6 +1116,15 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// and it should reach the app the same way everyone else does, so
   /// what a visitor sees is what the product does.
   Future<void> _signInAsDemo(DemoAccount account) async {
+    // A demo account is an ordinary account, so GoTrue asks it for a
+    // captcha token like anybody else. Without this the press was
+    // refused with a 400 and reported below as "the demo accounts are
+    // not available on this deployment" -- a wrong cause, confidently
+    // stated, about accounts that were there all along.
+    if (_captchaPending) {
+      setState(() => _error = _captchaBroken ? captchaBroken : captchaNotDone);
+      return;
+    }
     setState(() {
       _demoBusy = account.email;
       _error = null;
@@ -1131,7 +1141,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         signIn: () => ref
             .read(supabaseProvider)
             .auth
-            .signInWithPassword(email: account.email, password: demoPassword),
+            .signInWithPassword(
+              email: account.email,
+              password: demoPassword,
+              captchaToken: _captchaToken,
+            ),
         vet: () async {
           if (await _refuseIfNotTheirDoor()) return;
           await _refuseIfModuleNotActive();
@@ -1143,8 +1157,15 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       // before the project took real books, which is exactly what the
       // README tells you to do. Saying "invalid login credentials" would
       // send somebody hunting for a typo in a password they never typed.
+      // A 400 that mentions the captcha is the security check refusing,
+      // not an absent account. Reporting it as absent sends somebody to
+      // look for a deployment problem that is not there -- which is
+      // exactly what happened once the dashboard protection went on.
+      final captchaRefusal = e.message.toLowerCase().contains('captcha');
       setState(
-        () => _error = e.statusCode == '400'
+        () => _error = captchaRefusal
+            ? captchaNotDone
+            : e.statusCode == '400'
             ? 'The demo accounts are not available on this deployment.'
             : e.message,
       );

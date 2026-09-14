@@ -601,6 +601,12 @@ jobs:
       - name: Check the policy allows what the app loads
         run: python3 scripts/check_csp_allows.py
 
+      # Three doors in one day sent no captcha token, and none of them
+      # is visible until the project setting is switched on -- at which
+      # point every door is shut at once.
+      - name: Check every way in carries the security check
+        run: python3 scripts/check_captcha_tokens.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #
