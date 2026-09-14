@@ -358,6 +358,47 @@ begin
     'and the invoices agree with the run', v_invoiced, 4096.80);
 
   -- ------------------------------------------------------------------
+  -- Raising it again, which used to bill everybody twice
+  -- ------------------------------------------------------------------
+  --
+  -- The unique constraint on (site_id, period_from, period_to) already
+  -- refused the SAME period. What it could not see was an overlapping
+  -- one -- a different pair of dates is a different row -- so the
+  -- fortnight in the middle was invoiced twice and nothing said so.
+  -- `0584` is the check; these are the assertions that would fail if it
+  -- were removed.
+  perform pg_temp.check_refused(
+    'the same period again is refused by name',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-01', date '2026-01-31'),
+    '%already been raised%');
+
+  -- The one the constraint missed. Starts inside January and runs into
+  -- February, so the middle fortnight would be billed a second time.
+  perform pg_temp.check_refused(
+    'and so is a period that merely overlaps it',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-15', date '2026-02-15'),
+    '%already been raised%');
+
+  -- A period that ENDS the day the raised one begins touches nothing.
+  -- Asserted because an overlap test written with the wrong bound
+  -- refuses this too, and a property manager who cannot bill December
+  -- after billing January has been handed a worse bug than the one
+  -- being fixed.
+  perform pg_temp.check_refused(
+    'but the refusal names the run, so somebody can go and look',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-20', date '2026-01-25'),
+    '%run %');
+
+  v_run := public.raise_rent_invoices(
+    v_site, date '2026-02-01', date '2026-02-28', date '2026-02-07');
+  perform pg_temp.check_true(
+    'and the next month, which touches nothing, still raises',
+    v_run is not null);
+
+  -- ------------------------------------------------------------------
   -- One unit, one tenant, over any given day
   -- ------------------------------------------------------------------
   begin
