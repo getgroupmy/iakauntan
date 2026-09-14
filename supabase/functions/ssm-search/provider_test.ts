@@ -40,6 +40,27 @@ Deno.test("reads a result the way their site sends it", () => {
   assertEquals(out.total, 1);
 });
 
+Deno.test("and the way api.ssmsearch.com actually sends it", () => {
+  // The names their own search page reads off a row: snake_case, and
+  // the kind of entity as a word under `entity`. A live search on
+  // 14 Sep 2026 rendered through exactly these.
+  const out = normalise({
+    data: [{
+      name: "KABEER HOLDINGS SDN. BHD.",
+      reg_no: "201901030189",
+      reg_no_old: "1339519-K",
+      entity: "Company",
+    }],
+    total: 1,
+    is_more_than_limit: false,
+    is_not_logged_in: false,
+  }, 1, 20);
+
+  assertEquals(out.items[0].reg_no, "201901030189");
+  assertEquals(out.items[0].reg_no_old, "1339519-K");
+  assertEquals(out.items[0].entity_type, "Company");
+});
+
 Deno.test("and under the other names they use for the same fields", () => {
   const out = normalise({
     items: [{
@@ -153,7 +174,9 @@ Deno.test("a probe rules out 404 and keeps everything else", async () => {
   // is a different path and would be answered 404 by a server that has
   // the route.
   assertEquals(seen[0].url, "https://ssmsearch.com/api/user/login");
-  assertEquals(seen[2].url, "https://ssmsearch.com/api/company/search?q=test");
+  assertEquals(seen[2].url, "https://ssmsearch.com/api/company/search");
+  // Their search is a POST, so the probe asks it the way their site does.
+  assertEquals(seen[2].method, "POST");
 });
 
 Deno.test("a probe sends no credentials", async () => {
@@ -169,5 +192,5 @@ Deno.test("a probe sends no credentials", async () => {
   // 404 needs no password, and spraying a working credential across a
   // third party's URL space to learn something an empty body answers
   // is not a trade worth making.
-  assertEquals(bodies, ["{}", "{}", null]);
+  assertEquals(bodies, ["{}", "{}", "{}"]);
 });
