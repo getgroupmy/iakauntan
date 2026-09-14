@@ -73,8 +73,12 @@ if hasattr(signal, 'SIGPIPE'):
 # deliberately do not. `0582` took the eleven that do a lot at once,
 # where the only question is what happens if you run it twice -- and
 # `run_depreciation` charges nothing the second time while
-# `raise_rent_invoices` bills every tenant again.
-BUDGET = 65
+# `raise_rent_invoices` bills every tenant again. `0583` took the ten by
+# which data reaches somebody outside the company -- where the surprise
+# is that `audit_trail` and `security_log` are reads that WRITE, because
+# a log that does not record who read it is the one record an insider
+# has no reason to avoid.
+BUDGET = 55
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

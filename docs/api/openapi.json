@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0582",
+    "version": "0583",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -20170,8 +20170,8 @@
     "/rpc/audit_trail": {
       "post": {
         "operationId": "audit_trail",
-        "summary": "Audit trail",
-        "description": "`public.audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` Writes. Requires a signed-in user.",
+        "summary": "Returns what changed, most recent first, with the before and after of each row",
+        "description": "Returns what changed, most recent first, with the before and after of each row. A READ THAT WRITES: it records a `sensitive_read` against the caller, which is why it is volatile and why it is in the undocumented-writes list at all. Do not poll it \u2014 a dashboard on a timer writes an event every interval and buries the ones somebody is looking for. Capped at 500 rows however large `p_limit` is. Owner or administrator only.\n\n`public.audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -25578,8 +25578,8 @@
     "/rpc/company_export_page": {
       "post": {
         "operationId": "company_export_page",
-        "summary": "Company export page",
-        "description": "`public.company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` Writes. Requires a signed-in user.",
+        "summary": "Returns one page of one table of the whole company, for somebody taking their data out",
+        "description": "Returns one page of one table of the whole company, for somebody taking their data out. THE TABLE NAME REACHES DYNAMIC SQL, so it is matched against `app.company_export_tables()` rather than quoted and hoped for \u2014 a name not on that list is not a table as far as this is concerned, including the ones deliberately held back. Every row goes through `app.audit_redact`, so the export is not a way to read what the app will not show. RECORDS THE EXPORT as a security event on every page, so a large export appears as many events and not one. Pages on `id` with the `next` cursor; `next` is null when the page came back short. Owner or administrator only.\n\n`public.company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31400,8 +31400,8 @@
     "/rpc/email_document": {
       "post": {
         "operationId": "email_document",
-        "summary": "Email document",
-        "description": "`public.email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` Writes. Requires a signed-in user.",
+        "summary": "Queues an email about a sales document and returns the outbox row",
+        "description": "Queues an email about a sales document and returns the outbox row. ALSO ISSUES A SHARE LINK as a side effect, with the life given by `p_share_days`, and puts it in the template \u2014 so sending an email is also creating a credential, and sending twice replaces the first link. A draft, void or rejected document is emailed WITHOUT a link rather than refused, because the covering note may still be worth sending. The address defaults to the customer's primary contact person and then the contact itself, and is checked for shape before anything is queued. An attachment must live under `<org>/<documents>/<id>/` in storage: a path pointing anywhere else is refused, which is what stops an email being used to post any object in the bucket to an outside address. Refuses when email is switched off for the company. `p_dispatch` is `queued` or `immediate`. Needs `can_write`.\n\n`public.email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31474,8 +31474,8 @@
     "/rpc/email_receipt": {
       "post": {
         "operationId": "email_receipt",
-        "summary": "Email receipt",
-        "description": "`public.email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` Writes. Requires a signed-in user.",
+        "summary": "Queues an email about a receipt and returns the outbox row",
+        "description": "Queues an email about a receipt and returns the outbox row. Unlike `email_document` it issues NO share link \u2014 a receipt is the acknowledgement, and there is nothing further to show. Same path rule on the attachment (`<org>/receipts/<id>/`, anything else refused), same address fallback, same shape check, same refusal when email is off for the company. Needs `can_write`.\n\n`public.email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -36312,8 +36312,8 @@
     "/rpc/log_document_download": {
       "post": {
         "operationId": "log_document_download",
-        "summary": "Log document download",
-        "description": "`public.log_document_download(p_document_id uuid, p_format text)` Writes. Requires a signed-in user.",
+        "summary": "Writes that somebody downloaded a document, and returns the row",
+        "description": "Writes that somebody downloaded a document, and returns the row. The PDF is rendered in the browser, so without this the database would never know a document had left at all. Any member of the company may record one, for the same reason as `record_export`. Refuses a document that is deleted or belongs elsewhere.\n\n`public.log_document_download(p_document_id uuid, p_format text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -49438,8 +49438,8 @@
     "/rpc/record_export": {
       "post": {
         "operationId": "record_export",
-        "summary": "Record export",
-        "description": "`public.record_export(p_org_id uuid, p_what text, p_detail text)` Writes. Requires a signed-in user.",
+        "summary": "Writes that somebody took a copy of something",
+        "description": "Writes that somebody took a copy of something. Called by the app for the exports it does client-side, where the database never sees the rows leave and would otherwise have no record at all. Any member may write one \u2014 the point is the record, and a member who could not file it could export silently. Refuses a company the caller is not in, so nobody can write into somebody else's log.\n\n`public.record_export(p_org_id uuid, p_what text, p_detail text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -52024,8 +52024,8 @@
     "/rpc/report_denied": {
       "post": {
         "operationId": "report_denied",
-        "summary": "Report denied",
-        "description": "`public.report_denied(p_org_id uuid, p_action text, p_message text)` Writes. Requires a signed-in user.",
+        "summary": "Lets the app write down a refusal the database never saw \u2014 one the client enforced itself, which would\u2026",
+        "description": "Lets the app write down a refusal the database never saw \u2014 one the client enforced itself, which would otherwise leave no trace of somebody probing at doors. RETURNS QUIETLY rather than raising when the caller is not in the company: taking the caller's word for the organization would let anybody write into anybody's log, and a refusal aimed at a company you are not in is not that company's event. RATE LIMITED to one a minute per person, so a loop cannot bury the rest of the log \u2014 which means a burst of refusals appears as one entry, and the count is not the number of attempts.\n\n`public.report_denied(p_org_id uuid, p_action text, p_message text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57942,8 +57942,8 @@
     "/rpc/security_log": {
       "post": {
         "operationId": "security_log",
-        "summary": "Security log",
-        "description": "`public.security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` Writes. Requires a signed-in user.",
+        "summary": "Returns who signed in, from what address, who exported, who read something sensitive and who was refused",
+        "description": "Returns who signed in, from what address, who exported, who read something sensitive and who was refused. A READ THAT WRITES, and this is the one where that matters most: the body says a security log that does not record who read it is the one record an insider has no reason to avoid. Do not poll it. Capped at 1,000 rows. Owner or administrator only \u2014 it says where every colleague works from, which is the same bar as the audit trail and for a sharper reason.\n\n`public.security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -60930,8 +60930,8 @@
     "/rpc/share_document": {
       "post": {
         "operationId": "share_document",
-        "summary": "Share document",
-        "description": "`public.share_document(p_document_id uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user.",
+        "summary": "Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN \u2014 the only time\u2026",
+        "description": "Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN \u2014 the only time it can be read. Only the hash is stored, so nothing can recover it afterwards and a caller that discards the return value has made a link nobody holds. REVOKES ANY LIVE LINK FOR THE SAME DOCUMENT first: reissuing means the newest link is the one that should work, and leaving the old one alive would make \"revoke\" mean nothing. Refuses a draft, void or rejected document \u2014 a link is for something that has actually been issued. `p_valid_days` is clamped to between 1 and 365, so there is no such thing as a link that never expires. Needs `can_write`.\n\n`public.share_document(p_document_id uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -60991,8 +60991,8 @@
     "/rpc/share_ticket": {
       "post": {
         "operationId": "share_ticket",
-        "summary": "Share ticket",
-        "description": "`public.share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "The same for a support ticket, and returns the token once for the same reason",
+        "description": "The same for a support ticket, and returns the token once for the same reason. REFUSES A TICKET RAISED BY STAFF: they can already read it with their own login, and a link is for a requester who has none \u2014 handing one to a colleague creates a credential that outlives their employment. Refuses a cancelled ticket. Revokes any live link for the ticket, and clamps the life to 1\u2013365 days. Needs `can_write_module('ticketing')`.\n\n`public.share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
         "tags": [
           "ticketing"
         ],

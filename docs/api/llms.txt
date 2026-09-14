@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0582` (the highest applied migration).
+Schema version `0583` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**449 of 662 functions carry a `comment on
+**459 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -352,7 +352,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)*
 - `module_dashboard(p_org_id uuid)` — Figures for the modules a company holds and this caller may read, keyed by module code.
 - `revoke_ticket_share(p_ticket uuid)` *(writes)* — Turns off every share link for one support ticket, returning the count.
-- `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)*
+- `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)*
 
 ### general (455)
@@ -382,7 +382,7 @@ Not gated on any module.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
 - `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)*
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
-- `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` *(writes)*
+- `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` *(writes)* — Returns what changed, most recent first, with the before and after of each row.
 - `audit_view_payslip(p_payslip_id uuid)` *(writes)* — One payslip in full for a granted reader, logged against the grant that permitted it.
 - `bank_feed_status(p_bank_account_id uuid)` — What a screen may know about a feed: everything except the secret.
 - `bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)`
@@ -445,7 +445,7 @@ Not gated on any module.
 - `close_requisition(p_requisition uuid, p_status app.requisition_status, p_closed_on date)` *(writes)*
 - `collection_history(p_contact_id uuid)`
 - `company_export_manifest(p_org_id uuid)` *(writes)* — Every table holding this company's data, with a row count.
-- `company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` *(writes)*
+- `company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` *(writes)* — Returns one page of one table of the whole company, for somebody taking their data out.
 - `company_transfer_history(p_org_id uuid)`
 - `complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` *(writes)*
 - `confirm_manufacturing_order(p_mo_id uuid)` *(writes)*
@@ -511,8 +511,8 @@ Not gated on any module.
 - `document_lot_problems(p_document_id uuid, p_kind text)`
 - `document_numbering(p_org_id uuid)` — Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it.
 - `einvoice_credential_status(p_org_id uuid)`
-- `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)*
-- `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)*
+- `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a sales document and returns the outbox row.
+- `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a receipt and returns the outbox row.
 - `employee_directory(p_org_id uuid)` — Who works here: name, department, role and contact.
 - `ensure_default_warehouse(p_org_id uuid)` *(writes)* — Returns the company's default store, creating one if it has none.
 - `ensure_pay_period(p_org_id uuid, p_year integer, p_month integer)` *(writes)* — Returns the pay period for a month, creating it if it is not there.
@@ -557,7 +557,7 @@ Not gated on any module.
 - `link_contact_records(p_org_id uuid, p_ids uuid[])` *(writes)* — Makes the given contact records one company, bringing along every record already linked to any of them.
 - `link_group_contact(p_contact_id uuid, p_org_id uuid)` *(writes)*
 - `link_opportunity_quotation(p_opportunity uuid, p_document uuid)` *(writes)*
-- `log_document_download(p_document_id uuid, p_format text)` *(writes)*
+- `log_document_download(p_document_id uuid, p_format text)` *(writes)* — Writes that somebody downloaded a document, and returns the row.
 - `mail_domain()` — The domain reserved addresses live on, for screens that have to print one.
 - `mailbox_thread(p_mailbox_id uuid)` — Everything in one mailbox, received and sent, newest first.
 - `maintenance_notice()` — The maintenance banner, or null when there is nothing to say.
@@ -667,7 +667,7 @@ Not gated on any module.
 - `receive_client_money(p_matter uuid, p_amount numeric, p_date date, p_description text, p_reference text, p_payment_mode text)` *(writes)* — Money received from a client to hold on account for a matter.
 - `recognise_revenue(p_org_id uuid, p_upto date)` *(writes)* — Release deferred revenue that has been earned up to a date, one journal per period.
 - `record_departure(p_employee uuid, p_last_working_date date, p_status text, p_reason text, p_resignation_date date)` *(writes)* — Takes somebody off the payroll.
-- `record_export(p_org_id uuid, p_what text, p_detail text)` *(writes)*
+- `record_export(p_org_id uuid, p_what text, p_detail text)` *(writes)* — Writes that somebody took a copy of something.
 - `record_group_payment(p_paid_on date, p_reference text, p_lines jsonb, p_note text)` *(writes)* — One payment covering documents in several companies: one receipt (or supplier payment) per company and contact, linked by a batch that holds no money.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text)` *(writes)* — Puts a post-dated cheque in the register and takes the document it settles off the aged listing, without touching the bank balance.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)*
@@ -694,7 +694,7 @@ Not gated on any module.
 - `report_changes_in_equity(p_org_id uuid, p_from date, p_to date)`
 - `report_collections(p_org_id uuid, p_as_at date)`
 - `report_deferred_revenue(p_org_id uuid, p_as_at date)` — What is sitting in 2127 at a date and which invoice lines it belongs to, with the account's own posted balance repeated on every row so the schedule and the ledger are read as one answer.
-- `report_denied(p_org_id uuid, p_action text, p_message text)` *(writes)*
+- `report_denied(p_org_id uuid, p_action text, p_message text)` *(writes)* — Lets the app write down a refusal the database never saw — one the client enforced itself, which would otherwise leave no trace of somebody probing at doors.
 - `report_depreciation_history(p_org_id uuid, p_asset_id uuid)`
 - `report_expiring_documents(p_org_id uuid, p_within_days integer)`
 - `report_expiring_stock(p_org_id uuid, p_within_days integer)`
@@ -744,7 +744,7 @@ Not gated on any module.
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)* — Raises every recurring document due on or before a date for ONE company, and returns how many.
 - `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)* — The same for recurring journals, one company, returning how many were advanced.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
-- `security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` *(writes)*
+- `security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` *(writes)* — Returns who signed in, from what address, who exported, who read something sensitive and who was refused.
 - `security_summary(p_org_id uuid, p_days integer)`
 - `send_from_mailbox(p_mailbox_id uuid, p_to text, p_subject text, p_body text, p_in_reply_to uuid, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues a message from one of the company's addresses, optionally as a reply and optionally with one file.
 - `set_ai_credentials(p_org_id uuid, p_provider text, p_api_key text, p_base_url text)` *(writes)* — Stores a company's own key for one AI provider, so the assistant bills them rather than us.
@@ -773,7 +773,7 @@ Not gated on any module.
 - `settlement_discount_available(p_document uuid, p_as_at date)`
 - `setup_legal_module(p_org_id uuid)` *(writes)* — Creates the client account, client monies liability and disbursement accounts a law firm needs.
 - `share_customer_portal(p_contact_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues one customer a link to their whole account and emails it.
-- `share_document(p_document_id uuid, p_valid_days integer, p_email text)` *(writes)*
+- `share_document(p_document_id uuid, p_valid_days integer, p_email text)` *(writes)* — Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN — the only time it can be read.
 - `shared_payment_options(p_token text)` — Which acquirers a customer can pay a shared invoice through: the gateway code and its name, and nothing else.
 - `signup_reference()` — The dialling codes, salutations and Malaysian states the registration form offers, readable with no session because that form has none.
 - `site_pages()` — The published pages of the marketing site, plus `signin`, `signup` and `login` whether or not they are published.
