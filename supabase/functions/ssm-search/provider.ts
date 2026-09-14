@@ -66,29 +66,48 @@ interface SessionRow {
   token: string | null;
   logged_in_as: string | null;
   obtained_at: string | null;
+  upstream_user: UpstreamUser | null;
+}
+
+/**
+ * What ssmsearch.com said about the account at sign-in. Their website
+ * sends these back as `_user_id`, `_org_id`, `_org_role` and `_role_id`
+ * in the body of EVERY call, alongside the Bearer token -- the token on
+ * its own is answered with `is_not_logged_in: true` and no rows.
+ */
+export interface UpstreamUser {
+  id: unknown;
+  orgId: unknown;
+  orgRole: unknown;
+  roleId: unknown;
 }
 
 /**
  * Where ssmsearch.com's own website sends its requests.
  *
- * THESE ARE A GUESS UNTIL SOMEBODY WATCHES THE REAL ONE. They were read
- * off the package this feature arrived in, not off a live browser, and
- * the first real sign-in said so:
+ * Read off their front-end on 14 Sep 2026 (the Nuxt runtime config and
+ * the API wrapper in its main bundle), and confirmed against the live
+ * host with no credentials:
  *
- *   Sign-in failed (there was no session yet):
- *   Page not found: /api/user/login
+ *   FE_ROOT   https://ssmsearch.com        the website (Nuxt)
+ *   API_ROOT  https://api.ssmsearch.com    the API (Fastify)
  *
- * Which is worth reading carefully, because it is good news twice over.
- * The message is ssmsearch.com's own, in their words, which means
- * `/api` routes and answers — the root is right. And `/user/login` is
- * simply not one of their routes.
+ * The first version of this pointed at `https://ssmsearch.com/api`, and
+ * every path under it answered `Page not found: /api/...` -- that is
+ * the WEBSITE's catch-all 404 page, not an API saying the path is
+ * wrong. `/user/login` was right all along; only the host was not.
  *
- * So each piece is overridable by an edge-function secret, and
- * correcting one is a secret change rather than a deploy of this
- * repository. An operator who can open their own browser's network tab
- * can fix this without waiting for anybody:
+ * Every call is a POST with a JSON body. Sign-in is
+ * `POST /user/login {email, password, recaptchaToken: ""}` (their own
+ * login form sends the empty token) and answers the user record with
+ * `token` in it; a wrong password is a 400 `{"message": "Email or
+ * password is invalid"}`. Search is `POST /company/search` with
+ * `Authorization: Bearer <token>` -- see `call`.
  *
- *   SSMSEARCH_API_ROOT      https://ssmsearch.com/api
+ * Each piece is still overridable by an edge-function secret, so a
+ * change on their side is a secret change rather than a deploy:
+ *
+ *   SSMSEARCH_API_ROOT      https://api.ssmsearch.com
  *   SSMSEARCH_LOGIN_PATH    /user/login
  *   SSMSEARCH_SEARCH_PATH   /company/search
  *
@@ -103,7 +122,7 @@ export interface Routes {
 }
 
 export const DEFAULT_ROUTES: Routes = {
-  apiRoot: "https://ssmsearch.com/api",
+  apiRoot: "https://api.ssmsearch.com",
   loginPath: "/user/login",
   searchPath: "/company/search",
 };
@@ -137,15 +156,20 @@ export class SsmSearchWeb {
     perPage: number,
   ): Promise<SearchResult> {
     let session = await this.session();
-    let res = await this.call(session.token, query, typeId, page, perPage);
+    let res = await this.call(session, query, typeId, page, perPage);
 
     // The token went stale. One fresh login and one retry — not a loop:
     // a second failure after a successful login is ssmsearch.com saying
     // no to this account, and retrying that is just asking again.
     if (this.rejected(res.status, res.body)) {
       session = await this.login("the token was rejected");
-      res = await this.call(session.token, query, typeId, page, perPage);
+      res = await this.call(session, query, typeId, page, perPage);
       if (this.rejected(res.status, res.body)) {
+        await this.noteError(
+          `Search refused after a fresh sign-in: HTTP ${res.status} ${
+            JSON.stringify(res.body).slice(0, 300)
+          }`,
+        );
         throw new SsmError(
           "SSM_AUTH_FAILED",
           "ssmsearch.com refused the search even after signing in again.",
@@ -174,7 +198,7 @@ export class SsmSearchWeb {
 
   private async session(): Promise<SessionRow> {
     const { data } = await this.db.from("ssm_session")
-      .select("token, logged_in_as, obtained_at").eq("id", 1).maybeSingle();
+      .select("token, logged_in_as, obtained_at, upstream_user").eq("id", 1).maybeSingle();
     if (data?.token) return data as SessionRow;
     return this.login("there was no session yet");
   }
@@ -196,7 +220,7 @@ export class SsmSearchWeb {
       for (let i = 0; i < 4; i++) {
         await this.sleep(1200);
         const { data } = await this.db.from("ssm_session")
-          .select("token, logged_in_as, obtained_at").eq("id", 1).maybeSingle();
+          .select("token, logged_in_as, obtained_at, upstream_user").eq("id", 1).maybeSingle();
         if (data?.token && data.obtained_at !== before.data?.obtained_at) {
           return data as SessionRow;
         }
@@ -251,6 +275,12 @@ export class SsmSearchWeb {
       token,
       logged_in_as: typeof body.email === "string" ? body.email : this.email,
       obtained_at: new Date().toISOString(),
+      upstream_user: {
+        id: body.id ?? null,
+        orgId: body.orgId ?? null,
+        orgRole: body.orgRole ?? null,
+        roleId: body.roleId ?? null,
+      },
     };
     await this.db.from("ssm_session").update({
       provider: this.name,
@@ -263,26 +293,44 @@ export class SsmSearchWeb {
     return row;
   }
 
+  /**
+   * One search, the way their website makes it: a POST with a JSON body
+   * to api.ssmsearch.com, the session as a Bearer token.
+   *
+   * `offset` is their name for the PAGE SIZE (their table offers 10, 25,
+   * 50 and 100), not a row offset, and `sort` is an object, `{}` when
+   * nothing is sorted. `type_id` is only sent when there is a filter,
+   * as their site does. Without a valid token the same route answers
+   * 200 with `is_not_logged_in: true` and no rows -- `rejected` reads
+   * that as "sign in again", not as "no results".
+   */
   private async call(
-    token: string | null,
+    session: SessionRow,
     query: string,
     typeId: number | null,
     page: number,
     perPage: number,
   ) {
-    const url = new URL(this.url(this.routes.searchPath));
-    url.searchParams.set("q", query);
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("perPage", String(perPage));
-    if (typeId !== null) url.searchParams.set("typeId", String(typeId));
-
     let res: Response;
     try {
-      res = await this.fetchImpl(url.toString(), {
+      res = await this.fetchImpl(this.url(this.routes.searchPath), {
+        method: "POST",
         headers: {
+          "content-type": "application/json",
           "accept": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(session.token ? { authorization: `Bearer ${session.token}` } : {}),
         },
+        body: JSON.stringify({
+          _user_id: session.upstream_user?.id ?? null,
+          _org_id: session.upstream_user?.orgId ?? null,
+          _org_role: session.upstream_user?.orgRole ?? null,
+          _role_id: session.upstream_user?.roleId ?? null,
+          search: query,
+          ...(typeId !== null ? { type_id: typeId } : {}),
+          page,
+          offset: perPage,
+          sort: {},
+        }),
       });
     } catch (e) {
       throw new SsmError(
@@ -296,6 +344,7 @@ export class SsmSearchWeb {
   /** Their several ways of saying "sign in again". */
   private rejected(status: number, body: Record<string, unknown>): boolean {
     if (status === 401 || status === 403) return true;
+    if (body.is_not_logged_in === true) return true;
     const code = body.code ?? body.error;
     return code === "is_not_logged_in";
   }
@@ -344,16 +393,21 @@ export function normalise(
     const name = str(o, ["name", "companyName", "title", "entityName"]);
     if (!name) continue;
 
-    const typeId = num(o, ["typeId", "entityTypeId", "type_id", "type"]);
+    const typeId = num(o, [
+      "typeId", "entityTypeId", "type_id", "entity_type_id", "type",
+    ]);
     items.push({
       ssm_id: num(o, ["id", "companyId", "entityId"]),
       name,
       slug: str(o, ["slug", "handle"]),
       reg_no: str(o, ["regNo", "registrationNo", "newRegNo", "reg_no", "brn"]),
-      reg_no_old: str(o, ["oldRegNo", "regNoOld", "oldRegistrationNo"]),
+      reg_no_old: str(o, [
+        "reg_no_old", "oldRegNo", "regNoOld", "oldRegistrationNo",
+      ]),
       entity_type_id: typeId,
-      entity_type: str(o, ["typeName", "entityType", "type_title"]) ??
-        (typeId !== null ? ENTITY_TYPES[typeId] ?? null : null),
+      entity_type: str(o, [
+        "entity", "entity_type", "typeName", "entityType", "type_title",
+      ]) ?? (typeId !== null ? ENTITY_TYPES[typeId] ?? null : null),
     });
   }
 
@@ -388,25 +442,24 @@ function num(o: Record<string, unknown>, keys: string[]): number | null {
 }
 
 // ---------------------------------------------------------------------
-// Finding the endpoints, because guessing them did not work
+// Finding the endpoints, kept because it earned its place
 // ---------------------------------------------------------------------
 //
-// `DEFAULT_ROUTES` were read off the package this feature arrived in,
-// and the first live sign-in answered `Page not found: /api/user/login`
-// in ssmsearch.com's own words. The paths are now secrets, so an
-// operator CAN correct them -- but only if somebody first finds out
-// what they are, and that took a browser with the developer tools open.
-//
-// It does not have to. This function runs on a server that can reach
-// ssmsearch.com; the machine this repository is edited on cannot. So it
-// asks, once, on an operator's press.
+// The first version of this function pointed at the wrong host, and the
+// first live sign-in answered `Page not found: /api/user/login` -- the
+// website's 404 page, which read like an API answer. This probe is what
+// makes that difference visible from the admin page: it asks the
+// configured API root which of a short list of paths are routes, so an
+// operator can tell a wrong host (everything 404) from a wrong path
+// (some things answer) without a browser's developer tools.
 //
 // ## Nothing is signed in to
 //
-// Every probe sends an EMPTY body. A login route answers a request with
-// no credentials with 422, 400 or 401 -- it validates, or it refuses --
-// and a path that is not a route answers 404 with "Page not found".
-// That is the whole distinction being drawn, and it needs no password.
+// Every probe sends an EMPTY JSON body. A login route answers a request
+// with no credentials with 400, 401 or 422 -- it validates, or it
+// refuses -- a search route answers 200 with `is_not_logged_in: true`,
+// and a path that is not a route answers 404. That is the whole
+// distinction being drawn, and it needs no password.
 //
 // Sending the real one to fifteen guessed paths would be spraying a
 // working credential across a third party's URL space to learn
@@ -523,6 +576,6 @@ export async function probeRoutes(
   const login: ProbeHit[] = [];
   for (const p of loginPaths) login.push(await ask(p, "POST"));
   const search: ProbeHit[] = [];
-  for (const p of searchPaths) search.push(await ask(p, "GET"));
+  for (const p of searchPaths) search.push(await ask(p, "POST"));
   return { login, search };
 }
