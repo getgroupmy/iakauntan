@@ -486,6 +486,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                 onChanged: (_) => setState(() {}),
               ),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _recurrence,
                 decoration: const InputDecoration(labelText: 'How often'),
                 items: const [

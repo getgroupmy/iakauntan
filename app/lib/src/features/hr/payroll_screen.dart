@@ -674,6 +674,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
         child: Row(children: [
           Expanded(
             child: DropdownButtonFormField<int>(
+              isExpanded: true,
               value: _month,
               decoration: const InputDecoration(labelText: 'Month'),
               items: [
@@ -686,6 +687,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           const SizedBox(width: Space.md),
           Expanded(
             child: DropdownButtonFormField<int>(
+              isExpanded: true,
               value: _year,
               decoration: const InputDecoration(labelText: 'Year'),
               items: [

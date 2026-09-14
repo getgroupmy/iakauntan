@@ -774,6 +774,7 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
               ),
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _icon,
                 decoration: const InputDecoration(labelText: 'Icon'),
                 items: [
@@ -1269,6 +1270,7 @@ class _StatDialogState extends ConsumerState<_StatDialog> {
               ),
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _icons.contains(_icon) ? _icon : 'trending_up',
                 decoration: const InputDecoration(labelText: 'Icon'),
                 items: [

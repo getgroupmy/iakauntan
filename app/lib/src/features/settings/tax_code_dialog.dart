@@ -181,6 +181,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _taxType,
                     decoration: const InputDecoration(
                       labelText: 'LHDN tax type',

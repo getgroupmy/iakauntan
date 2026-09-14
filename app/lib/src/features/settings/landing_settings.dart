@@ -75,6 +75,7 @@ class _LandingSettingsCardState extends ConsumerState<LandingSettingsCard> {
                       'company you keep books for.',
                 ),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: choices.any((c) => c.route == current.landingRoute)
                       ? current.landingRoute
                       : '/dashboard',

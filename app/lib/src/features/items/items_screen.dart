@@ -388,6 +388,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _itemType,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: const [
@@ -549,6 +550,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   if (_trackInventory) ...[
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _tracking,
                       decoration: const InputDecoration(
                         labelText: 'Identify each unit',

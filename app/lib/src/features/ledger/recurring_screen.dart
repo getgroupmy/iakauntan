@@ -259,6 +259,7 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _frequency,
                     decoration: const InputDecoration(labelText: 'Every'),
                     items: const [

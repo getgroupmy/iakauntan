@@ -613,6 +613,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                               (v ?? '').trim().isEmpty ? 'Enter a code' : null,
                         ),
                         right: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _contactType,
                           decoration: const InputDecoration(labelText: 'Type'),
                           items: const [
@@ -702,6 +703,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       ),
                       const SizedBox(height: 14),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         value: _entityType,
                         decoration: const InputDecoration(
                           labelText: 'Entity type',
@@ -790,6 +792,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       const SizedBox(height: 14),
                       _Pair(
                         left: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _idType,
                           decoration: const InputDecoration(
                             labelText: 'ID type',

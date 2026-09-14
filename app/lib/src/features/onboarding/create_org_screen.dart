@@ -816,6 +816,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 ],
                 const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   value: _fiscalYearEndMonth,
                   decoration: const InputDecoration(
                     labelText: 'Financial year end',

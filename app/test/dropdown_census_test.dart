@@ -171,4 +171,77 @@ void main() {
           'test/dropdown_census_test.dart and say so.',
     );
   });
+
+  test('and every one of them ellipsises rather than overflowing', () {
+    // `isExpanded` decides what a dropdown does when its widest item is
+    // wider than the room it has. False -- the default -- lays the item
+    // out at its natural width and the row overflows; true constrains
+    // it and the text ellipsises.
+    //
+    // A debug build draws an overflow as a striped bar. A RELEASE WEB
+    // build draws it as text running off the edge of the card, which
+    // reads as a rendering fault rather than as a long word, and which
+    // no test on a 1600px surface will ever see.
+    //
+    // Found on the entity-type dropdown: "Limited Liability
+    // Partnership" ran 92 pixels past the sign-up column. Nineteen
+    // others were one narrow screen away from the same thing, so this
+    // is a rule now rather than a fix.
+    final missing = <String>[];
+    for (final entity in Directory('lib/src').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final source = entity.readAsStringSync();
+      for (final call in _dropdownCalls(source)) {
+        if (RegExp(r'(^|[^\w.])isExpanded\s*:').hasMatch(call)) continue;
+        final at =
+            source.substring(0, source.indexOf(call)).split('\n').length;
+        missing.add('${entity.path}:$at');
+      }
+    }
+
+    expect(
+      missing,
+      isEmpty,
+      reason:
+          'These DropdownButtonFormFields do not set isExpanded: true, so '
+          'a long item overflows instead of ellipsising:\n'
+          '${missing.join('\n')}',
+    );
+  });
+}
+
+/// The text of each `DropdownButtonFormField(...)` call, balanced
+/// parentheses and all.
+///
+/// Balanced rather than "the next few lines", because the argument
+/// being looked for can be anywhere in the call and a nested widget's
+/// own `isExpanded` must not be mistaken for it. Quotes are skipped so
+/// a bracket inside a label does not unbalance the count.
+List<String> _dropdownCalls(String source) {
+  final out = <String>[];
+  for (final m in RegExp(r'DropdownButtonFormField\s*(<[^>]*>)?\s*\(')
+      .allMatches(source)) {
+    var depth = 0;
+    var i = m.end - 1;
+    final start = i;
+    while (i < source.length) {
+      final c = source[i];
+      if (c == '(' || c == '[' || c == '{') {
+        depth++;
+      } else if (c == ')' || c == ']' || c == '}') {
+        depth--;
+        if (depth == 0) break;
+      } else if (c == "'" || c == '"') {
+        final quote = c;
+        i++;
+        while (i < source.length && source[i] != quote) {
+          if (source[i] == r'\') i++;
+          i++;
+        }
+      }
+      i++;
+    }
+    out.add(source.substring(start, i < source.length ? i + 1 : source.length));
+  }
+  return out;
 }

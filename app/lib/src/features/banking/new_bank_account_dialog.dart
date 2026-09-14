@@ -123,6 +123,7 @@ class _NewBankAccountDialogState
                   Expanded(
                     flex: 2,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _type,
                       decoration: const InputDecoration(labelText: 'Kind'),
                       items: [

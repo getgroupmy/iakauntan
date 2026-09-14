@@ -448,6 +448,7 @@ class _FormatSheetState extends ConsumerState<_FormatSheet> {
             ),
             const SizedBox(height: Space.md),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _kind,
               decoration: const InputDecoration(labelText: 'That number is'),
               items: const [

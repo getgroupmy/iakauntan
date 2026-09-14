@@ -482,6 +482,7 @@ class _ChargeRow extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: charge.basis,
                   isDense: true,
                   decoration: const InputDecoration(

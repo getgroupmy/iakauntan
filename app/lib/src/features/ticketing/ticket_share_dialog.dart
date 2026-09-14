@@ -125,6 +125,7 @@ class _TicketShareDialogState extends ConsumerState<_TicketShareDialog> {
                   SizedBox(
                     width: 140,
                     child: DropdownButtonFormField<int>(
+                      isExpanded: true,
                       value: _days,
                       decoration: const InputDecoration(labelText: 'Valid'),
                       items: const [

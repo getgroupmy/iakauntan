@@ -255,6 +255,7 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
               ),
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _mode,
                 decoration: const InputDecoration(
                   labelText: 'Mode',

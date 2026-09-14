@@ -142,6 +142,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _priority,
                 decoration: const InputDecoration(
                   labelText: 'Priority',

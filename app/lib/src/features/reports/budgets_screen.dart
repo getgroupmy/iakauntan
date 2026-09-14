@@ -320,6 +320,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: year,
                   decoration: const InputDecoration(labelText: 'From which year'),
                   items: [
@@ -419,6 +420,7 @@ class _BudgetDialogState extends ConsumerState<_BudgetDialog> {
             onChanged: (_) => setState(() {}),
           ),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             value: _year,
             decoration: const InputDecoration(labelText: 'Which year'),
             items: [

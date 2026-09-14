@@ -344,6 +344,7 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _type,
               decoration: const InputDecoration(labelText: 'Kind'),
               items: [
@@ -357,6 +358,7 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: choices.contains(_subtype) ? _subtype : choices.first,
               decoration: const InputDecoration(labelText: 'Where it sits'),
               items: [
