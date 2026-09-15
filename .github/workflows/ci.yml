@@ -918,6 +918,27 @@ jobs:
       - run: deno check cloudflare/email-router/mime_test.js
       - run: deno test cloudflare/email-router/mime_test.js
 
+      # The last thing that runs before an invoice leaves for LHDN.
+      # `buildUblDocument` is pure, and everything it gets wrong is
+      # rejected at validation or -- worse -- accepted carrying the
+      # wrong number, neither of which the SQL suite can see: that
+      # stops at the `einvoice_documents` row this reads.
+      #
+      # The assertions are LHDN's rules rather than the function's
+      # habits. An absent identifier must be "NA" and not "", because
+      # MyInvois refuses the empty string and a company with no SST
+      # registration is the ordinary case. Every party carries four
+      # identifications in order, since schemeID is what names each and
+      # a reordering hands a reader the SST number as the TIN. Lines
+      # roll up one subtotal PER TAX TYPE, and a roll-up keyed on the
+      # wrong thing looks correct until a second rate appears.
+      # TaxCurrencyCode stays MYR on a foreign-currency invoice,
+      # because LHDN is owed ringgit whatever the invoice is written
+      # in. And the issue time goes in UTC: Malaysia is +08:00 with no
+      # DST, and MyInvois rejects a local time outright.
+      - run: deno check supabase/functions/_shared/ubl_test.ts
+      - run: deno test supabase/functions/_shared/ubl_test.ts
+
       # And turning what it found into something storage will take. A
       # name that cannot be a key and base64 that arrived wrapped are
       # both "the file is skipped", which reads from outside as "there
