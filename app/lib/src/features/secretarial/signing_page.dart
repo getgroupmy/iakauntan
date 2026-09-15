@@ -255,7 +255,9 @@ class _SigningPageState extends ConsumerState<SigningPage> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_readable(e))));
         // Whatever went wrong, the link's state may have moved on.
-        setState(() => _link = _open());
+        setState(() {
+          _link = _open();
+        });
       }
     } finally {
       if (mounted) setState(() => _signing = false);
@@ -285,7 +287,9 @@ class _SigningPageState extends ConsumerState<SigningPage> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_readable(e))));
-        setState(() => _link = _open());
+        setState(() {
+          _link = _open();
+        });
       }
     } finally {
       if (mounted) setState(() => _signing = false);

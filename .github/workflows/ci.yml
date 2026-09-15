@@ -664,6 +664,20 @@ jobs:
       - name: Check no dialog action asks for a flex
         run: python3 scripts/check_dialog_actions.py
 
+      # A setState whose arrow body assigns a Future returns that Future,
+      # and Flutter asserts against exactly that -- so the widget throws
+      # on every load and every refresh in any build with asserts on.
+      # That is every `flutter run`, every debug build and every widget
+      # test, and NOT a release build, so a screen can ship carrying it
+      # and only ever fail for the people developing it.
+      # `exchange_rates_screen.dart` did, until the screen got its first
+      # test and could not render at all.
+      #
+      # Only Future-typed FIELDS are reported: `setState(() => _busy =
+      # true)` is an arrow body too and is entirely correct.
+      - name: Check no setState returns a Future
+        run: python3 scripts/check_setstate_futures.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #

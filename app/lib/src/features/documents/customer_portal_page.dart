@@ -99,8 +99,9 @@ class _CustomerPortalPageState extends State<CustomerPortalPage> {
                   account: account,
                   busyId: _busyId,
                   onOpen: _openInvoice,
-                  onRefresh: () =>
-                      setState(() => _account = _open()),
+                  onRefresh: () => setState(() {
+                    _account = _open();
+                  }),
                 );
               },
             ),

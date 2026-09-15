@@ -40,7 +40,9 @@ class _ExchangeRatesScreenState extends ConsumerState<ExchangeRatesScreen> {
   void _reload() {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
-    setState(() => _board = repo.exchangeRateBoard(_asAt));
+    setState(() {
+      _board = repo.exchangeRateBoard(_asAt);
+    });
   }
 
   Future<void> _pickDate() async {

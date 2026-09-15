@@ -65,7 +65,9 @@ class _SharedTicketPageState extends ConsumerState<SharedTicketPage> {
         setState(() => _error = sharedTicketSentence(state));
       } else {
         _reply.clear();
-        setState(() => _ticket = _open());
+        setState(() {
+          _ticket = _open();
+        });
       }
     } catch (e) {
       setState(() => _error = '$e');

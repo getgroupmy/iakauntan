@@ -40,7 +40,9 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
     ref.invalidate(salespeopleProvider);
-    setState(() => _report = repo.salesByPerson(from: _from, to: _to));
+    setState(() {
+      _report = repo.salesByPerson(from: _from, to: _to);
+    });
   }
 
   Future<void> _pick({required bool start}) async {

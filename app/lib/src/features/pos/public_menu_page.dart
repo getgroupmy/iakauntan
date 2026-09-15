@@ -373,7 +373,9 @@ class _PublicMenuPageState extends ConsumerState<PublicMenuPage> {
                   onRemove: _remove,
                   onOrder: () => _order('${head['kind']}'),
                   onRemoveLine: _removeLine,
-                  onRefresh: () => setState(() => _menu = _load()),
+                  onRefresh: () => setState(() {
+                    _menu = _load();
+                  }),
                 );
               },
             ),
