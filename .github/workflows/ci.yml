@@ -982,6 +982,27 @@ jobs:
       - run: deno check supabase/functions/_shared/ubl_test.ts
       - run: deno test supabase/functions/_shared/ubl_test.ts
 
+      # And the client that carries it there. Nothing in this reaches
+      # the network -- `fetch` is replaced, which is the only way to see
+      # the request the client BUILDS rather than the reply it got, and
+      # a submission that quietly went to preprod is an invoice that was
+      # never filed.
+      #
+      # The hosts are asserted per environment, both of them, because
+      # the portal a buyer scans is not the API host and preprod has a
+      # near-identical name. The token cache is module scope and keyed
+      # on environment, client id AND onbehalfof: share a key across
+      # taxpayers and an intermediary files one client's invoice under
+      # another client's TIN. A rejected token must not be cached, or a
+      # wrong secret locks the org out until the instance recycles. The
+      # secret itself is asserted absent from the audit trail, which is
+      # persisted. And `documentHash` is the SHA-256 of the raw UBL
+      # while `document` is the base64 of that same string; hashing the
+      # base64 instead is rejected by LHDN with a message naming
+      # neither field.
+      - run: deno check supabase/functions/_shared/myinvois_test.ts
+      - run: deno test supabase/functions/_shared/myinvois_test.ts
+
       # And turning what it found into something storage will take. A
       # name that cannot be a key and base64 that arrived wrapped are
       # both "the file is skipped", which reads from outside as "there
