@@ -138,7 +138,27 @@ if hasattr(signal, 'SIGPIPE'):
 #
 # `report_feedback` is the one write in this API that does not stay
 # with the tenant: `feedback_reports` is the platform's table.
-BUDGET = 14
+#
+# `0596` took the four that say one company is related to another -- a
+# practice keeps these books, these companies are a group, this contact
+# IS that company. Every one checks BOTH ENDS, and the second check is
+# the interesting half in all four: without it `attach_company_to_firm`
+# lets an administrator hand their books to a practice that has never
+# heard of them, and `link_group_contact` becomes a way to discover
+# which companies exist, one uuid at a time, by reading which refusal
+# comes back.
+#
+# `0597` took the three that run a support desk, where what a caller
+# cannot see from the signature is what it does to the CLOCKS.
+# `add_ticket_comment` defaults to an internal note and so leaves the
+# first-response clock running however careful the note was.
+# `escalate_ticket` checks that the person is a member of this company
+# because `tickets.assignee_id` points at `auth.users` and no foreign
+# key can hold it -- otherwise the ticket goes to somebody row level
+# security stops from ever seeing it while the clock runs on. And
+# `transition_ticket` is not a status setter at all; it is the SLA
+# clock, pausing and resuming in working hours.
+BUDGET = 7
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

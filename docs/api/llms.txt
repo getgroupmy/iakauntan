@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0595` (the highest applied migration).
+Schema version `0597` (the highest applied migration).
 665 functions and 330 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**503 of 665 functions carry a `comment on
+**510 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -346,14 +346,14 @@ Refused unless the company has the `sales` module switched on and the caller may
 
 Refused unless the company has the `ticketing` module switched on and the caller may use it.
 
-- `add_ticket_comment(p_ticket uuid, p_body text, p_internal boolean, p_channel app.ticket_channel)` *(writes)*
+- `add_ticket_comment(p_ticket uuid, p_body text, p_internal boolean, p_channel app.ticket_channel)` *(writes)* — Adds a comment to a ticket and returns it.
 - `assign_ticket(p_ticket uuid, p_user uuid)` *(writes)* — Hands a ticket to somebody.
 - `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` *(writes)* — Raises a support ticket.
-- `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)*
+- `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)* — Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an event that records both levels and the reason.
 - `module_dashboard(p_org_id uuid)` — Figures for the modules a company holds and this caller may read, keyed by module code.
 - `revoke_ticket_share(p_ticket uuid)` *(writes)* — Turns off every share link for one support ticket, returning the count.
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
-- `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)*
+- `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
 ### general (458)
 
@@ -380,7 +380,7 @@ Not gated on any module.
 - `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
 - `approve_budget(p_id uuid)` *(writes)* — Agrees a draft budget, which is the act that makes it the thing variances are measured against.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
-- `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)*
+- `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)* — Appoints a practice to keep this company's books, and returns how many access rows that came to.
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
 - `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` *(writes)* — Returns what changed, most recent first, with the before and after of each row.
 - `audit_view_payslip(p_payslip_id uuid)` *(writes)* — One payslip in full for a granted reader, logged against the grant that permitted it.
@@ -546,16 +546,16 @@ Not gated on any module.
 - `import_opening_stock(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — Opening stock quantities and costs.
 - `inbound_attachments(p_email_id uuid)` — What came attached to one message.
 - `intercompany_inbox(p_org_id uuid)`
-- `invite_firm_member(p_firm_id uuid, p_email text, p_role app.firm_role)` *(writes)*
+- `invite_firm_member(p_firm_id uuid, p_email text, p_role app.firm_role)` *(writes)* — Adds somebody to a practice, by address.
 - `invite_member(p_org_id uuid, p_email text, p_role app.member_role)` *(writes)* — Invites somebody into a company and returns the raw invitation token once.
 - `invoice_credit_remaining(p_invoice uuid)` — What is left uncredited on each line of an invoice.
 - `item_price(p_item_id uuid, p_contact_id uuid, p_quantity numeric)`
-- `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)*
+- `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)* — Moves a company into a group, or out of one when `p_group_id` is null.
 - `landing_page()` — The marketing site's own contents, for the signed-out landing page.
 - `ledger_dimensions(p_org_id uuid)`
 - `line_lots(p_line_table text, p_line_id uuid)`
 - `link_contact_records(p_org_id uuid, p_ids uuid[])` *(writes)* — Makes the given contact records one company, bringing along every record already linked to any of them.
-- `link_group_contact(p_contact_id uuid, p_org_id uuid)` *(writes)*
+- `link_group_contact(p_contact_id uuid, p_org_id uuid)` *(writes)* — Says that a contact on this company's books IS another company in the same group -- what makes an intercompany balance something that can be eliminated on consolidation rather than a coincidence of names.
 - `link_opportunity_quotation(p_opportunity uuid, p_document uuid)` *(writes)* — Ties a deal to the quotation it will be won on, and OVERWRITES THE DEAL'S AMOUNT with the quotation's total.
 - `log_document_download(p_document_id uuid, p_format text)` *(writes)* — Writes that somebody downloaded a document, and returns the row.
 - `mail_domain()` — The domain reserved addresses live on, for screens that have to print one.

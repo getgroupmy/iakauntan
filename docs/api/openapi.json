@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0595",
+    "version": "0597",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18522,8 +18522,8 @@
     "/rpc/add_ticket_comment": {
       "post": {
         "operationId": "add_ticket_comment",
-        "summary": "Add ticket comment",
-        "description": "`public.add_ticket_comment(p_ticket uuid, p_body text, p_internal boolean, p_channel app.ticket_channel)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Adds a comment to a ticket and returns it",
+        "description": "Adds a comment to a ticket and returns it. `p_internal` DEFAULTS TO TRUE, so a caller that says nothing writes a note the requester cannot see -- the safe default for a field somebody forgot, and the wrong one if the intention was to reply. It also decides the clock: the first-response time is stamped by the first comment the requester CAN see, so an internal note leaves that clock running however long and careful it was. A first public reply also files a `first_response` event, so the breach report can show when the promise was met. Needs the ticketing module.\n\n`public.add_ticket_comment(p_ticket uuid, p_body text, p_internal boolean, p_channel app.ticket_channel)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
         "tags": [
           "ticketing"
         ],
@@ -20039,8 +20039,8 @@
     "/rpc/attach_company_to_firm": {
       "post": {
         "operationId": "attach_company_to_firm",
-        "summary": "Attach company to firm",
-        "description": "`public.attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` Writes. Requires a signed-in user.",
+        "summary": "Appoints a practice to keep this company's books, and returns how many access rows that came to",
+        "description": "Appoints a practice to keep this company's books, and returns how many access rows that came to. CHECKS BOTH ENDS: the caller must be an owner or administrator of the COMPANY and a member of the FIRM, because without the second an administrator could hand their books to a practice that has never heard of them. Refuses the `owner` role outright -- a firm keeps the books, it does not own the company, and transferring ownership should be done somewhere that says so. What follows is `app.sync_firm_access`, which gives every member of the practice access to every company on its list; the return value is the size of that, not of this appointment.\n\n`public.attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31843,8 +31843,8 @@
     "/rpc/escalate_ticket": {
       "post": {
         "operationId": "escalate_ticket",
-        "summary": "Escalate ticket",
-        "description": "`public.escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an\u2026",
+        "description": "Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an event that records both levels and the reason. A functional escalation must name a team and a hierarchic one must name a person -- an escalation with nowhere to go is a level counter and nothing else. THE PERSON MUST BE AN ACTIVE MEMBER OF THIS COMPANY, checked here because `tickets.assignee_id` points at `auth.users`, which is platform-wide and carries no company, so no foreign key can hold it: escalating to somebody outside would hand the ticket to a name that row level security stops from ever seeing it, while the resolution clock ran on. A `new` ticket becomes `open` on the way past, because somebody has now looked at it. Needs the ticketing module.\n\n`public.escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
         "tags": [
           "ticketing"
         ],
@@ -34511,8 +34511,8 @@
     "/rpc/invite_firm_member": {
       "post": {
         "operationId": "invite_firm_member",
-        "summary": "Invite firm member",
-        "description": "`public.invite_firm_member(p_firm_id uuid, p_email text, p_role app.firm_role)` Writes. Requires a signed-in user.",
+        "summary": "Adds somebody to a practice, by address",
+        "description": "Adds somebody to a practice, by address. An address that already answers to an account is a member FROM THIS MOMENT -- no invitation to accept, because they are already a person this system knows -- and one that does not is invited, with fourteen days to sign up. Inviting somebody who is already a member changes their role rather than failing. A new member is given the whole portfolio at once through `app.sync_firm_access`: forty clients to be invited to one at a time is how people end up sharing a login. Only a partner or a manager may do it.\n\n`public.invite_firm_member(p_firm_id uuid, p_email text, p_role app.firm_role)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -35437,8 +35437,8 @@
     "/rpc/join_company_group": {
       "post": {
         "operationId": "join_company_group",
-        "summary": "Join company group",
-        "description": "`public.join_company_group(p_org_id uuid, p_group_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Moves a company into a group, or out of one when `p_group_id` is null",
+        "description": "Moves a company into a group, or out of one when `p_group_id` is null. Needs `can_admin` on the company, and ALSO membership of the group when the group already has companies in it -- because being in a group means being able to see the others, and a group with nothing in it yet is the one the caller has just made. Consolidated reporting and the group's shared contacts follow from this one column, so it is a wider change than moving a row.\n\n`public.join_company_group(p_org_id uuid, p_group_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -36197,8 +36197,8 @@
     "/rpc/link_group_contact": {
       "post": {
         "operationId": "link_group_contact",
-        "summary": "Link group contact",
-        "description": "`public.link_group_contact(p_contact_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Says that a contact on this company's books IS another company in the same group -- what makes an\u2026",
+        "description": "Says that a contact on this company's books IS another company in the same group -- what makes an intercompany balance something that can be eliminated on consolidation rather than a coincidence of names. Needs `can_write` where the contact lives, AND that the company being pointed at is in the same group and is one THE CALLER CAN ALREADY REACH. That second test is not belt and braces: without it the refusals differ between a company that exists and one that does not, and this becomes a way to discover which companies exist, one uuid at a time. Refuses a company as its own customer. UNLINKING IS ALWAYS ALLOWED -- passing null removes an assertion rather than making one, and nothing is learned by being allowed to.\n\n`public.link_group_contact(p_contact_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63229,8 +63229,8 @@
     "/rpc/transition_ticket": {
       "post": {
         "operationId": "transition_ticket",
-        "summary": "Transition ticket",
-        "description": "`public.transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter",
+        "description": "Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter. Moving into a waiting status pauses the resolution clock; moving out of one adds the paused minutes back through `app.sla_advance`, which counts in the company's working hours rather than wall-clock -- so a ticket parked on Friday evening is not three days late on Monday. `resolved_at` and `closed_at` are stamped and CLEARED again by a move back, because a ticket that was reopened was not resolved. Refuses a move the state machine does not allow and names the ones that were available instead; moving to the status it is already in does nothing rather than failing. Needs the ticketing module.\n\n`public.transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
         "tags": [
           "ticketing"
         ],
