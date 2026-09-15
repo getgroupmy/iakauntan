@@ -36,6 +36,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'captcha_controller.dart';
+export 'captcha_controller.dart' show CaptchaController;
 import 'captcha_stub.dart' if (dart.library.js_interop) 'captcha_web.dart';
 
 /// Whether a captcha is being asked for at all.
@@ -83,10 +85,17 @@ class CaptchaField extends StatefulWidget {
     required this.siteKey,
     required this.onToken,
     this.onFailed,
+    this.controller,
   });
 
   final String? siteKey;
   final ValueChanged<String?> onToken;
+
+  /// Ask the check to run again after a failed attempt. See
+  /// [CaptchaController]: the token the attempt spent is no longer any
+  /// good, and a form that re-sends it is refused for the wrong
+  /// reason.
+  final CaptchaController? controller;
 
   /// Told once when the check will not be drawn at all, so the form can
   /// refuse with [captchaBroken] instead of asking for something that
@@ -115,6 +124,7 @@ class _CaptchaFieldState extends State<CaptchaField> {
       child: TurnstileWidget(
         siteKey: widget.siteKey!.trim(),
         onToken: widget.onToken,
+        controller: widget.controller,
         onFailed: () {
           if (!mounted || _failed) return;
           setState(() => _failed = true);

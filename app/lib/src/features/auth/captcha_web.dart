@@ -5,6 +5,8 @@ import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
+import 'captcha_controller.dart';
+
 /// Cloudflare Turnstile, drawn into the page beside the form.
 ///
 /// Turnstile is a browser widget: a script from `challenges.cloudflare
@@ -23,6 +25,14 @@ external JSObject? get _turnstile;
 
 @JS('turnstile.render')
 external JSString? _render(JSAny container, JSObject options);
+
+/// Throw away the token this widget is holding and challenge again.
+///
+/// Cloudflare's own way of saying it, and the only one: a token is
+/// spent by the attempt that used it, and without this a form that
+/// failed once has nothing valid left to send. See [CaptchaController].
+@JS('turnstile.reset')
+external void _resetWidget(JSString widgetId);
 
 /// The script tag, added once per page.
 ///
@@ -70,6 +80,7 @@ class TurnstileWidget extends StatefulWidget {
     required this.siteKey,
     required this.onToken,
     required this.onFailed,
+    this.controller,
   });
 
   final String siteKey;
@@ -77,6 +88,10 @@ class TurnstileWidget extends StatefulWidget {
 
   /// Called once when the widget will not be drawn at all.
   final VoidCallback onFailed;
+
+  /// Asks for a fresh challenge when a form's attempt has spent the
+  /// token it was holding.
+  final CaptchaController? controller;
 
   @override
   State<TurnstileWidget> createState() => _TurnstileWidgetState();
@@ -86,9 +101,14 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
   late final String _viewType = 'turnstile-${widget.siteKey}';
   bool _gaveUp = false;
 
+  /// What Cloudflare called the widget it drew, which is what has to be
+  /// handed back to reset it. Null until it has drawn one.
+  String? _widgetId;
+
   @override
   void initState() {
     super.initState();
+    widget.controller?.addListener(_again);
     _ensureScript();
     if (_registered.add(_viewType)) {
       ui_web.platformViewRegistry.registerViewFactory(_viewType, (int id) {
@@ -144,7 +164,28 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
       // refuse with nothing on screen to explain it.
       ..setProperty('expired-callback'.toJS, (() => widget.onToken(null)).toJS)
       ..setProperty('error-callback'.toJS, (() => widget.onToken(null)).toJS);
-    _render(container as JSAny, options);
+    _widgetId = _render(container as JSAny, options)?.toDart;
+  }
+
+  /// Run the check again, at a form's request.
+  ///
+  /// Silent when nothing has been drawn yet: there is no spent token to
+  /// replace, and the form is already waiting for the first one.
+  void _again() {
+    final id = _widgetId;
+    if (id == null || _gaveUp) return;
+    // Told at once that the token it held is worthless, rather than
+    // when Cloudflare gets round to the new one. A form that thinks it
+    // still has a token between the reset and the callback would send
+    // the spent one.
+    widget.onToken(null);
+    _resetWidget(id.toJS);
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.removeListener(_again);
+    super.dispose();
   }
 
   @override

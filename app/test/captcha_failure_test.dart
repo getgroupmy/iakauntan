@@ -16,6 +16,8 @@ import 'package:iakauntan/src/features/auth/captcha.dart';
 /// the two situations have DIFFERENT words, and that the words for a
 /// broken check say who can fix it.
 void main() {
+  _runningAgain();
+
   group('the two refusals', () {
     test('are not the same sentence', () {
       // The bug, in one assertion. If these ever collapse into one
@@ -89,6 +91,66 @@ void main() {
       );
       await t.pump(const Duration(seconds: 1));
       expect(failed, isFalse);
+    });
+  });
+}
+
+/// The token is spent by the attempt, whether the attempt worked.
+///
+/// This is the second half of the same bug the file above is about, and
+/// it was live: GoTrue verifies the Turnstile token before it looks at
+/// the password, and it spends it either way. So a mistyped password
+/// left the form holding a token that was already gone, and the next
+/// press was answered
+///
+///     captcha protection: request disallowed
+///
+/// which reads on screen as the security check failing. Somebody who
+/// fat-fingers their password once could not get in at all, and nothing
+/// on the page said why.
+///
+/// The widget itself needs a browser, so what is asserted here is the
+/// piece that carries the request: a controller the form calls after
+/// every refusal, and a field that accepts one.
+void _runningAgain() {
+  group('running the check again', () {
+    test('a reset reaches whoever is listening', () {
+      final controller = CaptchaController();
+      var asked = 0;
+      controller.addListener(() => asked += 1);
+
+      controller.reset();
+      expect(asked, 1);
+
+      // Twice, because a second failed attempt is as ordinary as the
+      // first and must not be silently ignored.
+      controller.reset();
+      expect(asked, 2);
+
+      controller.dispose();
+    });
+
+    testWidgets('and the field takes one without a key configured', (t) async {
+      // The controller is optional and the field draws nothing when
+      // the deployment has no Turnstile key. A form on such a
+      // deployment still calls reset after a refusal, and that must be
+      // harmless rather than a crash.
+      final controller = CaptchaController();
+      await t.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CaptchaField(
+              siteKey: '',
+              onToken: (_) {},
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      controller.reset();
+      await t.pump();
+      expect(t.takeException(), isNull);
+      controller.dispose();
     });
   });
 }

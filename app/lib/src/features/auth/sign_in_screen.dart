@@ -481,6 +481,16 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// expired one is a refusal with nothing on the screen to explain it.
   String? _captchaToken;
 
+  /// How the form asks for a fresh challenge.
+  ///
+  /// A token is spent by the attempt that used it, so after a refusal
+  /// the one in `_captchaToken` is worthless — see [CaptchaController].
+  /// Without this a mistyped password left somebody unable to try
+  /// again: the second press was answered "captcha protection: request
+  /// disallowed", which reads as the check failing rather than as the
+  /// password being wrong.
+  final _captcha = CaptchaController();
+
   /// The check could not be drawn, so there is no token coming.
   ///
   /// Kept apart from "not passed yet" because the two need different
@@ -542,6 +552,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   @override
   void initState() {
     super.initState();
+    // The Sign in button is enabled by what is in these two boxes, so
+    // the form has to rebuild as they are typed. A `TextFormField`
+    // with a controller does not rebuild its parent on its own, and
+    // without this the button stays grey until something else happens
+    // to redraw the page.
+    for (final c in [_email, _password]) {
+      c.addListener(_onTyping);
+    }
     if (passkeysAvailable) {
       passkeysUsable().then((yes) {
         if (mounted && yes) setState(() => _passkeyUsable = true);
@@ -585,6 +603,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           ? (result.message ?? 'That passkey was not accepted.')
           : null;
     });
+    // Anything but a success has spent the token, a dismissed prompt
+    // included: the call reached GoTrue either way. The button above
+    // is disabled until the check passes again, so without this the
+    // screen would sit there with nothing to press.
+    if (result.outcome != PasskeyOutcome.signedIn) _challengeAgain();
     // Signed in needs no navigation: `verifyAuthentication` saves the
     // session and fires `signedIn`, and the router is already watching
     // for it — the same ending the password form has.
@@ -592,6 +615,9 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   void dispose() {
+    for (final c in [_email, _password]) {
+      c.removeListener(_onTyping);
+    }
     _email.dispose();
     _password.dispose();
     _fullName.dispose();
@@ -599,6 +625,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     _confirmPassword.dispose();
     _businessName.dispose();
     _stateText.dispose();
+    _captcha.dispose();
     super.dispose();
   }
 
@@ -754,6 +781,53 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     return failure;
   }
 
+  /// Redraw when what is typed changes whether the button may be
+  /// pressed, and not otherwise.
+  ///
+  /// Guarded rather than a bare `setState`: this fires on every
+  /// keystroke, and rebuilding a form of fifteen fields per character
+  /// is work nobody asked for. Only the transition matters.
+  bool _wasReady = false;
+  void _onTyping() {
+    final ready = _formReady;
+    if (ready == _wasReady) return;
+    setState(() => _wasReady = ready);
+  }
+
+  /// Whether the form has everything it needs to be submitted.
+  ///
+  /// The button is DISABLED rather than refusing on press. A press that
+  /// answers "complete the security check first" is a press that taught
+  /// somebody nothing they could not see, and the check is right there
+  /// above the button saying whether it has passed.
+  ///
+  /// Three things, and each is skipped when it does not apply:
+  ///
+  ///   * the check, when one is configured at all. A deployment with no
+  ///     Turnstile key has no widget and nothing to wait for;
+  ///   * an email, always;
+  ///   * a password -- except on a company's door, where the first step
+  ///     asks only for the address and the password box is not drawn
+  ///     yet. Requiring one there would be a button that never enables.
+  bool get _formReady {
+    if (_email.text.trim().isEmpty) return false;
+    if (!_asksEmailFirst && _password.text.isEmpty) return false;
+    return !_captchaPending;
+  }
+
+  /// Throw the spent token away and run the check again.
+  ///
+  /// Called after every refusal that leaves somebody on this screen
+  /// wanting another go. GoTrue spends the token on the attempt
+  /// whether the attempt succeeded or not, so carrying on with it is
+  /// how one mistyped password turns into a form that cannot be
+  /// submitted at all.
+  void _challengeAgain() {
+    if (!captchaOn(_brand?.turnstileSiteKey)) return;
+    setState(() => _captchaToken = null);
+    _captcha.reset();
+  }
+
   /// Whether the security check still has to be passed.
   ///
   /// Asked before anything is sent, because GoTrue's refusal for a
@@ -855,10 +929,17 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           // send both, and the offer below has to work against either.
           _unconfirmed = looksUnconfirmed(code: e.code, message: e.message);
         });
+        // The attempt spent the token even though it failed. Without a
+        // fresh one the next press is refused for the captcha rather
+        // than for the password, and one typo becomes a dead end.
+        _challengeAgain();
       }
     } catch (e) {
       // The readable half, never the class name and the status code.
-      if (mounted) setState(() => _error = resendFailureDetail('$e'));
+      if (mounted) {
+        setState(() => _error = resendFailureDetail('$e'));
+        _challengeAgain();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1192,8 +1273,15 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             ? 'The demo accounts are not available on this deployment.'
             : e.message,
       );
+      // The same spent token as the form's. A visitor who pressed the
+      // wrong demo role, or pressed once while the check was stale,
+      // should be able to press another.
+      _challengeAgain();
     } catch (e) {
-      if (mounted) setState(() => _error = resendFailureDetail('$e'));
+      if (mounted) {
+        setState(() => _error = resendFailureDetail('$e'));
+        _challengeAgain();
+      }
     } finally {
       if (mounted) setState(() => _demoBusy = null);
     }
@@ -1711,6 +1799,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 CaptchaField(
                   key: const ValueKey('auth-captcha'),
                   siteKey: _brand?.turnstileSiteKey,
+                  controller: _captcha,
                   onToken: (t) => setState(() => _captchaToken = t),
                   onFailed: () => setState(() => _captchaBroken = true),
                 ),
@@ -1753,7 +1842,16 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 ],
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed: _busy || (_isSignUp && !_signupsOpen)
+                  // `_asksEmailFirst` is the company-door first step,
+                  // which asks `may_sign_in_here` and never GoTrue --
+                  // so it needs the address and nothing else. See
+                  // `_formReady`.
+                  onPressed:
+                      _busy ||
+                          (_isSignUp && !_signupsOpen) ||
+                          (_asksEmailFirst
+                              ? _email.text.trim().isEmpty
+                              : !_formReady)
                       ? null
                       : (_asksEmailFirst ? _checkEmail : _submit),
                   child: _busy
@@ -1792,7 +1890,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     key: const ValueKey('passkey-sign-in'),
-                    onPressed: _busy ? null : _passkeySignIn,
+                    // The check and nothing else: a passkey IS the
+                    // email and the password, so neither box has to be
+                    // filled in for this to be pressable.
+                    onPressed: _busy || _captchaPending ? null : _passkeySignIn,
                     icon: const Icon(Icons.fingerprint, size: 18),
                     label: const Text('Sign in with a passkey'),
                   ),
