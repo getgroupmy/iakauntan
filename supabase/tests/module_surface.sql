@@ -133,7 +133,6 @@ do $$
 declare
   v_org    uuid;
   v_other  uuid;
-  v_failed boolean;
 begin
   v_org := pg_temp.test_org('Meja Bantuan Tiga Sdn Bhd', array['ticketing']);
 
@@ -144,14 +143,15 @@ begin
   values (v_org, 'payroll', false)
   on conflict (org_id, module_code) do update set is_enabled = false;
 
-  v_failed := false;
-  begin
-    perform public.set_module_hidden(v_org, 'payroll', true);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('a module the company never bought cannot be hidden',
-    v_failed);
+  -- On the message, not merely on "it failed". Three of the five
+  -- refusals in this file are 42501 and they are three different
+  -- rules, so a handler that only records failure passes when the
+  -- wrong one fires -- and passes with the rule under test deleted.
+  perform pg_temp.check_refused(
+    'a module the company never bought cannot be hidden',
+    format($q$ select public.set_module_hidden(%L, 'payroll', true) $q$,
+           v_org),
+    '%does not have payroll%', '42501');
 
   -- And the row it did not write is still not an entitlement.
   perform pg_temp.check_true('payroll is still not held',
@@ -159,41 +159,31 @@ begin
   perform pg_temp.check_eq('payroll still answers none',
     app.module_access(v_org, 'payroll')::text, 'none');
 
-  v_failed := false;
-  begin
-    perform public.set_module_hidden(v_org, 'no_such_module', true);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('an invented module code is refused', v_failed);
+  perform pg_temp.check_refused('an invented module code is refused',
+    format($q$ select public.set_module_hidden(%L, 'no_such_module', true) $q$,
+           v_org),
+    '%No such module: no_such_module%', '22023');
 
   -- Somebody else's company.
   v_other := pg_temp.another_user('outsider-modules@iakauntan.test');
   perform pg_temp.sign_in_as(v_other);
 
-  v_failed := false;
-  begin
-    perform public.org_module_surface(v_org);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('an outsider cannot read the surface', v_failed);
+  perform pg_temp.check_refused('an outsider cannot read the surface',
+    format($q$ select public.org_module_surface(%L) $q$, v_org),
+    '%Not a member of this organization%', '42501');
 
-  v_failed := false;
-  begin
-    perform public.set_module_hidden(v_org, 'ticketing', true);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('an outsider cannot hide anything', v_failed);
+  -- A DIFFERENT 42501 from the one above, and the distinction is the
+  -- point: an outsider is refused as not-an-administrator here, and as
+  -- not-a-member by the read. Asserting the code alone cannot tell
+  -- those apart.
+  perform pg_temp.check_refused('an outsider cannot hide anything',
+    format($q$ select public.set_module_hidden(%L, 'ticketing', true) $q$,
+           v_org),
+    '%Only an owner or an admin can change%', '42501');
 
-  v_failed := false;
-  begin
-    perform public.module_dashboard(v_org);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('an outsider gets no dashboard', v_failed);
+  perform pg_temp.check_refused('an outsider gets no dashboard',
+    format($q$ select public.module_dashboard(%L) $q$, v_org),
+    '%Not a member of this organization%', '42501');
 end;
 $$;
 

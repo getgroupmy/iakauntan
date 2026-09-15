@@ -896,28 +896,27 @@ begin
     'and stamps the mark itself, rather than trusting the caller to',
     v_edited is not null);
 
-  v_refused := false;
-  begin
-    perform public.chat_edit_message(v_other, 'not noted');
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.sign_in_as(v_ana);
-  perform pg_temp.check_true(
+  -- On the words. All three refusals below are 42501 and they are
+  -- three different rules -- not yours, too late, not yours to delete
+  -- -- so recording only that something failed passes when the wrong
+  -- one fires, and passes with the rule under test deleted.
+  perform pg_temp.check_refused(
     'nobody edits words another person is recorded as having said',
-    v_refused);
+    format($q$ select public.chat_edit_message(%L, 'not noted') $q$, v_other),
+    '%only edit your own messages%', '42501');
+  -- `check_refused` catches, and a caught exception rolls back to a
+  -- savepoint and takes the sign-in with it.
+  perform pg_temp.sign_in_as(v_ana);
 
   update public.chat_messages set created_at = now() - interval '20 minutes'
    where id = v_msg;
-  v_refused := false;
-  begin
-    perform public.chat_edit_message(v_msg, 'rewritten much later');
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.sign_in_as(v_ana);
-  perform pg_temp.check_true(
+  perform pg_temp.check_refused(
     'and a message past the window is not editable — by then it has been '
-    'read and acted on, and the honest correction is another message',
-    v_refused);
+    'read',
+    format($q$ select public.chat_edit_message(%L, 'rewritten much later') $q$,
+           v_msg),
+    '%can only be edited for%', '42501');
+  perform pg_temp.sign_in_as(v_ana);
   select body into v_body from public.chat_messages where id = v_msg;
   perform pg_temp.check_true('so it still reads as it did',
     v_body = 'the transfer is approved today');
@@ -964,15 +963,11 @@ begin
   perform pg_temp.check_true('while the other is untouched — the control',
     not v_deleted);
 
-  v_refused := false;
-  begin
-    perform public.chat_delete_message(v_msg);
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.sign_in_as(v_ben);
-  perform pg_temp.check_true(
+  perform pg_temp.check_refused(
     'and one person cannot take another''s message out of the record',
-    v_refused);
+    format($q$ select public.chat_delete_message(%L) $q$, v_msg),
+    '%only delete your own messages%', '42501');
+  perform pg_temp.sign_in_as(v_ben);
 
   perform public.chat_delete_message(v_other);
   perform pg_temp.check_true('while his own deletes, which is the control '

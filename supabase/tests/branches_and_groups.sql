@@ -41,49 +41,46 @@ declare
   v_a uuid := pg_temp.test_org('Cawangan A Sdn Bhd');
   v_b uuid := pg_temp.test_org('Cawangan B Sdn Bhd');
   v_branch uuid;
-  v_ok boolean;
 begin
   insert into public.branches (org_id, code, name)
   values (v_a, 'KL', 'Kuala Lumpur') returning id into v_branch;
 
-  begin
-    insert into public.purchase_documents
-      (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount,
-       branch_id)
-    values (v_a, 'bill', 'B-OWN', pg_temp.supplier(v_a, 'S-1'), current_date,
-            'draft', 0, v_branch);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('a document may name its own company''s branch',
-    v_ok);
+  -- No handler. This asserts the insert SUCCEEDS, and a handler that
+  -- turned any error into `v_ok := false` reported a failing insert as
+  -- the branch rule working -- including a column renamed out from
+  -- under it. Unhandled, the real error stops the file and names
+  -- itself.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount,
+     branch_id)
+  values (v_a, 'bill', 'B-OWN', pg_temp.supplier(v_a, 'S-1'), current_date,
+          'draft', 0, v_branch);
+  raise notice 'ok   a document may name its own company''s branch';
 
   -- The one that matters. Without the guard this succeeds, the document
   -- is invisible on every branch screen, and every report by branch is
   -- quietly wrong.
-  begin
-    insert into public.purchase_documents
-      (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount,
-       branch_id)
-    values (v_b, 'bill', 'B-BORROWED', pg_temp.supplier(v_b, 'S-1'),
-            current_date, 'draft', 0, v_branch);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('and not another company''s', not v_ok);
+  -- And the refusal, on its words. `23514` is a check constraint and
+  -- this file could raise one for half a dozen reasons.
+  perform pg_temp.check_refused('and not another company''s',
+    format($q$ insert into public.purchase_documents
+                 (org_id, doc_type, doc_no, contact_id, doc_date, status,
+                  total_amount, branch_id)
+               values (%L, 'bill', 'B-BORROWED', %L, current_date,
+                       'draft', 0, %L) $q$,
+           v_b, pg_temp.supplier(v_b, 'S-1'), v_branch),
+    '%branch belongs to another company%', '23514');
 
   -- The control: a document with no branch is the ordinary case and has
   -- to stay ordinary, or this migration would have broken every company
   -- that never opens a second shop.
-  begin
-    insert into public.purchase_documents
-      (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount)
-    values (v_b, 'bill', 'B-NONE', pg_temp.supplier(v_b, 'S-2'), current_date,
-            'draft', 0);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('a document with no branch is still fine', v_ok);
+  -- Success again, so again no handler: a branch is optional, and this
+  -- says so by the insert simply working.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount)
+  values (v_b, 'bill', 'B-NONE', pg_temp.supplier(v_b, 'S-2'), current_date,
+          'draft', 0);
+  raise notice 'ok   a document with no branch is still fine';
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -98,7 +95,6 @@ declare
   v_outsider uuid := pg_temp.another_user('outsider@kumpulan.test');
   v_group uuid;
   v_seen int;
-  v_refused boolean;
 begin
   insert into public.company_groups (name, created_by)
   values ('Kumpulan Ujian', v_owner) returning id into v_group;
@@ -120,13 +116,10 @@ begin
   perform pg_temp.check_eq('a stranger sees nothing of the group', v_seen, 0);
 
   -- And cannot attach a company to it, nor to one they do not administer.
-  begin
-    perform public.join_company_group(v_c, v_group);
-    v_refused := false;
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.check_true(
-    'a stranger cannot move a company into a group', v_refused);
+  perform pg_temp.check_refused(
+    'a stranger cannot move a company into a group',
+    format($q$ select public.join_company_group(%L, %L) $q$, v_c, v_group),
+    '%Only an administrator can move a company%', '42501');
 end $$;
 
 -- ---------------------------------------------------------------------

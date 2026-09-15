@@ -50,7 +50,34 @@ from pathlib import Path
 # FOUR different messages, so the assertion passes when the wrong guard
 # fires, and passes with the guard under test deleted. Exactly what
 # `create_withholding` did. They assert on the words now.
-BUDGET = 69
+#
+# 69 to 53: `module_surface.sql`, `branches_and_groups.sql`,
+# `group_reporting.sql` and three of `chat.sql`'s five. One pattern
+# runs through all of them -- a file raises 42501 for three or four
+# DIFFERENT rules, so "it was refused" is not the claim any of those
+# tests meant to make. `module_surface.sql` refuses an outsider as
+# not-a-member for the read and as not-an-administrator for the write,
+# one line apart.
+#
+# Two of them were not refusals at all. `branches_and_groups.sql`
+# wrapped two INSERTS THAT ARE MEANT TO SUCCEED in
+# `exception when others then v_ok := false`, and then asserted
+# `v_ok` -- so a column renamed out from under either one reported the
+# branch rule working. Both run unhandled now: if they raise, the real
+# error stops the file and names itself.
+#
+# ---------------------------------------------------------------------
+# What is deliberately still here
+#
+# The docstring says these are not all wrong, and `chat.sql` has the
+# clearest example of a right one. Two of its five are
+# `exception when others then null` around a statement run under row
+# level security, with the real assertion on the STATUS afterwards --
+# because an UPDATE a policy filters out does not raise at all, it
+# updates nothing. Its own comment says so, and says the first draft
+# asserted "the statement was refused" and failed. Converting those
+# would be worse tests for a smaller number.
+BUDGET = 53
 
 TESTS = Path(__file__).resolve().parent.parent / 'supabase' / 'tests'
 
