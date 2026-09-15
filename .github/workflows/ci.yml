@@ -918,6 +918,26 @@ jobs:
       - run: deno check cloudflare/email-router/mime_test.js
       - run: deno test cloudflare/email-router/mime_test.js
 
+      # Which company's credentials, and which environment's.
+      #
+      # `loadCredentials` takes the environment from the ORGANISATION
+      # and then filters the credentials on it. Since `0107` an
+      # organisation holds sandbox AND production at once, so the
+      # earlier version -- selecting on org_id alone -- matched two rows
+      # and maybeSingle() threw on the second set somebody configured.
+      # Getting it wrong now is quieter and worse: sandbox credentials
+      # against production is a rejected submission, and production
+      # credentials against a sandbox test is a real invoice filed with
+      # LHDN. An organisation with no setting must default to SANDBOX
+      # for the same reason.
+      #
+      # The Supabase client is faked rather than stubbed, so the tests
+      # assert WHICH FILTERS were applied rather than only what came
+      # back. `buildContext` is not covered -- it calls createClient and
+      # reads a real JWT.
+      - run: deno check supabase/functions/_shared/context_test.ts
+      - run: deno test supabase/functions/_shared/context_test.ts
+
       # The preflight, and what a failure is allowed to say. Both have
       # cost a working day.
       #
