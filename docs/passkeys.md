@@ -226,3 +226,23 @@ Whatever the approach, the test that would have caught this is the one to
 write first: build for web and assert that
 `.dart_tool/flutter_build/*/web_plugin_registrant.dart` does not mention
 `passkeys_web`.
+
+**That tripwire is laid.** `scripts/check_web_plugin_registrant.py` runs
+in the Flutter job on every commit, and it asks the question one step
+earlier than the sentence above: the generated registrant only exists
+after a web build, which in this repository happens in the deploy job —
+so a check on it fires where the white screen already fired. The check
+fires instead on the commit that ADDS the plugin. If `passkeys` is a
+dependency, `dependency_overrides` must point `passkeys_web` at a local
+`path:`, and a version override is refused because a version override is
+still the real implementation.
+
+It reads the generated registrant as well, when a local `flutter build
+web` has left one, and says which of the two answers it gave — a check
+that reports success for a file it never found is how a gate stops
+meaning anything.
+
+Verified against three pubspecs: the plugin added with no override (the
+commit that broke production), the plugin with a version override (the
+near miss), and the plugin with a local no-op (the supported way). It
+refuses the first two and passes the third.

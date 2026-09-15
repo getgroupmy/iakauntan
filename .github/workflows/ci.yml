@@ -48,6 +48,18 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+
+      # The `passkeys` plugin declares a WEB implementation, so adding
+      # it for a phone silently enrols `passkeys_web` into the web
+      # bundle -- whose registrant runs before `runApp` and calls a JS
+      # global this app does not load. That white-screened production,
+      # the landing page included, and nothing caught it: analyze is
+      # clean, `flutter build web` compiles it, and the failure is a
+      # missing global at runtime in a browser. Checked at the commit
+      # that ADDS the plugin rather than at the deploy that breaks.
+      - name: Check the web bundle carries no passkeys_web
+        run: python3 scripts/check_web_plugin_registrant.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
 
