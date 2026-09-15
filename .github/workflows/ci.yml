@@ -918,6 +918,29 @@ jobs:
       - run: deno check cloudflare/email-router/mime_test.js
       - run: deno test cloudflare/email-router/mime_test.js
 
+      # The preflight, and what a failure is allowed to say. Both have
+      # cost a working day.
+      #
+      # `ssm-search` shipped with its own CORS constant allowing
+      # `authorization, content-type`. supabase-js sends `x-client-info`
+      # on every call and `apikey` when the client carries one, so the
+      # browser refused the preflight BEFORE THE FUNCTION RAN -- no
+      # status, no body, nothing in the log, and on screen only
+      # "ClientException: Load failed". `check_edge_cors.py` refuses a
+      # function that writes its own headers; this asserts the shared
+      # list they all get is the right one.
+      #
+      # And `failUnexpected` must tell the caller nothing the error was
+      # holding. The test throws a Postgres unique-violation naming a
+      # constraint and a TIN, and asserts neither reaches the body --
+      # only a generic sentence and a reference that is useless to
+      # anyone but the person reading the log.
+      #
+      # --allow-env because the allowlist branch re-imports the module
+      # with ALLOWED_ORIGINS set; ALLOWED is read once at module load.
+      - run: deno check supabase/functions/_shared/cors_test.ts
+      - run: deno test --allow-env supabase/functions/_shared/cors_test.ts
+
       # The last thing that runs before an invoice leaves for LHDN.
       # `buildUblDocument` is pure, and everything it gets wrong is
       # rejected at validation or -- worse -- accepted carrying the
