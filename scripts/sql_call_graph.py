@@ -44,6 +44,25 @@ string this cannot see is a write it will miss, and the conservative
 half of that is the important half: the check built on this FAILS a
 build when it finds a write, so a miss is a gate that stays quiet, not
 a gate that fires wrongly.
+
+## The blind spot worth knowing before you build on this
+
+It reads `prosrc`, WHICH IS THE BODY AND NOTHING ELSE. A parameter's
+DEFAULT is not in it, and this schema puts load-bearing things there:
+
+    create function app.is_chat_participant(
+      p_conversation_id uuid,
+      p_user_id uuid default auth.uid())
+
+The caller's identity enters that function through a default, so a
+sweep for "functions with no `auth.uid()` anywhere" reports it as
+having no idea who is calling. It does. `pg_get_functiondef` shows the
+default because it reads `proargdefaults`; `prosrc` does not.
+
+Nothing here depends on that today -- a write does not hide in a
+default and neither does a discarded local -- but a check that asks
+about AUTHORIZATION will be wrong about it, and wrong in the direction
+that raises a false alarm on a function that is fine.
 """
 import re
 import json
