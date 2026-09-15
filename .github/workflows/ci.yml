@@ -1019,6 +1019,35 @@ jobs:
       - run: deno check supabase/functions/_shared/google_auth_test.ts
       - run: deno test supabase/functions/_shared/google_auth_test.ts
 
+      # The script an operator runs ONCE, checked against the code that
+      # consumes what it printed. `web_push_test.ts` already asserts the
+      # consumer end; nothing asserted that this end produces a pair
+      # that end accepts, and the two are as far apart in time as
+      # software gets -- a key printed in the wrong format surfaces
+      # weeks later as a browser refusing to subscribe, with no
+      # remaining connection to the afternoon somebody ran a keygen. So
+      # the test runs it for real and hands the output to
+      # `vapidAuthorization`, which does the pairing check itself.
+      #
+      # It also counts the private key's appearances in the output. One:
+      # in the secrets block. A second --dart-define carrying it would
+      # put the sending identity in a bundle anybody can read, and that
+      # mutant survived a check that only looked inside the public one.
+      - run: deno check supabase/functions/_shared/web_push_keygen_test.ts
+      - run: deno test supabase/functions/_shared/web_push_keygen_test.ts
+
+      # Six lines, and the one decision in them: `!value`, so a variable
+      # set to the empty string counts as missing. A secret set to "" in
+      # the dashboard is a secret that is not set, and it is the shape a
+      # mis-pasted value takes -- it would otherwise reach createClient
+      # and come back as a 401 from PostgREST, which reads as a
+      # permissions problem. With the control that "0" and "false" are
+      # ordinary values.
+      #
+      # --allow-env because it sets and clears its own variables.
+      - run: deno check supabase/functions/_shared/env_test.ts
+      - run: deno test --allow-env supabase/functions/_shared/env_test.ts
+
       # And turning what it found into something storage will take. A
       # name that cannot be a key and base64 that arrived wrapped are
       # both "the file is skipped", which reads from outside as "there
