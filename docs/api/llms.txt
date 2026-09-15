@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0593` (the highest applied migration).
+Schema version `0594` (the highest applied migration).
 665 functions and 330 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**490 of 665 functions carry a `comment on
+**497 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -185,11 +185,11 @@ Refused unless the company has the `loyalty` module switched on and the caller m
 
 Refused unless the company has the `memberships` module switched on and the caller may use it.
 
-- `cover_line_with_membership(p_line uuid, p_subscription uuid)` *(writes)*
+- `cover_line_with_membership(p_line uuid, p_subscription uuid)` *(writes)* — Discounts a bill line away against a membership and records the session used, returning what was covered.
 - `membership_balance(p_subscription uuid)`
 - `membership_billing_gaps(p_org uuid)` — Active memberships with no renewal schedule behind them.
 - `set_membership_status(p_subscription uuid, p_status app.pos_membership_status)` *(writes)* — Changes a membership's status and returns what it became.
-- `start_membership(p_sale uuid, p_membership uuid)` *(writes)*
+- `start_membership(p_sale uuid, p_membership uuid)` *(writes)* — Starts a membership off the sale that bought it, and sets up the renewal from the invoice that sale raised -- which already carries the right price, tax code and terms.
 
 ### pos (124)
 
@@ -201,9 +201,9 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `apply_pos_coupon(p_sale uuid, p_code text)` *(writes)* — Attaches a voucher to a parked bill, refusing a code that does not qualify rather than attaching it inert.
 - `assign_pos_delivery(p_delivery uuid, p_driver uuid)` *(writes)* — Puts a run on a driver's list, or moves it to another one.
 - `begin_pos_count(p_shift uuid)` *(writes)* — Stops the till while the drawer is counted.
-- `book_appointment(p_provider uuid, p_item uuid, p_starts_at timestamp with time zone, p_contact uuid, p_note text)` *(writes)*
+- `book_appointment(p_provider uuid, p_item uuid, p_starts_at timestamp with time zone, p_contact uuid, p_note text)` *(writes)* — Takes a slot with a provider.
 - `bump_kitchen_ticket(p_ticket uuid, p_status app.pos_ticket_status)` *(writes)* — Moves a docket along the kitchen screen — new, cooking, ready, served — and stamps the time it reached that state.
-- `check_in_booking(p_booking uuid, p_register uuid)` *(writes)*
+- `check_in_booking(p_booking uuid, p_register uuid)` *(writes)* — Marks the customer as arrived and opens the sale for the appointment, returning it.
 - `claim_pos_sale(p_sale uuid, p_register uuid)` *(writes)* — Moves an open bill onto this till, register and shift together, so the drawer that takes the money is the drawer it counts against.
 - `clear_pos_delivery(p_sale uuid)` *(writes)* — Takes the address and the fee back off a parked bill.
 - `close_pos_shift(p_shift uuid, p_declared numeric, p_notes text)` *(writes)* — Counts a drawer out.
@@ -365,7 +365,7 @@ Not gated on any module.
 - `adjust_attendance(p_record uuid, p_clock_in timestamp with time zone, p_clock_out timestamp with time zone, p_reason text)` *(writes)* — Corrects a day's clock times, recording who changed it and why.
 - `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)* — Records that a company has adopted a constitution, on the date it did.
 - `ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` *(writes)* — Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies.
-- `ai_ask(p_org_id uuid, p_question text, p_conversation uuid)` *(writes)*
+- `ai_ask(p_org_id uuid, p_question text, p_conversation uuid)` *(writes)* — Puts a question to the assistant and returns the conversation it belongs to, starting one when `p_conversation` is null.
 - `ai_conversation(p_id uuid)`
 - `ai_conversations_for(p_org_id uuid)`
 - `ai_run_tool(p_org_id uuid, p_tool text, p_args jsonb)` — Runs one allow-listed read for the assistant, as the caller — security invoker on purpose, so it cannot see what the person asking cannot.
@@ -583,8 +583,8 @@ Not gated on any module.
 - `my_payslip_access(p_org_id uuid)`
 - `next_contact_code(p_org_id uuid, p_type app.contact_type)` *(writes)* — The next code in the series for a contact of this type -- C-2026-00013, S-2026-00001, P-2026-00343.
 - `next_document_number(p_org_id uuid, p_doc_type text)` *(writes)* — Allocates the next number for a document type, e.g.
-- `ocr_begin(p_org_id uuid, p_attachment_id uuid)` *(writes)*
-- `ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` *(writes)*
+- `ocr_begin(p_org_id uuid, p_attachment_id uuid)` *(writes)* — Opens a scan and hands back what the caller needs to run it -- provider, endpoint, model, storage path -- having first charged for it.
+- `ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` *(writes)* — Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is `device` and `amount_charged` is zero.
 - `ocr_status(p_org_id uuid)`
 - `open_appraisal_cycle(p_cycle uuid)` *(writes)* — Creates an appraisal for everybody the cycle covers and returns how many were made.
 - `open_customer_portal(p_token text)` *(writes)* — What one customer owes, for somebody holding their portal token and no account.

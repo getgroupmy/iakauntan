@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0593",
+    "version": "0594",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18844,8 +18844,8 @@
     "/rpc/ai_ask": {
       "post": {
         "operationId": "ai_ask",
-        "summary": "Ai ask",
-        "description": "`public.ai_ask(p_org_id uuid, p_question text, p_conversation uuid)` Writes. Requires a signed-in user.",
+        "summary": "Puts a question to the assistant and returns the conversation it belongs to, starting one when\u2026",
+        "description": "Puts a question to the assistant and returns the conversation it belongs to, starting one when `p_conversation` is null. CHARGES RM0.20 BEFORE THE ANSWER and refuses when the credit is short: the model bills for the attempt, so charging afterwards would let a company at nil ask for ever. That price is a constant in the function rather than a setting -- unlike scanning, changing it is a migration. Needs the `ai` module and membership of the company; an existing conversation must be one you started, or you must be an administrator.\n\n`public.ai_ask(p_org_id uuid, p_question text, p_conversation uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -20778,8 +20778,8 @@
     "/rpc/book_appointment": {
       "post": {
         "operationId": "book_appointment",
-        "summary": "Book appointment",
-        "description": "`public.book_appointment(p_provider uuid, p_item uuid, p_starts_at timestamp with time zone, p_contact uuid, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Takes a slot with a provider",
+        "description": "Takes a slot with a provider. The end is worked out here, not passed in: the service's duration PLUS its turnaround, so the next customer is not booked into the time it takes to clean the chair. Refuses a provider who is inactive or not working then, and refuses a service with no duration set. The overlap message names the time of the clashing appointment -- but that look-up is only there to make a sentence; what actually decides is the exclusion constraint on the table, which has no window between the check and the insert for a second booking to slip through. Price and description are snapshotted from the item, so a later price change does not rewrite a quote. Needs the POS module.\n\n`public.book_appointment(p_provider uuid, p_item uuid, p_starts_at timestamp with time zone, p_contact uuid, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -24172,8 +24172,8 @@
     "/rpc/check_in_booking": {
       "post": {
         "operationId": "check_in_booking",
-        "summary": "Check in booking",
-        "description": "`public.check_in_booking(p_booking uuid, p_register uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Marks the customer as arrived and opens the sale for the appointment, returning it",
+        "description": "Marks the customer as arrived and opens the sale for the appointment, returning it. IDEMPOTENT ON PURPOSE: a booking that already has a sale returns that same sale rather than opening a second one, because a receptionist whose screen was slow will tap again, and two bills against one appointment is the kind of mess that is found at close of day. Refuses an appointment that was cancelled or marked a no-show, and refuses a register at a different outlet. Needs the POS module.\n\n`public.check_in_booking(p_booking uuid, p_register uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -28059,8 +28059,8 @@
     "/rpc/cover_line_with_membership": {
       "post": {
         "operationId": "cover_line_with_membership",
-        "summary": "Cover line with membership",
-        "description": "`public.cover_line_with_membership(p_line uuid, p_subscription uuid)` Writes. Requires a signed-in user. Refused unless the company has the `memberships` module and the caller may use it.",
+        "summary": "Discounts a bill line away against a membership and records the session used, returning what was covered",
+        "description": "Discounts a bill line away against a membership and records the session used, returning what was covered. THE AMOUNT IS COMPUTED FROM THE LINE AND CANNOT BE PASSED IN: a caller that could name it could cover a fifty-ringgit treatment with a ten-ringgit membership, and nothing downstream would have noticed. Refuses a bill that is not parked, a membership that is not active, an item the membership does not cover -- where a membership listing NO items covers everything, which is what unlimited means -- and a period with no sessions left. Needs the memberships module.\n\n`public.cover_line_with_membership(p_line uuid, p_subscription uuid)` Writes. Requires a signed-in user. Refused unless the company has the `memberships` module and the caller may use it.",
         "tags": [
           "memberships"
         ],
@@ -38788,8 +38788,8 @@
     "/rpc/ocr_begin": {
       "post": {
         "operationId": "ocr_begin",
-        "summary": "Ocr begin",
-        "description": "`public.ocr_begin(p_org_id uuid, p_attachment_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Opens a scan and hands back what the caller needs to run it -- provider, endpoint, model, storage path --\u2026",
+        "description": "Opens a scan and hands back what the caller needs to run it -- provider, endpoint, model, storage path -- having first charged for it. The price comes from the `ocr_providers` catalogue, so an operator can change it without a release. CHARGES NOTHING WHEN THE COMPANY IS ON ITS OWN KEY: it pays the provider directly and billing here would be charging twice; in that case the function instead refuses if the key has since been removed, because a scan with no key is a failure with no explanation. Refuses when scanning is switched off, and refuses with `0A000` when the chosen reader runs on the device -- there is nothing for the server to do. The scan row is written whether or not anything was charged. Needs `can_write`.\n\n`public.ocr_begin(p_org_id uuid, p_attachment_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -38845,8 +38845,8 @@
     "/rpc/ocr_record_local": {
       "post": {
         "operationId": "ocr_record_local",
-        "summary": "Ocr record local",
-        "description": "`public.ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` Writes. Requires a signed-in user.",
+        "summary": "Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is\u2026",
+        "description": "Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is `device` and `amount_charged` is zero. The row is written either way -- pass `p_error` and it is filed as failed -- so the history of what was read is complete even where no money moved. The mirror of `ocr_begin`: this one refuses when the company's reader does NOT run on the device, so a server-side reader cannot be billed as a free local one. Needs `can_write`.\n\n`public.ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -61656,8 +61656,8 @@
     "/rpc/start_membership": {
       "post": {
         "operationId": "start_membership",
-        "summary": "Start membership",
-        "description": "`public.start_membership(p_sale uuid, p_membership uuid)` Writes. Requires a signed-in user. Refused unless the company has the `memberships` module and the caller may use it.",
+        "summary": "Starts a membership off the sale that bought it, and sets up the renewal from the invoice that sale raised --\u2026",
+        "description": "Starts a membership off the sale that bought it, and sets up the renewal from the invoice that sale raised -- which already carries the right price, tax code and terms. TWO REFUSALS ARE THE POINT: the sale must be COMPLETED, because a membership that starts before the money is taken is an entitlement nobody paid for; and the membership's item must actually be on that sale, because otherwise this is a button that gives memberships away. Also needs a contact -- a membership belongs to a member. Needs the memberships module.\n\n`public.start_membership(p_sale uuid, p_membership uuid)` Writes. Requires a signed-in user. Refused unless the company has the `memberships` module and the caller may use it.",
         "tags": [
           "memberships"
         ],

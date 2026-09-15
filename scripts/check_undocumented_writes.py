@@ -110,7 +110,23 @@ if hasattr(signal, 'SIGPIPE'):
 # standard factor, deleting the pack does not raise at all. The line
 # re-derives against the standard dozen, thirty becomes thirty-six, and
 # nothing says a word.
-BUDGET = 27
+#
+# `0594` took the seven that consume something finite -- a credit
+# balance, a slot in somebody's day, a session out of a membership paid
+# for once. The question in all seven is what gets used up, WHEN, and
+# what stops it being used twice or given away. `ai_ask` charges before
+# the answer because the model bills for the attempt; `start_membership`
+# refuses until the sale completes, because otherwise the button gives
+# memberships away; and `cover_line_with_membership` computes the
+# covered amount from the line rather than taking it as an argument,
+# because a caller that could name it could cover a fifty-ringgit
+# treatment with a ten-ringgit membership.
+#
+# It also turned up two prices in one product: `ai_ask` carries RM0.20
+# as a constant in its own body, while `ocr_begin` reads the price off a
+# catalogue row an operator maintains. One is data and one is a
+# migration, and a caller should know which they are looking at.
+BUDGET = 20
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
