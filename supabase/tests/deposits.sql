@@ -1139,4 +1139,116 @@ begin
   raise notice 'create_deposit: 4 refusals, and the date the money arrived';
 end $$;
 
+-- =====================================================================
+-- A module that lapsed is a deposit you can no longer read
+-- =====================================================================
+--
+-- `deposit_history` takes an id, so it cannot filter rows out the way
+-- `deposit_notes_list` and `deposits_held_for` do. Before `0601` it
+-- checked the org and nothing else -- and that check could never fire,
+-- because it reads
+--
+--     if not can_read_module(org, 'sales')
+--        and not can_read_module(org, 'purchases')
+--
+-- and `sales` is a CORE module, so the first half is always false.
+--
+-- The tell was a variable: it selected `n.kind` into `v_kind` on its
+-- second line and never looked at it again. The whole check, read and
+-- thrown away.
+--
+-- What that left open is Purchases, which is not core and can lapse. A
+-- supplier deposit already in the books stayed readable afterwards --
+-- its events, their dates, their amounts and their free-text reasons --
+-- while both list functions had already stopped showing it.
+--
+-- The refusal's SHAPE is asserted too, and is half the point: a deposit
+-- the caller may not read must be indistinguishable from one that does
+-- not exist, or the two answers are a way to find out which ids are
+-- real, one guess at a time. That is the argument `0596` makes about
+-- `link_group_contact`.
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_sup   uuid;
+  v_cust  uuid;
+  v_dep   uuid;
+  v_cdep  uuid;
+  v_n     integer;
+begin
+  perform pg_temp.allow_many_companies();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Luput Sdn Bhd');
+  perform public.create_fiscal_year(v_org,
+                                    date_trunc('year', current_date)::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Kilang Rahsia', 'supplier') returning id into v_sup;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'A customer', 'customer') returning id into v_cust;
+
+  v_dep := public.create_deposit(v_org, 'supplier', v_sup,
+                                 current_date - 5, 700);
+  v_cdep := public.create_deposit(v_org, 'customer', v_cust,
+                                  current_date - 5, 900);
+  -- Something to read back. `settle_deposit` files a `deposit_events`
+  -- row carrying the reason somebody typed, which is the part of this
+  -- that is nobody else's business.
+  perform public.settle_deposit(v_dep, 'forfeit', 700,
+                                'Supplier kept the advance');
+
+  select count(*) into v_n from public.deposit_history(v_dep);
+  perform pg_temp.check_true('while Purchases is on, the history reads',
+    v_n >= 1);
+
+  -- Purchases lapses.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'purchases';
+
+  -- The two list functions already stopped showing it, which is what
+  -- made the third one a gap rather than a policy.
+  -- Asked for the supplier ones specifically: the customer deposit
+  -- below is still listed, on core Sales, and counting both would hide
+  -- which of them went away.
+  perform pg_temp.check_eq('the list stops showing it',
+    (select count(*)::integer
+       from public.deposit_notes_list(v_org, 'supplier', null)), 0);
+  perform pg_temp.check_eq('while still showing the customer one',
+    (select count(*)::integer
+       from public.deposit_notes_list(v_org, 'customer', null)), 1);
+  perform pg_temp.check_eq('and so does the one for the contact',
+    (select count(*)::integer from public.deposits_held_for(v_sup)), 0);
+
+  begin
+    perform public.deposit_history(v_dep);
+    raise exception
+      'FAIL: read a supplier deposit after Purchases lapsed';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   and the history stops with them';
+  end;
+
+  -- The same refusal an id that was never issued gets. If these two
+  -- ever differ, the refusal becomes an oracle for which ids are real.
+  begin
+    perform public.deposit_history(gen_random_uuid());
+    raise exception 'FAIL: a deposit that does not exist was readable';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   indistinguishable from an id that was never issued';
+  end;
+
+  -- And the check is about the KIND, not a blanket refusal that would
+  -- pass the assertions above by refusing everything.
+  perform public.deposit_history(v_cdep);
+  raise notice 'ok   while the customer deposit still reads, on core Sales';
+
+  -- Back on, and it reads again: a lapsed module hides the history, it
+  -- does not destroy it.
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'purchases';
+  select count(*) into v_n from public.deposit_history(v_dep);
+  perform pg_temp.check_true('renewing Purchases brings it back', v_n >= 1);
+
+  raise notice 'deposit_history: the kind is checked, and refuses like a gap';
+end $$;
+
 rollback;

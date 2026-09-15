@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0600",
+    "version": "0601",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -30309,8 +30309,8 @@
     "/rpc/deposit_history": {
       "post": {
         "operationId": "deposit_history",
-        "summary": "Deposit history",
-        "description": "`public.deposit_history(p_id uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "Everything that has happened to one deposit: what it was applied to, with the document number and date, and\u2026",
+        "description": "Everything that has happened to one deposit: what it was applied to, with the document number and date, and every event against it with its reason. NEEDS THE MODULE THE DEPOSIT'S OWN KIND BELONGS TO -- `sales` for a customer deposit, `purchases` for a supplier one -- and having the other is not having this one. A deposit the caller has no module for answers the same \"No such deposit.\" as an id that was never issued, so the refusal cannot be used to find out which ids are real.\n\n`public.deposit_history(p_id uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
         "tags": [
           "sales"
         ],

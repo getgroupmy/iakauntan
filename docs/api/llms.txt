@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0600` (the highest applied migration).
+Schema version `0601` (the highest applied migration).
 665 functions and 330 readable tables, of which
 255 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**517 of 665 functions carry a `comment on
+**518 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -335,7 +335,7 @@ Refused unless the company has the `sales` module switched on and the caller may
 - `contra_notes_list(p_org uuid, p_status text)`
 - `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text)` *(writes)* — Offsets a party's outstanding invoices against their outstanding bills.
 - `customer_payment_lags(p_org uuid)`
-- `deposit_history(p_id uuid)`
+- `deposit_history(p_id uuid)` — Everything that has happened to one deposit: what it was applied to, with the document number and date, and every event against it with its reason.
 - `deposit_notes_list(p_org uuid, p_kind text, p_status text)`
 - `deposits_held_for(p_contact uuid)`
 - `pdc_list(p_org uuid, p_direction text, p_status text)`
