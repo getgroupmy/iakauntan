@@ -548,6 +548,20 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_undocumented_writes.py "$DB"
 
+      # `docs/api/` files a function under ONE module, the first its
+      # body names, and twelve check more than one -- where the first
+      # name is at best half the answer. `create_contra` needs `sales`
+      # AND `purchases`, so a caller who switches on the one published
+      # still gets 42501; `pdc_list` needs EITHER, so a caller with
+      # only `purchases` reads "sales" and wrongly concludes it is shut
+      # to them. `not A or not B` and `not A and not B` are one
+      # character apart and mean opposite things, so the generator
+      # cannot tell them apart and the description has to. See 0602.
+      - name: Check a two-module gate says which modules
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_module_gates.py "$DB"
+
       # One level below the embeds, and the same string literal. The
       # screen that declares an employee's TP1 reliefs filtered
       # `statutory_schedules` on `schedule_type`, which this schema has

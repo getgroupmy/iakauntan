@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0601` (the highest applied migration).
+Schema version `0602` (the highest applied migration).
 665 functions and 330 readable tables, of which
 255 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**518 of 665 functions carry a `comment on
+**524 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -123,7 +123,7 @@ Refused unless the company has the `fixed_assets` module switched on and the cal
 
 Refused unless the company has the `forecasting` module switched on and the caller may use it.
 
-- `create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` *(writes)* — Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into the place that is short of it.
+- `create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` *(writes)* — Turns forecast reorder suggestions into purchase orders, one per supplier, and returns how many it raised.
 - `forecast_suggestions(p_org uuid, p_warehouse uuid)` — What the latest run for this organization and location says to order, with the item and supplier named and any draft orders already raised netted off.
 - `run_inventory_forecast(p_org uuid, p_warehouse uuid, p_as_of date)` *(writes)* — Forecasts every stocked item and records what it decided.
 
@@ -326,21 +326,22 @@ Refused unless the company has the `purchases` module switched on and the caller
 
 - `settle_pos_stalls(p_outlet uuid, p_from date, p_to date)` *(writes)* — Raises one posted purchase bill per stall for its takings less the court's commission, and records the period so the same days cannot be paid for twice.
 
-### sales (11)
+### sales (12)
 
 Refused unless the company has the `sales` module switched on and the caller may use it.
 
-- `contra_candidates(p_contact uuid)`
-- `contra_lines(p_id uuid)`
-- `contra_notes_list(p_org uuid, p_status text)`
+- `contra_candidates(p_contact uuid)` — What could be set off against what for one party: their unpaid invoices and their unpaid bills, in the company's own currency.
+- `contra_lines(p_id uuid)` — The two sides of one contra note -- which invoices and which bills it set off, and for how much.
+- `contra_notes_list(p_org uuid, p_status text)` — The company's contra notes, newest first, optionally narrowed to one status.
 - `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text)` *(writes)* — Offsets a party's outstanding invoices against their outstanding bills.
+- `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` *(writes)* — Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both.
 - `customer_payment_lags(p_org uuid)`
 - `deposit_history(p_id uuid)` — Everything that has happened to one deposit: what it was applied to, with the document number and date, and every event against it with its reason.
-- `deposit_notes_list(p_org uuid, p_kind text, p_status text)`
-- `deposits_held_for(p_contact uuid)`
-- `pdc_list(p_org uuid, p_direction text, p_status text)`
-- `pdc_maturing(p_org uuid, p_from date, p_to date)` — Cheques still outstanding that mature by a date, plus any already past their date and not banked — which is the whole reason to look.
-- `void_contra(p_id uuid, p_reason text)` *(writes)* — Voids a contra -- the set-off between what a contact owes and what they are owed -- and reverses its journal.
+- `deposit_notes_list(p_org uuid, p_kind text, p_status text)` — Money held before there was anything to bill: customer deposits and supplier advances, optionally narrowed to one kind or status.
+- `deposits_held_for(p_contact uuid)` — The deposits still holding money for one contact, with what is left on each.
+- `pdc_list(p_org uuid, p_direction text, p_status text)` — Post-dated cheques on hand, optionally narrowed by direction or status.
+- `pdc_maturing(p_org uuid, p_from date, p_to date)` — The post-dated cheques falling due between two dates, which is the list somebody works from on a Monday.
+- `void_contra(p_id uuid, p_reason text)` *(writes)* — Reverses a contra note, putting the balance back on both the invoices and the bills it settled.
 
 ### ticketing (8)
 
@@ -350,12 +351,12 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `assign_ticket(p_ticket uuid, p_user uuid)` *(writes)* — Hands a ticket to somebody.
 - `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` *(writes)* — Raises a support ticket.
 - `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)* — Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an event that records both levels and the reason.
-- `module_dashboard(p_org_id uuid)` — Figures for the modules a company holds and this caller may read, keyed by module code.
+- `module_dashboard(p_org_id uuid)` — One figure set per module for the company's home screen, built in Kuala Lumpur time.
 - `revoke_ticket_share(p_ticket uuid)` *(writes)* — Turns off every share link for one support ticket, returning the count.
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (458)
+### general (457)
 
 Not gated on any module.
 
@@ -476,7 +477,6 @@ Not gated on any module.
 - `correct_registered_office(p_entity uuid, p_address text)` *(writes)* — Corrects a registered office address that was recorded wrongly.
 - `create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` *(writes)* — Records a transfer between two of the company's own bank accounts, ready to post.
 - `create_contact_as(p_contact_id uuid, p_type app.contact_type)` *(writes)* — A second record of the same company, in another role: the details, addresses and people copied, a code from that role's own series, the source left as it was.
-- `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` *(writes)* — Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both.
 - `create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text)` *(writes)* — Records a deposit taken from a customer or paid to a supplier, and posts it: money moved, and a LIABILITY for a customer deposit rather than revenue, because it is not earned until the invoice it is held against exists.
 - `create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` *(writes)* — Records and posts a deposit taken from a customer or paid to a supplier, once.
 - `create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` *(writes)* — Starts an accounting practice and makes the caller a partner in it -- without that, nobody could do anything with it afterwards.

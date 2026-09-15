@@ -125,8 +125,26 @@ select coalesce(json_agg(x), '[]'::json)
       -- of a function's subject that lives in the code rather than in
       -- somebody's naming convention. Null means the function is not
       -- module-gated at all, which is itself worth knowing.
+      --
+      -- `module` is the FIRST one, and is what this function is filed
+      -- under -- a function has to live under one heading. `modules` is
+      -- all of them, because thirteen functions name more than one and
+      -- publishing only the first was wrong in both directions:
+      -- `create_contra` needs `sales` AND `purchases`, so a caller who
+      -- reads "sales", switches it on and retries still gets 42501;
+      -- `pdc_list` needs EITHER, so a caller with only `purchases`
+      -- reads "sales" and concludes it is shut to them when it would
+      -- have returned their outgoing cheques. Which of the two it is
+      -- lives in the description, where `check_module_gates.py`
+      -- insists every one of these names all of them.
       'module', (regexp_match(
           p.prosrc, 'can_(?:read|write)_module\([^,]+,\s*''([a-z_]+)'''))[1],
+      'modules', (
+        select coalesce(json_agg(distinct m[1] order by m[1]), '[]'::json)
+          from regexp_matches(
+                 p.prosrc,
+                 'can_(?:read|write)_module\([^,]+,\s*''([a-z_]+)''',
+                 'g') as m),
       'roles', (
         select array_agg(r)
           from unnest(%(roles)s::text[]) r
@@ -394,10 +412,18 @@ def operation(fn: dict, enums: dict, tables: frozenset) -> dict:
         ('Reachable without signing in.' if 'anon' in (fn['roles'] or [])
          else 'Requires a signed-in user.'),
     ]
-    if fn['module']:
+    others = [m for m in (fn.get('modules') or []) if m != fn['module']]
+    if fn['module'] and not others:
         note.append(
             f"Refused unless the company has the `{fn['module']}` module "
             'and the caller may use it.')
+    elif fn['module']:
+        named = ', '.join(f'`{m}`' for m in sorted(
+            [fn['module']] + others))
+        note.append(
+            f'Checks more than one module: {named}. Whether all of them '
+            'are needed or any one will do is in the description above; '
+            'it is filed here under the first.')
 
     return {
         'operationId': fn['name'],
@@ -761,6 +787,44 @@ def llms_txt(fns: list, tables: list, version: str) -> str:
     return '\n'.join(lines)
 
 
+
+def share_modules_across_overloads(fns: list) -> None:
+    """Overloads of one name are gated by whichever one actually runs.
+
+    `create_contra` has two: the five-argument function, which requires
+    BOTH `sales` and `purchases`, and `0307`'s six-argument idempotency
+    wrapper, whose own body delegates and so carries no guard at all.
+
+    The wrapper has the longer signature, so it wins the shared
+    `/rpc/create_contra` path -- and it published the whole function as
+    gated on NOTHING, filed under `general`, while calling it with
+    either module missing raises 42501. The gate was always enforced;
+    it was the description that said otherwise, which is the expensive
+    way round for somebody deciding what to buy.
+
+    So the modules of every overload of a name belong to all of them.
+    `module`, the one it is filed under, is taken from the overload with
+    the FEWEST arguments that names any -- the inner function rather
+    than the wrapper around it, which is where the guard is written and
+    therefore where its order means something.
+    """
+    by_name: dict[str, list] = {}
+    for fn in fns:
+        by_name.setdefault(fn['name'], []).append(fn)
+
+    for group in by_name.values():
+        if len(group) < 2:
+            continue
+        union = sorted({m for fn in group for m in (fn['modules'] or [])})
+        if not union:
+            continue
+        inner = sorted((f for f in group if f['module']),
+                       key=lambda f: len(f['args']))
+        primary = inner[0]['module'] if inner else union[0]
+        for fn in group:
+            fn['modules'] = list(union)
+            fn['module'] = primary
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('database_url')
@@ -776,6 +840,7 @@ def main() -> int:
     # The small lists inside each row, for the same reason.
     for row in fns:
         row['roles'] = sorted(row['roles'] or [])
+    share_modules_across_overloads(fns)
     for row in tables:
         row['privileges'] = sorted(row['privileges'] or [])
     version = schema_version()

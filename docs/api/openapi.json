@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0601",
+    "version": "0602",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -26353,8 +26353,8 @@
     "/rpc/contra_candidates": {
       "post": {
         "operationId": "contra_candidates",
-        "summary": "Contra candidates",
-        "description": "`public.contra_candidates(p_contact uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "What could be set off against what for one party: their unpaid invoices and their unpaid bills, in the\u2026",
+        "description": "What could be set off against what for one party: their unpaid invoices and their unpaid bills, in the company's own currency. NEEDS BOTH `sales` AND `purchases` -- a contra has one end in each ledger, so having one module is having half the answer, and the function refuses rather than showing that half. Since Sales is a core module every company already has it, so in practice this turns on Purchases.\n\n`public.contra_candidates(p_contact uuid)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -26439,8 +26439,8 @@
     "/rpc/contra_lines": {
       "post": {
         "operationId": "contra_lines",
-        "summary": "Contra lines",
-        "description": "`public.contra_lines(p_id uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "The two sides of one contra note -- which invoices and which bills it set off, and for how much",
+        "description": "The two sides of one contra note -- which invoices and which bills it set off, and for how much. NEEDS BOTH `sales` AND `purchases`, for the same reason the note itself does. Since Sales is core, in practice it turns on Purchases.\n\n`public.contra_lines(p_id uuid)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -26515,8 +26515,8 @@
     "/rpc/contra_notes_list": {
       "post": {
         "operationId": "contra_notes_list",
-        "summary": "Contra notes list",
-        "description": "`public.contra_notes_list(p_org uuid, p_status text)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "The company's contra notes, newest first, optionally narrowed to one status",
+        "description": "The company's contra notes, newest first, optionally narrowed to one status. NEEDS BOTH `sales` AND `purchases`: every row has an end in each ledger, so this is not a list a company with one of them can be shown a part of. Since Sales is core, in practice it turns on Purchases.\n\n`public.contra_notes_list(p_org uuid, p_status text)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -28266,9 +28266,9 @@
       "post": {
         "operationId": "create_contra",
         "summary": "Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both",
-        "description": "Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both. The protected overload: `p_idempotency_key` has no default, and a retry with the same key returns the first call's answer rather than contra-ing twice. Both sides must belong to one company and one contact.\n\n`public.create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
+        "description": "Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both. The protected overload: `p_idempotency_key` has no default, and a retry with the same key returns the first call's answer rather than contra-ing twice. Both sides must belong to one company and one contact.\n\n`public.create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
-          "general"
+          "sales"
         ],
         "x-volatility": "volatile",
         "x-roles": [
@@ -28815,8 +28815,8 @@
     "/rpc/create_po_from_suggestions": {
       "post": {
         "operationId": "create_po_from_suggestions",
-        "summary": "Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into\u2026",
-        "description": "Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into the place that is short of it. Items with no supplier come back as a final row with a null document rather than being dropped.\n\n`public.create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` Writes. Requires a signed-in user. Refused unless the company has the `forecasting` module and the caller may use it.",
+        "summary": "Turns forecast reorder suggestions into purchase orders, one per supplier, and returns how many it raised",
+        "description": "Turns forecast reorder suggestions into purchase orders, one per supplier, and returns how many it raised. NEEDS BOTH, AT TWO DIFFERENT POINTS AND IN THIS ORDER: `forecasting` to read the suggestions, checked first, and WRITE on `purchases` to raise the orders, checked second. So a company with Forecasting and no Purchases gets past the first gate and fails at the second, having raised nothing -- the two refusals name different modules and both are real.\n\n`public.create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` Writes. Requires a signed-in user. Checks more than one module: `forecasting`, `purchases`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "forecasting"
         ],
@@ -30310,7 +30310,7 @@
       "post": {
         "operationId": "deposit_history",
         "summary": "Everything that has happened to one deposit: what it was applied to, with the document number and date, and\u2026",
-        "description": "Everything that has happened to one deposit: what it was applied to, with the document number and date, and every event against it with its reason. NEEDS THE MODULE THE DEPOSIT'S OWN KIND BELONGS TO -- `sales` for a customer deposit, `purchases` for a supplier one -- and having the other is not having this one. A deposit the caller has no module for answers the same \"No such deposit.\" as an id that was never issued, so the refusal cannot be used to find out which ids are real.\n\n`public.deposit_history(p_id uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "description": "Everything that has happened to one deposit: what it was applied to, with the document number and date, and every event against it with its reason. NEEDS THE MODULE THE DEPOSIT'S OWN KIND BELONGS TO -- `sales` for a customer deposit, `purchases` for a supplier one -- and having the other is not having this one. A deposit the caller has no module for answers the same \"No such deposit.\" as an id that was never issued, so the refusal cannot be used to find out which ids are real.\n\n`public.deposit_history(p_id uuid)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -30384,8 +30384,8 @@
     "/rpc/deposit_notes_list": {
       "post": {
         "operationId": "deposit_notes_list",
-        "summary": "Deposit notes list",
-        "description": "`public.deposit_notes_list(p_org uuid, p_kind text, p_status text)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "Money held before there was anything to bill: customer deposits and supplier advances, optionally narrowed to\u2026",
+        "description": "Money held before there was anything to bill: customer deposits and supplier advances, optionally narrowed to one kind or status. EITHER `sales` OR `purchases` gets you in, AND THE ROWS FOLLOW THE ONE YOU HAVE -- customer deposits need `sales`, supplier ones need `purchases`, and a company with one module sees its half rather than a refusal. Since Sales is core the door is always open, so what Purchases decides is whether the supplier rows appear.\n\n`public.deposit_notes_list(p_org uuid, p_kind text, p_status text)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -30545,8 +30545,8 @@
     "/rpc/deposits_held_for": {
       "post": {
         "operationId": "deposits_held_for",
-        "summary": "Deposits held for",
-        "description": "`public.deposits_held_for(p_contact uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "The deposits still holding money for one contact, with what is left on each",
+        "description": "The deposits still holding money for one contact, with what is left on each. EITHER `sales` OR `purchases` gets you in, AND THE ROWS FOLLOW THE ONE YOU HAVE: a customer's deposits need `sales` and a supplier's need `purchases`. Since Sales is core, what Purchases decides is whether a supplier's advances appear. A deposit hidden this way is hidden, not deleted -- switch the module back on and it is there.\n\n`public.deposits_held_for(p_contact uuid)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -37713,8 +37713,8 @@
     "/rpc/module_dashboard": {
       "post": {
         "operationId": "module_dashboard",
-        "summary": "Figures for the modules a company holds and this caller may read, keyed by module code",
-        "description": "Figures for the modules a company holds and this caller may read, keyed by module code. One object rather than one call per module, because the dashboard opens every tab it is allowed to. Money is never converted here (0303) and every date is Malaysian (0305).\n\n`public.module_dashboard(p_org_id uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "One figure set per module for the company's home screen, built in Kuala Lumpur time",
+        "description": "One figure set per module for the company's home screen, built in Kuala Lumpur time. CHECKS SEVEN MODULES AND REQUIRES NONE OF THEM: `ticketing`, `pos`, `inventory`, `hr`, `payroll`, `crm` and `secretarial` each gate their own section, so the answer is a jsonb object carrying a key for every module this company has and nothing for the rest. A missing key means the module is off or hidden, NOT that the figure is zero -- the two are different and only one of them is worth telephoning somebody about. The only thing it insists on is membership of the company; it is filed under `ticketing` in this document because that is the first module its body names, which is an artefact of the filing and not a claim about the function.\n\n`public.module_dashboard(p_org_id uuid)` Reads only. Requires a signed-in user. Checks more than one module: `crm`, `hr`, `inventory`, `payroll`, `pos`, `secretarial`, `ticketing`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "ticketing"
         ],
@@ -40206,8 +40206,8 @@
     "/rpc/pdc_list": {
       "post": {
         "operationId": "pdc_list",
-        "summary": "Pdc list",
-        "description": "`public.pdc_list(p_org uuid, p_direction text, p_status text)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "Post-dated cheques on hand, optionally narrowed by direction or status",
+        "description": "Post-dated cheques on hand, optionally narrowed by direction or status. EITHER `sales` OR `purchases` gets you in, AND THE ROWS FOLLOW THE ONE YOU HAVE -- incoming cheques need `sales`, outgoing ones need `purchases`. So a company with only Purchases is NOT shut out despite `sales` being the module this is filed under: it sees its outgoing cheques. Since Sales is core the door is always open, and Purchases decides whether the outgoing half appears.\n\n`public.pdc_list(p_org uuid, p_direction text, p_status text)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -40315,8 +40315,8 @@
     "/rpc/pdc_maturing": {
       "post": {
         "operationId": "pdc_maturing",
-        "summary": "Cheques still outstanding that mature by a date, plus any already past their date and not banked \u2014 which is\u2026",
-        "description": "Cheques still outstanding that mature by a date, plus any already past their date and not banked \u2014 which is the whole reason to look.\n\n`public.pdc_maturing(p_org uuid, p_from date, p_to date)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "The post-dated cheques falling due between two dates, which is the list somebody works from on a Monday",
+        "description": "The post-dated cheques falling due between two dates, which is the list somebody works from on a Monday. EITHER `sales` OR `purchases` gets you in, AND THE ROWS FOLLOW THE ONE YOU HAVE: incoming need `sales`, outgoing need `purchases`. Since Sales is core, Purchases decides whether the cheques this company has written appear beside the ones it is waiting on.\n\n`public.pdc_maturing(p_org uuid, p_from date, p_to date)` Reads only. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
@@ -46045,7 +46045,7 @@
       "post": {
         "operationId": "pos_receipt_text",
         "summary": "The receipt as plain text, wrapped to the outlet's paper width",
-        "description": "The receipt as plain text, wrapped to the outlet's paper width. Rendered on the server so the counter, the phone, the kiosk and an hour-later reprint all produce the same paper.\n\n`public.pos_receipt_text(p_sale uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "description": "The receipt as plain text, wrapped to the outlet's paper width. Rendered on the server so the counter, the phone, the kiosk and an hour-later reprint all produce the same paper. NEEDS `pos`. IT ALSO CHECKS `loyalty`, and that one is not a gate but a SECTION: the points earned and the balance are printed only for a company that has Loyalty, on a sale attached to a member, with points switched on in the receipt settings. Without the module the receipt still prints, one block shorter -- which is why somebody looking for missing points should check the module before the settings.\n\n`public.pos_receipt_text(p_sale uuid)` Reads only. Requires a signed-in user. Checks more than one module: `loyalty`, `pos`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "pos"
         ],
@@ -66139,8 +66139,8 @@
     "/rpc/void_contra": {
       "post": {
         "operationId": "void_contra",
-        "summary": "Voids a contra -- the set-off between what a contact owes and what they are owed -- and reverses its journal",
-        "description": "Voids a contra -- the set-off between what a contact owes and what they are owed -- and reverses its journal. The reason is REQUIRED, and the function says why when it is missing: a contra reversed without a reason is a set-off nobody can account for afterwards. Refuses one already void. Both invoices and bills go back to standing on their own.\n\n`public.void_contra(p_id uuid, p_reason text)` Writes. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "Reverses a contra note, putting the balance back on both the invoices and the bills it settled",
+        "description": "Reverses a contra note, putting the balance back on both the invoices and the bills it settled. NEEDS WRITE ON BOTH `sales` AND `purchases`, the same pair as creating one -- undoing it touches both ledgers exactly as making it did. Since Sales is core, in practice this turns on Purchases.\n\n`public.void_contra(p_id uuid, p_reason text)` Writes. Requires a signed-in user. Checks more than one module: `purchases`, `sales`. Whether all of them are needed or any one will do is in the description above; it is filed here under the first.",
         "tags": [
           "sales"
         ],
