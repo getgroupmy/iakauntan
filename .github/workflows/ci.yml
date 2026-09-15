@@ -1003,6 +1003,22 @@ jobs:
       - run: deno check supabase/functions/_shared/myinvois_test.ts
       - run: deno test supabase/functions/_shared/myinvois_test.ts
 
+      # The forty lines that stand in for a Google SDK. A real RSA key
+      # is generated in the test process and the assertion the function
+      # builds is VERIFIED against the public half, because every
+      # mistake available in here -- base64url that left a `+` in, a
+      # signature over the wrong bytes, a PEM whose escaped newlines
+      # were never unescaped -- produces a well-formed string that
+      # Google rejects as `invalid_grant` and says nothing else about.
+      #
+      # The PEM cases are the ones that arrive from real customers: a
+      # key pasted through something that escaped its newlines, and one
+      # carrying a non-breaking space, which is not ASCII whitespace,
+      # which `atob` refuses, and which is what a key copied out of a
+      # rendered page or a PDF contains.
+      - run: deno check supabase/functions/_shared/google_auth_test.ts
+      - run: deno test supabase/functions/_shared/google_auth_test.ts
+
       # And turning what it found into something storage will take. A
       # name that cannot be a key and base64 that arrived wrapped are
       # both "the file is skipped", which reads from outside as "there
