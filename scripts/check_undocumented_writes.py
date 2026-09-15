@@ -83,8 +83,21 @@ if hasattr(signal, 'SIGPIPE'):
 # the wrong way round on purpose, keeping the EARLIEST punch. `0588`
 # took the eight that carry work from a name somebody wrote down to an
 # invoice, where `close_project` turns out to be a refusal with money
-# in it rather than the tidy-up its name suggests.
-BUDGET = 38
+# in it rather than the tidy-up its name suggests. `0592` took the
+# seven about something that has left one place and not arrived at the
+# other -- a post-dated cheque, an unmatched statement line, a van of
+# stock -- where the question a caller cannot answer from the signature
+# is WHEN this moves the money and when it only moves the record of it.
+# Two of the seven deliberately post nothing, and `deposit_pdc` is the
+# whole argument in one function: an entry on the day a cheque is paid
+# in would put the money in the bank three days early.
+#
+# It also turned up the failure mode this check cannot see. `record_pdc`
+# has two overloads; the unprotected one carried the only description
+# and the idempotent one, which is the one a client should call, had
+# none. The query below counts functions, so a documented sibling does
+# nothing for the signature beside it.
+BUDGET = 31
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0591` (the highest applied migration).
+Schema version `0592` (the highest applied migration).
 665 functions and 330 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**479 of 665 functions carry a `comment on
+**486 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -146,9 +146,9 @@ Refused unless the company has the `inventory` module switched on and the caller
 - `landed_cost_preview(p_run uuid)`
 - `landed_cost_runs_list(p_org uuid, p_status text)`
 - `post_landed_cost_run(p_run uuid)` *(writes)* — Puts a run's charges onto the cost of the goods that are still on the shelf, and takes the same money back off the accounts they were coded to.
-- `receive_stock_transfer(p_id uuid, p_counts jsonb)` *(writes)*
+- `receive_stock_transfer(p_id uuid, p_counts jsonb)` *(writes)* — Books the stock in at the far end and clears goods in transit.
 - `run_item_conversion(p_conversion uuid, p_times numeric, p_warehouse uuid)` *(writes)* — Cuts one item up into others — a carcass into cuts, a drum into bottles — moving stock out of the source and into the outputs, with the source's cost split across them by `cost_share`.
-- `send_stock_transfer(p_id uuid)` *(writes)*
+- `send_stock_transfer(p_id uuid)` *(writes)* — Takes stock out of the sending store and puts its value in goods in transit -- debit transit, credit inventory -- so the stock is on neither shelf and the balance sheet still has it.
 - `set_item_weighed(p_item uuid, p_weighed boolean, p_plu text)` *(writes)* — Marks an item as sold by weight, with the PLU the scale prints.
 - `stock_transfer_lines_for(p_transfer uuid)`
 - `stock_transfers_list(p_org uuid, p_status app.stock_transfer_status)`
@@ -447,7 +447,7 @@ Not gated on any module.
 - `company_export_manifest(p_org_id uuid)` *(writes)* — Every table holding this company's data, with a row count.
 - `company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` *(writes)* — Returns one page of one table of the whole company, for somebody taking their data out.
 - `company_transfer_history(p_org_id uuid)`
-- `complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` *(writes)*
+- `complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` *(writes)* — Closes a reconciliation, and refuses two things in an order that matters.
 - `confirm_manufacturing_order(p_mo_id uuid)` *(writes)*
 - `connect_bank_feed(p_bank_account_id uuid, p_provider text, p_api_key text, p_api_secret text, p_account_ref text)` *(writes)* — Connect or re-credential a bank feed.
 - `contact_duplicates(p_org_id uuid)` — Live records of one company carrying the same registration number, ID or TIN and not yet linked.
@@ -499,10 +499,10 @@ Not gated on any module.
 - `decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` *(writes)* — Approves or refuses an auditor's request to see payslips.
 - `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for a name on our domain.
 - `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
-- `deposit_pdc(p_id uuid, p_on date)` *(writes)*
+- `deposit_pdc(p_id uuid, p_on date)` *(writes)* — Marks a held cheque as paid in, and POSTS NOTHING.
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
 - `detach_company_from_firm(p_org_id uuid)` *(writes)* — Ends the appointment between a company and the accounting practice keeping its books, and returns how many memberships it removed.
-- `disconnect_bank_feed(p_bank_account_id uuid)` *(writes)*
+- `disconnect_bank_feed(p_bank_account_id uuid)` *(writes)* — Revokes a bank feed's stored credentials and stops it importing.
 - `discount_pos_sale(p_sale uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces a whole bill, by a percentage or by an amount.
 - `discount_pos_sale_line(p_line uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces one line, by a percentage or by an amount, with a reason and a name against it.
 - `dismiss_notification(p_id uuid)` *(writes)*
@@ -670,7 +670,7 @@ Not gated on any module.
 - `record_export(p_org_id uuid, p_what text, p_detail text)` *(writes)* — Writes that somebody took a copy of something.
 - `record_group_payment(p_paid_on date, p_reference text, p_lines jsonb, p_note text)` *(writes)* — One payment covering documents in several companies: one receipt (or supplier payment) per company and contact, linked by a batch that holds no money.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text)` *(writes)* — Puts a post-dated cheque in the register and takes the document it settles off the aged listing, without touching the bank balance.
-- `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)*
+- `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)* — The same as the eleven-argument `record_pdc`, and THE ONE TO CALL: the extra `p_idempotency_key` makes a retry return the cheque the first attempt recorded rather than recording a second one.
 - `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)* — Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period.
 - `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` *(writes)*
 - `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
@@ -797,7 +797,7 @@ Not gated on any module.
 - `transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` *(writes)* — The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion.
 - `transfer_outstanding(p_source_id uuid, p_target_type text)`
 - `unlink_contact_record(p_contact_id uuid)` *(writes)* — Takes one record out of its company, for a link made on a number that turned out to be a typing mistake.
-- `unmatch_bank_transaction(p_transaction_id uuid)` *(writes)*
+- `unmatch_bank_transaction(p_transaction_id uuid)` *(writes)* — Breaks the link between a statement line and what it was matched to, leaving the line on the statement and the document alone.
 - `unread_notifications(p_org uuid)`
 - `unregister_device(p_token text)` *(writes)*
 - `unverify_person_identity(p_person uuid)` *(writes)* — Withdraws the identity verification on a director, shareholder or officer — for a document found to be false, or a check done against the wrong person.
