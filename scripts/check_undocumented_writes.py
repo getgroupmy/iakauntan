@@ -16,7 +16,7 @@ None of that was written anywhere a caller would look.
 
     python3 scripts/check_undocumented_writes.py "$DATABASE_URL"
 
-## A ratchet, not a rule
+## A ratchet that reached the bottom
 
 `check_blind_catches.py` carries a budget for the same reason and says
 it plainly: "the number should go DOWN rather than up". Two hundred
@@ -26,6 +26,16 @@ until all of them were written would be turned off within the week.
 So this fails a build that ADDS one, and fails a build that removes
 some without lowering the budget -- which is what keeps the number
 honest. `0569`, `0570` and `0571` took it from 278.
+
+`0599` took it to zero, and at zero the budget stops being a budget:
+every write in the described surface now carries a description, and
+the next one that does not will be a NEW one. Which is the right place
+for this check to end up -- a comment written beside the rule it
+describes, while the rule is being written, costs a paragraph; the
+same comment written eighteen months later costs an afternoon of
+reading the body to find out what it refuses.
+
+There is nothing to lower any more. Do not raise it.
 
 ## Why the comment and not a document
 
@@ -158,7 +168,37 @@ if hasattr(signal, 'SIGPIPE'):
 # security stops from ever seeing it while the clock runs on. And
 # `transition_ticket` is not a status setter at all; it is the SLA
 # clock, pausing and resuming in working hours.
-BUDGET = 7
+#
+# `0598` took the three where a plan becomes a commitment --
+# `open_requisition`, `close_requisition`,
+# `confirm_manufacturing_order`. `open_requisition` refuses a vacancy
+# with no hiring manager, because applications to a requisition nobody
+# owns go into a queue nobody is reading. `close_requisition` cannot
+# record a vacancy as FILLED -- that is `hire_applicant`'s -- and
+# treats "on hold" as not closed, so it keeps no closing date and
+# stays in the count. And `confirm_manufacturing_order` explodes the
+# bill of materials with scrap ADDED rather than deducted, and DELETES
+# the existing components and operations first, so a re-confirm
+# replaces rather than doubles.
+#
+# `0599` took the last four, and one of them was not a write.
+# `org_payment_gateway_status` reads four columns and returns them;
+# it had been counted here for its whole life because PLPGSQL'S
+# DEFAULT VOLATILITY IS VOLATILE and nobody had said otherwise. The
+# fix was `alter function ... stable`, not a paragraph describing a
+# write that does not happen.
+#
+# That is `check_stable_writers.py`'s mistake with the sign flipped,
+# and it is the cheap direction: a read declared VOLATILE costs a
+# planner optimisation and a place in this list, and breaks nothing,
+# which is why it survived six hundred migrations. `0599`'s header
+# carries the query that finds the rest -- 37 of them on the applied
+# schema -- and the reason they were left rather than swept: a
+# function whose own body is clean but which CALLS a writer reads as a
+# pure read to that query, and marking that one STABLE is how a page
+# starts returning 25006.
+
+BUDGET = 0
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
@@ -219,6 +259,11 @@ def main() -> int:
         print(f'Lower BUDGET in {Path(__file__).name} to {n} to hold the '
               f'ground.')
         return 1
+
+    if BUDGET == 0:
+        print('Every write a signed-in user can reach carries a '
+              '`comment on function`.')
+        return 0
 
     print(f'{n} undocumented writes, at the budget.')
     return 0

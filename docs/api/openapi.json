@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0597",
+    "version": "0599",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -25330,8 +25330,8 @@
     "/rpc/close_requisition": {
       "post": {
         "operationId": "close_requisition",
-        "summary": "Close requisition",
-        "description": "`public.close_requisition(p_requisition uuid, p_status app.requisition_status, p_closed_on date)` Writes. Requires a signed-in user.",
+        "summary": "Stops a vacancy, by cancelling it or putting it on hold",
+        "description": "Stops a vacancy, by cancelling it or putting it on hold. IT CANNOT RECORD ONE AS FILLED -- that is `hire_applicant`'s to say, because it has somebody to attach it to, and a requisition marked filled with nobody hired is a headcount that will not reconcile to a payroll. ON HOLD IS NOT CLOSED: a requisition parked while somebody decides is still a vacancy, so it gets no closing date and stays on the open list and in the count; only a cancellation is dated. Refuses a date in the future and a date before the vacancy opened, because a negative time-to-hire is not an error anybody notices -- it is an average that quietly improves. Needs `can_manage_hr`.\n\n`public.close_requisition(p_requisition uuid, p_status app.requisition_status, p_closed_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -25954,8 +25954,8 @@
     "/rpc/confirm_manufacturing_order": {
       "post": {
         "operationId": "confirm_manufacturing_order",
-        "summary": "Confirm manufacturing order",
-        "description": "`public.confirm_manufacturing_order(p_mo_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Turns a drafted works order into one the floor can work to, by EXPLODING ITS BILL OF MATERIALS into the\u2026",
+        "description": "Turns a drafted works order into one the floor can work to, by EXPLODING ITS BILL OF MATERIALS into the order: every component and every operation, scaled by how many times over the recipe is being made. Until this runs the order names a product and a quantity and nothing that could be issued against it. Scrap is ADDED rather than deducted -- needing twenty with one in twenty wasted means issuing twenty-one -- so the quantity required is the line divided by the remainder, not multiplied by the waste. The existing components and operations are DELETED first, so confirming again replaces the explosion rather than doubling it, and any adjustment somebody made by hand goes with it. Draft only, and the order must have a bill of materials. Needs `can_post`.\n\n`public.confirm_manufacturing_order(p_mo_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -30999,8 +30999,8 @@
     "/rpc/dispose_fixed_asset": {
       "post": {
         "operationId": "dispose_fixed_asset",
-        "summary": "Dispose fixed asset",
-        "description": "`public.dispose_fixed_asset(p_asset_id uuid, p_date date, p_proceeds numeric, p_bank_account_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Takes a fixed asset off the books on `p_date` and returns the id of the journal entry it posted",
+        "description": "Takes a fixed asset off the books on `p_date` and returns the id of the journal entry it posted. The entry carries TWO things, not one: the disposal itself -- accumulated depreciation and any proceeds debited, the asset relieved at cost, the difference to gain or loss through `app.disposal_account` -- and THE DEPRECIATION NOBODY HAS POSTED YET. An asset depreciates daily and the schedule runs monthly, so on the day it leaves there is almost always a catch-up owing; it is charged to 6400 here, in this same journal, and filed as a `depreciation_runs` row pointing at it so the asset's history is whole. If there is a catch-up and the chart has no 6400 THE WHOLE DISPOSAL REFUSES rather than relieving that amount off the balance sheet without it ever reaching the profit and loss. Accounts come off the asset where it names them, else 1510, 1590 and 6400 from the seeded chart (1510 and not 1500, which is a header nothing may post to). `p_proceeds` debits `p_bank_account_id`'s GL account, or 1120 if none is named -- it is booked as CASH, never as a receivable, so a disposal on credit puts money in the ledger that has not arrived. NO `bank_transactions` ROW IS WRITTEN: the proceeds are invisible to bank reconciliation until the real credit lands on the statement. Accumulated depreciation is never reduced -- the greater of the computed and the stored figure is used. Refuses a disposal dated before acquisition, and refuses an asset already disposed of, so it cannot be run twice. Needs posting rights.\n\n`public.dispose_fixed_asset(p_asset_id uuid, p_date date, p_proceeds numeric, p_bank_account_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -39379,8 +39379,8 @@
     "/rpc/open_requisition": {
       "post": {
         "operationId": "open_requisition",
-        "summary": "Open requisition",
-        "description": "`public.open_requisition(p_requisition uuid, p_opened_on date)` Writes. Requires a signed-in user.",
+        "summary": "Opens a vacancy so it can be applied to, from draft or from on hold, and clears any closing date a previous\u2026",
+        "description": "Opens a vacancy so it can be applied to, from draft or from on hold, and clears any closing date a previous hold left behind. REFUSES ONE WITH NO HIRING MANAGER: applications to a requisition nobody owns go into a queue nobody is reading, and the refusal is the only thing standing between a candidate and silence. Refuses an opening date in the future -- a vacancy cannot have opened on a day that has not happened, and time-to-hire is measured from this. Defaults to today in Malaysian time. Needs `can_manage_hr`.\n\n`public.open_requisition(p_requisition uuid, p_opened_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -39645,12 +39645,12 @@
     "/rpc/org_payment_gateway_status": {
       "post": {
         "operationId": "org_payment_gateway_status",
-        "summary": "Org payment gateway status",
-        "description": "`public.org_payment_gateway_status(p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what\u2026",
+        "description": "Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what is configured without being shown the credentials. NEVER RETURNS A KEY: `has_api_key` and `has_signature_key` are booleans saying whether one is stored. `collection_ref` IS returned, deliberately -- a collection id is useless to anybody without the key beside it, and somebody checking their set-up needs to see which pot they pointed payments at. Administrator only. Reads only; declared STABLE since `0599`, having been VOLATILE by plpgsql's default since it was written.\n\n`public.org_payment_gateway_status(p_org_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
-        "x-volatility": "volatile",
+        "x-volatility": "stable",
         "x-roles": [
           "authenticated"
         ],
@@ -39729,8 +39729,8 @@
     "/rpc/org_save_login_page": {
       "post": {
         "operationId": "org_save_login_page",
-        "summary": "Org save login page",
-        "description": "`public.org_save_login_page(p_org_id uuid, p_title text, p_body text)` Writes. Requires a signed-in user.",
+        "summary": "Writes the heading and body shown on this company's own sign-in page, creating the row on first save",
+        "description": "Writes the heading and body shown on this company's own sign-in page, creating the row on first save. WHAT IS TYPED HERE IS PUBLIC: the table is closed to `anon`, but `workspace_by_host` is not, and it hands `title` and `body` to anyone who names the company's web address, before anybody has signed in to anything. Both arguments distinguish absent from empty -- null leaves the current wording alone, and a blank or whitespace-only string clears it back to null, which the screen reads as \"use the platform's wording\". Owner or administrator only, and refuses unless the company has the `workspace_address` module, because without its own web address there is no sign-in page of its own to write on. Records who saved it and when.\n\n`public.org_save_login_page(p_org_id uuid, p_title text, p_body text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63679,8 +63679,8 @@
     "/rpc/update_recurring_template": {
       "post": {
         "operationId": "update_recurring_template",
-        "summary": "Update recurring template",
-        "description": "`public.update_recurring_template(p_id uuid, p_document_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Re-photographs a recurring schedule's template from an existing document, which must be an invoice for a\u2026",
+        "description": "Re-photographs a recurring schedule's template from an existing document, which must be an invoice for a sales schedule or a bill for a purchase one, not deleted, AND BELONGING TO THE SAME COMPANY -- copying across organizations would put one company's prices into another's billing. The snapshot is taken once, here: later edits to that document do not reach the schedule. This is also the repair for a schedule that bills short, because `app.snapshot_document` whitelists the header columns it copies, so a column added to the document table after the snapshot was taken is missing from everything raised off it -- `0416` (service charge) and `0441` (the tax on it) were both that, and re-pointing the schedule at a document raised today picks them up. IT ALSO MOVES THE CUSTOMER: `contact_id` is overwritten from the source document, so copying from an invoice raised for somebody else re-aims every future run at them. Nothing else about the schedule changes -- frequency, next run date and occurrence count are left alone. Needs posting rights.\n\n`public.update_recurring_template(p_id uuid, p_document_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

@@ -317,6 +317,26 @@ begin
   perform pg_temp.check_eq('carrying the whole charge',
     (select fa.accumulated_depreciation from public.fixed_assets fa
       where fa.id = v_fa), 1200);
+
+  -- And what the disposal deliberately does NOT do, asserted because
+  -- `0599` publishes it: the proceeds debit the bank account's LEDGER
+  -- account and no statement line is invented to go with them. The
+  -- money is in the books and absent from the reconciliation until the
+  -- real credit arrives from the bank, which is right -- a disposal is
+  -- not evidence that anybody has paid.
+  --
+  -- A future migration that had the disposal write its own
+  -- `bank_transactions` row would make that description false AND
+  -- double the money at reconciliation, matching the invented line
+  -- against the real one. Nothing else would say so.
+  perform pg_temp.check_eq(
+    'no statement line is invented for the proceeds',
+    (select count(*) from public.bank_transactions bt
+      where bt.bank_account_id = v_bank_b), 0);
+  perform pg_temp.check_eq('nor for any other account of this company',
+    (select count(*) from public.bank_transactions bt
+      join public.bank_accounts ba on ba.id = bt.bank_account_id
+     where ba.org_id = v_org), 0);
 end $$;
 
 -- =====================================================================

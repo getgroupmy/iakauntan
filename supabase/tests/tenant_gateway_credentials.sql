@@ -158,6 +158,21 @@ begin
       where p.oid = 'public.org_payment_gateway_status(uuid)'::regprocedure
         and a.name in ('api_key', 'signature_key')), 0);
 
+  -- And that it still says it does not write. `0599` marked it STABLE,
+  -- which it had always been in fact and never in the catalog --
+  -- plpgsql defaults to VOLATILE, so for its whole life this read sat
+  -- in `check_undocumented_writes.py`'s list of writes.
+  --
+  -- The declaration is worth an assertion because a later
+  -- `create or replace` that forgets the word silently puts it back,
+  -- and because the published description in `docs/api/` now counts it
+  -- among the functions that only read. Nothing else would notice: a
+  -- read declared VOLATILE works perfectly.
+  perform pg_temp.check_eq('and is still declared a read, not a write',
+    (select p.provolatile::text from pg_proc p
+      where p.oid = 'public.org_payment_gateway_status(uuid)'::regprocedure),
+    's');
+
   -- ------------------------------------------------------------------
   -- Who may
   -- ------------------------------------------------------------------
