@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0594",
+    "version": "0595",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -30945,8 +30945,8 @@
     "/rpc/dismiss_notification": {
       "post": {
         "operationId": "dismiss_notification",
-        "summary": "Dismiss notification",
-        "description": "`public.dismiss_notification(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Takes a notification off the list for good, and marks it read on the way past if it was not -- dismissed but\u2026",
+        "description": "Takes a notification off the list for good, and marks it read on the way past if it was not -- dismissed but unread is a state nothing needs. Same reach and same silence as `mark_notification_read`: yours or the company's, false for anything else whether it exists or not. A company-wide notice is one row, so dismissing it removes it from EVERY member's list, not just the caller's.\n\n`public.dismiss_notification(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -36906,8 +36906,8 @@
     "/rpc/mark_all_notifications_read": {
       "post": {
         "operationId": "mark_all_notifications_read",
-        "summary": "Mark all notifications read",
-        "description": "`public.mark_all_notifications_read(p_org uuid)` Writes. Requires a signed-in user.",
+        "summary": "Marks everything currently unread in one company read and returns how many",
+        "description": "Marks everything currently unread in one company read and returns how many. Leaves dismissed ones alone -- they are gone already -- and leaves notifications addressed to OTHER people alone, so this is not a way to clear a colleague's list. Company-wide notices are included, and those are shared, so this clears them for everybody. Unlike the single-row calls it raises `42501` rather than returning a count when the caller is not a member: the company is named in the argument, so there is nothing to protect by staying silent.\n\n`public.mark_all_notifications_read(p_org uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -36961,8 +36961,8 @@
     "/rpc/mark_notification_read": {
       "post": {
         "operationId": "mark_notification_read",
-        "summary": "Mark notification read",
-        "description": "`public.mark_notification_read(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Marks one notification read, and returns whether anything changed",
+        "description": "Marks one notification read, and returns whether anything changed. Reaches a notification addressed to you, and one addressed to nobody in particular -- WHICH IS SHARED: a company-wide notice is a single row with a single `read_at`, so reading it reads it for every member. Somebody else's is not yours to touch, and the answer for one of those is the same false as for a notification that does not exist, deliberately: distinguishing them would confirm that another person's notification is there. Already-read keeps its original timestamp rather than moving.\n\n`public.mark_notification_read(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -49877,8 +49877,8 @@
     "/rpc/register_device": {
       "post": {
         "operationId": "register_device",
-        "summary": "Register device",
-        "description": "`public.register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` Writes. Requires a signed-in user.",
+        "summary": "Records a device to send push notifications to, and returns its row",
+        "description": "Records a device to send push notifications to, and returns its row. Keyed ON THE TOKEN, not on the pair of user and token: one handset is one row, belonging to whoever is signed in on it now, so a colleague signing in on a shared tablet takes the row over rather than adding a second and getting the first person's notifications (0141). A browser subscription must bring its `p256dh` and `auth` keys or there is nothing to encrypt the notification to, and a phone must not bring them; on a re-subscribe the keys are REPLACED rather than merged, because a browser that re-subscribes has thrown the old keypair away. Platform is android, ios or web.\n\n`public.register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -52415,8 +52415,8 @@
     "/rpc/report_feedback": {
       "post": {
         "operationId": "report_feedback",
-        "summary": "Report feedback",
-        "description": "`public.report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Files a bug report or a suggestion, and is the ONE WRITE IN THIS API THAT DOES NOT STAY WITH THE TENANT\u2026",
+        "description": "Files a bug report or a suggestion, and is the ONE WRITE IN THIS API THAT DOES NOT STAY WITH THE TENANT: `feedback_reports` is the platform's table, read by whoever runs the service rather than by the company. `p_org_id` is optional and is only a label saying which company the person was in at the time -- it is checked for membership when given, so it cannot be used to file against somebody else. `p_severity` is kept only for a bug; a severity on a suggestion is dropped rather than refused. Needs a signed-in user and a one-line title, and nothing else.\n\n`public.report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63457,8 +63457,8 @@
     "/rpc/unregister_device": {
       "post": {
         "operationId": "unregister_device",
-        "summary": "Unregister device",
-        "description": "`public.unregister_device(p_token text)` Writes. Requires a signed-in user.",
+        "summary": "Stops sending to one device",
+        "description": "Stops sending to one device. Deletes by token AND by the signed-in user, so it only ever removes your own -- and, following from `register_device` keying on the token alone, it does nothing at all if somebody else has since signed in on that handset and taken the row over. That is the intended outcome: the row now belongs to them, and the notifications going to it are theirs.\n\n`public.unregister_device(p_token text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

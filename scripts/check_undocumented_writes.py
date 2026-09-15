@@ -126,7 +126,19 @@ if hasattr(signal, 'SIGPIPE'):
 # as a constant in its own body, while `ocr_begin` reads the price off a
 # catalogue row an operator maintains. One is data and one is a
 # migration, and a caller should know which they are looking at.
-BUDGET = 20
+#
+# `0595` took the six that are not scoped by a company at all -- the
+# ones that ask `auth.uid()` rather than `app.can_*`. Two of them turned
+# out not to be personal after all: `notifications` is one table with
+# `read_at` on the row and no per-person read state, so a notice
+# addressed to NOBODY is the company's, and one member reading it has
+# read it for everyone. `notifications.sql` asserts that now, so a
+# per-person read table added later fails the test rather than quietly
+# falsifying the description.
+#
+# `report_feedback` is the one write in this API that does not stay
+# with the tenant: `feedback_reports` is the platform's table.
+BUDGET = 14
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

@@ -246,4 +246,57 @@ begin
         and read_at is null), 1);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A notice addressed to nobody is addressed to everybody
+-- ---------------------------------------------------------------------
+--
+-- The half `0595` publishes and this file did not assert. A
+-- notification with a null `user_id` is ONE ROW for the whole company:
+-- `read_at` and `dismissed_at` live on it, and there is no per-person
+-- read state anywhere. So the boss marking the e-Invoice rejection read
+-- marks it read for the clerk too, and dismissing it takes it off
+-- everybody's list.
+--
+-- That is a reasonable design for a company-wide notice and a
+-- surprising one to meet by accident, which is why the description now
+-- says it. If somebody later adds a per-person read table, this
+-- assertion fails and the description has to be rewritten with it --
+-- which is the point of asserting it rather than only writing it down.
+do $$
+declare
+  f      pg_temp.fixture;
+  v_open uuid;
+begin
+  select * into f from pg_temp.fixture;
+
+  select id into v_open from public.notifications
+   where org_id = f.org and kind = 'fs_lodgement_due';
+
+  perform pg_temp.check_true('the lodgement notice is nobody''s in particular',
+    (select user_id is null from public.notifications where id = v_open));
+
+  -- The boss has already marked everything read, the line above
+  -- included. The clerk never touched it.
+  perform pg_temp.sign_in_as(f.clerk);
+  set local role authenticated;
+  perform pg_temp.check_eq(
+    'and one person reading it has read it for the whole company',
+    (select count(*)::integer from public.my_notifications(f.org)
+      where kind = 'fs_lodgement_due' and read_at is null), 0);
+  reset role;
+
+  perform pg_temp.sign_in_as(f.boss);
+  perform public.dismiss_notification(v_open);
+
+  perform pg_temp.sign_in_as(f.clerk);
+  set local role authenticated;
+  perform pg_temp.check_eq(
+    'and one person dismissing it takes it off everybody''s list',
+    (select count(*)::integer from public.my_notifications(f.org)
+      where kind = 'fs_lodgement_due'), 0);
+  reset role;
+
+  perform pg_temp.sign_in_as(f.boss);
+end $$;
+
 rollback;
