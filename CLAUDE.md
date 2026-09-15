@@ -44,9 +44,22 @@ type error in `pay-invoice-callback` was found by CI rather than before the
 push. Green there is not green in CI: every call made *on* the Supabase client
 is unchecked. Red there is red in CI.
 
-Where there is no `deno` either, it hands over to `check_with_tsc.sh` on its
-own — same entry points, same supabase-js stub, plus a narrow declaration of
-the four pieces of Deno this repository uses. It needs a `tsc`
+Where there is no `deno`, it now **fetches one from npm** before giving up.
+`dl.deno.land` is what Deno's own installer uses and is exactly what a
+locked-down network refuses, but Deno is published to npm as well, and
+`registry.npmjs.org` is reachable from the same places — so one
+`npm install` produces a real `deno` where the installer cannot. Cached
+under `$TMPDIR/iakauntan-deno`; `DENO_SKIP_NPM=1` goes straight to the
+fallback.
+
+It then runs **the ten `deno test` files CI runs**, reading their names and
+flags out of `ci.yml` so the list cannot drift, and refusing to start if the
+count it matched disagrees with the count the workflow names. Those tests had
+never run anywhere but CI.
+
+Only where npm cannot supply one either does it hand over to
+`check_with_tsc.sh` — same entry points, same supabase-js stub, plus a narrow
+declaration of the four pieces of Deno this repository uses. It needs a `tsc`
 (`npm install --no-save typescript@5`, or set `TSC`). Weaker again, in the same
 direction: green under tsc is not green under `deno check`, which is not green
 in CI, and red at any level is red at every level above it.
