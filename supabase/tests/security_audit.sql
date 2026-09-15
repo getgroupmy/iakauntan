@@ -187,7 +187,6 @@ declare
   v_org      uuid;
   v_other    uuid;
   v_stranger uuid;
-  v_failed   boolean;
 begin
   v_org := pg_temp.test_org('Kilang Selamat Tiga Sdn Bhd');
 
@@ -220,13 +219,13 @@ begin
   v_stranger := pg_temp.another_user('stranger-audit@iakauntan.test');
   perform pg_temp.sign_in_as(v_stranger);
 
-  v_failed := false;
-  begin
-    perform public.record_export(v_org, 'Everything');
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('an outsider cannot record an export', v_failed);
+  -- On the words. All three refusals here are 42501 and they are two
+  -- different rules -- not a member at all, versus a member who is not
+  -- an owner or admin -- so asserting the code alone passes when the
+  -- wrong one fires.
+  perform pg_temp.check_refused('an outsider cannot record an export',
+    format($q$ select public.record_export(%L, 'Everything') $q$, v_org),
+    '%Not a member of this organization%', '42501');
 
   perform public.report_denied(v_org, 'anything', 'from outside');
   perform pg_temp.check_eq('and cannot write a refusal into it either',
@@ -243,7 +242,6 @@ declare
   v_org    uuid;
   v_owner  uuid;
   v_clerk  uuid;
-  v_failed boolean;
 begin
   v_org   := pg_temp.test_org('Kilang Selamat Empat Sdn Bhd');
   v_owner := pg_temp.test_user();
@@ -273,21 +271,15 @@ begin
   values (v_org, v_clerk, 'accounts_clerk', 'active');
   perform pg_temp.sign_in_as(v_clerk);
 
-  v_failed := false;
-  begin
-    perform public.security_log(v_org);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('a clerk cannot read the security log', v_failed);
+  perform pg_temp.check_refused('a clerk cannot read the security log',
+    format($q$ select public.security_log(%L) $q$, v_org),
+    '%may read the security log%', '42501');
 
-  v_failed := false;
-  begin
-    perform public.audit_trail(v_org);
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('nor the change log', v_failed);
+  -- A different message from the one above, and that is the point:
+  -- two logs, two rules, one sqlstate.
+  perform pg_temp.check_refused('nor the change log',
+    format($q$ select public.audit_trail(%L) $q$, v_org),
+    '%may read the audit trail%', '42501');
 
   -- And nothing was recorded as read for the attempts that failed.
   perform pg_temp.sign_in_as(v_owner);

@@ -45,7 +45,6 @@ declare
   v_token    text;
   v_role     text;
   v_demoted  boolean;
-  v_promoted boolean;
   v_deleted  boolean;
   v_took     boolean;
   r          record;
@@ -132,24 +131,30 @@ begin
   begin
     set local role authenticated;
     v_role := current_user;
-    begin
-      update public.org_members set role = 'viewer'
-       where org_id = v_org and user_id = v_owner;
-      v_demoted := found;
-    exception when others then v_demoted := false;
-    end;
-    begin
-      update public.org_members set role = 'owner'
-       where org_id = v_org and user_id = v_admin;
-      v_promoted := found;
-    exception when others then v_promoted := false;
-    end;
-    begin
-      delete from public.org_members
-       where org_id = v_org and user_id = v_owner;
-      v_deleted := found;
-    exception when others then v_deleted := false;
-    end;
+    -- Two of these are FILTERED and one is REFUSED, and the difference
+    -- is worth keeping visible. Row level security's `using` clause
+    -- takes the owner's row out of reach, so the demotion and the
+    -- delete simply match nothing and `found` is false. Promoting
+    -- yourself touches your OWN row, which `using` allows through, and
+    -- it is the `with check` that stops it -- so that one raises.
+    --
+    -- All three used to sit behind `exception when others then
+    -- v_x := false`, which reports a typo in the column name as the
+    -- policy holding. The two that cannot raise now run bare, and the
+    -- one that does asserts on what it said.
+    update public.org_members set role = 'viewer'
+     where org_id = v_org and user_id = v_owner;
+    v_demoted := found;
+
+    perform pg_temp.check_refused(
+      'nor promote themselves into the owner''s chair',
+      format($q$ update public.org_members set role = 'owner'
+                  where org_id = %L and user_id = %L $q$, v_org, v_admin),
+      '%violates row-level security policy%', '42501');
+
+    delete from public.org_members
+     where org_id = v_org and user_id = v_owner;
+    v_deleted := found;
   end;
   reset role;
 
@@ -157,8 +162,6 @@ begin
     v_role, 'authenticated');
   perform pg_temp.check_true('an admin cannot demote the owner by hand either',
     not v_demoted);
-  perform pg_temp.check_true('nor promote themselves into the owner''s chair',
-    not v_promoted);
   perform pg_temp.check_true('nor delete the owner outright', not v_deleted);
   perform pg_temp.check_eq('the owner is untouched by all three',
     (select role::text from public.org_members

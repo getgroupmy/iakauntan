@@ -448,7 +448,6 @@ declare
   v_item_a uuid := pg_temp.stocked(v_a, 'WIDGET', 0, 0);
   v_item_b uuid := pg_temp.stocked(v_b, 'WIDGET', 0, 0);
   v_branch uuid;
-  v_ok boolean;
 begin
   insert into public.branches (org_id, code, name)
   values (v_a, 'KL', 'Kuala Lumpur') returning id into v_branch;
@@ -456,36 +455,32 @@ begin
   -- Control one: no branch at all is the ordinary case and has to stay
   -- ordinary, or this guard broke every company that never opens a
   -- second place.
-  begin
-    insert into public.manufacturing_orders
-      (org_id, order_no, item_id, warehouse_id, quantity)
-    values (v_b, 'MO-NONE', v_item_b, app.default_warehouse(v_b), 1);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('an order with no branch is fine', v_ok);
+  -- A control asserts the insert SUCCEEDS, so no handler: one that
+  -- turned any error into `v_ok := false` reported a failing insert as
+  -- the branch guard working, including a column renamed out from under
+  -- it. Unhandled, the real error stops the file and names itself.
+  insert into public.manufacturing_orders
+    (org_id, order_no, item_id, warehouse_id, quantity)
+  values (v_b, 'MO-NONE', v_item_b, app.default_warehouse(v_b), 1);
+  raise notice 'ok   an order with no branch is fine';
 
   -- Control two: its own company's branch is the point of the feature.
-  begin
-    insert into public.manufacturing_orders
-      (org_id, order_no, item_id, warehouse_id, quantity, branch_id)
-    values (v_a, 'MO-OWN', v_item_a, app.default_warehouse(v_a), 1, v_branch);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('and its own company''s branch is fine', v_ok);
+  insert into public.manufacturing_orders
+    (org_id, order_no, item_id, warehouse_id, quantity, branch_id)
+  values (v_a, 'MO-OWN', v_item_a, app.default_warehouse(v_a), 1, v_branch);
+  raise notice 'ok   and its own company''s branch is fine';
 
   -- The one that matters.
-  begin
-    insert into public.manufacturing_orders
-      (org_id, order_no, item_id, warehouse_id, quantity, branch_id)
-    values (v_b, 'MO-BORROWED', v_item_b, app.default_warehouse(v_b), 1,
-            v_branch);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true(
-    'but another company''s branch is refused', not v_ok);
+  -- And the refusal on its words. 23514 is a check constraint and this
+  -- insert could fail one for several reasons that are not the branch.
+  perform pg_temp.check_refused(
+    'but another company''s branch is refused',
+    format($q$ insert into public.manufacturing_orders
+                 (org_id, order_no, item_id, warehouse_id, quantity,
+                  branch_id)
+               values (%L, 'MO-BORROWED', %L, %L, 1, %L) $q$,
+           v_b, v_item_b, app.default_warehouse(v_b), v_branch),
+    '%branch belongs to another company%', '23514');
 end $$;
 
 -- ---------------------------------------------------------------------

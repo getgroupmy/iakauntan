@@ -116,13 +116,15 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.test_org('Kedai Tiada Alamat', array['sales']);
-  v_state text;
 begin
-  begin
-    perform public.org_save_login_page(v_org, 'Masuk', null);
-  exception when others then v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('no address, no page to write', v_state, '42501');
+  -- On the words, not on 42501. All three refusals in this file are
+  -- 42501 and the first is a DIFFERENT rule from the other two -- no
+  -- web address at all, versus a member who is not an administrator.
+  -- Asserting the code alone passes when the wrong one fires.
+  perform pg_temp.check_refused('no address, no page to write',
+    format($q$ select public.org_save_login_page(%L, 'Masuk', null) $q$,
+           v_org),
+    '%does not have its own web address%', '42501');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -137,17 +139,16 @@ do $$
 declare
   v_org uuid := pg_temp.test_org('Sinar Tuan');
   v_outsider uuid := pg_temp.another_user('outsider-login@test.local');
-  v_state text; v_title text;
+  v_title text;
 begin
   perform public.org_save_login_page(v_org, 'Sinar sahaja', null);
 
   perform pg_temp.sign_in_as(v_outsider);
-  begin
-    perform public.org_save_login_page(v_org, 'Bukan Sinar', null);
-  exception when others then v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('a stranger cannot rewrite a company''s door',
-                           v_state, '42501');
+  perform pg_temp.check_refused(
+    'a stranger cannot rewrite a company''s door',
+    format($q$ select public.org_save_login_page(%L, 'Bukan Sinar', null) $q$,
+           v_org),
+    '%Only an owner or an administrator may write%', '42501');
 
   select p.title into v_title
     from public.org_login_pages p where p.org_id = v_org;
@@ -160,7 +161,6 @@ do $$
 declare
   v_org uuid := pg_temp.test_org('Sinar Kerani');
   v_clerk uuid := pg_temp.another_user('clerk-login@test.local');
-  v_state text;
 begin
   insert into public.org_members (org_id, user_id, role, status)
   values (v_org, v_clerk, 'accounts_clerk', 'active')
@@ -168,12 +168,12 @@ begin
                                               status = 'active';
 
   perform pg_temp.sign_in_as(v_clerk);
-  begin
-    perform public.org_save_login_page(v_org, 'Kerani tulis', null);
-  exception when others then v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('a clerk is a member, not a spokesman',
-                           v_state, '42501');
+  -- The same message as the stranger above, and deliberately so: being
+  -- inside the company is not the thing this rule asks about.
+  perform pg_temp.check_refused('a clerk is a member, not a spokesman',
+    format($q$ select public.org_save_login_page(%L, 'Kerani tulis', null) $q$,
+           v_org),
+    '%Only an owner or an administrator may write%', '42501');
 end $$;
 
 -- ---------------------------------------------------------------------

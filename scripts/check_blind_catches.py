@@ -69,6 +69,25 @@ from pathlib import Path
 # ---------------------------------------------------------------------
 # What is deliberately still here
 #
+# 53 to 41: `org_login_page.sql`, `security_audit.sql`,
+# `manufacturing.sql` and `invitations.sql`. Same story again --
+# `security_audit.sql`'s three 42501s are two different rules, and
+# `org_login_page.sql`'s three are two.
+#
+# `invitations.sql` was the one worth reading carefully, because its
+# three were not the same thing as each other. Under row level
+# security the `using` clause takes the owner's row out of reach, so
+# demoting the owner and deleting them MATCH NOTHING and `found` is
+# false -- no exception at all. Promoting yourself touches your OWN
+# row, which `using` lets through, and it is the `with check` that
+# stops it, so that one really does raise. Two filtered, one refused,
+# all three behind the same `exception when others then v_x := false`.
+# The two that cannot raise run bare now and the one that does asserts
+# on what it said.
+#
+# ---------------------------------------------------------------------
+# What is deliberately still here
+#
 # The docstring says these are not all wrong, and `chat.sql` has the
 # clearest example of a right one. Two of its five are
 # `exception when others then null` around a statement run under row
@@ -77,7 +96,7 @@ from pathlib import Path
 # updates nothing. Its own comment says so, and says the first draft
 # asserted "the statement was refused" and failed. Converting those
 # would be worse tests for a smaller number.
-BUDGET = 53
+BUDGET = 41
 
 TESTS = Path(__file__).resolve().parent.parent / 'supabase' / 'tests'
 
