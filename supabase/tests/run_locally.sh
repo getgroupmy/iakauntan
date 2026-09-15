@@ -388,9 +388,57 @@ $(ci_guards)
 GUARDS
 
   unit_tests || failed=1
+  workflow_paths || failed=1
 
   if [ $failed -eq 0 ]; then echo "schema and client agree"; fi
   return $failed
+}
+
+# ---------------------------------------------------------------------
+# A guard whose path only works from the root
+# ---------------------------------------------------------------------
+#
+# `ci_guards` harvests `python3 scripts/<name>.py` out of ci.yml and
+# runs each one FROM THE REPOSITORY ROOT, where they all work. The
+# `flutter` job does not run from the root: it declares
+#
+#     defaults:
+#       run:
+#         working-directory: app
+#
+# so a guard step added there becomes `python3 app/scripts/...` and
+# fails with "can't open file" -- while passing here, every time.
+#
+# That is not hypothetical. `check_web_plugin_registrant.py` went in
+# that way and took CI red on its first run, with every local gate
+# green beforehand.
+workflow_paths() {
+  python3 - "$ROOT" <<'PATHSPY'
+import re, sys
+
+text = open(sys.argv[1] + '/.github/workflows/ci.yml').read()
+bad = []
+for m in re.finditer(r'python3 scripts/([A-Za-z0-9_]+[.]py)', text):
+    head = text[:m.start()]
+    jobs = re.findall(r'^  ([a-z0-9_-]+):$', head, re.M)
+    if not jobs:
+        continue
+    block = text[head.rindex('\n  ' + jobs[-1] + ':'):m.start()]
+    # The job's `defaults:` are everything before its first `steps:`.
+    if 'working-directory: app' not in block.split('steps:')[0]:
+        continue
+    step = text[max(0, m.start() - 400):m.start()]
+    if 'working-directory: .' in step.rsplit('- name:', 1)[-1]:
+        continue
+    bad.append((jobs[-1], m.group(1)))
+
+for job, name in bad:
+    print('FAIL  scripts/' + name)
+    print('  runs in the `' + job + '` job, which defaults to app/,')
+    print('  and does not say `working-directory: .`. In CI that is')
+    print('  `python3 app/scripts/' + name + '`, which does not exist.')
+sys.exit(1 if bad else 0)
+PATHSPY
 }
 
 # ---------------------------------------------------------------------

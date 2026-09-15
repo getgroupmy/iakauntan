@@ -57,7 +57,16 @@ jobs:
       # clean, `flutter build web` compiles it, and the failure is a
       # missing global at runtime in a browser. Checked at the commit
       # that ADDS the plugin rather than at the deploy that breaks.
+      #
+      # `working-directory: .` because this job DEFAULTS to `app`, and
+      # the script lives at the repository root. Without it the step is
+      # `python3 app/scripts/...`, which does not exist -- and nothing
+      # local catches that, because `run_locally.sh`'s `ci_guards`
+      # harvests these lines out of this file and runs them from the
+      # root, where they all work. A guard in a job with a non-root
+      # default passes here and fails in CI.
       - name: Check the web bundle carries no passkeys_web
+        working-directory: .
         run: python3 scripts/check_web_plugin_registrant.py
 
       - run: flutter analyze --fatal-infos --fatal-warnings
