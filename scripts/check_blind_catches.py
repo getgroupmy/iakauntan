@@ -88,8 +88,23 @@ from pathlib import Path
 # ---------------------------------------------------------------------
 # What is deliberately still here
 #
-# The docstring says these are not all wrong, and `chat.sql` has the
-# clearest example of a right one. Two of its five are
+# 41 is where this stopped being worth grinding in bulk: the remaining
+# ones are 41 across 29 files, mostly one or two each, and a sweep of a
+# long tail is churn rather than work. Take them as the files they are
+# in get touched for other reasons.
+#
+# The docstring says these are not all wrong, and two files hold the
+# clearest examples. Do not "fix" either.
+#
+# `the_helpers_fail_loudly.sql` has three, and they are the most
+# deliberate `when others then null` in this repository: that file
+# exists to prove a failing assertion ESCAPES such a handler, so the
+# handler IS the thing under test. Converting them deletes the test
+# and leaves the suite unable to notice the exact failure --
+# assertions silently passing while checking nothing -- that the file
+# was written for.
+#
+# And `chat.sql` has the clearest example of a right one. Two of its five are
 # `exception when others then null` around a statement run under row
 # level security, with the real assertion on the STATUS afterwards --
 # because an UPDATE a policy filters out does not raise at all, it

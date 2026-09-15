@@ -562,6 +562,18 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_module_gates.py "$DB"
 
+      # `0601` was found by a variable, not by reading the function:
+      # `deposit_history` selected the deposit's kind into `v_kind` and
+      # never looked at it again, and that variable was the whole
+      # access check somebody meant to write. An unused variable is
+      # usually nothing; one holding a row's KIND, in a function
+      # deciding what a caller may see, is a missing `if`. Checked
+      # against the pre-0601 body: it names `v_kind`.
+      - name: Check nothing computes a value and throws it away
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_discarded_values.py "$DB"
+
       # One level below the embeds, and the same string literal. The
       # screen that declares an employee's TP1 reliefs filtered
       # `statutory_schedules` on `schedule_type`, which this schema has
