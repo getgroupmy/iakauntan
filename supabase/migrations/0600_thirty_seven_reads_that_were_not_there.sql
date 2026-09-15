@@ -1,0 +1,108 @@
+-- =====================================================================
+-- iAkauntan :: 0600 thirty-seven reads that were not there
+--
+-- `0599`'s header says this, and carries the query that produced it:
+--
+--   "37 functions in `public` that a signed-in user can reach are
+--    declared VOLATILE and contain no writing verb anywhere in their
+--    body."
+--
+-- THAT NUMBER IS WRONG. The real count is zero. Every one of the
+-- thirty-seven either writes in its own body or reaches something that
+-- does, and `0599` left them alone for a good reason -- it just had the
+-- reason and the count the wrong way round.
+--
+-- Migrations are append-only, so `0599` keeps its paragraph and this
+-- one is the correction beside it. Nothing about the schema changes
+-- here; what changes is `check_stable_writers.py`, which now answers
+-- the question properly instead of by a list of three names.
+--
+-- ---------------------------------------------------------------------
+-- How a query invents thirty-seven functions
+--
+-- The query in `0599` looks for a writing verb with
+--
+--     p.prosrc !~* '\m(insert|update|delete|...)\M'
+--
+-- against the RAW body, comments and string literals included -- and
+-- it was sanity-checked against a Python version that blanked the
+-- comments first and the string literals second. Which is where the
+-- thirty-seven came from, because `set_item_weighed` says
+--
+--     raise exception '% is counted in %, which is a thing rather than
+--       an amount. Sold by weight needs a unit that measures something
+--       -- a kilogram, a litre, a metre.', v_name, v_uom;
+--
+-- and then updates `items`. Strip comments first and that `--`, which
+-- is four characters of English inside a string, eats to the end of
+-- the line. The quote it opened is now unmatched, so the string pass
+-- swallows everything after it -- including the `update` the message
+-- was written for.
+--
+-- `set_item_weighed`, `import_accounts` and `platform_save_promotion`
+-- all read as pure reads that way. All three plainly write, and are
+-- the last three that survived; the other thirty-four were lost to a
+-- second bug in the same expression, a single trailing `\M` across an
+-- alternation. `update p` of `update public.items` has to end on a
+-- word boundary to match, and `p` to `u` is not one, so no `update`
+-- in this schema was ever seen.
+--
+-- Two mistakes, both silent, both in the direction where the tool
+-- reports a clean database.
+--
+-- ---------------------------------------------------------------------
+-- What the check asked before this
+--
+--     p.prosrc ~* '(note_read|note_export|record_security_event)'
+--
+-- That is the list of writers somebody had been bitten by, not the list
+-- of writers. It answers correctly for `platform_feedback`, which is
+-- the one that broke the platform console, and says nothing about a
+-- STABLE function that calls anything else -- or that writes with its
+-- own `update`.
+--
+-- The shape it could not see is the ordinary one here. Half this schema
+-- is a thin wrapper over an `_internal` writer: `post_sales_document`,
+-- `next_document_number`, `open_pos_sale`, `transition_ticket`,
+-- `add_pos_sale_line`, `bill_time_internal`'s two callers, and a dozen
+-- more. Nothing in any of those bodies mentions a write. Any one of
+-- them declared STABLE by a future migration would have passed the
+-- check and returned 25006 to every caller.
+--
+-- ---------------------------------------------------------------------
+-- What it asks now
+--
+-- `scripts/sql_call_graph.py` builds the graph, marks every function
+-- whose own body writes, and propagates to a fixed point, so a write
+-- four hops down still counts. The scanner that reads the bodies is one
+-- left-to-right pass -- the only thing that can tell a comment from
+-- four characters of English -- and it handles `''` and `$tag$` too.
+--
+-- Checked against two mutants, neither of which the old regex caught:
+-- a STABLE function whose own body updates a table, and a STABLE
+-- function that calls a VOLATILE one that does, where the caller's body
+-- mentions no write at all. Both are named now, along with what they
+-- write through. And the original `platform_feedback` case still fails,
+-- which is the regression that mattered.
+--
+-- `scripts/sql_call_graph_test.py` pins all of it, including both of
+-- the scanner bugs above, and runs in the same CI job as the other two
+-- generators' assertions.
+--
+-- ---------------------------------------------------------------------
+-- The one claim of `0599`'s that stands
+--
+-- `org_payment_gateway_status` really was a read declared VOLATILE, and
+-- is STABLE now. It was found by reading it, not by that query. It is
+-- also, on this schema, the only one there was.
+-- =====================================================================
+
+-- Nothing to apply. The correction is in the header above, in
+-- `scripts/check_stable_writers.py`, and in the assertions that now
+-- hold it to it.
+--
+-- Recorded as a migration rather than a commit message because `0599`
+-- is a migration: somebody reading the schema's own history to find out
+-- why `org_payment_gateway_status` changed volatility will find that
+-- paragraph, and has to find this one immediately after it.
+select 1 where false;

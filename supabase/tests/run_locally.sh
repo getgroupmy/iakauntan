@@ -387,7 +387,41 @@ schema_checks() {
 $(ci_guards)
 GUARDS
 
+  unit_tests || failed=1
+
   if [ $failed -eq 0 ]; then echo "schema and client agree"; fi
+  return $failed
+}
+
+# ---------------------------------------------------------------------
+# The scripts' own assertions
+# ---------------------------------------------------------------------
+#
+# `ci_guards` deliberately skips `*_test.py`, because those are unit
+# tests OF the scripts rather than checks of this repository -- and the
+# comment there said they "run everywhere", which was not true. They ran
+# in CI and nowhere else, so a broken scanner was a red run rather than
+# a red command here. Exactly the hole `014871d` closed for the guards,
+# one file along.
+#
+# They need no database and no network, so they always run. Discovered
+# from DISK and then checked against ci.yml, which catches it from both
+# sides: a test CI never runs, and a test this script never runs.
+unit_tests() {
+  local failed=0 out name
+  for f in "$ROOT"/scripts/*_test.py; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f")
+    if ! grep -q "scripts/$name" "$ROOT/.github/workflows/ci.yml"; then
+      echo "FAIL  scripts/$name"
+      echo "  on disk and not named in .github/workflows/ci.yml,"
+      echo "  so CI never runs it"
+      failed=1
+      continue
+    fi
+    out=$(python3 "$f" 2>&1) || {
+      echo "FAIL  scripts/$name"; echo "$out" | tail -12; failed=1; }
+  done
   return $failed
 }
 
@@ -411,8 +445,8 @@ import re, sys
 # pass -- which is right, and which means it cannot pass on a machine
 # whose egress is a proxy that refuses it. A gate that is always red is
 # a gate people learn to scroll past, so it is CI's to run. Its own
-# unit tests run everywhere and are covered by the \`_test.py\` rule
-# below.
+# unit tests are run by \`unit_tests\` instead, which is what the
+# \`_test.py\` rule below hands them to.
 SKIP = {'schema_drift.py', 'dependency_audit.py'}
 
 text = open(sys.argv[1] + '/.github/workflows/ci.yml').read()

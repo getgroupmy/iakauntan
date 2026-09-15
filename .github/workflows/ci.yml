@@ -996,6 +996,17 @@ jobs:
       - name: The API description generator's own assertions
         run: python3 scripts/generate_api_description_test.py
 
+      # `check_stable_writers.py` fails a build when the call graph
+      # says a STABLE function can reach a write, and a gate is only as
+      # honest as what it reads. Its scanner has been wrong twice, both
+      # times in the same direction -- a write it could not see, and so
+      # a gate that stayed quiet. A `--` inside a refusal message read
+      # as a comment and swallowed the rest of the function; a trailing
+      # `\b` across an alternation made every `update` in the schema
+      # invisible. Both are pinned.
+      - name: The call graph's own assertions
+        run: python3 scripts/sql_call_graph_test.py
+
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py
 
