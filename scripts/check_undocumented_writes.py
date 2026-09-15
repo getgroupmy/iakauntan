@@ -97,7 +97,20 @@ if hasattr(signal, 'SIGPIPE'):
 # and the idempotent one, which is the one a client should call, had
 # none. The query below counts functions, so a documented sibling does
 # nothing for the signature beside it.
-BUDGET = 31
+#
+# `0593` took the four whose names promise a tidy-up. Three really
+# delete, and each takes something unmentioned with it: a conversion's
+# outputs by cascade, a barcode format a label already on a package
+# still needs, and the pack size that is the only thing turning "3 CT"
+# on an old invoice into a quantity. The fourth,
+# `retire_cash_forecast_item`, is a soft delete wearing an honest name.
+#
+# Writing the test for that slice found the worse half of the pack
+# case, which reading the function had not: where the unit HAS a
+# standard factor, deleting the pack does not raise at all. The line
+# re-derives against the standard dozen, thirty becomes thirty-six, and
+# nothing says a word.
+BUDGET = 27
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

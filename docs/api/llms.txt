@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0592` (the highest applied migration).
+Schema version `0593` (the highest applied migration).
 665 functions and 330 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**486 of 665 functions carry a `comment on
+**490 of 665 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -95,7 +95,7 @@ Refused unless the company has the `accounting` module switched on and the calle
 - `cash_forecast_items_list(p_org uuid)`
 - `report_budget_vs_actual(p_budget uuid, p_from_period integer, p_to_period integer)` — What happened, what was supposed to, and whether the difference is good news.
 - `report_cash_forecast(p_org uuid, p_weeks integer, p_use_history boolean)` — Thirteen weeks of cash by default, from what the bank holds now plus what is expected in and out.
-- `retire_cash_forecast_item(p_id uuid)` *(writes)*
+- `retire_cash_forecast_item(p_id uuid)` *(writes)* — Switches a standing forecast line off.
 - `set_budget_lines(p_budget uuid, p_lines jsonb)` *(writes)* — Replaces a budget's lines wholesale and returns how many were written.
 - `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)* — Creates or renames a budget for a financial year.
 - `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)* — Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or bill has yet recorded -- so the thirteen-week forecast can include it.
@@ -135,8 +135,8 @@ Refused unless the company has the `inventory` module switched on and the caller
 - `bundle_margin(p_item uuid)`
 - `cancel_landed_cost_run(p_run uuid)` *(writes)* — Cancels a landed-cost run -- freight, duty and handling being spread across the items on a shipment.
 - `cancel_stock_transfer(p_id uuid)` *(writes)* — Cancels a transfer between warehouses.
-- `delete_item_conversion(p_id uuid)` *(writes)*
-- `delete_item_uom_pack(p_item uuid, p_uom text)` *(writes)*
+- `delete_item_conversion(p_id uuid)` *(writes)* — Deletes a conversion, AND ITS OUTPUT LINES WITH IT: `item_conversion_outputs` is ON DELETE CASCADE, so what the conversion produced goes in the same statement.
+- `delete_item_uom_pack(p_item uuid, p_uom text)` *(writes)* — Removes a pack size from an item -- the row that says one CT is twelve.
 - `item_bundle_for(p_item uuid)`
 - `item_bundles_list(p_org uuid)`
 - `item_conversion_outputs_for(p_conversion uuid)`
@@ -211,7 +211,7 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `complete_pos_sale(p_sale uuid, p_tenders jsonb, p_contact uuid)` *(writes)* — Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually paid, records the tenders and awards the points.
 - `delete_pos_recipe(p_recipe uuid)` *(writes)* — Removes the ingredient list behind a dish.
 - `delete_pos_report(p_id uuid)` *(writes)* — Removes a saved report.
-- `delete_scale_format(p_id uuid)` *(writes)*
+- `delete_scale_format(p_id uuid)` *(writes)* — Deletes a scale barcode format.
 - `ingest_offline_sales(p_register uuid, p_sales jsonb)` *(writes)* — Lands a batch of sales rung up with no signal.
 - `item_modifier_group_ids(p_item uuid)` — Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually attached.
 - `item_modifier_options(p_item uuid)` — What can be asked about a dish: the questions attached to it, their rules, whether each takes an answer that is not listed, and the answers that are.

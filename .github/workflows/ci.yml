@@ -260,6 +260,7 @@ jobs:
                    supabase/tests/business_types.sql \
                    supabase/tests/signup_details.sql \
                    supabase/tests/registration_answers.sql \
+                   supabase/tests/delete_takes_more_than_it_says.sql \
                    supabase/tests/personal_mailbox.sql \
                    supabase/tests/mailbox_reply.sql \
                    supabase/tests/mailbox_search.sql \

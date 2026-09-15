@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0592",
+    "version": "0593",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -29991,8 +29991,8 @@
     "/rpc/delete_item_conversion": {
       "post": {
         "operationId": "delete_item_conversion",
-        "summary": "Delete item conversion",
-        "description": "`public.delete_item_conversion(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Deletes a conversion, AND ITS OUTPUT LINES WITH IT: `item_conversion_outputs` is ON DELETE CASCADE, so what\u2026",
+        "description": "Deletes a conversion, AND ITS OUTPUT LINES WITH IT: `item_conversion_outputs` is ON DELETE CASCADE, so what the conversion produced goes in the same statement. Nothing is checked first -- there is no refusal if the conversion has been run. Returns false when there is no such row, which is the same answer as a successful delete of a row that is now gone; a caller cannot tell the two apart. Needs the inventory module.\n\n`public.delete_item_conversion(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -30045,8 +30045,8 @@
     "/rpc/delete_item_uom_pack": {
       "post": {
         "operationId": "delete_item_uom_pack",
-        "summary": "Delete item uom pack",
-        "description": "`public.delete_item_uom_pack(p_item uuid, p_uom text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Removes a pack size from an item -- the row that says one CT is twelve",
+        "description": "Removes a pack size from an item -- the row that says one CT is twelve. NOTHING REFERENCES IT AND THAT IS THE PROBLEM: document lines carry `uom_code` as text, so an invoice reading \"3 CT\" keeps the word and loses the arithmetic. `app.uom_qty` resolves a unit by looking this table up first, then by the standard factors in `ref_uom_factors`. Which of the two comes next decides how badly this goes. Where there is no standard factor -- CT is not one -- it raises 22023, \"There is no way to turn CT into EA\", and somebody sees it. WHERE THERE IS ONE IT DOES NOT REFUSE AT ALL: a company selling ten to the dozen box had a pack saying so, and with the pack gone the same line re-derives against the standard twelve. Thirty becomes thirty-six, on a stock take, with no error anywhere. Either way the delete succeeds and the consequence arrives later. Returns false when there was no such pack. Needs the inventory module.\n\n`public.delete_item_uom_pack(p_item uuid, p_uom text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -30255,8 +30255,8 @@
     "/rpc/delete_scale_format": {
       "post": {
         "operationId": "delete_scale_format",
-        "summary": "Delete scale format",
-        "description": "`public.delete_scale_format(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Deletes a scale barcode format",
+        "description": "Deletes a scale barcode format. `app.parse_scale_barcode` reads these to take the weight and the price out of a label a scale printed, so a label already on a package, printed under the format being deleted, stops being readable at the till. Nothing is checked and nothing refuses. Returns false when there is no such row. Needs the POS module.\n\n`public.delete_scale_format(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -56211,8 +56211,8 @@
     "/rpc/retire_cash_forecast_item": {
       "post": {
         "operationId": "retire_cash_forecast_item",
-        "summary": "Retire cash forecast item",
-        "description": "`public.retire_cash_forecast_item(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
+        "summary": "Switches a standing forecast line off",
+        "description": "Switches a standing forecast line off. NOT A DELETE, despite sitting beside three that are: it sets `is_active` false, because a forecast circulated last month was run against these rows and deleting one makes it impossible to explain why the figure was what it was. Raises `P0002` for a row that is not there rather than returning false, which is the opposite of the three deletes in this migration. Needs the accounting module.\n\n`public.retire_cash_forecast_item(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
         "tags": [
           "accounting"
         ],
