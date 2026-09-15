@@ -211,21 +211,18 @@ end $$;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_state text;
 begin
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
   perform pg_temp.sign_in_as(v_admin);
 
-  begin
-    perform public.platform_reserve_subdomain('parked-pointed', null, 'pos',
-                                              null, null, 'reserved');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('a held name cannot open a module',
-                           v_state, '22023');
+  -- On the message as well as the code. Four different refusals in this
+  -- file raise 22023, so asserting the sqlstate alone passes when the
+  -- WRONG guard fires -- and would pass with this one deleted.
+  perform pg_temp.check_refused('a held name cannot open a module',
+    $q$ select public.platform_reserve_subdomain('parked-pointed', null,
+          'pos', null, null, 'reserved') $q$,
+    '%reserved name answers to nobody%', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -234,41 +231,29 @@ end $$;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_org uuid; v_state text;
+  v_org uuid;
 begin
   v_org := pg_temp.test_org('Kedai Bantah');
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
   perform pg_temp.sign_in_as(v_admin);
 
-  begin
-    perform public.platform_reserve_subdomain('ours-theirs', v_org, null,
-                                              null, null, 'admin');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('an address of ours cannot have a company on it',
-                           v_state, '22023');
+  perform pg_temp.check_refused(
+    'an address of ours cannot have a company on it',
+    format($q$ select public.platform_reserve_subdomain('ours-theirs', %L,
+             null, null, null, 'admin') $q$, v_org),
+    '%cannot have one on it%', '22023');
 
-  begin
-    perform public.platform_reserve_subdomain('theirs-nobody', null, null,
-                                              null, null, 'company');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('and a company''s door has to name the company',
-                           v_state, '22023');
+  perform pg_temp.check_refused(
+    'and a company''s door has to name the company',
+    $q$ select public.platform_reserve_subdomain('theirs-nobody', null, null,
+          null, null, 'company') $q$,
+    '%Choose the company this address belongs to%', '22023');
 
-  begin
-    perform public.platform_reserve_subdomain('what-even', null, null,
-                                              null, null, 'borrowed');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('and there is no fourth kind', v_state, '22023');
+  perform pg_temp.check_refused('and there is no fourth kind',
+    $q$ select public.platform_reserve_subdomain('what-even', null, null,
+          null, null, 'borrowed') $q$,
+    '%reserved, or ours to use%', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -306,7 +291,7 @@ end $$;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_id uuid; v_state text;
+  v_id uuid;
 begin
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
@@ -314,14 +299,10 @@ begin
 
   v_id := public.platform_reserve_subdomain('two-minds', null, null, null,
                                             null, 'admin');
-  begin
-    perform public.platform_update_reservation('subdomain', v_id, null, null,
-                                               'pos', null, false, 'reserved');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('one submission cannot say both', v_state, '22023');
+  perform pg_temp.check_refused('one submission cannot say both',
+    format($q$ select public.platform_update_reservation('subdomain', %L,
+             null, null, 'pos', null, false, 'reserved') $q$, v_id),
+    '%reserved name answers to nobody%', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -381,7 +362,7 @@ end $$;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_id uuid; v_state text;
+  v_id uuid;
 begin
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
@@ -389,15 +370,10 @@ begin
 
   v_id := public.platform_reserve_subdomain('orphan', null, null, null,
                                             null, 'reserved');
-  begin
-    perform public.platform_update_reservation('subdomain', v_id, null, null,
-                                               null, null, false, 'company');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('a door needs somebody behind it',
-                           v_state, '22023');
+  perform pg_temp.check_refused('a door needs somebody behind it',
+    format($q$ select public.platform_update_reservation('subdomain', %L,
+             null, null, null, null, false, 'company') $q$, v_id),
+    '%Choose the company this address belongs to%', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -406,7 +382,7 @@ end $$;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_org uuid; v_id uuid; v_state text;
+  v_org uuid; v_id uuid;
 begin
   v_org := pg_temp.test_org('Kedai Surat');
   perform public.request_mailbox(v_org, 'surat');
@@ -416,15 +392,11 @@ begin
     on conflict do nothing;
   perform pg_temp.sign_in_as(v_admin);
 
-  begin
-    perform public.platform_update_reservation('mailbox', v_id, null, null,
-                                               null, null, false, 'admin');
-    v_state := 'allowed';
-  exception when others then
-    v_state := sqlstate;
-  end;
-  perform pg_temp.check_eq('an address to write to is always a company''s',
-                           v_state, '22023');
+  perform pg_temp.check_refused(
+    'an address to write to is always a company''s',
+    format($q$ select public.platform_update_reservation('mailbox', %L, null,
+             null, null, null, false, 'admin') $q$, v_id),
+    '%mailbox is always%', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------

@@ -30,7 +30,27 @@ from pathlib import Path
 # up fifteen between them, and the conversion is mechanical once the
 # refusal's own words are known: run the statement, read the message,
 # assert on it.
-BUDGET = 82
+#
+# 82 to 69: `ledger_append_only.sql` and `name_purposes.sql`. The two
+# files are the two shapes this budget contains, and they are not
+# equally bad.
+#
+# `ledger_append_only.sql` was the shape in the docstring above --
+# `exception when others then v_failed := true` and then
+# `check_true('a posted journal cannot be edited', v_failed)`. That
+# passes whatever went wrong. Renaming a column out from under the
+# statement raises 42703 and reads as the ledger defending itself; so
+# does a typo. All six are `42501 permission denied for table ...` and
+# now say so, message and sqlstate. Checked by misspelling
+# `total_debit`: it used to pass, and now fails naming the column.
+#
+# `name_purposes.sql` looked better and was the more interesting one.
+# It captured `v_state := sqlstate` and asserted `= '22023'`, which is
+# not nothing -- but SEVEN refusals in that file raise 22023 between
+# FOUR different messages, so the assertion passes when the wrong guard
+# fires, and passes with the guard under test deleted. Exactly what
+# `create_withholding` did. They assert on the words now.
+BUDGET = 69
 
 TESTS = Path(__file__).resolve().parent.parent / 'supabase' / 'tests'
 
