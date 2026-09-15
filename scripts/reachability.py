@@ -19,7 +19,16 @@ Get the inventory out of the database:
            case when exists (
              select 1 from pg_proc c
               where c.oid <> p.oid
-                and c.prosrc like '%' || p.proname || '%'
+                -- \m and \M, not like '%...%'. A substring match says
+                -- `create_gl_entry` is called by every body that
+                -- mentions `create_gl_entry_internal`, which moves a
+                -- dead function into the quiet bucket -- the direction
+                -- this whole script exists to prevent. It still counts
+                -- a bare identifier: a COLUMN named `clock_out` reads
+                -- as a call to the function `clock_out`, and so does a
+                -- name in a comment. Pass --database-url below to have
+                -- the bodies read properly instead.
+                and c.prosrc ~ ('\m' || p.proname || '\M')
                 and c.pronamespace in ('public'::regnamespace,
                                        'app'::regnamespace))
                 then 'sql' else '' end
@@ -40,12 +49,36 @@ save it as CSV (kind,name,args,called_from_sql) and run:
 
     python3 scripts/reachability.py inventory.csv
 
+or, better, hand it the database as well and let it work the SQL half
+out for itself:
+
+    python3 scripts/reachability.py inventory.csv "$DATABASE_URL"
+
+which reads the bodies through `sql_call_graph`: comments out, and a
+CALL SHAPE required rather than a bare identifier. Both matter, and the
+second more than expected -- `attendance.clock_out` is a column, and
+`r.clock_out is null` is not a call to `public.clock_out`, which is the
+sort of thing that quietly keeps a dead function looking alive.
+
 Two traps this avoids, both of which produced false positives on the
 first hand-rolled pass:
 
   * searching only for 'quoted_name' misses PostgREST embeds, which
     appear as `contacts(name, code)` inside a select string;
   * a name that appears only inside a comment is not a reference.
+
+That second rule was applied to Dart and never to SQL, where the
+inventory query used `prosrc like '%name%'` -- which counts a mention
+in a comment AND matches `create_gl_entry` inside every body naming
+`create_gl_entry_internal`. Measured: the substring rule calls 32
+functions reachable that a word-boundary match does not, `audit_trail`
+inside `platform_audit_trail` among them. Every one of those pushes a
+possibly-dead function into the quiet "only SQL calls it" bucket.
+
+The query now uses `\m...\M`, and `--database-url` goes further,
+requiring a call shape rather than a bare identifier -- because
+`r.clock_out is null` reads a COLUMN and is not a call to
+`public.clock_out`.
 
 A function nothing in the app calls is not necessarily unreachable:
 this codebase writes through functions that call other functions, so
@@ -60,6 +93,9 @@ import csv
 import os
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 SOURCE_ROOTS = ["app/lib", "supabase/functions"]
 SOURCE_SUFFIXES = (".dart", ".ts", ".js")
@@ -101,6 +137,29 @@ def main():
         print(__doc__)
         return 2
 
+    # The SQL half, worked out here rather than taken from the CSV, so
+    # a name appearing only in a comment does not count as a call.
+    #
+    # `_CALL` wants `name(`, so a column called `clock_out` is not a
+    # call to the function `clock_out` -- which the `\m...\M` query
+    # above cannot tell apart.
+    #
+    # `clean` blanks string literals as well as comments, so a call made
+    # through `execute 'select foo()'` is not seen. That UNDER-counts,
+    # which is the safe direction here: an under-count reports a gap a
+    # person then triages, and an over-count hides a dead function in
+    # silence.
+    sql_callers = None
+    if len(sys.argv) > 2:
+        from sql_call_graph import load, _CALL
+        rows = load(sys.argv[2])
+        sql_callers = set()
+        for row in rows:
+            for m in _CALL.finditer(row['clean']):
+                nm = m.group(1).lower()
+                if nm != row['name'].lower():
+                    sql_callers.add(nm)
+
     files = read_sources()
     if not files:
         print("No sources found — run this from the repository root.",
@@ -115,7 +174,10 @@ def main():
         kind, name = row[0].strip(), row[1].strip()
         if kind not in unreachable:
             continue
-        from_sql = len(row) > 3 and row[3].strip() == "sql"
+        if sql_callers is None:
+            from_sql = len(row) > 3 and row[3].strip() == "sql"
+        else:
+            from_sql = name.lower() in sql_callers
 
         pattern = re.compile(r"\b" + re.escape(name) + r"\b")
         where = [os.path.basename(p) for p, body in files if pattern.search(body)]

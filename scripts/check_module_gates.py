@@ -33,17 +33,39 @@ because `sales` is a core module, and nothing was reading the body
 closely enough to notice.
 
 Naming them is the floor, not the ceiling. Say which are required.
+
+## The second thing it asks
+
+`generate_api_description.py` reads the module out of the RAW body, so
+a `can_read_module(org, 'x')` sitting in a COMMENT is published as the
+module this function is filed under. Nothing in the schema does that
+today, and nothing would say so if it started: the published document
+would simply name the wrong module, confidently, and a caller would
+switch on something that changes nothing.
+
+So this compares what the raw body says against what the body says with
+its comments taken out, and fails on a difference. The comparison uses
+`sql_call_graph.strip_comments`, which keeps the string literals -- a
+module name IS a literal, and the scanner that blanks them answers a
+different question and calls every gated function in the schema
+comment-gated. It did, 207 of them, before that distinction existed.
 """
 import re
 import sys
 import json
 import subprocess
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from sql_call_graph import strip_comments  # noqa: E402
 
 QUERY = r"""
 select coalesce(json_agg(row_to_json(t)), '[]'::json) from (
   select p.proname as name,
          pg_get_function_identity_arguments(p.oid) as args,
          coalesce(d.description, '') as description,
+         coalesce(p.prosrc, '') as src,
          (select coalesce(array_agg(distinct m[1]), '{}')
             from regexp_matches(
                    p.prosrc,
@@ -72,9 +94,18 @@ def main() -> int:
         print(out.stderr.strip(), file=sys.stderr)
         return 2
 
+    GATE = re.compile(r"can_(?:read|write)_module\([^,]+,\s*'([a-z_]+)'")
+
     offenders = []
+    commented = []
     for row in json.loads(out.stdout):
         mods = sorted(set(row['modules'] or []))
+        real = sorted(set(GATE.findall(strip_comments(row['src']))))
+        # A module the generator will publish that the function does
+        # not actually check. See "The second thing it asks".
+        if mods != real:
+            commented.append((f"{row['name']}({row['args']})",
+                              sorted(set(mods) - set(real))))
         if len(mods) < 2:
             continue
         text = row['description']
@@ -85,6 +116,18 @@ def main() -> int:
         if missing:
             offenders.append((f"{row['name']}({row['args']})", mods, missing,
                               bool(text.strip())))
+
+    if commented:
+        print('A module named only in a COMMENT is published as the module')
+        print('this function is filed under, and it does not check it:')
+        print()
+        for sig, ghosts in commented:
+            print(f'    {sig}')
+            print(f'        commented out or merely mentioned: '
+                  f'{", ".join(ghosts)}')
+        print()
+        print('Take the mention out of the comment, or make it a real gate.')
+        return 1
 
     if not offenders:
         print('ok   every function checking two modules names them both')

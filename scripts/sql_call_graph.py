@@ -145,6 +145,60 @@ def clean(src: str) -> str:
     return ''.join(out)
 
 
+def strip_comments(src: str) -> str:
+    """The body with comments gone and STRING LITERALS KEPT.
+
+    [clean]'s sibling, and the one to reach for when the question is
+    ABOUT a string. `check_module_gates.py` needs it: a module name is
+    a literal -- `app.can_read_module(org, 'pos')` -- so the scanner
+    that blanks literals answers a different question entirely and
+    reports every gated function in the schema as gated only by a
+    comment. It did, 207 of them, before this existed.
+
+    Same single pass, so a `--` inside a message is still four
+    characters of English rather than the start of a comment.
+    """
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        if src.startswith('--', i):
+            j = src.find('\n', i)
+            i = n if j < 0 else j
+        elif src.startswith('/*', i):
+            depth, i = 1, i + 2
+            while i < n and depth:
+                if src.startswith('/*', i):
+                    depth, i = depth + 1, i + 2
+                elif src.startswith('*/', i):
+                    depth, i = depth - 1, i + 2
+                else:
+                    i += 1
+            out.append(' ')
+        elif src[i] == "'":
+            out.append("'")
+            i += 1
+            while i < n:
+                out.append(src[i])
+                if src[i] == "'":
+                    if src.startswith("''", i):
+                        out.append("'")
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+        elif src[i] == '$' and (m := _DOLLAR.match(src, i)):
+            tag = m.group(0)
+            j = src.find(tag, i + len(tag))
+            end = n if j < 0 else j + len(tag)
+            out.append(src[i:end])
+            i = end
+        else:
+            out.append(src[i])
+            i += 1
+    return ''.join(out)
+
+
 def writes_in_body(src: str) -> bool:
     """Whether this body writes something itself."""
     return bool(WRITE.search(clean(src)))

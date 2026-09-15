@@ -34,7 +34,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from sql_call_graph import clean, writes_in_body, mark_writers  # noqa: E402
+from sql_call_graph import (  # noqa: E402
+    clean, strip_comments, writes_in_body, mark_writers)
 
 
 class Clean(unittest.TestCase):
@@ -68,6 +69,42 @@ class Clean(unittest.TestCase):
         out = clean(body)
         self.assertNotIn('inner', out)
         self.assertIn('update x', out)
+
+
+class StripComments(unittest.TestCase):
+    """[clean]'s sibling, for questions that are ABOUT a string.
+
+    A module gate names its module as a literal --
+    `app.can_read_module(org, 'pos')` -- so the scanner that blanks
+    literals answers a different question and reports every gated
+    function in the schema as gated only by a comment. It did, 207 of
+    them.
+    """
+
+    def test_the_literal_survives(self):
+        body = "if not app.can_read_module(v_org, 'pos') then"
+        self.assertIn("'pos'", strip_comments(body))
+
+    def test_the_comment_does_not(self):
+        body = ("-- app.can_read_module(org, 'ghost')\n"
+                "if not app.can_read_module(v_org, 'pos') then")
+        out = strip_comments(body)
+        self.assertNotIn('ghost', out)
+        self.assertIn("'pos'", out)
+
+    def test_a_dash_dash_inside_a_string_is_still_not_a_comment(self):
+        body = ("raise exception 'a unit -- a kilogram';\n"
+                "if app.can_read_module(v_org, 'pos') then")
+        self.assertIn("'pos'", strip_comments(body))
+
+    def test_doubled_quote_does_not_end_the_string(self):
+        body = ("raise exception 'the company''s own -- books';\n"
+                "if app.can_read_module(v_org, 'pos') then")
+        self.assertIn("'pos'", strip_comments(body))
+
+    def test_a_block_comment_goes(self):
+        self.assertNotIn('ghost', strip_comments(
+            "/* can_read_module(org, 'ghost') */ select 1;"))
 
 
 class Verbs(unittest.TestCase):
