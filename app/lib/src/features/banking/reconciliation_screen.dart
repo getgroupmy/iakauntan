@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -653,11 +654,43 @@ class _PasteDialog extends StatefulWidget {
 
 class _PasteDialogState extends State<_PasteDialog> {
   final _text = TextEditingController();
+  String? _fileName;
+  bool _reading = false;
 
   @override
   void dispose() {
     _text.dispose();
     super.dispose();
+  }
+
+  /// A statement is a file somebody downloaded. Making them open it in
+  /// a text editor to copy it out is friction on the one step of
+  /// reconciliation that is already tedious — and on an MT940, whose
+  /// `.sta` or `.940` extension most editors will not open at all.
+  ///
+  /// No extension filter. Banks name these `.csv`, `.txt`, `.sta`,
+  /// `.940` and `.TXT`, and a filter that misses one is a file the
+  /// picker refuses to show for a reason nobody can see.
+  /// `parseStatement` works out which format it is from the content.
+  Future<void> _openFile() async {
+    setState(() => _reading = true);
+    try {
+      final file = await openFile();
+      if (file == null) return;
+      final text = await file.readAsString();
+      if (!mounted) return;
+      setState(() {
+        _text.text = text;
+        _fileName = file.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not read the file: $e')));
+    } finally {
+      if (mounted) setState(() => _reading = false);
+    }
   }
 
   @override
@@ -674,10 +707,33 @@ class _PasteDialogState extends State<_PasteDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Paste the CSV your bank exports, including its header row. '
-                'Columns are found by name, so the order does not matter. '
-                'Lines already imported are skipped.',
+                'Open the file your bank exports, or paste it. A CSV needs '
+                'its header row — columns are found by name, so the order '
+                'does not matter. An MT940, which is what corporate '
+                'accounts get, is recognised on its own. Lines already '
+                'imported are skipped.',
                 style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    key: const ValueKey('statement-open-file'),
+                    onPressed: _reading ? null : _openFile,
+                    icon: const Icon(Icons.folder_open_outlined, size: 18),
+                    label: const Text('Open a file'),
+                  ),
+                  if (_fileName != null) ...[
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        _fileName!,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 12),
               TextField(

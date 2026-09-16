@@ -1612,7 +1612,17 @@ Stated plainly so nothing here is mistaken for finished:
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
   account, two secrets and a DNS record. See `docs/email-setup.md`
-- Bank statement import and auto-matching
+- ~~Bank statement import and auto-matching.~~ Built, and the line was
+  stale: `import_bank_transactions`, `suggest_bank_matches`,
+  `match_bank_transaction` and a reconciliation screen have all been
+  there, with a CSV parser that reads columns by header name and checks
+  the balance chain so a clipped paste fails on the line after the hole
+  rather than a month later. What was genuinely missing is **MT940** —
+  the SWIFT format a corporate account gets and no amount of CSV parsing
+  will read — and opening a file rather than pasting one. Both are in
+  now; `parseStatement` works out which format arrived from the content,
+  because the extension is `.csv`, `.txt`, `.sta` or `.940` depending on
+  the bank and is missing entirely from a paste
 - Statutory submission files. The **EA form is built** — `0608` computes
   C.P.8A from this employer's posted payslips, by the year of the pay
   date, with what a previous employer paid reported separately and in no
