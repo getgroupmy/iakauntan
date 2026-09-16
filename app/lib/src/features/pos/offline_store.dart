@@ -45,6 +45,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/format.dart';
 
 /// A version 4 uuid, generated on the device before anything is sent.
 ///
@@ -250,6 +251,33 @@ class OfflineSale {
 /// posts. They are written to agree, and
 /// `app/test/offline_store_test.dart` asserts the same worked examples
 /// `supabase/tests/pos.sql` does.
+/// What the cashier typed into the tender box.
+///
+/// Three answers, not two, and conflating the first with the second is
+/// what this exists to stop:
+///
+///   * an EMPTY box means exact money. That is the right default at a
+///     counter — most sales are paid exactly and nobody should have to
+///     retype the total — and it comes back as [exact];
+///   * a box that cannot be READ is not an answer at all, and comes
+///     back null;
+///   * anything else is the figure.
+///
+/// Both tills used to write `double.tryParse(text) ?? total`, so a box
+/// the parser could not read was treated as exact money. A customer
+/// handing a hundred ringgit for a basket of 43.50, with "1OO" typed by
+/// somebody whose finger found the letter, got NO CHANGE: `0209` works
+/// change out as `round(v_cashin - v_cashdue, 2)`, and the cash in had
+/// silently become the cash due. The offline till showed the same nil
+/// change on its own screen.
+///
+/// Read with `Fmt.typedNumber`, so "RM 50", "1,000" and a stray space
+/// are figures rather than refusals — a till is typed at quickly.
+double? tenderTyped(String raw, {required double exact}) {
+  if (raw.trim().isEmpty) return exact;
+  return Fmt.typedNumber(raw);
+}
+
 num cashDue(num total, {num nonCash = 0, bool round = true}) {
   final left = total - nonCash;
   if (left <= 0) return 0;

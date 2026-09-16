@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'member_panel.dart';
+import 'offline_store.dart' show tenderTyped;
 import 'on_account.dart';
 import 'receipt_view.dart';
 import 'till_screen.dart' show posNum;
@@ -59,7 +60,22 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
   Future<void> _take(double total, {required bool onAccount}) async {
     final type = _tenderTypeId;
     if (type == null) return;
-    final given = double.tryParse(_amount.text) ?? total;
+    // An empty box is exact money, which is the right default at a
+    // counter. A box that cannot be READ is not, and this used to treat
+    // the two the same: `?? total` meant a mistyped amount completed
+    // the sale as though the customer had handed over the exact basket,
+    // so `0209` worked the change out as nought and somebody walked
+    // away short. See `tenderTyped`.
+    final given = tenderTyped(_amount.text, exact: total);
+    if (given == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('That is not an amount. Leave it empty for exact '
+              'money.'),
+        ),
+      );
+      return;
+    }
     setState(() => _busy = true);
     Map<String, dynamic>? result;
     final ok = await runWithFeedback(

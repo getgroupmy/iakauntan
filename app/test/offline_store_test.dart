@@ -213,6 +213,54 @@ void main() {
       expect(store.cachedMenu('out-2'), isEmpty);
     });
   });
+  group('what the cashier typed into the tender box', () {
+    // Three answers, not two. Both tills used to write
+    // `double.tryParse(text) ?? total`, which made the second
+    // indistinguishable from the first.
+
+    test('an empty box is exact money', () {
+      // The right default at a counter: most sales are paid exactly and
+      // nobody should have to retype the total.
+      expect(tenderTyped('', exact: 43.50), 43.50);
+      expect(tenderTyped('   ', exact: 43.50), 43.50);
+    });
+
+    test('a figure is the figure', () {
+      expect(tenderTyped('100', exact: 43.50), 100);
+      expect(tenderTyped('50.25', exact: 43.50), 50.25);
+      expect(tenderTyped('43.50', exact: 43.50), 43.50);
+    });
+
+    test('and it is read the way money is written at a till', () {
+      expect(tenderTyped('RM 100', exact: 43.50), 100);
+      expect(tenderTyped('1,000', exact: 43.50), 1000);
+      expect(tenderTyped(' 100 ', exact: 43.50), 100);
+    });
+
+    test('a box that cannot be read is not exact money', () {
+      // The defect. A hundred ringgit handed over for a basket of
+      // 43.50, with the letter O typed for a nought: `?? total` made
+      // the cash in equal the cash due, `0209` worked the change out as
+      // `round(v_cashin - v_cashdue, 2)`, and the customer walked away
+      // 56.50 short.
+      expect(tenderTyped('1OO', exact: 43.50), isNull);
+      expect(tenderTyped('one hundred', exact: 43.50), isNull);
+      expect(tenderTyped('50,5', exact: 43.50), isNull);
+    });
+
+    test('and the old reading really did call it exact money', () {
+      // The control, so these read as a defect rather than as numbers.
+      expect(double.tryParse('1OO') ?? 43.50, 43.50);
+      expect(double.tryParse('one hundred') ?? 43.50, 43.50);
+    });
+
+    test('a nought is a figure, not an empty box', () {
+      // Somebody taking nothing in cash on a split tender. It must not
+      // fall through to the exact amount.
+      expect(tenderTyped('0', exact: 43.50), 0);
+    });
+  });
+
 }
 
 OfflineSale _stub(String id) => OfflineSale(
