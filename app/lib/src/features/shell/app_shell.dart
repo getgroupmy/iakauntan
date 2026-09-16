@@ -731,6 +731,20 @@ final _destinations = <_Dest>[
     '/assets',
     module: 'fixed_assets',
   ),
+  // Before the journals rather than after them: the chart is what a
+  // journal posts INTO, and somebody looking for an account code is
+  // looking for it before they write the entry, not after.
+  //
+  // It had no entry at all until it was reported missing. The chart sat
+  // on a card most of the way down Settings — a company's setup, which
+  // is not what a chart of accounts is.
+  _Dest(
+    'Chart of accounts',
+    Icons.account_tree_outlined,
+    Icons.account_tree,
+    '/accounts',
+    module: 'accounting',
+  ),
   _Dest(
     'Journals',
     Icons.menu_book_outlined,

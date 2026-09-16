@@ -112,6 +112,7 @@ final List<ScreenModule> appScreenCatalogue = [
   ]),
   ScreenModule('Accounting', [
     ScreenArea('The ledger', [
+      AppScreen('Chart of accounts', '/accounts'),
       AppScreen('Journals', '/journals'),
       AppScreen('Recurring journals', '/recurring'),
       AppScreen('Reports', '/reports'),

@@ -94,6 +94,7 @@ import '../features/secretarial/signing_page.dart';
 import '../features/secretarial/entity_screen.dart';
 import '../features/secretarial/people_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
+import '../features/settings/chart_of_accounts_card.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
 import '../features/hr/employee_editor.dart';
@@ -774,6 +775,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/journals',
             builder: (_, __) => const JournalsScreen(),
+          ),
+          // The chart had no route at all until now: it was a card most
+          // of the way down Settings, which is where a company's SETUP
+          // lives. The chart is not setup — it is the thing somebody
+          // opens to look an account up — and it belongs beside the
+          // journals that post to it.
+          GoRoute(
+            path: '/accounts',
+            builder: (_, __) => const ChartOfAccountsScreen(),
           ),
           GoRoute(path: '/email', builder: (_, __) => const EmailScreen()),
           GoRoute(

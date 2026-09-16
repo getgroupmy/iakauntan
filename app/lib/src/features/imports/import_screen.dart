@@ -256,6 +256,12 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   List<Map<String, dynamic>>? _verdict;
   String? _failure;
 
+  /// What was done to the file to make it readable, when anything was.
+  /// See `readImportFile`: a stray non-breaking space is swapped for an
+  /// ordinary one rather than refusing a whole export, and saying so is
+  /// the difference between that and changing somebody's file quietly.
+  String? _fileNote;
+
   /// What the file in the box looks like, and to whom (0552).
   ///
   /// Null until something has been parsed. Held rather than recomputed
@@ -421,6 +427,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     if (!mounted) return;
     setState(() {
       _failure = read.problem;
+      _fileNote = read.note;
       _verdict = null;
       _table = null;
       _shape = null;
@@ -793,6 +800,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                   danger: true,
                   title: 'Nothing was imported',
                   lines: [_failure!],
+                ),
+              ],
+              if (_fileNote != null) ...[
+                const SizedBox(height: Space.lg),
+                _Panel(
+                  title: 'About the file',
+                  lines: [_fileNote!],
                 ),
               ],
               if (_verdict != null) ...[

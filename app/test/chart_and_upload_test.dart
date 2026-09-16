@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:iakauntan/src/core/csv.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/imports/import_file.dart';
 import 'package:iakauntan/src/features/settings/chart_export.dart';
@@ -135,6 +136,114 @@ void main() {
       expect(read.problem, contains('not UTF-8'));
       expect(read.problem, contains('CSV UTF-8'));
       expect(read.problem, contains('suppliers.csv'));
+    });
+
+    group('a stray non-breaking space', () {
+      // The report. A 160-row contacts export was refused on the
+      // strength of two bytes, both 0xA0, one trailing "GOH KOK HUAT"
+      // and one in front of "TF AUTO PARTS SDN. BHD".
+      //
+      // Refusing that protected nothing. 0xA0 is a space in Latin-1, in
+      // code page 1252 and in Unicode alike, and `String.trim()` takes
+      // it off with the ordinary kind — so it never reaches the
+      // database whichever way it is read.
+      //
+      // And the advice was wrong for that file: saving it again as "CSV
+      // UTF-8" succeeds and leaves the non-breaking space INSIDE the
+      // name, now as legal UTF-8, where it stops "GOH KOK HUAT"
+      // matching "GOH KOK HUAT" for ever.
+
+      Uint8List withNbsp() => Uint8List.fromList([
+        ...utf8.encode('code,name\n301-G003,GOH KOK HUAT'),
+        0xA0,
+        ...utf8.encode('\n301-T011,'),
+        0xA0,
+        ...utf8.encode('TF AUTO PARTS SDN. BHD\n'),
+      ]);
+
+      test('is read rather than refused', () {
+        final read = readImportFile(withNbsp(), name: 'contacts.csv');
+
+        expect(read.problem, isNull);
+        expect(read.text, isNotNull);
+      });
+
+      test('and the file says so rather than changing it quietly', () {
+        final read = readImportFile(withNbsp());
+
+        expect(read.note, isNotNull);
+        expect(read.note, contains('non-breaking space'));
+        expect(read.note, contains('2'));
+      });
+
+      test('the name comes out clean through the parser', () {
+        // The end of it, which is the only thing that matters: what the
+        // row actually carries. `String.trim()` removes U+00A0, so the
+        // name is what somebody typed and not what their spreadsheet
+        // picked up off a web page.
+        final read = readImportFile(withNbsp());
+        final table = parseCsvTable(read.text!, (h) => h);
+
+        expect(table.rows.map((r) => r['name']), contains('GOH KOK HUAT'));
+        expect(table.rows.map((r) => r['name']),
+            contains('TF AUTO PARTS SDN. BHD'));
+      });
+
+      test('an ordinary file is not given a note about nothing', () {
+        // The control. Without it, every assertion above passes against
+        // a build that announces a rescue on every file it reads.
+        expect(readImportFile(bytes('code,name\n8000,Fuel\n')).note, isNull);
+      });
+
+      test('but a real letter is still refused', () {
+        // The rescue must not become a general "read it anyway". 0xDC
+        // is Ü in code page 1252 and there is no honest guess to make
+        // about it, so the file is refused exactly as before.
+        final cp1252 = Uint8List.fromList([
+          ...utf8.encode('code,name\n8000,'),
+          0xA0,
+          0xDC,
+          ...utf8.encode('nal\n'),
+        ]);
+        final read = readImportFile(cp1252, name: 'suppliers.csv');
+
+        expect(read.text, isNull);
+        expect(read.problem, contains('not UTF-8'));
+      });
+
+      test('and a 0xA0 inside a real character is not swapped out of it',
+          () {
+        // U+00A0 properly encoded is C2 A0, and U+4E20 is E4 B8 A0.
+        // Replacing the A0 in either would break a character that was
+        // never broken — so the retry is a STRICT decode, and it only
+        // succeeds when every other byte was already valid.
+        final good = Uint8List.fromList([
+          ...utf8.encode('code,name\n8000,'),
+          0xE4, 0xB8, 0xA0,
+          ...utf8.encode('\n'),
+        ]);
+        final read = readImportFile(good);
+
+        expect(read.problem, isNull);
+        expect(read.note, isNull, reason: 'nothing needed rescuing');
+        expect(read.text, contains('\u4E20'));
+      });
+    });
+
+    test('a refusal says which line to look at', () {
+      // Two invisible bytes in a hundred and sixty rows is not
+      // something anybody can find. "Save it again as CSV UTF-8" is not
+      // advice you can check the result of when you cannot see what was
+      // wrong in the first place.
+      final cp1252 = Uint8List.fromList([
+        ...utf8.encode('code,name\n1,One\n2,Two\n3,'),
+        0xDC,
+        ...utf8.encode('nal\n'),
+      ]);
+      final read = readImportFile(cp1252);
+
+      expect(read.problem, contains('line 4'));
+      expect(read.problem, contains('0xDC'));
     });
 
     test('an empty file says so', () {
