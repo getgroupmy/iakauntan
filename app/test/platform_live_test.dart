@@ -44,6 +44,8 @@ void main() {
       'entity_types',
       // 0606. The registers Entity Search offers.
       'search_registers',
+      // 0614. What AI SmartScan can recognise a paper as.
+      'scan_document_kinds',
     });
   });
 

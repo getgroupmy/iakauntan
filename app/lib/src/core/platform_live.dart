@@ -41,6 +41,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/entity_types_repository.dart';
+import '../data/scan_kinds_repository.dart';
 import '../data/search_registers_repository.dart';
 import '../data/landing_repository.dart';
 import '../data/site_pages_repository.dart';
@@ -124,6 +125,10 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     allSearchRegistersProvider,
     offeredSearchRegistersProvider,
   ],
+  // 0614. What a scanned paper can be recognised as. Same argument
+  // again, and more immediate than either: the person this reaches is
+  // holding the paper while the administrator adds the kind.
+  'scan_document_kinds': [allScanKindsProvider, offeredScanKindsProvider],
   'module_promotions': [
     platformPromotionsAdminProvider,
     moduleSurfaceProvider,

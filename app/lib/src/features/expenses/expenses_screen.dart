@@ -14,6 +14,7 @@ import '../../data/ocr_repository.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../settings/new_account_dialog.dart';
 import '../shared/attachments_card.dart';
+import '../shared/scan_runner.dart';
 import 'expense_split.dart';
 import 'expense_voucher_pdf.dart';
 import '../shared/doc_scanner.dart';
@@ -263,7 +264,11 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     // Shown before it is applied. A machine reading a faded thermal
     // receipt is a good first draft, not a source document.
     final accepted = await showScanResult(context, staged!.read!, canApply: true);
-    if (accepted != null && mounted) setState(() => _apply(accepted));
+    if (accepted == null) return;
+    // What the paper was taken to be, onto the scan. `0614`.
+    await rememberDocumentKind(ref,
+        attachmentId: staged.attachmentId, accepted: accepted);
+    if (mounted) setState(() => _apply(accepted));
   }
 
   void _apply(OcrExtraction read) {

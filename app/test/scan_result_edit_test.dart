@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/ocr_repository.dart';
+import 'package:iakauntan/src/data/scan_kinds_repository.dart';
 import 'package:iakauntan/src/features/shared/scan_result_dialog.dart';
 
 /// The reading is a first draft, and this dialog is where it stops being
@@ -12,6 +14,32 @@ import 'package:iakauntan/src/features/shared/scan_result_dialog.dart';
 /// 316.95, tax of 17.94 and a *total* of 17.94 — the total taken off the
 /// tax line. Every figure was found and one was wrong, which is the
 /// ordinary outcome and useless unless it can be corrected.
+/// A `ProviderScope` with the kinds of document already answered.
+///
+/// `0614` put a picker on this dialog, and a picker reads a table. The
+/// list is stubbed rather than left to fail: without a scope the dialog
+/// throws, and with a scope that never answers the picker draws nothing
+/// — and a picker that drew nothing would satisfy every assertion in
+/// this file without ever having existed.
+Widget scoped(Widget child) => ProviderScope(
+      overrides: [
+        offeredScanKindsProvider.overrideWith(
+          (ref) async => const [
+            ScanKind(
+              code: 'bill',
+              label: "Supplier's bill or invoice",
+              destination: 'purchase_document',
+              hint: 'Becomes a bill, with the supplier and the lines '
+                  'filled in.',
+              sortOrder: 10,
+            ),
+            ScanKind(code: 'other', label: 'Something else', sortOrder: 999),
+          ],
+        ),
+      ],
+      child: child,
+    );
+
 void main() {
   const tmBill = OcrExtraction(
     supplierName: 'TM Technology Services Sdn Bhd',
@@ -34,7 +62,7 @@ void main() {
     OcrExtraction read,
   ) async {
     OcrExtraction? applied;
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(scoped(MaterialApp(
       theme: AppTheme.light(),
       home: Builder(
         builder: (context) => Scaffold(
@@ -47,7 +75,7 @@ void main() {
           ),
         ),
       ),
-    ));
+    )));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     return () => applied;
@@ -215,5 +243,147 @@ void main() {
     final out = applied()!;
     expect(out.supplierName, 'Kedai Runcit Aman');
     expect(out.totalAmount, 48.0);
+  });
+
+  // ---- what the paper IS, above what it says (0614) ----
+
+  testWidgets('the dialog says what kind of paper it thinks this is',
+      (tester) async {
+    await open(
+      tester,
+      const OcrExtraction(
+        supplierName: 'TM Technology Services Sdn Bhd',
+        totalAmount: 334.89,
+        rawText: 'TM Technology Services Sdn Bhd\nTAX INVOICE\n'
+            'Invoice No 010043211993\nJUMLAH 334.89',
+      ),
+    );
+
+    // The picker exists and has chosen. `_KindField` draws nothing at
+    // all while the list is loading, so finding it is the assertion
+    // that the stub arrived as well as that the guess was made.
+    final picker = find.byKey(const ValueKey('scan-document-kind'));
+    expect(picker, findsOneWidget);
+    expect(
+      find.descendant(
+        of: picker,
+        matching: find.text("Supplier's bill or invoice"),
+      ),
+      findsOneWidget,
+    );
+
+    // The reason in words rather than a percentage, and the hint that
+    // says what pressing the button will do.
+    expect(find.textContaining('Says "tax invoice"'), findsOneWidget);
+    expect(
+      find.textContaining('Becomes a bill'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('and says "something else" when the paper does not say',
+      (tester) async {
+    // The negative half, and the one that makes the assertion above
+    // mean anything: "Supplier's bill" is also the first row in the
+    // stub, so a picker that ignored the guess entirely and fell back
+    // to the head of the list would pass that test and fail this one.
+    await open(tester, const OcrExtraction(supplierName: 'Kedai Aman'));
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('scan-document-kind')),
+        matching: find.text('Something else'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('and lets somebody say otherwise', (tester) async {
+    await open(
+      tester,
+      const OcrExtraction(
+        supplierName: 'TM Technology Services Sdn Bhd',
+        totalAmount: 334.89,
+        rawText: 'TAX INVOICE\nJUMLAH 334.89',
+      ),
+    );
+
+    final picker = find.byKey(const ValueKey('scan-document-kind'));
+    await tester.ensureVisible(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Something else').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: picker, matching: find.text('Something else')),
+      findsOneWidget,
+    );
+    // The hint follows the choice rather than the guess: the two rows
+    // in the stub carry different ones, so a hint that stayed put would
+    // show here.
+    expect(find.textContaining('Becomes a bill'), findsNothing);
+  });
+
+  testWidgets('and the choice is what comes back, not the guess',
+      (tester) async {
+    // The half that matters outside this dialog. A picker that draws
+    // the new label and hands back the old code files the scan as
+    // something nobody chose, and the screen would look right.
+    final applied = await open(
+      tester,
+      const OcrExtraction(
+        supplierName: 'TM Technology Services Sdn Bhd',
+        totalAmount: 334.89,
+        rawText: 'TAX INVOICE\nJUMLAH 334.89',
+      ),
+    );
+
+    final picker = find.byKey(const ValueKey('scan-document-kind'));
+    await tester.ensureVisible(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Something else').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use these'));
+    await tester.pumpAndSettle();
+
+    expect(applied()!.documentKind, 'other');
+  });
+
+  testWidgets('a guess at a kind nobody offers is corrected, not shown',
+      (tester) async {
+    // The stub offers a bill and "something else". A receipt is read
+    // as a receipt, which is not on the list — the kind was switched
+    // off, or added to the classifier before it was added to the
+    // table. Without the correction the dropdown asserts on a value
+    // that is not among its items, and the document somebody is
+    // looking at is not the place to find that out.
+    final applied = await open(
+      tester,
+      const OcrExtraction(
+        supplierName: 'Kedai Runcit Aman',
+        totalAmount: 48.0,
+        rawText: 'RESIT RASMI\nJUALAN TUNAI\nJUMLAH 48.00',
+      ),
+    );
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('scan-document-kind')),
+        matching: find.text("Supplier's bill or invoice"),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Use these'));
+    await tester.pumpAndSettle();
+
+    // And what comes back is what was SHOWN. A dialog that displayed
+    // the fallback and handed back the unoffered guess would pass the
+    // assertion above.
+    expect(applied()!.documentKind, 'bill');
   });
 }

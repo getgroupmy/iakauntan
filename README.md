@@ -188,16 +188,55 @@ your organisation's certificate before enabling it.
 
 ---
 
-## Reading receipts and bills
+## AI SmartScan
 
-Photograph a receipt and the supplier, the date, the number and the
+Photograph a paper and the supplier, the date, the number and the
 figures come back filled in. It reaches a bill through **Supplier
 paperwork** in the document editor, and an expense through **Record
 expense**, where the capture happens before the expense exists and the
 file is moved onto it once it does.
 
+**It knows what the paper is.** `0614` gave the reading a second
+question beside "what does it say": *what is it*. The answer comes from
+`scan_document_kinds` — a table, not an enum, edited in the console
+under **Document scanning → Kinds of document** — and it shipped with
+nine: a supplier's bill, a receipt, a quotation, a delivery order, a
+bank statement, a name card, an SSM certificate, a statement of account,
+and *something else*. Each one names where that kind of paper goes, and
+three of them deliberately name nowhere: a statement of account is worth
+filing even where nothing here turns one into a record.
+
+The kind is offered on the scan result as a picker with the guess
+already chosen, and the reason beside it in words — "Says TAX INVOICE"
+rather than a percentage, because a percentage reads as a machine being
+certain about something it cannot be certain about. It is written onto
+`ocr_scans.document_kind` by `set_scan_document_kind`, so the question a
+bookkeeper asks three months later — *what did it think this was* — has
+an answer that outlived the dialog. That call is keyed on the
+attachment, not the scan: the app has the file in its hand and the
+scan's own id never leaves the database. It lands on the most recent
+reading of that file, takes a kind that was switched off while somebody
+was looking at it — refusing would lose the answer to a race nobody can
+see — and answers null rather than raising where nothing was read.
+
+**The rules that choose are in Dart, on purpose.**
+`features/shared/document_classifier.dart` is a pure function over the
+text the reader returned. They are string matching against letterheads,
+they change every time a bank rewords its statement, and in SQL each of
+those rewordings would be a migration. So a kind added in the console is
+a kind somebody can PICK; it will not be suggested until the words to
+look for are written. The console page says so on the page, because an
+administrator who adds "Payslip" and waits for payslips to recognise
+themselves has been misled by a screen.
+
+What the classifier is careful about is the two documents that share a
+word: a **bank statement** and a **statement of account** are not each
+other, and each rules the other out. A name on the paper beats any
+number of supporting words; several supporting words are as good as a
+name; one is a guess and says so.
+
 **It is off until an administrator turns it on**, per organization, under
-Settings → *Read receipts and bills*. There is no settings row until
+Settings → *AI SmartScan*. There is no settings row until
 somebody creates one and no row means off. A receipt carries a supplier,
 an amount and sometimes a person's movements; sending that to a third
 party is a decision, not a default to discover afterwards.
@@ -308,6 +347,17 @@ refuses before the provider is called, that a failed scan returns exactly
 what it took and does so once however often the callback arrives, that
 the ledger and the balance agree after every move, and that a signed-in
 user reaches neither the key table nor the function that refunds.
+
+`supabase/tests/scan_document_kinds.sql` asserts the list: that an
+absent argument leaves a field alone and an empty one clears it — the
+difference between correcting a name and taking a destination away,
+which a plain `coalesce` gets wrong while still reporting "Saved" —
+that a kind this shipped with cannot be deleted and one a scan is filed
+under is refused by a count rather than silently unfiled, that a kind
+which IS removed leaves its scans standing, and that only a platform
+administrator writes any of it.
+`app/test/document_classifier_test.dart` asserts the choosing, in both
+languages, and a nine-mutant sweep over it killed all nine.
 
 ---
 

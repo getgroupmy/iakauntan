@@ -34,6 +34,11 @@ const dropdownCensus = <String, int>{
   // here anyway. The module and the company beside it are pickers:
   // both of those lists grow.
   'features/admin/promotions_admin.dart': 1,
+  // 0614. Where a kind of scanned document goes. The list is a `const`
+  // in `scan_kinds_repository.dart` -- six screens this app knows how
+  // to open -- so it cannot grow without somebody editing Dart, and a
+  // seventh would arrive beside a screen to open.
+  'features/admin/scan_kinds_admin.dart': 1,
   'features/admin/statutory_rates_admin.dart': 3,
   'features/approvals/rule_editor.dart': 4,
   // The entity type a business chooses at REGISTRATION. This was
@@ -120,6 +125,13 @@ const dropdownCensus = <String, int>{
   // register's own classification, not ours. A fifth would arrive by
   // Act of Parliament and by migration, and a migration that added one
   // would have to come here anyway.
+  // 0614. What AI SmartScan thinks the paper is. The same argument as
+  // the kinds of business above, and for the same reason: the list is
+  // a table a platform administrator adds to, there are nine of them,
+  // and nobody has ever wanted to SEARCH for "Bank statement". If it
+  // ever reaches the size where somebody would, this entry comes off
+  // and a `SearchablePicker` goes in.
+  'features/shared/scan_result_dialog.dart': 1,
   'features/shared/ssm_entity_picker.dart': 1,
   'features/stock/landed_cost_screen.dart': 1,
   'features/team/team_screen.dart': 1,

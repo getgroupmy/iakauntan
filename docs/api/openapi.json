@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0613",
+    "version": "0614",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -41820,6 +41820,59 @@
         }
       }
     },
+    "/rpc/platform_delete_scan_kind": {
+      "post": {
+        "operationId": "platform_delete_scan_kind",
+        "summary": "Removes a kind of document nothing is filed as",
+        "description": "Removes a kind of document nothing is filed as. Refuses a built-in one and refuses one in use, naming how many. 0614.\n\n`public.platform_delete_scan_kind(p_code text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_delete_search_register": {
       "post": {
         "operationId": "platform_delete_search_register",
@@ -43433,6 +43486,79 @@
                 "schema": {
                   "type": "string",
                   "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_save_scan_kind": {
+      "post": {
+        "operationId": "platform_save_scan_kind",
+        "summary": "Adds or amends a kind of document a scan can be recognised as",
+        "description": "Adds or amends a kind of document a scan can be recognised as. An absent argument means \"leave it alone\"; an empty one means \"clear it\", which is how a destination is taken away. 0614.\n\n`public.platform_save_scan_kind(p_code text, p_label text, p_label_my text, p_destination text, p_hint text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_code": {
+                    "type": "string"
+                  },
+                  "p_label": {
+                    "type": "string"
+                  },
+                  "p_label_my": {
+                    "type": "string"
+                  },
+                  "p_destination": {
+                    "type": "string"
+                  },
+                  "p_hint": {
+                    "type": "string"
+                  },
+                  "p_sort_order": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_is_active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "p_code",
+                  "p_label"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -61796,6 +61922,70 @@
         }
       }
     },
+    "/rpc/set_scan_document_kind": {
+      "post": {
+        "operationId": "set_scan_document_kind",
+        "summary": "Files the most recent scan of an attachment as a kind of document",
+        "description": "Files the most recent scan of an attachment as a kind of document. Accepts a kind that has since been switched off, and answers null where there is no scan to write on. 0614.\n\n`public.set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_attachment_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_document_kind": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_attachment_id",
+                  "p_document_kind"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/set_sst_registration": {
       "post": {
         "operationId": "set_sst_registration",
@@ -68631,6 +68821,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/scale_barcode_formats"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/scan_document_kinds": {
+      "get": {
+        "operationId": "select_scan_document_kinds",
+        "summary": "Read scan_document_kinds",
+        "description": "What a scanned paper can be recognised as, and where that kind of paper goes. The rules that CHOOSE between these live in the app: they are string matching against letterheads and would need a migration every time a bank changed its wording. 0614.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/scan_document_kinds"
                   }
                 }
               }
@@ -82522,6 +82776,9 @@
           "finished_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "document_kind": {
+            "type": "string"
           }
         },
         "required": [
@@ -89831,6 +90088,52 @@
           "code_digits",
           "value_digits",
           "value_kind"
+        ]
+      },
+      "scan_document_kinds": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "label_my": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "is_builtin": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_by": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "code",
+          "label"
         ]
       },
       "search_registers": {

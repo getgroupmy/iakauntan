@@ -15,6 +15,7 @@ import 'credit_admin.dart';
 import 'landing_cms.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
+import 'scan_kinds_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'promotions_admin.dart';
 import 'feedback_admin.dart';
@@ -88,6 +89,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/readers',
     primary: false,
     page: OcrCatalogAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    label: 'Kinds of document',
+    icon: Icons.rule_folder_outlined,
+    selectedIcon: Icons.rule_folder,
+    path: '/admin/scan-kinds',
+    primary: false,
+    page: ScanKindsAdminTab(),
   ),
   (
     group: 'Service',

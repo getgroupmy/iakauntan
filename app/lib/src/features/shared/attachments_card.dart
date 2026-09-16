@@ -329,7 +329,11 @@ class _FileRowState extends ConsumerState<_FileRow> {
         // What comes back is what the person on the screen settled on,
         // which is not always what the reader said.
         final accepted = await showScanResult(context, read, canApply: true);
-        if (accepted != null) apply(accepted);
+        if (accepted != null) {
+          await rememberDocumentKind(ref,
+              attachmentId: file.id, accepted: accepted);
+          apply(accepted);
+        }
       }
     } catch (e) {
       // The database's own refusals — scanning switched off, no credit,

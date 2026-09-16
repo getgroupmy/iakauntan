@@ -557,11 +557,17 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
           builder: (ocr) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Named, because `0614` widened it past receipts. The
+              // subtitle names the papers rather than the technology:
+              // the question somebody has is "will it read THIS", and
+              // a list answers it where "AI-powered extraction" does
+              // not.
               const SectionHeader(
-                'Read receipts and bills',
+                'AI SmartScan',
                 subtitle:
-                    'Photograph a receipt and have the supplier, date and '
-                    'amount filled in for you',
+                    'Photograph a bill, a receipt, a delivery order, a '
+                    'name card or a bank statement and have it read — the '
+                    'supplier, the date, the amounts and the lines',
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

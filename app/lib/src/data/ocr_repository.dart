@@ -226,6 +226,7 @@ class OcrExtraction {
     this.lines = const [],
     this.note,
     this.rawText,
+    this.documentKind,
   });
 
   final String? supplierName;
@@ -273,6 +274,15 @@ class OcrExtraction {
   /// empty page that looks like a failure.
   final String? rawText;
 
+  /// What KIND of paper this is, as a `scan_document_kinds.code`.
+  ///
+  /// `0614`. Guessed by `document_classifier.dart` from [rawText] and
+  /// confirmable by the person holding the paper — the fields above are
+  /// what the reading made of the document, and this is what the
+  /// document is. Null where nobody was asked, which is every reading
+  /// taken before 0614 and every one where the list had not loaded.
+  final String? documentKind;
+
   /// The same reading with some of it changed.
   ///
   /// Only ever sets; it cannot put a field back to null, which is what
@@ -294,6 +304,7 @@ class OcrExtraction {
     List<OcrLine>? lines,
     String? note,
     String? rawText,
+    String? documentKind,
   }) =>
       OcrExtraction(
         supplierName: supplierName ?? this.supplierName,
@@ -312,6 +323,7 @@ class OcrExtraction {
         lines: lines ?? this.lines,
         note: note ?? this.note,
         rawText: rawText ?? this.rawText,
+        documentKind: documentKind ?? this.documentKind,
       );
 
   /// The amount to put in an expense's Amount field.
@@ -343,6 +355,7 @@ class OcrExtraction {
             .toList(),
         note: _text(j['note']),
         rawText: _text(j['raw_text']),
+        documentKind: _text(j['document_kind']),
       );
 
   /// The same shape the server-side readers return, so a scan logged
@@ -375,6 +388,7 @@ class OcrExtraction {
         ],
         'note': note,
         'raw_text': rawText,
+        'document_kind': documentKind,
       };
 
   static String? _text(Object? v) {
@@ -474,6 +488,27 @@ extension RepoOcr on Repo {
         'p_extracted': read?.toJson(),
         'p_error': error,
       });
+
+  /// Files the most recent scan of an attachment as a kind of document.
+  ///
+  /// `0614`. Separate from the reading because the kind is settled
+  /// AFTER it: by the time somebody has looked at the dialog the scan
+  /// row exists, written by `ocr_finish` or by `ocr_record_local`.
+  ///
+  /// Answers null where there was no scan to write on — a capture
+  /// nobody read still reaches this with whatever the form said — which
+  /// is why it is not an error.
+  Future<String?> setScanDocumentKind({
+    required String attachmentId,
+    String? kind,
+  }) async {
+    final out = await client.rpc('set_scan_document_kind', params: {
+      'p_org_id': orgId,
+      'p_attachment_id': attachmentId,
+      'p_document_kind': kind,
+    });
+    return out?.toString();
+  }
 
   /// Every movement of the scanning balance, newest first.
   Future<List<Map<String, dynamic>>> creditLedger() async => Repo.rows(

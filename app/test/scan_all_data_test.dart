@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/ocr_repository.dart';
+import 'package:iakauntan/src/data/scan_kinds_repository.dart';
 import 'package:iakauntan/src/features/shared/scan_all_data.dart';
 import 'package:iakauntan/src/features/shared/scan_result_dialog.dart';
 
@@ -11,6 +13,32 @@ import 'package:iakauntan/src/features/shared/scan_result_dialog.dart';
 /// The reader finds most of it. This is for the rest — a figure printed
 /// plainly on the page that nothing recognised, which until now could
 /// only be retyped.
+/// A `ProviderScope` with the kinds of document already answered.
+///
+/// `0614` put a picker on this dialog, and a picker reads a table. The
+/// list is stubbed rather than left to fail: without a scope the dialog
+/// throws, and with a scope that never answers the picker draws nothing
+/// — and a picker that drew nothing would satisfy every assertion in
+/// this file without ever having existed.
+Widget scoped(Widget child) => ProviderScope(
+      overrides: [
+        offeredScanKindsProvider.overrideWith(
+          (ref) async => const [
+            ScanKind(
+              code: 'bill',
+              label: "Supplier's bill or invoice",
+              destination: 'purchase_document',
+              hint: 'Becomes a bill, with the supplier and the lines '
+                  'filled in.',
+              sortOrder: 10,
+            ),
+            ScanKind(code: 'other', label: 'Something else', sortOrder: 999),
+          ],
+        ),
+      ],
+      child: child,
+    );
+
 void main() {
   const tmBill = OcrExtraction(
     supplierName: 'TM Technology Services Sdn Bhd',
@@ -127,7 +155,7 @@ void main() {
     await roomToSeeItAll(tester);
     OcrExtraction? applied;
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(scoped(MaterialApp(
       theme: AppTheme.light(),
       home: Builder(
         builder: (context) => Scaffold(
@@ -140,7 +168,7 @@ void main() {
           ),
         ),
       ),
-    ));
+    )));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -188,7 +216,7 @@ void main() {
     await roomToSeeItAll(tester);
     OcrExtraction? applied;
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(scoped(MaterialApp(
       theme: AppTheme.light(),
       home: Builder(
         builder: (context) => Scaffold(
@@ -201,7 +229,7 @@ void main() {
           ),
         ),
       ),
-    ));
+    )));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('All data'));
