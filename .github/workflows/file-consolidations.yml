@@ -1,0 +1,150 @@
+name: File consolidated e-Invoices
+
+# Under the LHDN e-Invoice guideline a seller aggregates the month's
+# sales to buyers who did not ask for an invoice into one submission,
+# due within **seven days of month end**. `app.run_daily_jobs` rolls
+# them up on the first; until `0616` nothing turned the rollup into a
+# document and nothing submitted it, so the seven-day clock started and
+# ran out against nothing.
+#
+# ---------------------------------------------------------------------
+# Why daily, all month
+#
+# The deadline is the eighth, so the first week is what matters. It runs
+# every day anyway, for about 30 minutes of allowance a month, because
+# `einvoice_consolidations_due` returns overdue consolidations however
+# late they are — and a company that could not file on the eighth
+# (credentials expired, MyInvois down, certificate not renewed) should
+# file on the ninth rather than next month.
+#
+# Nothing here is idempotency-critical in the usual way: a consolidation
+# that has been accepted is marked `submitted` and
+# `prepare_consolidated_einvoice` refuses it by name, so a second run
+# cannot file the same month twice.
+#
+# ---------------------------------------------------------------------
+# What it does NOT do
+#
+# It does not consolidate. Rolling sales up is `run_daily_jobs`'s work
+# and it happens on the first of the month; this files what that
+# produced. Two timers doing one job each, so a failure in either is
+# about one thing.
+
+on:
+  schedule:
+    # 02:00 UTC, which is 10:00 in Kuala Lumpur — inside the working day
+    # of whoever has to act on a company that could not be filed for.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      within_days:
+        description: 'How far ahead to look, in days. Overdue ones are always included.'
+        required: false
+        default: '3'
+
+concurrency:
+  group: file-consolidations
+  # Never cancel a run in flight: it is in the middle of handing
+  # documents to LHDN and updating their rows, and a killed run would
+  # leave a submission recorded as in_progress that was in fact filed.
+  cancel-in-progress: false
+
+jobs:
+  file:
+    name: File what is due
+    runs-on: ubuntu-latest
+    env:
+      SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+      WITHIN_DAYS: ${{ inputs.within_days || '3' }}
+    steps:
+      - name: Call myinvois
+        run: |
+          # The same two ways in every scheduler here uses, and the same
+          # order of preference. `docs/schedulers.md` says why the
+          # secret is better than the key.
+          auth=""
+          headers=()
+          if [ -n "$SCHEDULER_SECRET" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            auth="$SUPABASE_ANON_KEY"
+            headers=(-H "X-Scheduler-Secret: $SCHEDULER_SECRET")
+          elif [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            auth="$SUPABASE_SERVICE_ROLE_KEY"
+          else
+            echo "::warning::Nothing was filed. Set the repository secret SCHEDULER_SECRET and the variable SUPABASE_ANON_KEY."
+            {
+              echo "### Nothing was filed"
+              echo
+              echo "Neither \`SCHEDULER_SECRET\` nor \`SUPABASE_SERVICE_ROLE_KEY\`"
+              echo "is set. Add one under **Settings → Secrets and variables →"
+              echo "Actions** — \`docs/schedulers.md\` says which and why."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          out="$(mktemp)"
+          code="$(curl -sS -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/myinvois" \
+            -H "Authorization: Bearer ${auth}" \
+            "${headers[@]}" \
+            -H 'Content-Type: application/json' \
+            -d "$(printf '{"action":"file-consolidations","within_days":%s}' "$WITHIN_DAYS")" \
+            -o "$out" -w '%{http_code}')"
+
+          echo "HTTP $code"
+          cat "$out"
+          echo
+
+          if [ "$code" = "401" ]; then
+            echo "::error::The platform rejected the bearer token. These functions are verify_jwt = true, so it has to be a JWT this project signed: the anon key, or the service role key."
+            exit 1
+          fi
+
+          # Unlike send-email, an unrecognised caller does not quietly
+          # file nothing: the function answers 403 by name. So a wrong
+          # secret can never look like a month with nothing due, which
+          # is the failure that would go unnoticed for a year.
+          if [ "$code" = "403" ]; then
+            echo "::error::myinvois did not recognise this caller as the scheduler. SCHEDULER_SECRET here must match the one set on the function."
+            exit 1
+          fi
+
+          if [ "$code" != "200" ]; then
+            echo "::error::myinvois answered $code"
+            exit 1
+          fi
+
+          considered="$(python3 -c "import json;print(json.load(open('$out')).get('considered',0))")"
+          submitted="$(python3 -c "import json;print(json.load(open('$out')).get('submitted',0))")"
+
+          # Most days nothing is due, and that does not deserve a line.
+          if [ "$considered" = "0" ]; then
+            exit 0
+          fi
+
+          {
+            echo "### Filed $submitted of $considered"
+            echo
+            # One line per company. On one line, because a YAML block
+            # scalar ends at the first line indented less than the
+            # block -- which is every continuation line of a Python
+            # script and the terminator of a heredoc.
+            python3 -c "import json,sys;rs=json.load(open(sys.argv[1])).get('results',[]);print(chr(10).join(('- **%s (%s)** - filed, %s' % (r['org'],r['period'],r.get('uuid'))) if r.get('submitted') else ('- %s (%s) - skipped: %s' % (r['org'],r['period'],r['skipped'])) if 'skipped' in r else ('- **%s (%s)** - FAILED: %s' % (r['org'],r['period'],r.get('failed'))) for r in rs))" "$out"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A skip is somebody's unfinished setup and a failure is a
+          # filing that did not happen. Both are warnings rather than a
+          # red run: the deadline is statutory and this workflow going
+          # red every day for one misconfigured company is how a real
+          # failure stops being noticed.
+          #
+          # They are counted separately because they need different
+          # people. A skip needs an administrator to finish a setup; a
+          # failure needs somebody to look at why LHDN said no.
+          skipped="$(python3 -c "import json;print(sum(1 for r in json.load(open('$out')).get('results',[]) if 'skipped' in r))")"
+          failed="$(python3 -c "import json;print(sum(1 for r in json.load(open('$out')).get('results',[]) if 'failed' in r))")"
+          [ "$skipped" != "0" ] && echo "::warning::$skipped company(s) could not be filed for — see the run summary for what each one is missing."
+          [ "$failed" != "0" ] && echo "::warning::$failed consolidation(s) were rejected or failed to send."
+          exit 0

@@ -451,4 +451,230 @@ begin
   end;
 end $$;
 
+-- =====================================================================
+-- And the document it becomes
+--
+-- `0616`. Everything above gathers the month's unclaimed sales into
+-- `einvoice_consolidations` and its items. Until 0616 that is where it
+-- stopped: `einvoice_consolidations.einvoice_id` has been nullable and
+-- null since `0007` and nothing ever wrote it, so the screen's
+-- "Consolidated, and queued for MyInvois" described something that had
+-- not happened and the seven-day clock ran out against nothing.
+--
+-- What is asserted is the shape LHDN asks for: the general public as
+-- the buyer, one line per receipt under classification `004`, and a
+-- tax figure taken off the sales documents rather than derived by
+-- subtraction from a gross total.
+-- =====================================================================
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_con   uuid;
+  v_ei    uuid;
+  v_again uuid;
+  v_doc   public.einvoice_documents;
+  v_lines integer;
+  v_codes text;
+  v_empty uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+
+  select id into v_org from public.organizations
+   where name = 'Kedai Konsolidasi Sdn Bhd';
+  select id into v_con from public.einvoice_consolidations
+   where org_id = v_org
+     and period_start = date_trunc('month', app.today())::date;
+  perform pg_temp.check_true(
+    'the month above left a consolidation to prepare', v_con is not null);
+
+  v_ei := public.prepare_consolidated_einvoice(v_con);
+  select * into v_doc from public.einvoice_documents where id = v_ei;
+
+  -- ------------------------------------------------------------------
+  -- The document
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq(
+    'it is an invoice, not a self-billed anything',
+    v_doc.einvoice_type_code, '01');
+  perform pg_temp.check_eq(
+    'and it says where it came from, which is a third kind of source',
+    v_doc.source_table, 'einvoice_consolidations');
+  perform pg_temp.check_eq(
+    'numbered after the period, so preparing it twice cannot raise two',
+    v_doc.internal_doc_no,
+    'CONS-' || to_char(date_trunc('month', app.today())::date, 'YYYYMM'));
+  perform pg_temp.check_eq(
+    'it is queued, which is what submit picks up', v_doc.status::text, 'queued');
+
+  -- ------------------------------------------------------------------
+  -- There is no buyer
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq(
+    'the buyer is the general public', v_doc.buyer_name, 'General Public');
+  perform pg_temp.check_eq(
+    'under LHDN''s own TIN for them',
+    v_doc.buyer_tin, app.general_public_tin());
+  perform pg_temp.check_eq(
+    'with NA where a registration number would go',
+    v_doc.buyer_id_value, 'NA');
+  -- Not decoration. A consolidated e-Invoice is not sent to anybody,
+  -- and an address or an e-mail on it would be somebody's -- the last
+  -- walk-in customer whose details happened to be to hand.
+  perform pg_temp.check_true(
+    'and no contact details at all, because there is nobody to contact',
+    v_doc.buyer_email is null and v_doc.buyer_phone is null);
+
+  -- ------------------------------------------------------------------
+  -- One line per receipt
+  -- ------------------------------------------------------------------
+  select count(*), string_agg(distinct classification_code, ',')
+    into v_lines, v_codes
+    from public.einvoice_lines where einvoice_id = v_ei;
+  perform pg_temp.check_eq('two receipts, two lines', v_lines, 2);
+  perform pg_temp.check_eq(
+    'every one of them classified as a consolidated e-Invoice, which is '
+    'what code 004 exists for', v_codes, '004');
+
+  perform pg_temp.check_eq(
+    'and each line is named after the receipt it stands for, which is '
+    'the only thing tying it back to a sale',
+    -- `in` rather than a join: document numbers repeat across
+    -- companies, and joining `sales_documents` on the number alone
+    -- counted the shop next door's receipt as well. It said 3.
+    (select count(*)::integer from public.einvoice_lines l
+      where l.einvoice_id = v_ei
+        and l.description in (
+              select d.doc_no from public.einvoice_consolidation_items i
+                join public.sales_documents d on d.id = i.sales_document_id
+               where i.consolidation_id = v_con)), 2);
+
+  perform pg_temp.check_eq(
+    'the totals are the month''s takings', v_doc.total_incl_tax, 30.00);
+  perform pg_temp.check_eq(
+    'and the payable amount agrees with them', v_doc.payable_amount, 30.00);
+  -- Summed from the sales documents rather than taken off the items'
+  -- gross, which carries no tax figure at all.
+  perform pg_temp.check_eq(
+    'the tax is what the sales carried, to the sen',
+    v_doc.total_tax,
+    (select coalesce(sum(d.tax_amount), 0)
+       from public.einvoice_consolidation_items i
+       join public.sales_documents d on d.id = i.sales_document_id
+      where i.consolidation_id = v_con));
+
+  -- ------------------------------------------------------------------
+  -- The consolidation knows about it now
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq(
+    'the consolidation points at the document it became',
+    (select einvoice_id from public.einvoice_consolidations where id = v_con),
+    v_ei);
+  perform pg_temp.check_eq(
+    'and says it has been generated',
+    (select status from public.einvoice_consolidations where id = v_con),
+    'generated');
+
+  -- ------------------------------------------------------------------
+  -- Preparing it twice
+  -- ------------------------------------------------------------------
+  -- A shop presses the button again. It must reach the same document
+  -- rather than raise a second e-Invoice for the same month, which
+  -- LHDN would take as two filings.
+  v_again := public.prepare_consolidated_einvoice(v_con);
+  perform pg_temp.check_eq('preparing it twice reaches one document',
+    v_again::text, v_ei::text);
+  perform pg_temp.check_eq('and does not double the lines',
+    (select count(*)::integer from public.einvoice_lines
+      where einvoice_id = v_ei), 2);
+
+  -- ------------------------------------------------------------------
+  -- Once it is at LHDN
+  -- ------------------------------------------------------------------
+  update public.einvoice_consolidations set status = 'submitted'
+   where id = v_con;
+  perform pg_temp.check_refused(
+    'a consolidation already at LHDN is not prepared again, and the '
+    'refusal says what to do with a sale that missed it',
+    format($q$select public.prepare_consolidated_einvoice(%L)$q$, v_con),
+    '%needs its own e-Invoice%');
+  update public.einvoice_consolidations set status = 'generated'
+   where id = v_con;
+
+  -- ------------------------------------------------------------------
+  -- An empty month
+  -- ------------------------------------------------------------------
+  -- The rollup opens a consolidation for a month with nothing in it --
+  -- asserted above. Filing a zero-value e-Invoice for it would be a
+  -- statement to LHDN that the shop sold nothing, which is a different
+  -- claim from not having filed.
+  select id into v_empty from public.einvoice_consolidations
+   where org_id = v_org
+     and period_start = (date_trunc('month', app.today())
+                         - interval '1 month')::date;
+  perform pg_temp.check_refused(
+    'a month with nothing in it is not filed as nothing',
+    format($q$select public.prepare_consolidated_einvoice(%L)$q$, v_empty),
+    '%nothing to file%');
+
+  -- ------------------------------------------------------------------
+  -- And it is not a reading decision
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar@example.test'));
+  perform pg_temp.check_refused(
+    'somebody outside the company cannot file its month',
+    format($q$select public.prepare_consolidated_einvoice(%L)$q$, v_con),
+    '%not permitted to file e-Invoices%', '42501');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The scheduler's way in is nobody else's
+--
+-- Its own block, because it needs `set local role authenticated` and
+-- that has to be undone. `0612` learned this the hard way: this suite
+-- runs as the table OWNER, and an owner is not subject to its own
+-- GRANTs -- so a permission assertion made without switching role
+-- passes against a function granted to nobody at all, which is exactly
+-- what it looked like here on the first run.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_con uuid;
+begin
+  select id into v_org from public.organizations
+   where name = 'Kedai Konsolidasi Sdn Bhd';
+  select id into v_con from public.einvoice_consolidations
+   where org_id = v_org
+     and period_start = date_trunc('month', app.today())::date;
+
+  set local role authenticated;
+  -- That the switch happened, before anything is concluded from it.
+  perform pg_temp.check_eq(
+    'and we really are somebody signed in', current_user, 'authenticated');
+
+  perform pg_temp.check_refused(
+    'the scheduler''s way in is not reachable by anybody signed in',
+    format(
+      $q$select public.scheduler_prepare_consolidated_einvoice(%L)$q$, v_con),
+    '%permission denied%', '42501');
+
+  -- CONTROL. The ordinary way in IS reachable by the same role, so the
+  -- refusal above is about that function rather than about the role
+  -- being unable to call anything.
+  perform pg_temp.check_true(
+    'while the ordinary one is',
+    has_function_privilege('authenticated',
+      'public.prepare_consolidated_einvoice(uuid)', 'execute'));
+
+  -- And the list the scheduler reads across every company, which is
+  -- the one that would leak what the shop next door owes LHDN.
+  perform pg_temp.check_refused(
+    'nor is the list of what every company owes',
+    'select * from public.einvoice_consolidations_due(7)',
+    '%permission denied%', '42501');
+
+  reset role;
+end $$;
+
 rollback;

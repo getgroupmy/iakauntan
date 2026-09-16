@@ -332,14 +332,26 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- A version this build cannot sign
+-- A version this build cannot produce
 --
--- The version on a document is a claim about that document. Version 1.1
--- is the one carrying an XAdES signature from a Malaysian certificate
--- authority; 0015's own comment on the certificate columns says so and
--- README says the signing step is not implemented. A document stamped
--- 1.1 with no signature in it is not a rejected filing, it is a filed
--- one with a false statement of what it is.
+-- The version on a document is a claim about that document, and until
+-- `0616` the claim this build could not honour was 1.1: it is the
+-- version carrying an XAdES signature and nothing here made one. `0615`
+-- built the signature -- `_shared/xades.ts` and `_shared/der.ts` -- so
+-- the assertion that 1.1 is refused has become an assertion about a
+-- premise that stopped being true, and it is rewritten rather than
+-- deleted.
+--
+-- What has NOT changed is the rule the guard exists for: the settings
+-- key is free-form text an administrator writes, and anything in it was
+-- going onto a tax document verbatim. `banana` is still refused, and
+-- that is the half of this block that was always the point.
+--
+-- Whether a particular COMPANY can produce 1.1 -- whether it has a
+-- certificate -- is a different question, asked by
+-- `set_einvoice_version` and asserted in
+-- `einvoice_signing_certificate.sql`. This predicate is about the
+-- build.
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -348,8 +360,12 @@ declare
 begin
   perform pg_temp.check_true('1.0 is what this build produces',
     app.einvoice_version_supported('1.0'));
-  perform pg_temp.check_true('and 1.1 is not, while nothing signs',
-    not app.einvoice_version_supported('1.1'));
+  perform pg_temp.check_true('and 1.1 is too, since 0615 signs',
+    app.einvoice_version_supported('1.1'));
+  -- CONTROL. The predicate is a list and not "anything", which is the
+  -- only reason the refusals below still happen at all.
+  perform pg_temp.check_true('and 2.0 is not, because it does not exist',
+    not app.einvoice_version_supported('2.0'));
 
   -- The default `0007` set the other way round. This fixture has never
   -- named the column, which is how a test suite came to be full of
@@ -360,34 +376,43 @@ begin
     '1.0');
 
   -- Written straight to the table, which is the path a future insert or
-  -- an incident fix would take.
-  begin
-    update public.einvoice_documents
-       set einvoice_version = '1.1' where id = v_ein;
-    raise exception 'FAIL: a document was stamped 1.1 with nothing to sign it';
-  exception when sqlstate '0A000' then
-    get stacked diagnostics v_msg = message_text;
-    perform pg_temp.check_true('and the refusal names the signature',
-      v_msg like '%XAdES signature%');
-    raise notice 'ok   a version this build cannot sign is refused';
-  end;
-  perform pg_temp.check_eq('and the document is unchanged',
+  -- an incident fix would take. 1.1 goes on now; it did not before 0616
+  -- and that refusal is what this block used to assert.
+  update public.einvoice_documents
+     set einvoice_version = '1.1' where id = v_ein;
+  perform pg_temp.check_eq('a document can be stamped 1.1 now',
     (select einvoice_version from public.einvoice_documents where id = v_ein),
-    '1.0');
+    '1.1');
 
-  -- Not only 1.1. The settings key is free-form text and anything in it
-  -- was going onto a tax document verbatim.
+  -- The half that was always the point. The settings key is free-form
+  -- text and anything in it was going onto a tax document verbatim.
   begin
     update public.einvoice_documents
        set einvoice_version = 'banana' where id = v_ein;
     raise exception 'FAIL: an arbitrary string was accepted as a version';
   exception when sqlstate '0A000' then
-    raise notice 'ok   and so is anything else somebody types';
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'and the refusal names the two versions to choose between',
+      v_msg like '%1.0%' and v_msg like '%1.1%');
+    raise notice 'ok   anything else somebody types is refused';
   end;
+  perform pg_temp.check_eq('and the document is unchanged',
+    (select einvoice_version from public.einvoice_documents where id = v_ein),
+    '1.1');
+  update public.einvoice_documents
+     set einvoice_version = '1.0' where id = v_ein;
 
   -- End to end: the settings key an admin can write, through
   -- prepare_einvoice, which is where it actually gets on the document.
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  --
+  -- This is the assertion `0615` needed and did not have. It set the
+  -- version to 1.1 through a dropdown and left the predicate answering
+  -- false, so every preparation raised 0A000 and e-Invoicing was
+  -- entirely broken by a settings change. Nothing caught it, because
+  -- nothing asserted that a company at 1.1 could still prepare a
+  -- document at all.
+  perform public.create_fiscal_year(v_org, date_trunc('year', app.today())::date);
   update public.organizations
      set einvoice_enabled = true, tin = 'C1234567890',
          settings = coalesce(settings, '{}'::jsonb)
@@ -397,12 +422,26 @@ begin
   values (v_org, 'C-1', 'customer', 'Pembeli Sdn Bhd', 'C1111111111')
   returning id into v_contact;
   v_doc := pg_temp.sales_doc(v_org, v_contact);
+  perform public.prepare_einvoice(v_doc);
+  perform pg_temp.check_eq(
+    'a company filing at 1.1 can prepare a document, which is what 0615 '
+    'broke and nothing noticed',
+    (select einvoice_version from public.einvoice_documents
+      where source_id = v_doc), '1.1');
+
+  -- CONTROL. `banana` in the same key still stops a preparation dead,
+  -- so the assertion above is about the version being SUPPORTED rather
+  -- than about the guard having been removed.
+  update public.organizations
+     set settings = settings || jsonb_build_object('einvoice_version', 'banana')
+   where id = v_org;
+  delete from public.einvoice_documents where source_id = v_doc;
   begin
     perform public.prepare_einvoice(v_doc);
     raise exception
-      'FAIL: an organization setting put 1.1 on a document with no signature';
+      'FAIL: an organization setting put an invented version on a document';
   exception when sqlstate '0A000' then
-    raise notice 'ok   nor can an organization setting reach it';
+    raise notice 'ok   and a version nobody has heard of still cannot reach it';
   end;
   perform pg_temp.check_eq('and no document was prepared',
     (select count(*) from public.einvoice_documents

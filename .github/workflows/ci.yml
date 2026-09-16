@@ -1120,6 +1120,23 @@ jobs:
       - run: deno check supabase/functions/_shared/xades_test.ts
       - run: deno test --allow-read supabase/functions/_shared/xades_test.ts
 
+      # Which companies the scheduler leaves alone when it files the
+      # month's consolidated e-Invoices, and what it says about them.
+      #
+      # Pure, and asserted here because the alternative is finding out
+      # from MyInvois: a company with no credentials attempted anyway
+      # spends a call to be told what the database already knew, and
+      # buries the real problem -- somebody never finished the setup --
+      # in a transport error. Each sentence names the setup step,
+      # because the person who reads the report is the one who has to
+      # do it, and that is asserted rather than hoped for.
+      #
+      # The controls matter as much as the skips: 1.0 does not need a
+      # certificate, so a check that forgot the version would stop
+      # every unsigned filing in the country.
+      - run: deno check supabase/functions/myinvois/consolidations_test.ts
+      - run: deno test supabase/functions/myinvois/consolidations_test.ts
+
       # The forty lines that stand in for a Google SDK. A real RSA key
       # is generated in the test process and the assertion the function
       # builds is VERIFIED against the public half, because every

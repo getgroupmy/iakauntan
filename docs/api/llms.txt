@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0615` (the highest applied migration).
-688 functions and 340 readable tables, of which
+Schema version `0616` (the highest applied migration).
+689 functions and 340 readable tables, of which
 258 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**548 of 688 functions carry a `comment on
+**549 of 689 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -106,12 +106,13 @@ Refused unless the company has the `crm` module switched on and the caller may u
 
 - `report_pipeline_quote_mismatch(p_org uuid)` — Open deals whose figure no longer matches the quotation they are attached to.
 
-### einvoice (2)
+### einvoice (3)
 
 Refused unless the company has the `einvoice` module switched on and the caller may use it.
 
 - `consolidate_pos_einvoices(p_org uuid, p_month date)` *(writes)* — Rolls a month of anonymous counter sales into one consolidated e-Invoice, due seven days after month end.
 - `pos_einvoice_outstanding(p_org uuid)`
+- `prepare_consolidated_einvoice(p_consolidation_id uuid)` *(writes)* — Prepares a consolidation for submission, for somebody who may file for the company.
 
 ### fixed_assets (1)
 

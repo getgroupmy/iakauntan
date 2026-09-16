@@ -13,6 +13,15 @@
  *   action = "validate-tin"-> confirm a TIN matches an identifier
  *   action = "certificate" -> read a XAdES signing certificate, prove the
  *                             key matches it, and put it on file
+ *
+ * And one caller that is not a person at all:
+ *
+ *   action = "file-consolidations" -> file every consolidated e-Invoice
+ *                             coming due, for every company. Only the
+ *                             scheduler may ask, and it is answered
+ *                             before `buildContext` runs, because that
+ *                             resolves a signed-in user and a timer is
+ *                             not one.
  */
 import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
 import { buildContext, HttpError } from "../_shared/context.ts";
@@ -21,6 +30,8 @@ import { checkStatus } from "./status.ts";
 import { cancel } from "./cancel.ts";
 import { validateTin } from "./tin.ts";
 import { saveCertificate } from "./certificate.ts";
+import { fileConsolidations } from "./consolidations.ts";
+import { isSchedulerCall } from "../_shared/scheduler.ts";
 
 serveFunction("myinvois.failed", async (req: Request) => {
   if (req.method !== "POST") {
@@ -32,6 +43,26 @@ serveFunction("myinvois.failed", async (req: Request) => {
   let action = "";
 
   try {
+    // The scheduler, before anything tries to resolve a person. Its
+    // body is read here and nowhere else, so a signed-in caller cannot
+    // reach this action by naming it: `buildContext` below does not
+    // route to it at all.
+    const peeked = (await req.clone().json().catch(() => ({}))) as
+      Record<string, unknown>;
+    const asked = String(peeked.action ?? "").toLowerCase();
+    if (asked === "file-consolidations") {
+      action = asked;
+      if (
+        !isSchedulerCall(req, {
+          secret: Deno.env.get("SCHEDULER_SECRET"),
+          serviceKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+        })
+      ) {
+        return fail("Only the scheduler files consolidations", 403);
+      }
+      return json(await fileConsolidations(peeked));
+    }
+
     const ctx = await buildContext(req);
     action = String(ctx.body.action ?? "").toLowerCase();
 

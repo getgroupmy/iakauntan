@@ -164,6 +164,7 @@ The `myinvois` edge function then handles the API side, routing on an
 | `cancel` | Cancels within LHDN's 72-hour window; refuses after it closes |
 | `validate-tin` | Confirms a TIN matches a BRN/NRIC, cached 30 days |
 | `certificate` | Reads a signing certificate, proves the key matches it, files it |
+| `file-consolidations` | The scheduler's: files every consolidated e-Invoice coming due, for every company |
 
 Supported document types: 01 Invoice, 02 Credit Note, 03 Debit Note,
 04 Refund Note, and the 11–14 self-billed equivalents. Item lines carry
@@ -1687,9 +1688,19 @@ Stated plainly so nothing here is mistaken for finished:
   anything is stored, but nothing here has ever been submitted to
   MyInvois. `docs/einvoice-signing.md` says what is unverified and what
   closing it takes — a preprod credential and one submission, not code.
-- Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
+- ~~Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
   7-day clock, but **submitting** the consolidation is still manual — the
-  scheduler does not hold MyInvois credentials
+  scheduler does not hold MyInvois credentials.~~ Built, `0616`. That line
+  was too kind to itself: submitting was not manual, it was impossible.
+  `einvoice_consolidations.einvoice_id` has been nullable and null since
+  `0007` and nothing in this product ever wrote it, so the clock started
+  and ran out against nothing.
+  `prepare_consolidated_einvoice` builds the document LHDN asks for —
+  general public buyer, one line per receipt, classification `004` — and
+  `.github/workflows/file-consolidations.yml` files every company's,
+  daily, through the same `SCHEDULER_SECRET` the other timers use. A
+  company that cannot submit is **reported rather than attempted**, with
+  the setup step it is missing named
 - ~~Self-billed e-Invoice for foreign suppliers: schema supports it, no
   UI.~~ Built, `0611`. The schema half was real — codes 11 to 14 in
   `ref_einvoice_types` since `0011`, `requires_self_billed` since `0006`

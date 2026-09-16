@@ -4096,6 +4096,22 @@ class Repo {
         params: {'p_document_id': documentId, 'p_required': required},
       );
 
+  /// Turns a month's rolled-up till sales into the one e-Invoice LHDN
+  /// wants for them, and returns its id.
+  ///
+  /// `0616`. Separate from the rollup because they are separate
+  /// decisions: gathering the month is bookkeeping and filing it is a
+  /// statutory submission, and until now the second did not exist at
+  /// all — `einvoice_consolidations.einvoice_id` was never written by
+  /// anything.
+  Future<String> prepareConsolidatedEinvoice(String consolidationId) async {
+    final out = await callRpc(
+      'prepare_consolidated_einvoice',
+      params: {'p_consolidation_id': consolidationId},
+    );
+    return '$out';
+  }
+
   Future<Map<String, dynamic>> refreshEinvoiceStatus({List<String>? ids}) =>
       callMyInvois('status', {if (ids != null) 'einvoice_ids': ids});
 
