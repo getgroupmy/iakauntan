@@ -84,35 +84,52 @@ void main() {
 
   group('a tablet', () {
     testWidgets('gets one column in portrait', (tester) async {
-      // 800 across is under the line either way round.
+      // 800 across is under the 900 the second column needs.
       await at(tester, const Size(800, 1280));
-
-      expect(panel, findsNothing);
-    });
-
-    testWidgets('and one column in landscape, for the same reason as the '
-        'phone', (tester) async {
-      await at(tester, const Size(1280, 800));
 
       expect(panel, findsNothing);
     });
   });
 
   group('a laptop', () {
-    testWidgets('gets the panel, which is the control for all of the '
-        'above', (tester) async {
-      // Without this the assertions above pass against a build that
-      // never draws the panel at all, and the two-column layout would
-      // be dead code nobody noticed.
-      await at(tester, const Size(1440, 900));
+    // THE SIZES HERE ARE THE POINT, and the first version of this file
+    // got them wrong in a way that let a regression through.
+    //
+    // Its desktop control was 1440x900 -- exactly on the boundary -- and
+    // 1024x1600, a window taller than it is wide. Neither is a laptop.
+    // A browser viewport on a 1440x900 screen is about 1440x760 once the
+    // chrome is off it, and on a 1366x768 laptop it is nearer 1366x630.
+    //
+    // So when the breakpoint was briefly `shortestSide >= 900` alone,
+    // every one of those heights fell under it, the panel came off every
+    // desktop, and this file stayed green. It had also asserted that
+    // 1280x800 gets ONE column -- which is the shape of a laptop
+    // viewport, so the test was pinning the defect in place.
+    //
+    // Real viewports now, measured from the browser rather than from the
+    // screen it is running on.
+    for (final size in const [
+      Size(1440, 760), // 15" laptop, browser chrome removed
+      Size(1366, 630), // the commonest laptop panel there is
+      Size(1280, 720),
+      Size(1920, 1080), // an external monitor
+      Size(1024, 700), // a small window on a big screen
+    ]) {
+      testWidgets(
+          'gets the panel at ${size.width.toInt()}x${size.height.toInt()}',
+          (tester) async {
+        await at(tester, size);
 
-      expect(panel, findsOneWidget);
-    });
+        expect(panel, findsOneWidget);
+      });
+    }
 
-    testWidgets('and a tall desktop window gets it too', (tester) async {
-      await at(tester, const Size(1024, 1600));
+    testWidgets('and a tall narrow window does not, because the second '
+        'column has nowhere to go', (tester) async {
+      // Height is not what the panel needs. 800 across is 800 across.
+      await at(tester, const Size(800, 1600));
 
-      expect(panel, findsOneWidget);
+      expect(panel, findsNothing);
     });
   });
 

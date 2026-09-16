@@ -1407,19 +1407,32 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
 
     final scheme = Theme.of(context).colorScheme;
 
-    // SHORTEST side, not width. A phone held sideways is 915 by 412 and
-    // was getting the two-column desktop layout on the strength of that
-    // 915 -- which put the Sign in button below the fold on a screen
-    // 412 tall, so the one thing the page exists for was off-screen and
-    // the panel beside it was decoration.
+    // TWO questions, and they are not the same question.
     //
-    // A device's shortest side does not change when it is rotated, so
-    // this asks what KIND of screen it is rather than which way up it is
-    // being held. 900 stays the number: a laptop is at least 900 both
-    // ways round and a tablet in portrait is about 800, which is the
-    // line this was always meant to draw.
+    // Is there room for a second column? That is width, and 900 is the
+    // number: the form is capped at 400 and the panel needs the rest.
+    //
+    // And is this a phone? That is the SHORTEST side, which does not
+    // change when the device is rotated, so it asks what kind of screen
+    // this is rather than which way up it is being held. A phone held
+    // sideways is 915 by 412, and on the strength of that 915 it used to
+    // get the desktop layout -- which put the Sign in button below the
+    // fold on a screen 412 tall, so the one thing the page exists for
+    // was off-screen and the panel beside it was decoration. 600 is the
+    // conventional line between a handset and everything larger.
+    //
+    // Asking only the second question is what this was for one commit,
+    // and it took the panel off every DESKTOP. The reasoning written
+    // here was "a laptop is at least 900 both ways round", which is
+    // simply false: a laptop is 1440 by about 760 once the browser's own
+    // chrome is off the viewport, so `shortestSide >= 900` is false on
+    // very nearly every desktop there is. The points beside the form
+    // went missing and it was reported from a browser within the hour.
+    //
+    // Both, then. A shape only counts as wide if it is wide AND is not a
+    // handset.
     final size = MediaQuery.sizeOf(context);
-    final wide = size.shortestSide >= 900;
+    final wide = size.width >= 900 && size.shortestSide >= 600;
 
     // Nothing but the circle until there is something true to draw.
     // A page that is loading looks like a page that is loading; the
