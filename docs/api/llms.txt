@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0607` (the highest applied migration).
-671 functions and 333 readable tables, of which
-255 functions only read.
+Schema version `0608` (the highest applied migration).
+673 functions and 334 readable tables, of which
+257 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**531 of 671 functions carry a `comment on
+**533 of 673 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -190,6 +190,13 @@ Refused unless the company has the `memberships` module switched on and the call
 - `membership_billing_gaps(p_org uuid)` — Active memberships with no renewal schedule behind them.
 - `set_membership_status(p_subscription uuid, p_status app.pos_membership_status)` *(writes)* — Changes a membership's status and returns what it became.
 - `start_membership(p_sale uuid, p_membership uuid)` *(writes)* — Starts a membership off the sale that bought it, and sets up the renewal from the invoice that sale raised -- which already carries the right price, tax code and terms.
+
+### payroll (2)
+
+Refused unless the company has the `payroll` module switched on and the caller may use it.
+
+- `ea_statement(p_employee_id uuid, p_tax_year integer)` — One employee's EA form (C.P.8A) figures for a year of assessment: this employer's payslips only, by the year of the PAY DATE, from posted runs.
+- `ea_statements(p_org_id uuid, p_tax_year integer)` — Who is owed an EA form for a year of assessment and what each one comes to, leavers included.
 
 ### pos (124)
 
@@ -920,6 +927,7 @@ inconsistent.
 - `document_downloads`
 - `document_line_lots`
 - `document_share_links`
+- `ea_categories`
 - `einvoice_consolidation_items`
 - `einvoice_consolidations`
 - `einvoice_documents`

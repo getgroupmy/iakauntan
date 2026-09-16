@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/ea_form_repository.dart';
 import '../../data/repository.dart';
 import 'holidays_tab.dart';
 import 'onboarding_template_dialog.dart';
@@ -267,6 +268,7 @@ class SetupField {
     this.boolean = false,
     this.defaultOn = true,
     this.multiline = false,
+    this.eaBoxes = false,
     this.helper,
   });
 
@@ -303,6 +305,18 @@ class SetupField {
   /// only one so far — what a role actually involves does not fit on
   /// one line, and a single-line box says it should.
   final bool multiline;
+
+  /// A picker of EA form boxes rather than a text field.
+  ///
+  /// `salary_components.ea_category` is the only one, and it is
+  /// special-cased rather than given a general "choices" mechanism
+  /// because a `const SetupField` cannot hold a provider: providers are
+  /// top-level finals, not compile-time constants. One flag for one
+  /// column is less machinery than the alternative.
+  ///
+  /// The list comes from `ea_categories`, so the only codes this can
+  /// produce are ones the foreign key will accept.
+  final bool eaBoxes;
   final String? helper;
 }
 
@@ -359,6 +373,19 @@ const _salaryComponentFields = <SetupField>[
           // `not null default false` since 0446, and the one switch on
           // this screen where starting ON costs somebody money.
           defaultOn: false,
+        ),
+        // Which box on the EA form this component is reported in.
+        // `0608`. Left blank it falls back to gross salary for an
+        // ordinary component and to fees, commission or bonus for one
+        // marked "paid once, not monthly" -- which is the same
+        // distinction the switch above already makes.
+        SetupField(
+          'ea_category',
+          'EA form box',
+          eaBoxes: true,
+          helper: 'Where this shows up on the employee\'s EA form. '
+              'Leave it blank unless it is a perquisite, a benefit in '
+              'kind, accommodation or something else with its own box.',
         ),
         SetupField('is_active', 'Active', boolean: true),
       ];
@@ -604,7 +631,14 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
                 for (final f in widget.fields)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Space.md),
-                    child: f.boolean
+                    child: f.eaBoxes
+                        ? _EaBoxField(
+                            controller: _c[f.key]!,
+                            label: f.label,
+                            helper: f.helper,
+                            enabled: !_saving,
+                          )
+                        : f.boolean
                         ? SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             value: _flags[f.key] ?? true,
@@ -689,6 +723,60 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
 
     if (mounted) setState(() => _saving = false);
     if (ok && mounted) Navigator.pop(context, true);
+  }
+}
+
+/// Which box on the EA form a salary component is reported in.
+///
+/// Backed by the same `TextEditingController` every other field in this
+/// dialog uses, so `_save` needs no special case: an empty selection is
+/// an empty string, which it already turns into null.
+///
+/// Blank is the first item and it is not an omission — it is the answer
+/// for almost every component. `0608` falls back to gross salary for an
+/// ordinary earning and to fees, commission or bonus for one paid once,
+/// which is right for a salary, an allowance and a bonus alike. Only a
+/// perquisite, a benefit in kind, accommodation or a termination
+/// payment needs saying.
+class _EaBoxField extends ConsumerWidget {
+  const _EaBoxField({
+    required this.controller,
+    required this.label,
+    required this.enabled,
+    this.helper,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String? helper;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final boxes = ref.watch(eaCategoriesProvider).valueOrNull ?? const [];
+    final codes = [for (final b in boxes) b.code];
+    // What is already on the row, even where the box has since been
+    // switched off. A dropdown whose `value` is not among its `items`
+    // throws, and the component that would throw is the one somebody
+    // opened this dialog to correct.
+    final current = controller.text.trim();
+    final extra = current.isNotEmpty && !codes.contains(current);
+
+    return DropdownButtonFormField<String>(
+      key: const ValueKey('setup-ea-category'),
+      isExpanded: true,
+      value: current.isEmpty ? '' : current,
+      decoration: InputDecoration(labelText: label, helperText: helper),
+      items: [
+        const DropdownMenuItem(value: '', child: Text('Gross salary or bonus')),
+        if (extra) DropdownMenuItem(value: current, child: Text(current)),
+        for (final b in boxes)
+          DropdownMenuItem(value: b.code, child: Text(b.heading)),
+      ],
+      onChanged: enabled
+          ? (v) => controller.text = (v ?? '').trim()
+          : null,
+    );
   }
 }
 

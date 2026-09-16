@@ -97,6 +97,7 @@ import '../features/secretarial/secretarial_screen.dart';
 import '../features/settings/chart_of_accounts_card.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
+import '../features/hr/ea_forms_screen.dart';
 import '../features/hr/employee_editor.dart';
 import '../features/hr/hr_setup_screen.dart';
 import '../features/hr/onboarding_screen.dart';
@@ -735,6 +736,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr/remittances',
             builder: (_, __) => const StatutoryRemittancesScreen(),
+          ),
+          GoRoute(
+            path: '/hr/ea-forms',
+            builder: (_, __) => const EaFormsScreen(),
           ),
           GoRoute(
             path: '/hr/payroll',

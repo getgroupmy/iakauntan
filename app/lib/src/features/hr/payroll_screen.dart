@@ -46,6 +46,16 @@ class PayrollScreen extends ConsumerWidget {
           // contribution nobody was reminded of is the one that goes
           // late.
           if (canRun) const _RemittancesAction(),
+          // And the other other half: the statement of remuneration
+          // every employee is owed by the end of February, which is
+          // what they file their own return from. Reached from here
+          // because it is built out of the same posted runs.
+          if (canRun)
+            IconButton(
+              tooltip: 'EA forms',
+              onPressed: () => context.go('/hr/ea-forms'),
+              icon: const Icon(Icons.description_outlined),
+            ),
           if (canRun)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),

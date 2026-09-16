@@ -1594,8 +1594,17 @@ Stated plainly so nothing here is mistaken for finished:
   send is logged per document. What is left is not code — a provider
   account, two secrets and a DNS record. See `docs/email-setup.md`
 - Bank statement import and auto-matching
-- Statutory submission files: CP39, Borang A, Lampiran 1 and the EA form
-  are all computable from what is stored, but no exporter is written
+- Statutory submission files. The **EA form is built** — `0608` computes
+  C.P.8A from this employer's posted payslips, by the year of the pay
+  date, with what a previous employer paid reported separately and in no
+  total; Payroll → EA forms produces one per employee and names what is
+  missing before it does. CP39, KWSP's Form A and PERKESO's Lampiran 1
+  are **not**, and are a different kind of problem: all three are
+  fixed-width files uploaded to a portal, right or rejected, and the
+  layouts are published by the bodies themselves in documents the build
+  machine cannot reach. Writing one from memory produces a file that
+  looks correct in a diff and is refused at the counter. What is needed
+  is the layout specification for each, not more code
 - The gazetted KWSP and PERKESO contribution tables (see HRMS above)
 - Biometric terminal integration: attendance records carry a terminal
   identifier, but nothing pushes punches in from a device yet

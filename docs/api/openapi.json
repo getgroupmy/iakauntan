@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0607",
+    "version": "0608",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -67,6 +67,10 @@
     {
       "name": "memberships",
       "description": "Refused unless the company has the `memberships` module switched on."
+    },
+    {
+      "name": "payroll",
+      "description": "Refused unless the company has the `payroll` module switched on."
     },
     {
       "name": "pos",
@@ -5647,6 +5651,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/document_share_links"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/ea_categories": {
+      "get": {
+        "operationId": "select_ea_categories",
+        "summary": "Read ea_categories",
+        "description": "The boxes on the EA form (C.P.8A) that a salary component can be reported in. A table rather than an enum because the form has been renumbered before. 0608.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ea_categories"
                   }
                 }
               }
@@ -31469,6 +31537,180 @@
                       },
                       "is_default": {
                         "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/ea_statement": {
+      "post": {
+        "operationId": "ea_statement",
+        "summary": "One employee's EA form (C.P.8A) figures for a year of assessment: this employer's payslips only, by the year\u2026",
+        "description": "One employee's EA form (C.P.8A) figures for a year of assessment: this employer's payslips only, by the year of the PAY DATE, from posted runs. What a previous employer paid is reported separately and is in no total. 0608.\n\n`public.ea_statement(p_employee_id uuid, p_tax_year integer)` Reads only. Requires a signed-in user. Refused unless the company has the `payroll` module and the caller may use it.",
+        "tags": [
+          "payroll"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_employee_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_tax_year": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_employee_id",
+                  "p_tax_year"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/ea_statements": {
+      "post": {
+        "operationId": "ea_statements",
+        "summary": "Who is owed an EA form for a year of assessment and what each one comes to, leavers included",
+        "description": "Who is owed an EA form for a year of assessment and what each one comes to, leavers included. `missing` names what would make the form wrong to hand out. 0608.\n\n`public.ea_statements(p_org_id uuid, p_tax_year integer)` Reads only. Requires a signed-in user. Refused unless the company has the `payroll` module and the caller may use it.",
+        "tags": [
+          "payroll"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_tax_year": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_tax_year"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "employee_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "employee_no": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "nric": {
+                        "type": "string"
+                      },
+                      "income_tax_no": {
+                        "type": "string"
+                      },
+                      "employment_status": {
+                        "type": "string"
+                      },
+                      "months_paid": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "gross_pay": {
+                        "type": "number"
+                      },
+                      "mtd": {
+                        "type": "number"
+                      },
+                      "cp38": {
+                        "type": "number"
+                      },
+                      "zakat": {
+                        "type": "number"
+                      },
+                      "epf_employee": {
+                        "type": "number"
+                      },
+                      "epf_employer": {
+                        "type": "number"
+                      },
+                      "socso_employee": {
+                        "type": "number"
+                      },
+                      "has_previous_employer": {
+                        "type": "boolean"
+                      },
+                      "missing": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     }
                   }
@@ -75645,6 +75887,46 @@
           "expires_at"
         ]
       },
+      "ea_categories": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string"
+          },
+          "box": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "label_my": {
+            "type": "string"
+          },
+          "is_exempt": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "code",
+          "part",
+          "box",
+          "label"
+        ]
+      },
       "einvoice_consolidation_items": {
         "type": "object",
         "properties": {
@@ -87796,6 +88078,9 @@
           },
           "is_additional_remuneration": {
             "type": "boolean"
+          },
+          "ea_category": {
+            "type": "string"
           }
         },
         "required": [

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/export_log.dart';
 import '../../core/format.dart';
+import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/ea_form_repository.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'attendance_month.dart';
+import 'ea_form_pdf.dart';
 
 /// Self-service. Everything here is scoped to the person signed in, and
 /// the scoping is the database's job — an employee simply cannot read
@@ -45,6 +49,8 @@ class MyHrScreen extends ConsumerWidget {
                   _LeaveBalancesCard(employee: employee),
                   const SizedBox(height: Space.lg),
                   _MyPayslipsCard(employee: employee),
+                  const SizedBox(height: Space.lg),
+                  _MyEaFormCard(employee: employee),
                   const SizedBox(height: Space.lg),
                   _MyDetailsCard(employee: employee),
                   const SizedBox(height: Space.xxl),
@@ -299,6 +305,137 @@ class _MyPayslipsCard extends ConsumerWidget {
                         ],
                       ],
                     ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The employee's own EA form.
+///
+/// `0608` allows the payroll administrator OR the employee themselves to
+/// read one, which is exactly the `payslips` policy — an EA form is a
+/// year of payslips added up, and somebody entitled to twelve of those
+/// is entitled to their total.
+///
+/// The year offered is the one that has ENDED. An EA form is issued in
+/// February for the year before; offering the current one would produce
+/// a part-year form somebody might try to file.
+class _MyEaFormCard extends ConsumerStatefulWidget {
+  const _MyEaFormCard({required this.employee});
+
+  final Employee employee;
+
+  @override
+  ConsumerState<_MyEaFormCard> createState() => _MyEaFormCardState();
+}
+
+class _MyEaFormCardState extends ConsumerState<_MyEaFormCard> {
+  late int _year = DateTime.now().year - 1;
+  bool _busy = false;
+
+  List<int> get _years {
+    final now = DateTime.now().year;
+    return [for (var y = now - 1; y >= now - 6; y--) y];
+  }
+
+  Future<void> _download() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    final repo = ref.read(eaFormsRepoProvider);
+    if (org == null || repo == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final ea = await repo.statement(widget.employee.id, _year);
+      if (ea.monthsPaid == 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'You were not paid anything in $_year. An EA form covers '
+              'what was PAID in a year, so a December salary paid in '
+              'January belongs to the following one.',
+            ),
+          ),
+        );
+        return;
+      }
+      final bytes = await buildEaFormPdf(
+        org: org,
+        ea: ea,
+        logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed,
+      );
+      final saved = await exportBytesFile(
+        ref,
+        'ea-$_year.pdf',
+        'application/pdf',
+        bytes,
+        what: 'EA form',
+        detail: '$_year',
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            saved
+                ? 'Downloaded'
+                : 'PDF download is only available in the browser',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              'My EA form',
+              subtitle: 'What to file your own tax return from',
+            ),
+            const SizedBox(height: Space.sm),
+            Row(
+              children: [
+                DropdownButton<int>(
+                  key: const ValueKey('my-ea-year'),
+                  value: _year,
+                  items: [
+                    for (final y in _years)
+                      DropdownMenuItem(value: y, child: Text('$y')),
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() => _year = v ?? _year),
+                ),
+                const SizedBox(width: Space.lg),
+                FilledButton.icon(
+                  key: const ValueKey('my-ea-download'),
+                  onPressed: _busy ? null : _download,
+                  icon: const Icon(Icons.download_outlined, size: 18),
+                  label: const Text('Download'),
+                ),
+              ],
+            ),
+            const SizedBox(height: Space.sm),
+            Text(
+              'Covers what you were PAID in the year, not what you earned '
+              'in it — a December salary paid in January is on the '
+              'following year\'s form. If you had another job in the same '
+              'year, that employer issues their own and you declare both.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.scheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

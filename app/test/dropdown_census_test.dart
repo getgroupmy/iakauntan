@@ -69,7 +69,13 @@ const dropdownCensus = <String, int>{
   'features/hr/employee_editor.dart': 1,
   'features/hr/employee_records.dart': 2,
   'features/hr/holidays_tab.dart': 1,
-  'features/hr/hr_setup_screen.dart': 2,
+  // Three since 0608. The third is which box on the EA form a salary
+  // component is reported in, and the list cannot grow without a
+  // migration: it is `ea_categories`, which is the printed layout of
+  // C.P.8A -- thirteen boxes, and a fourteenth would mean LHDN had
+  // reissued the form. Twelve of them fit on a screen at once, and
+  // nobody has ever wanted to SEARCH for "benefits in kind".
+  'features/hr/hr_setup_screen.dart': 3,
   'features/hr/interviews_dialog.dart': 2,
   'features/hr/payroll_screen.dart': 2,
   'features/hr/tax_year_section.dart': 1,

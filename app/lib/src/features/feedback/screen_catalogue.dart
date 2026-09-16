@@ -156,6 +156,7 @@ final List<ScreenModule> appScreenCatalogue = [
     ScreenArea('Payroll', [
       AppScreen('Payroll runs', '/hr/payroll'),
       AppScreen('Statutory remittances', '/hr/remittances'),
+      AppScreen('EA forms', '/hr/ea-forms'),
     ]),
     ScreenArea('Time', [AppScreen('Timesheets', '/timesheets')]),
   ]),
