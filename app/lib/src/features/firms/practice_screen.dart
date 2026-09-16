@@ -6,6 +6,8 @@ import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../mia/mia_credential.dart';
+import '../mia/mia_credential_card.dart';
 
 /// The practice: who works at it, whose books it keeps, and what has
 /// happened to it.
@@ -53,6 +55,11 @@ class PracticeScreen extends ConsumerWidget {
                     _FirmPicker(firms: rows, current: firmId),
                     const SizedBox(height: 20),
                   ],
+                  _PracticeMiaCard(
+                    firmId: firmId,
+                    firmName: '${firm['name']}',
+                  ),
+                  const SizedBox(height: 24),
                   _ClientsCard(firmId: firmId),
                   const SizedBox(height: 24),
                   _PeopleCard(firmId: firmId),
@@ -122,6 +129,51 @@ class _FirmPicker extends ConsumerWidget {
               ref.read(currentFirmIdProvider.notifier).state = v,
         ),
       ),
+    );
+  }
+}
+
+/// Whether this person may record the practice's own MIA registration.
+///
+/// The same question `app.can_manage_firm` asks, asked here so the
+/// card does not offer a button the database will refuse: an active
+/// membership of this firm, at partner or manager. Staff see what was
+/// recorded and cannot change it.
+///
+/// Pure, and public, because it is a permission rule — the sort that is
+/// invisible when it is too generous.
+bool canManagePractice(List<Map<String, dynamic>> team, String? userId) {
+  if (userId == null) return false;
+  return team.any(
+    (m) =>
+        m['user_id'] == userId &&
+        m['status'] == 'active' &&
+        (m['role'] == 'partner' || m['role'] == 'manager'),
+  );
+}
+
+/// The practice's own registration with the Institute.
+///
+/// `kind` is firm and only firm. A practice is a firm; the partners'
+/// own member numbers belong to the partners, and recording one here
+/// would file a person's credential against a company.
+class _PracticeMiaCard extends ConsumerWidget {
+  const _PracticeMiaCard({required this.firmId, required this.firmName});
+
+  final String firmId;
+  final String firmName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final team =
+        ref.watch(firmTeamProvider(firmId)).valueOrNull ??
+            const <Map<String, dynamic>>[];
+    return MiaCredentialCard(
+      subjectType: 'firm',
+      subjectId: firmId,
+      subjectName: firmName,
+      kinds: const [MiaKind.firm],
+      canWrite: canManagePractice(team, ref.watch(currentUserProvider)?.id),
     );
   }
 }

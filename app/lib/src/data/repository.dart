@@ -9,6 +9,8 @@ import '../core/format.dart';
 // need and which each of them used to write out again inline.
 import 'custom_fields_repository.dart';
 import '../features/documents/transfer.dart';
+// `RepoMia` at the foot of this file returns these.
+import '../features/mia/mia_credential.dart';
 import 'models.dart';
 
 /// All data access for one organization. Every query is additionally
@@ -11921,4 +11923,50 @@ extension RepoBankFeeds on Repo {
             .order('started_at', ascending: false)
             .limit(20),
       );
+}
+
+/// What MIA's members and firms register said about a corporate officer
+/// or a practice.
+///
+/// `0603`. Reading is an ordinary select under the table's own policy;
+/// writing goes through `upsert_mia_credential`, which reads the owning
+/// organization or firm OFF THE SUBJECT rather than taking it from the
+/// caller.
+extension RepoMia on Repo {
+  /// Reading is not filtered by `org_id` here, unlike almost every
+  /// other query in this file. A firm's own credential has no org: the
+  /// row's owner is either an organization or a practice, and the
+  /// table's read policy asks whichever applies. Adding `.eq('org_id',
+  /// orgId)` would hide every firm credential from the practice that
+  /// owns it.
+  Future<List<MiaCredential>> miaCredentials({
+    required String subjectType,
+    required String subjectId,
+  }) async => Repo._rows(
+        await client
+            .from('mia_credentials')
+            .select(
+              '*, verifier:profiles!mia_credentials_verified_by_fkey'
+              '(full_name, email)',
+            )
+            .eq('subject_type', subjectType)
+            .eq('subject_id', subjectId)
+            .order('kind', ascending: true),
+      ).map(MiaCredential.fromJson).toList();
+
+  Future<String> saveMiaCredential({
+    required String subjectType,
+    required String subjectId,
+    required String kind,
+    required Map<String, Object> fields,
+  }) async =>
+      (await callRpc('upsert_mia_credential', params: {
+        'p_subject_type': subjectType,
+        'p_subject_id': subjectId,
+        'p_kind': kind,
+        'p_fields': fields,
+      })).toString();
+
+  Future<void> deleteMiaCredential(String id) async =>
+      await callRpc('delete_mia_credential', params: {'p_id': id});
 }

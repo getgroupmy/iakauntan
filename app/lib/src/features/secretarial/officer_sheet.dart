@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
 import '../../data/corp_repository.dart';
+import '../mia/mia_credential_card.dart';
 import 'person_editor.dart';
 
 /// The roles the register knows, in the words a secretary uses.
@@ -97,6 +98,20 @@ Map<String, dynamic> officerValues({
 /// of a prescribed body or hold a licence from the Registrar. Nobody
 /// else needs one, so nobody else is asked.
 bool roleNeedsLicence(String role) => role == 'secretary';
+
+/// Which appointment is worth checking against MIA's register.
+///
+/// The auditor, and only the auditor. s.263 of the Companies Act 2016
+/// requires an approved company auditor, and the engagement is signed
+/// by a member of the Institute for an audit firm that is registered
+/// with it — two numbers, which is what `mia_credentials` holds.
+///
+/// A secretary is deliberately not asked, although MIA is one of the
+/// prescribed bodies under s.20G. That appointment already has a
+/// licence number, a body and an expiry on the form above, and a
+/// second card asking for an overlapping number would be two places to
+/// record one fact — which is how the two end up disagreeing.
+bool roleNeedsMia(String role) => role == 'auditor';
 
 /// Which roles act in somebody else's place.
 ///
@@ -393,6 +408,28 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
                     enabled: !_saving,
                     onChanged: (d) => setState(() => _licenceExpires = d),
                   ),
+                ],
+
+                if (roleNeedsMia(_role)) ...[
+                  const Divider(height: Space.xl),
+                  if (_isNew)
+                    // There is nothing to hang a credential on until
+                    // the appointment has an id, and inventing one so
+                    // the card could draw would mean recording what
+                    // MIA said about an auditor who is not appointed.
+                    Text(
+                      'Appoint the auditor first, then check them against '
+                      'MIA’s register.',
+                      key: const ValueKey('officer-mia-later'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  else
+                    MiaCredentialCard(
+                      subjectType: 'corp_officer',
+                      subjectId: widget.officer!.id,
+                      subjectName: widget.officer!.name,
+                      canWrite: ref.watch(canWriteProvider),
+                    ),
                 ],
 
                 if (!_isNew) ...[

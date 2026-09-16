@@ -14,6 +14,8 @@ import '../shared/attachments_card.dart';
 import 'document_pdf.dart';
 import 'beneficial_owner_sheet.dart';
 import 'charge_sheet.dart';
+import '../mia/mia_credential.dart';
+import '../mia/mia_service.dart';
 import 'officer_sheet.dart';
 import 'particulars_sheet.dart';
 import 'share_class_sheet.dart';
@@ -96,7 +98,7 @@ class CorpEntityScreen extends ConsumerWidget {
                 Expanded(
                   child: TabBarView(children: [
                     _Particulars(entity: e),
-                    _Officers(entityId: entityId),
+                    OfficersTab(entityId: entityId),
                     _Members(entityId: entityId),
                     _BeneficialOwners(entityId: entityId),
                     _Charges(entityId: entityId),
@@ -195,8 +197,13 @@ class _Row extends StatelessWidget {
   }
 }
 
-class _Officers extends ConsumerWidget {
-  const _Officers({required this.entityId});
+/// The s.57 register, as a tab.
+///
+/// Public so a test can pump it on its own. Reaching it through
+/// `EntityScreen` means a tab bar, a route and four other providers,
+/// none of which the register's own rules depend on.
+class OfficersTab extends ConsumerWidget {
+  const OfficersTab({super.key, required this.entityId});
 
   final String entityId;
 
@@ -367,12 +374,53 @@ class _OfficerRow extends StatelessWidget {
                     'validly appointed secretary',
                     colour: context.colors.danger,
                   ),
+                // Only for the auditor, and only where something was
+                // recorded. A line reading "not checked" under every
+                // auditor of every company is a nag, not a fact; the
+                // card inside the appointment is where one is added.
+                if (roleNeedsMia(officer.role)) _MiaLine(officerId: officer.id),
               ],
             ),
           ),
         ],
       ),
       ),
+    );
+  }
+}
+
+/// What MIA's register said about this auditor, in one line.
+///
+/// Silent where nothing was recorded, and silent while it loads — a
+/// register that flickered "nothing recorded" on every rebuild would
+/// say something false for as long as it took to answer.
+class _MiaLine extends ConsumerWidget {
+  const _MiaLine({required this.officerId});
+
+  final String officerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = ref
+            .watch(miaCredentialsProvider((
+              subjectType: 'corp_officer',
+              subjectId: officerId,
+            )))
+            .valueOrNull ??
+        const <MiaCredential>[];
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final stale = rows.any((c) => c.isStale);
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Text(
+      'MIA ${rows.map((c) => c.number).join(' · ')}'
+      '${stale ? ' · checked over a year ago' : ''}',
+      key: const ValueKey('officer-mia-line'),
+      style: stale ? muted?.copyWith(color: context.colors.warning) : muted,
     );
   }
 }
