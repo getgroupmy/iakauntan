@@ -41,6 +41,10 @@
       "handle": "filesystem"
     },
     {
+      "src": "^/.*\\.(js|mjs|json|map|wasm|woff|woff2|ttf|otf|eot|png|jpg|jpeg|gif|svg|webp|ico|bin|data|part|symbols|traineddata|txt|xml|webmanifest)$",
+      "status": 404
+    },
+    {
       "src": "/.*",
       "dest": "/index.html"
     }

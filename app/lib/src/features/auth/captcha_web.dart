@@ -113,6 +113,15 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
     if (_registered.add(_viewType)) {
       ui_web.platformViewRegistry.registerViewFactory(_viewType, (int id) {
         final host = web.document.createElement('div') as web.HTMLDivElement;
+        // Flutter sizes the SLOT it drops a platform view into; it does
+        // not size the element. A bare `<div>` has no width of its own,
+        // so the browser lays it out at its content and Flutter reports
+        // that the view's size was never set. Cloudflare then has
+        // nothing to be flexible against and falls back to its fixed
+        // 300 pixels, which is the box that would not line up with the
+        // fields beside it.
+        host.style.width = '100%';
+        host.style.height = '100%';
         _hosts[id] = host;
         return host;
       });
@@ -155,6 +164,13 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
     if (container.hasChildNodes()) return;
     final options = JSObject()
       ..setProperty('sitekey'.toJS, widget.siteKey.toJS)
+      // Turnstile's default is a fixed 300x65 box, which on a sign-in
+      // form is a rectangle that visibly does not belong to the column
+      // it sits in -- reported from a phone, where the fields are wider
+      // than 300 and the check was not. `flexible` takes the width of
+      // its container instead, down to a floor of 300, and keeps the
+      // same 65-pixel height.
+      ..setProperty('size'.toJS, 'flexible'.toJS)
       ..setProperty(
         'callback'.toJS,
         ((JSString token) => widget.onToken(token.toDart)).toJS,

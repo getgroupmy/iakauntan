@@ -71,6 +71,29 @@ If the mobile apps are in use, the options are: leave the protection off
 until a webview-backed widget is written, or accept that mobile sign-in
 stops.
 
+## How wide the box is
+
+Turnstile's default `size` is a fixed 300x65 rectangle. The sign-in
+form's fields are wider than that on nearly every screen, so the check
+sat in the column looking like something that had been pasted in --
+reported from an Android handset, where the gap either side of it is
+most of the difference.
+
+It is rendered with `size: 'flexible'`, which takes the width of its
+container down to a floor of 300 and keeps the same 65-pixel height.
+
+That only works if the container HAS a width. Flutter sizes the slot it
+drops a platform view into; it does not size the element inside it, so
+the `<div>` the view factory returns is given `width: 100%` and
+`height: 100%` explicitly. Without that the browser lays the div out at
+its content, Flutter reports that the view's size was never set, and
+Cloudflare has nothing to be flexible against and falls back to 300.
+
+Both halves live in `lib/src/features/auth/captcha_web.dart`, and
+neither is covered by a test: that file is compiled only for the web,
+`flutter test` runs on the VM, and CI runs no browser tests. Changing
+it means loading a form in a browser and looking.
+
 ## Switching it off
 
 Clear the site key in the console AND turn the protection off in the
