@@ -132,9 +132,41 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
     );
   }
 
+  /// The period the whole consolidation is drawn for.
+  ///
+  /// Extracted because it sits on the bar at a laptop width and under
+  /// the tabs on a phone, and describing it twice is how the two come
+  /// to disagree.
+  Widget _rangeButton() => OutlinedButton.icon(
+    key: const ValueKey('group-range'),
+    onPressed: () async {
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+        initialDateRange: _range,
+      );
+      if (picked != null) setState(() => _range = picked);
+    },
+    icon: const Icon(Icons.date_range, size: 18),
+    label: Text('${Fmt.date(_range.start)} – ${Fmt.date(_range.end)}'),
+  );
+
+  TabBar _tabBar() => TabBar(
+    controller: _tabs,
+    isScrollable: true,
+    tabAlignment: TabAlignment.start,
+    tabs: const [
+      Tab(text: 'Combined'),
+      Tab(text: 'Consolidated'),
+      Tab(text: 'Inter-company'),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final spec = _visibleSpec;
+    final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
       appBar: AppBar(
@@ -146,36 +178,39 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
             icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
             onPressed: spec == null ? null : () => _download(spec),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12, left: 4),
-            child: OutlinedButton.icon(
-              key: const ValueKey('group-range'),
-              onPressed: () async {
-                final picked = await showDateRangePicker(
-                  context: context,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                  initialDateRange: _range,
-                );
-                if (picked != null) setState(() => _range = picked);
-              },
-              icon: const Icon(Icons.date_range, size: 18),
-              label: Text(
-                '${Fmt.date(_range.start)} – ${Fmt.date(_range.end)}',
-              ),
+          if (!narrow)
+            Padding(
+              padding: const EdgeInsets.only(right: 12, left: 4),
+              child: _rangeButton(),
             ),
-          ),
         ],
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Combined'),
-            Tab(text: 'Consolidated'),
-            Tab(text: 'Inter-company'),
-          ],
-        ),
+        // The same arrangement as `reports_screen.dart`, and for the
+        // same measured reason: the range is twenty-three characters
+        // and went 48 pixels off a 412px phone. It labels every figure
+        // in the consolidation, so it moves rather than shortening.
+        bottom: !narrow
+            ? _tabBar()
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(46 + 52),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Space.lg,
+                        0,
+                        Space.lg,
+                        Space.sm,
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: _rangeButton(),
+                      ),
+                    ),
+                    _tabBar(),
+                  ],
+                ),
+              ),
       ),
       body: Column(
         children: [

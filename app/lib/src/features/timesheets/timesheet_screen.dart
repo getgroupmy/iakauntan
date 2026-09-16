@@ -38,9 +38,43 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
     _to = DateTime(now.year, now.month + 1, 0);
   }
 
+  /// The week being looked at.
+  ///
+  /// Extracted because it sits on the bar at a laptop width and under
+  /// the tabs on a phone, and describing it twice is how the two come
+  /// to disagree.
+  Widget _rangeButton() => OutlinedButton.icon(
+    key: const ValueKey('timesheet-range'),
+    onPressed: () async {
+      final range = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100),
+        initialDateRange: DateTimeRange(start: _from, end: _to),
+      );
+      if (range != null) {
+        setState(() {
+          _from = range.start;
+          _to = range.end;
+        });
+      }
+    },
+    icon: const Icon(Icons.date_range, size: 18),
+    label: Text('${Fmt.date(_from)} — ${Fmt.date(_to)}'),
+  );
+
+  TabBar _tabBar() => const TabBar(
+    tabs: [
+      Tab(text: 'My week'),
+      Tab(text: 'Unbilled'),
+      Tab(text: 'Rates'),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final period = (from: _from, to: _to);
+    final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return DefaultTabController(
       length: 3,
@@ -57,35 +91,40 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
               icon: const Icon(Icons.donut_small_outlined),
               onPressed: () => showProjectBudgets(context),
             ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final range = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2100),
-                    initialDateRange: DateTimeRange(start: _from, end: _to),
-                  );
-                  if (range != null) {
-                    setState(() {
-                      _from = range.start;
-                      _to = range.end;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.date_range, size: 18),
-                label: Text('${Fmt.date(_from)} — ${Fmt.date(_to)}'),
+            if (!narrow)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _rangeButton(),
               ),
-            ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'My week'),
-              Tab(text: 'Unbilled'),
-              Tab(text: 'Rates'),
-            ],
-          ),
+          // The same arrangement as `reports_screen.dart`, and for the
+          // same measured reason: the period is twenty-three characters
+          // and went 44 pixels off a 412px phone beside a title reading
+          // "Timesheets". It says which week every hour below it
+          // belongs to, so it moves rather than shortening.
+          bottom: !narrow
+              ? _tabBar()
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(46 + 52),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.lg,
+                          0,
+                          Space.lg,
+                          Space.sm,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: _rangeButton(),
+                        ),
+                      ),
+                      _tabBar(),
+                    ],
+                  ),
+                ),
         ),
         body: TabBarView(
           children: [

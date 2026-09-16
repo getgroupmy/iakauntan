@@ -78,7 +78,16 @@ void main() {
     WidgetTester tester,
     List<Map<String, dynamic>> entries, {
     String role = 'owner',
+    double? width,
   }) async {
+    if (width != null) {
+      // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
+      // moves the render surface without moving `MediaQuery`, so the
+      // screen would take its DESKTOP branch. See docs/widget-tests.md.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = Size(width, 900);
+      addTearDown(tester.view.reset);
+    }
     await tester.pumpWidget(wrap(entries, role: role));
     await tester.pumpAndSettle();
   }
@@ -228,4 +237,54 @@ void main() {
           findsOneWidget);
     });
   });
+  /// The bar above the three tabs, at every width one is opened at.
+  ///
+  /// It ran 44 pixels off a 412px phone and 96 off a 360: the period
+  /// button carries twenty-three characters -- "01/09/2026 —
+  /// 30/09/2026" -- beside a title reading "Timesheets" and the job
+  /// costing icon. Flutter CLIPS an overflowing toolbar in a release
+  /// build rather than reporting it, so what a phone lost was the
+  /// right-hand end of the very control that says which week the hours
+  /// below belong to.
+  ///
+  /// These assert nothing but that the screen rendered, because a
+  /// `RenderFlex` overflow IS a test failure here.
+  group('the bar fits', () {
+    for (final width in [1400.0, 1000.0, 800.0, 700.0, 600.0, 412.0, 360.0]) {
+      testWidgets('at ${width.toInt()} wide', (tester) async {
+        await show(tester, [entry()], width: width);
+
+        expect(find.byType(TimesheetScreen), findsOneWidget);
+      });
+    }
+  });
+
+  group('the period being looked at', () {
+    testWidgets('keeps its full dates on a phone, below the tabs',
+        (tester) async {
+      // Not abbreviated. The year is what tells somebody which period
+      // they are looking at, and it moves rather than shortening.
+      await show(tester, [entry()], width: 412);
+
+      final range = find.byKey(const ValueKey('timesheet-range'));
+      final tabs = find.byType(TabBar);
+      expect(range, findsOneWidget);
+      expect(tester.getCenter(range).dy, lessThan(tester.getCenter(tabs).dy));
+
+      final label = tester
+          .widget<Text>(find.descendant(of: range, matching: find.byType(Text)))
+          .data!;
+      expect(RegExp(r'\d{2}/\d{2}/\d{4}').allMatches(label), hasLength(2));
+    });
+
+    testWidgets('and sits on the toolbar on a laptop', (tester) async {
+      // The control for where it lives. Without it, "the range is above
+      // the tabs" passes against a screen that always puts it there.
+      await show(tester, [entry()], width: 1400);
+
+      final range = find.byKey(const ValueKey('timesheet-range'));
+      expect(tester.getCenter(range).dy, lessThan(56));
+    });
+  });
+
 }
