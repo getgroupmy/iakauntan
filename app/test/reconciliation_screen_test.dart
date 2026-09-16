@@ -1,0 +1,235 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:iakauntan/src/core/providers.dart';
+import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/data/repository.dart';
+import 'package:iakauntan/src/features/banking/reconciliation_screen.dart';
+
+/// Reconciling a bank account against its statement.
+///
+/// The two balances never agree; the question is whether every
+/// difference is accounted for. Book balance, less what the bank has
+/// not seen, should equal the statement -- and what is left over is the
+/// number the screen shows largest.
+///
+/// Three decisions live only in this widget.
+///
+/// THE TOLERANCE. `difference.abs() < 0.005` is half a sen, which is
+/// the right width for a figure carried to two places: it absorbs the
+/// representation error in a sum of doubles and nothing else. Widen it
+/// to a sen and a real one-sen difference -- which is a real
+/// transposition somewhere -- gets a green tick.
+///
+/// THE SIGN OF THE UNPRESENTED LINE. It is rendered negative because it
+/// is SUBTRACTED. Showing the same figure unsigned turns a subtraction
+/// into what reads as an addition, and the arithmetic on the page stops
+/// being checkable by the person doing the reconciling -- which is the
+/// only reason to show the working at all.
+///
+/// AND WHAT A DIFFERENCE MEANS. "Out by RM 240" is not actionable.
+/// Three named causes are: a line nobody matched, a payment entered
+/// twice, a charge the books have not heard of.
+void main() {
+  Map<String, dynamic> status({
+    double book = 12500,
+    double unpresented = 340,
+    double expected = 12160,
+    double statement = 12160,
+    double difference = 0,
+    int unmatched = 0,
+  }) => {
+    'book_balance': book,
+    'unpresented': unpresented,
+    'expected_statement': expected,
+    'statement_balance': statement,
+    'difference': difference,
+    'unmatched_lines': unmatched,
+  };
+
+  Widget wrap(Map<String, dynamic> st, {String role = 'owner'}) => ProviderScope(
+    overrides: [
+      repoProvider.overrideWithValue(_FakeRepo(st)),
+      bankAccountsProvider.overrideWith(
+        (ref) async => const [
+          {'id': 'b1', 'name': 'Maybank Current', 'account_no': '5140 1234'},
+        ],
+      ),
+      memberRoleProvider.overrideWith((ref) async => role),
+    ],
+    child: MaterialApp(
+      theme: AppTheme.light(),
+      home: const ReconciliationScreen(),
+    ),
+  );
+
+  Future<void> show(
+    WidgetTester tester,
+    Map<String, dynamic> st, {
+    String role = 'owner',
+  }) async {
+    await tester.pumpWidget(wrap(st, role: role));
+    await tester.pumpAndSettle();
+  }
+
+  group('the working, so it can be checked', () {
+    testWidgets('what the bank has not seen is subtracted, and looks it',
+        (tester) async {
+      await show(tester, status(book: 12500, unpresented: 340,
+          expected: 12160, statement: 12160));
+
+      expect(find.text('Book balance'), findsOneWidget);
+      expect(find.text('RM 12,500.00'), findsOneWidget);
+
+      // Negative, because it is taken away. Unsigned, the page reads as
+      // 12,500 + 340 and stops being checkable.
+      expect(find.text('Less what the bank has not seen'), findsOneWidget);
+      expect(find.text('RM -340.00'), findsOneWidget);
+      expect(find.textContaining('Unpresented cheques and deposits in '
+          'transit'), findsOneWidget);
+
+      // And the two the person compares: what the statement should say,
+      // and what it does.
+      expect(find.text('Statement should read'), findsOneWidget);
+      expect(find.text('Statement says'), findsOneWidget);
+      expect(find.text('RM 12,160.00'), findsNWidgets(2));
+    });
+
+    testWidgets('what the statement should say and what it says are two '
+        'different rows', (tester) async {
+      // Both fixtures above are reconciled, so expected and statement
+      // hold the same figure -- and a row wired to the WRONG key renders
+      // an identical page. That mutant survived the first run.
+      //
+      // This is the case somebody actually opens the screen for: the
+      // two rows disagree, which is the whole point of showing both.
+      await show(tester, status(book: 9000, unpresented: 1250,
+          expected: 7750, statement: 7510, difference: 240, unmatched: 2));
+
+      expect(find.text('RM 9,000.00'), findsOneWidget);
+      expect(find.text('RM -1,250.00'), findsOneWidget);
+      // Book less unpresented. Read from `statement_balance` instead and
+      // this figure is nowhere on the page.
+      expect(find.text('RM 7,750.00'), findsOneWidget);
+      expect(find.text('RM 7,510.00'), findsOneWidget);
+      // And the gap between them is what is shown largest.
+      expect(find.text('Out by'), findsOneWidget);
+      expect(find.text('RM 240.00'), findsOneWidget);
+    });
+  });
+
+  group('the tolerance', () {
+    testWidgets('a difference under half a sen is reconciled', (tester) async {
+      // What a sum of doubles leaves behind, and nothing else.
+      await show(tester, status(difference: 0.004, unmatched: 0));
+
+      expect(find.text('Reconciled'), findsOneWidget);
+      expect(find.text('Out by'), findsNothing);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    });
+
+    testWidgets('and half a sen exactly is not', (tester) async {
+      // The boundary is `< 0.005`, so 0.005 is out. Widen this and a
+      // real one-sen difference -- a transposition somewhere -- gets a
+      // green tick.
+      await show(tester, status(difference: 0.005, unmatched: 1));
+
+      expect(find.text('Out by'), findsOneWidget);
+      expect(find.text('Reconciled'), findsNothing);
+      expect(find.byIcon(Icons.check_circle), findsNothing);
+    });
+
+    testWidgets('a difference the wrong way round is still a difference',
+        (tester) async {
+      // `abs()`. A statement 240 BELOW the books is exactly as
+      // unreconciled as one 240 above, and a comparison without it
+      // calls half of them reconciled.
+      await show(tester, status(difference: -240, unmatched: 2));
+
+      expect(find.text('Out by'), findsOneWidget);
+      expect(find.text('RM -240.00'), findsOneWidget);
+    });
+  });
+
+  group('what a difference means', () {
+    testWidgets('it counts the unmatched lines and names the three causes',
+        (tester) async {
+      await show(tester, status(difference: 240, unmatched: 3));
+
+      expect(find.textContaining('3 statement lines are still unmatched'),
+          findsOneWidget);
+      // "Out by RM 240" on its own tells somebody nothing they can act
+      // on. These three are where it always is.
+      expect(find.textContaining('a line nobody has matched'), findsOneWidget);
+      expect(find.textContaining('a payment entered twice'), findsOneWidget);
+      expect(find.textContaining('a charge the books have not heard of'),
+          findsOneWidget);
+    });
+
+    testWidgets('and says none of it once the account is reconciled',
+        (tester) async {
+      // The control. The sentence is conditional, and a reconciled
+      // account that still explains what a difference means is telling
+      // somebody to go looking for one.
+      await show(tester, status(difference: 0, unmatched: 0));
+
+      expect(find.textContaining('still unmatched'), findsNothing);
+      expect(find.textContaining('a payment entered twice'), findsNothing);
+    });
+  });
+
+  group('the registers that were written and never read', () {
+    testWidgets('transfers made, and the reconciliation history, are both '
+        'reachable', (tester) async {
+      // 0157: both of these were written by the app and had no way back
+      // into it. A transfer, once made, left the app entirely.
+      await show(tester, status());
+
+      expect(find.byKey(const ValueKey('transfers-history')), findsOneWidget);
+      expect(find.byKey(const ValueKey('reconciliation-history')),
+          findsOneWidget);
+    });
+
+    testWidgets('and a viewer, who may not post, still sees its own history',
+        (tester) async {
+      await show(tester, status(), role: 'viewer');
+
+      // The transfer register is not a posting action.
+      expect(find.byKey(const ValueKey('transfers-history')), findsOneWidget);
+      // Making one is.
+      expect(find.byTooltip('Transfer between accounts'), findsNothing);
+      expect(find.byTooltip('Import statement'), findsNothing);
+    });
+  });
+}
+
+/// Only what the screen asks for. Anything else throws, so a screen that
+/// grows a third call fails loudly here rather than rendering a
+/// reconciliation built out of empty maps.
+class _FakeRepo implements Repo {
+  _FakeRepo(this.status);
+
+  final Map<String, dynamic> status;
+
+  @override
+  Future<Map<String, dynamic>> bankReconciliationStatus({
+    required String bankAccountId,
+    required DateTime asAt,
+    required double statementBalance,
+  }) async =>
+      status;
+
+  @override
+  Future<List<Map<String, dynamic>>> bankStatementLines(
+    String bankAccountId, {
+    bool onlyOpen = false,
+  }) async =>
+      const [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        'the reconciliation screen called Repo.${invocation.memberName}, '
+        'which this fake does not answer',
+      );
+}
