@@ -173,40 +173,65 @@ class Fmt {
     return double.tryParse('$sign$s');
   }
 
-  /// Tax on an amount at a percentage rate, rounded the way the
-  /// database rounds it.
+  /// A percentage of a money base, rounded the way Postgres rounds it.
   ///
-  /// `0099_withholding_tax.sql` states the rule, and it is the house
-  /// rule for every percentage of money in this application:
+  /// `0009_functions.sql` and `0099_withholding_tax.sql` both spell the
+  /// rule out, and it is the house rule for every percentage of money
+  /// here:
   ///
-  ///     v_gross := round(coalesce(p_gross_amount, ...), 2);
-  ///     v_tax   := round(v_gross * v_rate / 100.0, 2);
+  ///     v_discount := round(v_gross * new.discount_percent / 100.0, 2);
+  ///     v_tax      := round(v_net * coalesce(new.tax_rate, 0) / 100.0, 2);
   ///
-  /// The base is rounded to cents FIRST, and the tax is rounded from
-  /// that. Postgres `numeric` is exact decimal, so it gets the half-up
-  /// right for nothing. A double does not, and the obvious Dart
-  /// transcription is wrong:
+  /// Postgres `numeric` is exact decimal, so it gets the half-up for
+  /// nothing. A double does not, and the obvious transcription --
   ///
-  ///     ((amount * rate / 100) * 100).roundToDouble() / 100
+  ///     ((base * percent / 100) * 100).roundToDouble() / 100
   ///
-  /// `2.90 * 5 / 100` is 0.145 in decimal and 0.14499999999999999 in
-  /// binary, so the multiply-back lands on 14.499999999999998 and
-  /// rounds DOWN. Fourteen sen instead of fifteen.
+  /// -- was written in four places in this app and is wrong in all of
+  /// them. `2.90 * 5 / 100` is 0.145 in decimal and
+  /// 0.14499999999999999 in binary, so multiplying back gives
+  /// 14.499999999999998 and it rounds DOWN. Fourteen sen, not fifteen.
   ///
-  /// It is not a rare corner. Measured over every amount from one sen
-  /// to twenty thousand ringgit: 2,468 wrong at 6 per cent, 9,173 at
-  /// 10, 4,588 at 5, 278 at 8.25 -- and always a cent LOW, because the
-  /// error only ever pushes a value that sits exactly on a half-cent
-  /// down off it. Eight per cent happens to be clean, which is the
-  /// current SST service rate and is pure luck.
+  /// Not a rare corner. Over every amount from one sen to twenty
+  /// thousand ringgit: 2,468 wrong at 6 per cent, 9,173 at 10, 4,588
+  /// at 5. Eight per cent happens to be clean, which is the current SST
+  /// service rate and is luck rather than a reason.
   ///
-  /// Rounding the base to whole cents first removes it: an integer
-  /// number of cents times a rate is exact in a double up to 2^53, and
-  /// the halves that result land on values binary floating point can
-  /// represent. Zero wrong over the same range at every rate tested.
-  static double taxOn(double amount, double ratePercent) {
-    final cents = (amount * 100).roundToDouble();
-    return (cents * ratePercent / 100).roundToDouble() / 100;
+  /// And always a cent LOW, never high. The error can only knock a
+  /// value that sits exactly on a half-cent downwards off it, so this
+  /// under-collects — the direction a tax authority minds.
+  ///
+  /// So the arithmetic here is integer, and there is no float in it at
+  /// all. The base is taken in its smallest unit and the percentage in
+  /// hundredths of a per cent, which makes the whole thing one exact
+  /// division of two ints rounded half away from zero — which is what
+  /// Postgres `round` does, including for negatives, so a credit note
+  /// is the exact reverse of what it reverses.
+  ///
+  /// [baseDecimals] is how many decimals the base carries in the
+  /// database, because that decides what "its smallest unit" is. Money
+  /// is 2 and is the default. A document line's gross is
+  /// `numeric(18, 4)` — quantity times unit price, kept at four so a
+  /// price per thousand is not lost — and passes 4.
+  static double percentOf(double base, double percent, {int baseDecimals = 2}) {
+    final scale = _pow10[baseDecimals];
+    final units = (base * scale).round();
+    final hundredths = (percent * 100).round();
+    return _halfAwayFromZero(units * hundredths, 100 * scale) / 100;
+  }
+
+  /// Tax on an amount at a percentage rate. The money case of
+  /// [percentOf], named for what it is used for.
+  static double taxOn(double amount, double ratePercent) =>
+      percentOf(amount, ratePercent);
+
+  static const _pow10 = [1, 10, 100, 1000, 10000, 100000, 1000000];
+
+  /// `round(n / d)` with halves going away from zero, in integers.
+  static int _halfAwayFromZero(int n, int d) {
+    if (n < 0) return -_halfAwayFromZero(-n, d);
+    final q = n ~/ d;
+    return (n % d) * 2 >= d ? q + 1 : q;
   }
 
   static double toDouble(dynamic value) {

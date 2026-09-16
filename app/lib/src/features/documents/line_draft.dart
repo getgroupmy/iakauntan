@@ -219,24 +219,43 @@ String? baseQuantityHint({
   required double taxRate,
   required bool taxInclusive,
 }) {
-  final gross = quantity * unitPrice;
+  // `v_gross numeric(18, 4)`, so the product is held to four decimals
+  // and not to whatever a double happens to carry. Four rather than two
+  // because a price per thousand is real and would otherwise be lost
+  // before the discount is taken off it.
+  final gross = _r4(quantity * unitPrice);
+
+  // `Fmt.percentOf`, not the arithmetic written out, and for the reason
+  // that function gives: `((base * pct / 100) * 100).round() / 100` is
+  // a cent low whenever the answer lands exactly on a half-cent. On a
+  // one-unit line at RM 2.90 with 5% off, the editor used to show 14
+  // sen of discount against the 15 the trigger would store.
   final discount = discountPercent > 0
-      ? _r(gross * discountPercent / 100)
+      ? Fmt.percentOf(gross, discountPercent, baseDecimals: 4)
       : discountAmount;
 
   if (taxInclusive && taxRate > 0) {
     // unit_price already contains tax: strip it back out.
+    //
+    // A division rather than a percentage, so there is nothing for
+    // `percentOf` to do here. It is left as the SQL writes it, and the
+    // tax falls out by subtraction — which is what keeps net and tax
+    // adding back to the gross exactly.
     final net = _r((gross - discount) / (1 + taxRate / 100));
     final tax = _r(gross - discount - net);
     return (net: net, tax: tax, total: net + tax);
   }
 
   final net = _r(gross - discount);
-  final tax = _r(net * taxRate / 100);
+  final tax = Fmt.percentOf(net, taxRate);
   return (net: net, tax: tax, total: net + tax);
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
+
+/// To four decimals, which is what `numeric(18, 4)` holds a line's
+/// gross at.
+double _r4(double v) => (v * 10000).roundToDouble() / 10000;
 
 /// How a service period reads on the line it belongs to.
 ///
