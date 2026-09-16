@@ -27,6 +27,7 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
   Widget build(BuildContext context) {
     final people = ref.watch(directoryProvider);
     final canManageHr = ref.watch(canManageHrProvider);
+    final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
       appBar: AppBar(
@@ -59,7 +60,12 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
               child: FilledButton.icon(
                 onPressed: () => context.go('/hr/people/new'),
                 icon: const Icon(Icons.person_add_alt, size: 18),
-                label: const Text('Add employee'),
+                // The noun goes on the narrowest phones. Measured: the
+                // bar was two pixels over at 360 with both icon buttons
+                // showing, and Flutter CLIPS a toolbar in a release
+                // build rather than reporting it. The list behind the
+                // button says who is being added.
+                label: Text(narrow ? 'Add' : 'Add employee'),
               ),
             ),
         ],
