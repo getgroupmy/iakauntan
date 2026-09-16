@@ -111,6 +111,12 @@ class _SsmLookupAdminTabState extends ConsumerState<SsmLookupAdminTab> {
                           s.configured ? 'valid' : 'not_applicable',
                         ),
                       ),
+                      _Row(
+                        label: 'Which lookup',
+                        value: s.onOfficialApi
+                            ? 'SSM\u2019s own Search API (charged per call)'
+                            : 'ssmsearch.com, the interim one',
+                      ),
                       if (!s.configured)
                         const _NotConfigured()
                       else ...[

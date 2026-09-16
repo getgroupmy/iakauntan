@@ -305,6 +305,58 @@ void main() {
   });
 
   group('the console', () {
+    testWidgets('says which of the two lookups is switched on', (
+      tester,
+    ) async {
+      // `SSM_PROVIDER` chooses, and every other line on this page means
+      // something different depending on the answer: a held session and
+      // a signed-in name belong to the web provider and are always
+      // empty under the official API, which has no session at all. A
+      // console that did not say which was live would read as a broken
+      // lookup.
+      await tester.pumpWidget(
+        _wrap(
+          const SsmLookupAdminTab(),
+          _FakeSsm(
+            statusValue: const SsmStatus(
+              configured: true,
+              chosenProvider: 'ssm_api',
+              cacheRows: 0,
+              searches24h: 0,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('own Search API'), findsOneWidget);
+      // And it says the calls cost money, because that is the fact an
+      // operator switching this on needs in front of them.
+      expect(find.textContaining('charged per call'), findsOneWidget);
+    });
+
+    testWidgets('and says so about the interim one too', (tester) async {
+      // The control. Without it a page that always printed the official
+      // API's line would pass the assertion above — and the default is
+      // the interim provider, so that line would be wrong for everybody.
+      await tester.pumpWidget(
+        _wrap(
+          const SsmLookupAdminTab(),
+          _FakeSsm(
+            statusValue: const SsmStatus(
+              configured: true,
+              cacheRows: 0,
+              searches24h: 0,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('ssmsearch.com, the interim one'), findsOneWidget);
+      expect(find.textContaining('own Search API'), findsNothing);
+    });
+
     testWidgets('offers nowhere to type a password', (tester) async {
       await tester.pumpWidget(
         _wrap(

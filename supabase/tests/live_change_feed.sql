@@ -27,10 +27,10 @@ begin;
 \i supabase/tests/_helpers.sql
 
 -- ---------------------------------------------------------------------
--- 1. Every org-scoped table is on the feed, but two
+-- 1. Every org-scoped table is on the feed, but three
 -- ---------------------------------------------------------------------
--- The two are read-receipts, and they are the exception that the blanket
--- rule could not survive.
+-- All three are receipts for a READ, and they are the exception that the
+-- blanket rule could not survive.
 --
 -- `security_events` and `payslip_access_log` are written BY reads:
 -- `audit_trail` calls `note_read` calls `record_security_event`, and
@@ -39,14 +39,30 @@ begin;
 -- writes a receipt for the read, and is told to refresh again -- an
 -- endless reload, which is what happened in production.
 --
+-- `ssm_api_log` (0604) is the third, and it is the same shape for a
+-- different reason. A row is written when somebody LOOKS a company up
+-- in SSM's register -- a read, and one that costs money, which is why
+-- it is recorded at all. Two things make the trigger wrong rather than
+-- merely unnecessary:
+--
+--   * Nobody may read the table. It is service-role only, like the
+--     other two SSM tables `0589` created, so a notice on the feed
+--     would wake every client watching that company to tell them a
+--     table they cannot select from has moved.
+--   * A search is several calls. `searchAll` follows up to ten pages
+--     and each one logs, so one person typing one name would append ten
+--     notices about nothing anybody can see.
+--
 -- So the rule is not "every org-scoped table" but "every org-scoped
--- table whose writes are changes". A glance is not a change. The list
--- below is the exception in full, and it is a list rather than a
--- pattern so that adding to it takes a decision.
+-- table whose writes are changes". A glance is not a change, and
+-- neither is a lookup. The list below is the exception in full, and it
+-- is a list rather than a pattern so that adding to it takes a
+-- decision.
 do $$
 declare
   v_missing text[];
-  v_receipts text[] := array['security_events', 'payslip_access_log'];
+  v_receipts text[] := array[
+    'security_events', 'payslip_access_log', 'ssm_api_log'];
   v_wrongly_on text[];
 begin
   select coalesce(array_agg(c.relname order by c.relname), '{}')
@@ -127,10 +143,13 @@ begin
    where n.nspname = 'public'
      and c.relkind = 'r'
      and c.relname <> 'live_changes'
-     -- The same two read-receipt tables the block above excuses, for
+     -- The same three read-receipt tables the block above excuses, for
      -- the same reason: they are written by reads, and a screen that
-     -- refreshed on them would read again and never stop.
-     and c.relname not in ('security_events', 'payslip_access_log')
+     -- refreshed on them would read again and never stop -- or, for
+     -- `ssm_api_log`, would be told to re-read a table it may not
+     -- select from.
+     and c.relname not in
+       ('security_events', 'payslip_access_log', 'ssm_api_log')
      and exists (
        select 1 from information_schema.columns col
         where col.table_schema = 'public'

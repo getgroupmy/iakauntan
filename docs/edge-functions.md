@@ -13,7 +13,8 @@ must reach neither:
 | `call-token` | nobody — it signs | the app, once somebody has joined a call |
 | `send-push` | Firebase Cloud Messaging | the sender's app, right after a message or a call |
 | `places` | Google Places | the address box, on every screen that has one |
-| `ssm-search` | SSM's register, through the interim provider | the contact editor and the scanned-bill supplier dialog |
+| `ssm-search` | SSM's register, through whichever provider `SSM_PROVIDER` names | the contact editor and the scanned-bill supplier dialog |
+| `ssm-api` | SSM's own Search API (CIDP), all thirteen endpoints | nothing yet — the key is still under SSM's review |
 
 They live in `supabase/functions/`. `_shared/` is not a function — it is
 what they import, and the underscore is what tells both the CLI and the

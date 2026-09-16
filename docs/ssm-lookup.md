@@ -192,19 +192,60 @@ Name, new and old registration numbers, and entity type. Status,
 address and directors are paid documents on their side and are not
 fetched.
 
-## When the Corporate API arrives
+## The Corporate API has arrived, and is switched off
 
-Nothing in the app changes. `provider.ts` has one class and one
-contract — a query in, entities out. A second class implementing the
-same two methods, chosen by `SSM_PROVIDER`, is the whole change.
+`0604`. SSM's own Search API — the Corporate Information Delivery
+Platform, CIDP v1.0.1 — is in this repository in full: thirteen
+endpoints on `SsmSearchClient`, an `ssm-api` edge function that exposes
+every one of them, and `SsmSearchService` on the Flutter side.
 
-It is deliberately not stubbed: a class that type-checks and does
-nothing is one somebody switches on by accident.
+The contact lookup does not use it yet. `SSM_PROVIDER` chooses between
+the two and **defaults to `web`**, because the subscription is still
+under SSM's review and there is no key. Until there is one, every call
+through the official path answers `SSM_NOT_CONFIGURED` — "not set up
+yet" rather than a failure to retry. The day the key arrives is a
+dashboard secret and nothing else.
 
-Worth asking Infomina for: an **entity name search** endpoint (their
-public catalogue lists per-document lookups by registration number
-only), its price per call, rate limits, and the OpenAPI spec — their
-developer portal renders with RapiDoc, so one exists.
+`provider.ts` said what the second provider had to be — "a second class
+implementing the same two methods" — and `api_provider.ts` is that
+class. The console says which one is live, because every other line on
+that page means something different depending on the answer: a held
+session and a signed-in name belong to the web provider and are always
+empty under the API one, which has no session at all.
+
+### Every call is charged
+
+The development host (`https://cidp.ssmsearch.com/`) is free and
+appears to serve fixture data. Production
+(`https://apigw.ssmsearch.com/gateway/CIDP/V1.1/`) is billed per call
+against a points balance the whole platform shares. That is behind most
+of the design and is worth reading before changing any of it:
+
+* the cache key carries the HOST, so an answer from the free host is
+  never served as an answer from the register;
+* the cache key carries the PROVIDER, so an answer from ssmsearch.com
+  is never served as an answer from SSM;
+* the rate limit is per COMPANY rather than per person — ten members of
+  staff at thirty lookups a minute each is the same bill as one
+  enthusiastic script — and it refuses rather than failing open;
+* `searchAll` has a hard ceiling on pages, because each page is its own
+  charge;
+* and no test anywhere reaches SSM. `fetch` is injected.
+
+### The profile endpoints return personal data
+
+Directors', shareholders' and secretaries' identity numbers, dates of
+birth, race and home addresses. The cache holds the raw payload for its
+TTL, so `SSM_CACHE_TTL_PROFILE_SEC` is a retention setting rather than
+a performance one — which is why it is separate from the search TTL.
+
+### Secrets
+
+`SSMSEARCH_API_KEY`, `SSMSEARCH_API_SECRET` and
+`SSMSEARCH_API_BASE_URL`, in the Supabase dashboard, beside the
+interim provider's login. Never in this repository, never in the
+database, and never in any payload the app can read: they go in request
+HEADERS and not in the body, which is what gets logged and cached.
 
 ## What nobody has tested
 

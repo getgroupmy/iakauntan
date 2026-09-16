@@ -271,6 +271,7 @@ class SsmStatus {
     required this.configured,
     required this.cacheRows,
     required this.searches24h,
+    this.chosenProvider = 'ssmsearch_web',
     this.provider,
     this.loggedInAs,
     this.loginUrl,
@@ -287,6 +288,21 @@ class SsmStatus {
 
   final int cacheRows;
   final int searches24h;
+
+  /// Which of the two lookups `SSM_PROVIDER` has switched on:
+  /// `ssmsearch_web` for the interim web session, `ssm_api` for SSM's
+  /// own Search API.
+  ///
+  /// On the page because every other line means something different
+  /// depending on the answer. A held session and a signed-in name
+  /// belong to the web provider and are always empty under the API one,
+  /// which has no session at all — so a console that did not say which
+  /// was live would read as a broken lookup.
+  final String chosenProvider;
+
+  /// Whether the official API is the one answering searches.
+  bool get onOfficialApi => chosenProvider == 'ssm_api';
+
   final String? provider;
   final String? loggedInAs;
 
@@ -318,6 +334,7 @@ class SsmStatus {
 
     return SsmStatus(
       configured: j['configured'] == true,
+      chosenProvider: _str(j['chosen_provider']) ?? 'ssmsearch_web',
       cacheRows: _int(j['cache_rows']) ?? 0,
       searches24h: _int(j['searches_24h']) ?? 0,
       provider: _str(s['provider']),

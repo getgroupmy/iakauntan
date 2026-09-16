@@ -421,6 +421,7 @@ jobs:
                    supabase/tests/einvoice_totals_reconcile.sql \
                    supabase/tests/mia_credentials.sql \
                    supabase/tests/ssm_register_lookup.sql \
+                   supabase/tests/ssm_api_tables.sql \
                    supabase/tests/recurring_template_carries_the_document.sql \
                    supabase/tests/transfer_carries_the_price_agreed.sql \
                    supabase/tests/transfer_shapes.sql \
@@ -1132,6 +1133,38 @@ jobs:
       # number on an e-Invoice.
       - run: deno check supabase/functions/ssm-search/provider_test.ts
       - run: deno test supabase/functions/ssm-search/provider_test.ts
+
+      # SSM's OFFICIAL Search API, and the failures that arrive wearing
+      # a 200.
+      #
+      # CIDP puts its errors INSIDE the payload — `errorMsg` beside the
+      # data, under a normal success status — so a client reading only
+      # the HTTP status treats "no record found" as a company. Three of
+      # these assert exactly that, and one asserts the control: an empty
+      # `errorMsg` is what success looks like, and a truthiness check
+      # that took it for a failure would refuse every good answer.
+      #
+      # Every production call is CHARGED against a points balance the
+      # whole platform shares, so `fetch` is injected and nothing here
+      # reaches SSM. The paging assertions are part of the same
+      # argument: CIDP echoes `currentPage` in `nextPage` on the last
+      # page, which read literally is an endless "Load more" against a
+      # metered API.
+      - run: deno check supabase/functions/_shared/ssm_search_client_test.ts
+      - run: deno test supabase/functions/_shared/ssm_search_client_test.ts
+
+      # The seam between the interim lookup and the official one.
+      #
+      # `provider.ts` said what the second provider had to be — "the
+      # same two methods, chosen by SSM_PROVIDER" — and the risk is not
+      # that it fails. A failure is loud. It is that it SUCCEEDS while
+      # meaning something slightly different: a registration number
+      # under the wrong key, an entity type that comes back null, a page
+      # that claims to be the last when it is not. Each of those shows a
+      # plausible company carrying somebody else's number, which then
+      # goes on an e-Invoice.
+      - run: deno check supabase/functions/ssm-search/api_provider_test.ts
+      - run: deno test supabase/functions/ssm-search/api_provider_test.ts
 
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and

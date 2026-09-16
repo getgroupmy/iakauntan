@@ -534,7 +534,12 @@ async function logRequest(
 ): Promise<void> {
   const { error } = await admin.from("ssm_api_log").insert({
     org_id: info.orgId,
-    user_id: info.userId,
+    // `searched_by`, not `user_id`. A `user_id` beside an `org_id` is
+    // read by `a_colleague_not_a_stranger.sql` as work HANDED to
+    // somebody and wants a trigger checking they belong; nobody is
+    // handed anything here. `0589` made the same call for
+    // `ssm_search_log`.
+    searched_by: info.userId,
     action: info.action,
     path: info.path,
     client_ref_no: info.clientRefNo,

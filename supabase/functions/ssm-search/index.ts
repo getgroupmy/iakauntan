@@ -62,6 +62,11 @@ import {
   SsmError,
   SsmSearchWeb,
 } from "./provider.ts";
+import {
+  apiClientFromEnv,
+  chosenProvider,
+  SsmSearchApi,
+} from "./api_provider.ts";
 
 /**
  * The body shape, and NOT the CORS headers.
@@ -155,9 +160,12 @@ serveFunction("ssm-search", async (req: Request): Promise<Response> => {
           .select("id", { count: "exact", head: true }).gte("created_at", since);
         return json({
           ok: true,
-          configured: Boolean(
-            Deno.env.get("SSMSEARCH_EMAIL") && Deno.env.get("SSMSEARCH_PASSWORD"),
-          ),
+          configured: configured(),
+          // Which of the two is switched on. The console shows it
+          // because every other line on that page -- the session, the
+          // routes, the last error -- means something different
+          // depending on the answer.
+          chosen_provider: providerName(),
           // Endpoints, not credentials. On the page because the
           // defaults are a guess and "which URL did it actually ask
           // for" is the first question a failed sign-in raises -- and
@@ -234,7 +242,10 @@ serveFunction("ssm-search", async (req: Request): Promise<Response> => {
  * Exactly the gap `check_locally.sh` warns about in its own output.
  */
 // deno-lint-ignore no-explicit-any
-function provider(admin: any): SsmSearchWeb {
+function provider(admin: any): SsmSearchWeb | SsmSearchApi {
+  if (chosenProvider(Deno.env.get("SSM_PROVIDER")) === "api") {
+    return new SsmSearchApi(admin, apiClientFromEnv());
+  }
   const email = Deno.env.get("SSMSEARCH_EMAIL");
   const password = Deno.env.get("SSMSEARCH_PASSWORD");
   if (!email || !password) {
@@ -246,6 +257,38 @@ function provider(admin: any): SsmSearchWeb {
     );
   }
   return new SsmSearchWeb(admin, email, password, routes());
+}
+
+/**
+ * The name the cache and the log are keyed on.
+ *
+ * Read from the chosen provider rather than written out, because the
+ * two must never share a cache row. ssmsearch.com's answer handed back
+ * as SSM's own would be the wrong kind of fact under a field the app
+ * shows as verified — and the switch is a dashboard secret, so the day
+ * it flips there are already rows under the other name.
+ */
+function providerName(): string {
+  return chosenProvider(Deno.env.get("SSM_PROVIDER")) === "api"
+    ? "ssm_api"
+    : "ssmsearch_web";
+}
+
+/**
+ * Whether the chosen provider has what it needs.
+ *
+ * Two providers, two pairs of secrets, and `status` must answer about
+ * the one that is switched on rather than about the one this shipped
+ * with.
+ */
+function configured(): boolean {
+  return chosenProvider(Deno.env.get("SSM_PROVIDER")) === "api"
+    ? Boolean(
+      Deno.env.get("SSMSEARCH_API_KEY") && Deno.env.get("SSMSEARCH_API_SECRET"),
+    )
+    : Boolean(
+      Deno.env.get("SSMSEARCH_EMAIL") && Deno.env.get("SSMSEARCH_PASSWORD"),
+    );
 }
 
 /**
@@ -300,8 +343,11 @@ async function search(
     );
   }
 
+  // Keyed on the provider that is switched on, so a cached answer from
+  // ssmsearch.com is never served as an answer from SSM's own API.
+  const name = providerName();
   const key = [
-    "ssmsearch_web",
+    name,
     query.toLowerCase().replace(/\s+/g, " "),
     typeId ?? "",
     page,
@@ -314,11 +360,11 @@ async function search(
     await admin.from("ssm_search_log").insert({
       searched_by: userId,
       query,
-      provider: "ssmsearch_web",
+      provider: name,
       cached: true,
       result_count: (hit.payload?.items ?? []).length,
     });
-    return json({ ok: true, provider: "ssmsearch_web", cached: true, ...hit.payload });
+    return json({ ok: true, provider: name, cached: true, ...hit.payload });
   }
 
   let result;
@@ -328,7 +374,7 @@ async function search(
     await admin.from("ssm_search_log").insert({
       searched_by: userId,
       query,
-      provider: "ssmsearch_web",
+      provider: name,
       cached: false,
       error_code: e instanceof SsmError ? e.code : "INTERNAL",
     });
@@ -338,17 +384,17 @@ async function search(
   const hours = Number(Deno.env.get("SSM_CACHE_TTL_HOURS") ?? 24);
   await admin.from("ssm_search_cache").upsert({
     cache_key: key,
-    provider: "ssmsearch_web",
+    provider: name,
     payload: result,
     expires_at: new Date(Date.now() + hours * 3_600_000).toISOString(),
   });
   await admin.from("ssm_search_log").insert({
     searched_by: userId,
     query,
-    provider: "ssmsearch_web",
+    provider: name,
     cached: false,
     result_count: result.items.length,
   });
 
-  return json({ ok: true, provider: "ssmsearch_web", cached: false, ...result });
+  return json({ ok: true, provider: name, cached: false, ...result });
 }
