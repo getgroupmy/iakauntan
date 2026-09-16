@@ -24,6 +24,7 @@ import '../../data/places_repository.dart';
 // in scope where its declaring library is imported.
 import '../../data/repository.dart';
 import '../../data/ssm_repository.dart';
+import '../../data/entity_types_repository.dart';
 import '../shared/ssm_entity_picker.dart';
 import '../shared/ssm_query_hints.dart';
 import 'statement_pdf.dart';
@@ -107,7 +108,14 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   String? _payableAccountId;
   String? _linkedOrgId;
   bool _statementBusy = false;
-  String _entityType = 'sdn_bhd';
+  /// Null until somebody chooses, on a NEW contact.
+  ///
+  /// It used to default to `sdn_bhd`, which meant the commonest kind
+  /// was also the kind nobody was ever asked about: a sole proprietor
+  /// typed in quickly was filed as a private limited company, and
+  /// nothing on the screen had said so. The form now asks first and
+  /// the name box does not appear until it has an answer.
+  String? _entityType;
   String _idType = 'BRN';
   String? _stateCode;
   bool _loading = true;
@@ -431,7 +439,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     city: _nullIfEmpty(_c('city').text),
     postcode: _nullIfEmpty(_c('postcode').text),
     stateCode: _stateCode,
-    entityType: _entityType,
+    entityType: _entityType ?? 'sdn_bhd',
     // `?? 0` and not a guess: `_creditLimitProblem` has already
     // refused anything `typedNumber` will not read, so the only text
     // that reaches here and comes back null is an empty field -- which
@@ -688,6 +696,44 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           },
                         ),
                       ),
+                      // ----------------------------------------------
+                      // What kind of business, BEFORE the name
+                      //
+                      // The order is the point. It used to default to
+                      // Sdn Bhd below the name, which made the commonest
+                      // kind the one nobody was ever asked about: a sole
+                      // proprietor typed in quickly was filed as a
+                      // private limited company and nothing said so.
+                      //
+                      // Asking first also makes the registry search
+                      // mean something. `Entity Search` searches by
+                      // kind, and a search that knows it is looking for
+                      // an enterprise is a different search from one
+                      // that does not.
+                      // ----------------------------------------------
+                      const SizedBox(height: 14),
+                      _EntityTypeField(
+                        value: _entityType,
+                        onChanged: (v) => setState(() => _entityType = v),
+                      ),
+                      if (_entityType == null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: Space.sm),
+                          child: Text(
+                            'Choose what kind of business this is. The rest '
+                            'of the form follows.',
+                            key: const ValueKey('contact-entity-first'),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: context.scheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ),
+
+                      // Everything below waits for that answer. On an
+                      // EXISTING contact it is already answered, so the
+                      // form opens whole.
+                      if (_entityType != null) ...[
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _c('name'),
@@ -748,48 +794,6 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           helperText: 'Used on e-Invoices when it differs',
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _entityType,
-                        decoration: const InputDecoration(
-                          labelText: 'Entity type',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'sdn_bhd',
-                            child: Text('Sdn Bhd'),
-                          ),
-                          DropdownMenuItem(value: 'bhd', child: Text('Berhad')),
-                          DropdownMenuItem(
-                            value: 'enterprise',
-                            child: Text('Enterprise'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'sole_proprietor',
-                            child: Text('Sole Proprietor'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'partnership',
-                            child: Text('Partnership'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'individual',
-                            child: Text('Individual'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'government',
-                            child: Text('Government'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'other',
-                            child: Text('Other'),
-                          ),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _entityType = v ?? 'sdn_bhd'),
-                      ),
-
                       ContactLookalikesNotice(rows: _lookalikes),
 
                       const SizedBox(height: 24),
@@ -1166,6 +1170,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           email: _c('email').text.trim(),
                         ),
                       const SizedBox(height: 40),
+                      ],
                     ],
                   ),
                 ),
@@ -1248,6 +1253,66 @@ class _Pair extends StatelessWidget {
         const SizedBox(width: 14),
         Expanded(child: right),
       ],
+    );
+  }
+}
+
+/// What kind of business, from the console-managed list.
+///
+/// `0605` turned `app.entity_type` from an enum into a table so a
+/// platform administrator can add a kind without a deploy. This draws
+/// whatever is on it and switched on for contacts.
+///
+/// While the list is loading it draws a disabled box rather than an
+/// empty dropdown: an empty dropdown looks like a list with nothing on
+/// it, and the answer is the gate for the rest of the form.
+class _EntityTypeField extends ConsumerWidget {
+  const _EntityTypeField({required this.value, required this.onChanged});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(contactEntityTypesProvider);
+    final kinds = async.valueOrNull ?? const <EntityType>[];
+
+    if (kinds.isEmpty) {
+      return InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Kind of business *',
+          helperText: async.hasError
+              ? 'The list could not be read. Try again in a moment.'
+              : 'Loading the list…',
+        ),
+        child: const SizedBox(height: 20),
+      );
+    }
+
+    // A value that is no longer on the list — a kind switched off after
+    // this contact was filed — is kept as its own entry rather than
+    // silently becoming null, which would look like somebody had never
+    // chosen one.
+    final codes = kinds.map((k) => k.code).toSet();
+    final retired = value != null && !codes.contains(value);
+
+    return DropdownButtonFormField<String>(
+      key: const ValueKey('contact-entity-type'),
+      isExpanded: true,
+      value: value,
+      decoration: const InputDecoration(
+        labelText: 'Kind of business *',
+        helperText: 'Asked first: it decides what the rest of the form '
+            'is for.',
+      ),
+      items: [
+        for (final k in kinds)
+          DropdownMenuItem(value: k.code, child: Text(k.display)),
+        if (retired)
+          DropdownMenuItem(value: value, child: Text('$value (no longer offered)')),
+      ],
+      onChanged: onChanged,
+      validator: (v) => v == null ? 'Choose a kind of business' : null,
     );
   }
 }

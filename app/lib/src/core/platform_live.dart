@@ -40,6 +40,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/entity_types_repository.dart';
 import '../data/landing_repository.dart';
 import '../data/site_pages_repository.dart';
 import '../data/platform_catalog_repository.dart';
@@ -111,6 +112,10 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
   // company, and the running total of what this month has cost —
   // ending a promotion changes all three, and a screen still offering
   // a price nobody is charging is worse than one that never refreshes.
+  // 0605. The kinds of business are a dropdown on the contact form and
+  // on registration, so an operator adding one has to reach every tab
+  // that draws it, not only the console page they added it on.
+  'entity_types': [allEntityTypesProvider, contactEntityTypesProvider],
   'module_promotions': [
     platformPromotionsAdminProvider,
     moduleSurfaceProvider,

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0604` (the highest applied migration).
-667 functions and 331 readable tables, of which
+Schema version `0605` (the highest applied migration).
+669 functions and 332 readable tables, of which
 255 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**526 of 667 functions carry a `comment on
+**528 of 669 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -356,7 +356,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (459)
+### general (461)
 
 Not gated on any module.
 
@@ -607,6 +607,7 @@ Not gated on any module.
 - `platform_ai_providers()` — The provider list for the platform console, with whether a key is on file and when it was set.
 - `platform_audit_trail(p_table text, p_limit integer)` *(writes)* — The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate tables may write.
 - `platform_credit_summary()`
+- `platform_delete_entity_type(p_code text)` *(writes)* — Removes a kind of business that nothing is filed as.
 - `platform_delete_landing_app_link(p_store_code text)` *(writes)* — Removes one download button from the landing page.
 - `platform_delete_landing_logo(p_id uuid)` *(writes)* — Removes one customer logo from the landing page.
 - `platform_delete_landing_section(p_id uuid)` *(writes)* — Removes one section from the landing page.
@@ -623,6 +624,7 @@ Not gated on any module.
 - `platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` *(writes)* — Publishes a statutory rate table -- EPF, SOCSO, EIS or PCB -- that EVERY company's payroll is then computed from.
 - `platform_reservations()`
 - `platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` *(writes)* — Holds a name on our domain -- for a company, for the platform's own use, or parked so nobody else takes it.
+- `platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean)` *(writes)* — Adds or amends a kind of business.
 - `platform_save_landing_app_link(p_store_code text, p_label text, p_url text, p_badge_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits a download button -- App Store, Play Store -- on the landing page.
 - `platform_save_landing_logo(p_id uuid, p_name text, p_logo_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits a customer logo on the landing page.
 - `platform_save_landing_page(p_patch jsonb)` *(writes)* — Patches the landing page: only the fields present in the patch are changed.
@@ -932,6 +934,7 @@ inconsistent.
 - `employee_tax_reliefs`
 - `employee_ytd_opening`
 - `employees`
+- `entity_types`
 - `exchange_rates`
 - `expense_claim_lines`
 - `expense_claims`

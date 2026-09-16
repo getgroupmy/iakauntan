@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0604",
+    "version": "0605",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -6671,6 +6671,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/employees"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/entity_types": {
+      "get": {
+        "operationId": "select_entity_types",
+        "summary": "Read entity_types",
+        "description": "The kinds of business a contact or a company can be. Was the `app.entity_type` enum until 0605. Read by anybody signed in (it is a dropdown); written only by a platform administrator. `is_public_company` is the MBRS answer, carried on the row so a new kind has to state it rather than being compared against the string 'bhd'.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/entity_types"
                   }
                 }
               }
@@ -40949,6 +41013,59 @@
         }
       }
     },
+    "/rpc/platform_delete_entity_type": {
+      "post": {
+        "operationId": "platform_delete_entity_type",
+        "summary": "Removes a kind of business that nothing is filed as",
+        "description": "Removes a kind of business that nothing is filed as. Refuses a built-in one and refuses one in use, naming how many \u2014 both are cases where switching it off is what was wanted.\n\n`public.platform_delete_entity_type(p_code text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_delete_landing_app_link": {
       "post": {
         "operationId": "platform_delete_landing_app_link",
@@ -42057,6 +42174,82 @@
                 "schema": {
                   "type": "string",
                   "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_save_entity_type": {
+      "post": {
+        "operationId": "platform_save_entity_type",
+        "summary": "Adds or amends a kind of business",
+        "description": "Adds or amends a kind of business. Platform administrators only. An absent argument means leave it alone, so correcting a label cannot switch a kind off. `p_is_public_company` is the MBRS answer and a new kind must state it; the default is the safe one.\n\n`public.platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_code": {
+                    "type": "string"
+                  },
+                  "p_label": {
+                    "type": "string"
+                  },
+                  "p_label_my": {
+                    "type": "string"
+                  },
+                  "p_sort_order": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_is_active": {
+                    "type": "boolean"
+                  },
+                  "p_is_public_company": {
+                    "type": "boolean"
+                  },
+                  "p_for_contacts": {
+                    "type": "boolean"
+                  },
+                  "p_for_organizations": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "p_code",
+                  "p_label"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -73145,19 +73338,7 @@
             "type": "string"
           },
           "entity_type": {
-            "type": "string",
-            "enum": [
-              "sdn_bhd",
-              "bhd",
-              "enterprise",
-              "partnership",
-              "llp",
-              "sole_proprietor",
-              "association",
-              "government",
-              "individual",
-              "other"
-            ]
+            "type": "string"
           },
           "tin": {
             "type": "string"
@@ -76511,6 +76692,55 @@
           "employee_no",
           "full_name",
           "hire_date"
+        ]
+      },
+      "entity_types": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "label_my": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "is_public_company": {
+            "type": "boolean"
+          },
+          "for_contacts": {
+            "type": "boolean"
+          },
+          "for_organizations": {
+            "type": "boolean"
+          },
+          "is_builtin": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_by": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "code",
+          "label"
         ]
       },
       "exchange_rates": {

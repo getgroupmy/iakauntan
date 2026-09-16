@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'entity_types_admin.dart';
 import 'ai_providers_admin.dart';
 import 'branding_admin.dart';
 import 'credit_admin.dart';
@@ -95,6 +96,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/ai',
     primary: false,
     page: AiProvidersAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Kinds of business',
+    icon: Icons.category_outlined,
+    selectedIcon: Icons.category,
+    path: '/admin/entity-types',
+    primary: false,
+    page: EntityTypesAdminTab(),
   ),
   (
     group: 'Service',

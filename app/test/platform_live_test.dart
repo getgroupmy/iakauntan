@@ -37,6 +37,11 @@ void main() {
       // settings card that is still offering it, and the running total
       // that is still discounting it.
       'module_promotions',
+      // 0605. The kinds of business a contact or a company can be.
+      // An administrator adds one FOR somebody — usually somebody on
+      // the telephone with a contact form already open — so "log out
+      // and back in" is not an answer to give them.
+      'entity_types',
     });
   });
 
