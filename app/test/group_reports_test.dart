@@ -303,7 +303,17 @@ void main() {
 
     /// `pumpAndSettle` cannot be used: an unreachable repository leaves
     /// `AsyncView` retrying on a periodic timer, which never settles.
+    ///
+    /// The WIDTH is not incidental. What is asserted below is whether
+    /// group reports are OFFERED, and below 900 the button folds into
+    /// the bar's overflow menu -- the full row of actions was four
+    /// pixels over at 800, which `reports_screen_test.dart` measures.
+    /// So these render at a laptop width, where the button is a button.
+    /// Both placements are asserted there.
     Future<void> open(WidgetTester tester, {required int companies}) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1400, 900);
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(reports(companies: companies));
       await tester.pump();
       await tester.pump();
