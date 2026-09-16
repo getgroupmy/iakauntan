@@ -21,15 +21,17 @@ void main() {
   /// The tile shows the claim's title, so the fixtures are told apart
   /// by that rather than by a claim number the list never renders on its
   /// own.
-  ExpenseClaim claim(String title) => ExpenseClaim.fromJson({
+  ExpenseClaim claim(String title, {String status = 'submitted',
+      String? paidAt}) => ExpenseClaim.fromJson({
     'id': title,
     'org_id': 'o',
     'claim_no': 'CLM-0001',
     'employee_id': 'e',
     'claim_date': '2026-03-15',
     'title': title,
-    'status': 'submitted',
+    'status': status,
     'total_amount': 500,
+    'paid_at': paidAt,
   });
 
   Widget harness({
@@ -105,4 +107,86 @@ void main() {
 
     expect(find.text('No claims here'), findsOneWidget);
   });
+  /// Every line of this list, at every width one is opened at.
+  ///
+  /// `4bd1d7e` fixed both ends of this row on the ARITHMETIC in
+  /// `check_narrow_rows.py` rather than by rendering, because the first
+  /// probe of it was written with a malformed fixture and hung. This is
+  /// the confirmation that was owed.
+  ///
+  /// The trailing was Money, "Reject" and "Approve" -- 168 pixels of
+  /// labelled button beside the amount -- and the title carries TWO
+  /// status chips on a paid claim, 168 more that a `Flexible` cannot
+  /// give back. A `ListTile` does not report either: it hands the
+  /// trailing the width it asks for and gives the title what is left,
+  /// so a phone got a title thirty pixels wide and wrapped it one
+  /// letter per line.
+  group('a claim line fits', () {
+    for (final width in [1400.0, 1000.0, 800.0, 700.0, 600.0, 412.0, 360.0]) {
+      testWidgets('at ${width.toInt()} wide', (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = Size(width, 900);
+        addTearDown(tester.view.reset);
+
+        // The widest a row gets: awaiting a decision, so both buttons,
+        // beside a paid claim carrying both chips.
+        await tester.pumpWidget(
+          harness(
+            mine: [claim('Taxi to the land office')],
+            all: [
+              claim('Taxi to the land office'),
+              claim(
+                'Stamp duty paid at the counter',
+                status: 'approved',
+                paidAt: '2026-03-20T10:00:00Z',
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ClaimsScreen), findsOneWidget);
+      });
+    }
+  });
+
+  group('deciding a claim', () {
+    testWidgets('is offered as buttons on a laptop', (tester) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1400, 900);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(mine: [claim('Taxi')], all: [claim('Taxi')]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Approve'), findsOneWidget);
+      expect(find.text('Reject'), findsOneWidget);
+      expect(find.byKey(const ValueKey('claim-actions')), findsNothing);
+    });
+
+    testWidgets('and as one menu on a phone, with both still in it',
+        (tester) async {
+      // Folded, not dropped. Approving is the reason somebody opened
+      // this screen, and rejecting is the other half of the decision.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(412, 900);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(mine: [claim('Taxi')], all: [claim('Taxi')]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Approve'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('claim-actions')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Approve'), findsOneWidget);
+      expect(find.text('Reject'), findsOneWidget);
+    });
+  });
+
 }
