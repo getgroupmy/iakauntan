@@ -74,7 +74,16 @@ void main() {
     List<Map<String, dynamic>> board, {
     String role = 'owner',
     String base = 'MYR',
+    double? width,
   }) async {
+    if (width != null) {
+      // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
+      // moves the render surface without moving `MediaQuery`. See
+      // docs/widget-tests.md.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = Size(width, 900);
+      addTearDown(tester.view.reset);
+    }
     await tester.pumpWidget(wrap(board, role: role, base: base));
     await tester.pumpAndSettle();
   }
@@ -258,6 +267,26 @@ void main() {
           findsOneWidget);
     });
   });
+  /// The bar, at every width one is opened at.
+  ///
+  /// "As at 16/09/2026" is an interpolated date beside a title reading
+  /// "Exchange rates" and a refresh button -- the same shape that ran
+  /// off four other app bars in this branch. A `RenderFlex` overflow IS
+  /// a test failure here, and in a release build it is not an error at
+  /// all: Flutter CLIPS the toolbar and the date is simply gone.
+  group('the bar fits', () {
+    for (final width in [1400.0, 1000.0, 800.0, 700.0, 600.0, 412.0, 360.0]) {
+      testWidgets('at ${width.toInt()} wide', (tester) async {
+        await show(tester, [rateRow()], width: width);
+
+        expect(find.byType(ExchangeRatesScreen), findsOneWidget);
+        // And the date is still readable, with its year.
+        expect(find.textContaining(RegExp(r'As at \d{2}/\d{2}/\d{4}')),
+            findsOneWidget);
+      });
+    }
+  });
+
 }
 
 /// Only the one method the screen calls. Everything else on `Repo`

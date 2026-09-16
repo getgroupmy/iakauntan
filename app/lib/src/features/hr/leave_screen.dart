@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/row_actions.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -135,20 +136,32 @@ class _LeaveTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: canDecide
-          ? Row(mainAxisSize: MainAxisSize.min, children: [
-              TextButton(
-                onPressed: () => _decide(context, ref, false),
-                child: Text('Reject',
-                    style: TextStyle(color: context.colors.danger)),
-              ),
-              const SizedBox(width: Space.xs),
-              FilledButton(
-                onPressed: () => _decide(context, ref, true),
-                child: const Text('Approve'),
-              ),
-            ])
-          : null,
+      // `RowActions`, so the pair become ONE menu below 700. "Reject"
+      // and "Approve" together are 168 pixels of labelled buttons, and
+      // a `ListTile` does not overflow when that leaves nothing for the
+      // request's own line -- it GIVES it what is left and wraps it one
+      // letter per line, which is the shape `row_actions.dart`'s own
+      // header is about.
+      trailing: !canDecide
+          ? null
+          : RowActions(
+              menuKey: 'leave-actions',
+              actions: [
+                RowAction(
+                  actionKey: 'approve-leave',
+                  label: 'Approve',
+                  icon: Icons.check,
+                  emphasis: RowActionEmphasis.filled,
+                  onTap: () => _decide(context, ref, true),
+                ),
+                RowAction(
+                  actionKey: 'reject-leave',
+                  label: 'Reject',
+                  icon: Icons.close,
+                  onTap: () => _decide(context, ref, false),
+                ),
+              ],
+            ),
     );
   }
 

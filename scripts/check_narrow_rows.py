@@ -38,9 +38,25 @@ status chip off the right edge on a phone.
 The shape is always the same. A `title:` that is a `Row` of
 `Text(number)`, a gap and a `StatusChip` CANNOT SHRINK -- a Row lays
 its children out at their natural size and overflows the rest -- while
-the box it is given shrinks to whatever the trailing left. Forty-nine
-titles in this app are Rows with an `Expanded` or a `Flexible` in them
-and are fine; the ones without are the ones to look at.
+the box it is given shrinks to whatever the trailing left.
+
+## An `Expanded` is not a get-out, and this check said it was
+
+The first version of this rule skipped any title Row containing an
+`Expanded` or a `Flexible`, on the reasoning that such a Row can
+shrink. It can -- but only down to the width of its INFLEXIBLE
+children, and if those alone do not fit it overflows exactly as before.
+
+`exchange_rates_screen.dart` is the counter-example, and it was found
+by rendering the screen rather than by this script: a title of
+`SizedBox(width: 56)`, an `Expanded` name, and `1 USD = 4.2500 MYR`,
+against a trailing "Override" button. The `Expanded` collapsed to
+nothing and the row still went 68 pixels off a 412px phone, while this
+check passed it on the strength of that `Expanded`.
+
+So what is measured is the inflexible children only. A Row whose
+children are all flexible measures zero and passes, which is correct;
+one with a fixed `SizedBox` and a fixed label is measured on those.
 
 `Wrap` is the fix, not an ellipsis: the thing being truncated would be
 the document number, which is what somebody came to the list to read.
@@ -246,14 +262,45 @@ def text_width(expr: str) -> float:
     return holes * INTERPOLATION + literal * CHAR
 
 
+def flex_spans(expr: str) -> list[tuple[int, int]]:
+    """Where the `Expanded`/`Flexible` children of this Row sit.
+
+    Anything inside one of these yields when the box is small, so it
+    contributes nothing to what the Row demands.
+    """
+    spans = []
+    for m in FLEX.finditer(expr):
+        own = balanced(expr, m.end() - 1)
+        spans.append((m.start(), m.start() + len(own) + (m.end() - 1 - m.start())))
+    return spans
+
+
+def outside(spans: list[tuple[int, int]], at: int) -> bool:
+    return not any(a <= at < b for a, b in spans)
+
+
 def title_width(expr: str) -> float:
-    """What a rigid title Row asks for, laid out at its natural size."""
+    """What a title Row asks for that it cannot give back.
+
+    Only the INFLEXIBLE children. An `Expanded` shrinks to nothing when
+    the box is small; a `SizedBox(width: 56)` and a `Text('1 USD =
+    4.2500 MYR')` do not, and if those two alone exceed the box the Row
+    overflows however many `Expanded`s sit beside them.
+    """
+    spans = flex_spans(expr)
     total = 0.0
     for m in at_depth(expr, TEXT_WIDGET, MAX_DEPTH):
-        total += text_width(balanced(expr, m.end() - 1))
-    total += CHIP * len(at_depth(expr, CHIP_WIDGET, MAX_DEPTH))
-    total += ICON_GLYPH * len(at_depth(expr, ICON_WIDGET, MAX_DEPTH))
+        if outside(spans, m.start()):
+            total += text_width(balanced(expr, m.end() - 1))
+    for m in at_depth(expr, CHIP_WIDGET, MAX_DEPTH):
+        if outside(spans, m.start()):
+            total += CHIP
+    for m in at_depth(expr, ICON_WIDGET, MAX_DEPTH):
+        if outside(spans, m.start()):
+            total += ICON_GLYPH
     for gap in GAP.finditer(expr):
+        if not outside(spans, gap.start()):
+            continue
         total += SPACE.get(gap.group(1), 0) if gap.group(1) else float(
             gap.group(2))
     return total
@@ -286,8 +333,6 @@ def scan_titles(path: str, source: str) -> list[str]:
         if not expr[start + len('title:'):].lstrip().startswith('Row('):
             continue
         title = balanced(expr, expr.index('Row(', start) + 3)
-        if at_depth(title, FLEX, MAX_DEPTH):
-            continue
 
         trailing = slot(expr, 'trailing')
         taken = TILE_PADDING
@@ -302,9 +347,10 @@ def scan_titles(path: str, source: str) -> list[str]:
             problems.append(
                 f'{os.path.relpath(path, ROOT)}:{line}: a title Row wants '
                 f'~{wants:.0f}px and the trailing and leading leave ~'
-                f'{room:.0f}px on a {PHONE}px phone. A Row cannot shrink, so '
-                f'the last thing in it -- usually the status chip -- goes off '
-                f'the right edge. Use a Wrap, or give the text a Flexible and '
+                f'{room:.0f}px on a {PHONE}px phone. Only the INFLEXIBLE '
+                f'children are counted -- an Expanded gives its space back '
+                f'and these do not -- so the last of them goes off the right '
+                f'edge. Use a Wrap, or give the widest child a Flexible and '
                 f'an ellipsis -- or mark the row narrow-ok and say why.')
     return problems
 
@@ -313,9 +359,14 @@ def scan(path: str, source: str) -> list[str]:
     problems = []
     for m in re.finditer(r"\btrailing:\s*", source):
         rest = source[m.end():]
-        # Only a composite trailing can be wide. A bare Icon or one
-        # button is what `trailing` is for.
-        if not rest.startswith(('Row(', 'Wrap(', '_')):
+        # A conditional trailing is still a trailing. This used to
+        # require the value to START with `Row(`, `Wrap(` or a private
+        # widget, which skipped every `pending ? Row(...) : Row(...)` --
+        # and `claims_screen.dart` puts Money, "Reject" and "Approve" in
+        # exactly that shape. The arithmetic below is what decides; a
+        # bare Icon or a single button measures under the threshold and
+        # is not reported.
+        if '(' not in rest[:80]:
             continue
         start = m.end() + rest.index('(')
         expr = balanced(source, start)

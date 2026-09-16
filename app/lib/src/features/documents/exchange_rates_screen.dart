@@ -183,22 +183,44 @@ class _Row extends StatelessWidget {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      title: Row(children: [
-        SizedBox(
-          width: 56,
-          child: Text(code,
+      // A `Wrap`, not a `Row`. The `Expanded` on the currency name
+      // looked like it made this shrinkable and does not: it collapses
+      // to nothing and the 56px code and "1 USD = 4.2500 MYR" are left
+      // fixed, which went 68 pixels off a 412px phone against the
+      // "Override" button at the other end. The rate is the thing
+      // somebody came to read, so it drops to a second line rather than
+      // off the edge.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 2,
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(
+              code,
               style: const TextStyle(
-                  fontWeight: FontWeight.w700, fontFamily: 'monospace')),
-        ),
-        Expanded(child: Text(row['name']?.toString() ?? '')),
-        if (rate == null)
-          Text('no rate',
+                fontWeight: FontWeight.w700,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+          Text(row['name']?.toString() ?? ''),
+          if (rate == null)
+            Text(
+              'no rate',
               style: TextStyle(
-                  color: context.colors.danger, fontWeight: FontWeight.w600))
-        else
-          Text('1 $code = ${Fmt.rate(rate)} $base',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-      ]),
+                color: context.colors.danger,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          else
+            Text(
+              '1 $code = ${Fmt.rate(rate)} $base',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+        ],
+      ),
       subtitle: rate == null
           ? const Text('Nothing on file. Enter one, or wait for the feed.')
           : Text(isOwn

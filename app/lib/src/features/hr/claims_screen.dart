@@ -6,6 +6,7 @@ import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/row_actions.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -132,19 +133,26 @@ class _ClaimTile extends ConsumerWidget {
         isScrollControlled: true,
         builder: (_) => _ClaimSheet(claim: claim),
       ),
-      title: Row(children: [
-        Flexible(
-          child: Text(claim.title ?? claim.claimNo,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        const SizedBox(width: Space.sm),
-        StatusChip(claim.status, compact: true),
-        if (claim.paidAt != null) ...[
-          const SizedBox(width: Space.xs),
-          const StatusChip('completed', compact: true),
+      // A `Wrap`. The `Flexible` on the title looked like it made this
+      // shrinkable and does not: it collapses to nothing and the two
+      // chips are left fixed at 168 pixels between them, which is more
+      // than the row has on a phone. A paid claim carries both, so this
+      // is the ordinary case rather than the awkward one.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Space.sm,
+        runSpacing: 2,
+        children: [
+          Text(
+            claim.title ?? claim.claimNo,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          StatusChip(claim.status, compact: true),
+          if (claim.paidAt != null)
+            const StatusChip('completed', compact: true),
         ],
-      ]),
+      ),
       subtitle: Text(
         '${claim.employeeName ?? ''} · ${claim.claimNo} · '
         '${Fmt.date(claim.claimDate)}'
@@ -154,35 +162,48 @@ class _ClaimTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: pending
-          ? Row(mainAxisSize: MainAxisSize.min, children: [
-              Money(claim.totalAmount, bold: true),
-              const SizedBox(width: Space.md),
-              TextButton(
-                onPressed: () => _decide(context, ref, false),
-                child: Text('Reject',
-                    style: TextStyle(color: context.colors.danger)),
-              ),
-              FilledButton(
-                onPressed: () => _decide(context, ref, true),
-                child: const Text('Approve'),
-              ),
-            ])
-          : Row(mainAxisSize: MainAxisSize.min, children: [
-              Money(
-                claim.status == 'approved'
-                    ? claim.approvedAmount
-                    : claim.totalAmount,
-                bold: true,
-              ),
-              if (postable) ...[
-                const SizedBox(width: Space.md),
-                FilledButton.tonal(
-                  onPressed: () => _post(context, ref),
-                  child: const Text('Post'),
-                ),
-              ],
-            ]),
+      // `RowActions`, so "Reject" and "Approve" become ONE menu below
+      // 700. Together they are 168 pixels of labelled buttons beside
+      // the amount, which on a 360px phone leaves the claim's own title
+      // about thirty -- and a `ListTile` does not overflow there, it
+      // GIVES the title thirty pixels and wraps it one letter per line.
+      // The amount stays put at every width: it is what the row is
+      // about, not an action.
+      trailing: RowActions(
+        menuKey: 'claim-actions',
+        leading: Money(
+          pending
+              ? claim.totalAmount
+              : claim.status == 'approved'
+              ? claim.approvedAmount
+              : claim.totalAmount,
+          bold: true,
+        ),
+        actions: [
+          if (pending) ...[
+            RowAction(
+              actionKey: 'approve-claim',
+              label: 'Approve',
+              icon: Icons.check,
+              emphasis: RowActionEmphasis.filled,
+              onTap: () => _decide(context, ref, true),
+            ),
+            RowAction(
+              actionKey: 'reject-claim',
+              label: 'Reject',
+              icon: Icons.close,
+              onTap: () => _decide(context, ref, false),
+            ),
+          ] else if (postable)
+            RowAction(
+              actionKey: 'post-claim',
+              label: 'Post',
+              icon: Icons.post_add_outlined,
+              emphasis: RowActionEmphasis.filled,
+              onTap: () => _post(context, ref),
+            ),
+        ],
+      ),
     );
   }
 

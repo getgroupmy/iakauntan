@@ -68,7 +68,16 @@ void main() {
     WidgetTester tester,
     Map<String, dynamic> st, {
     String role = 'owner',
+    double? width,
   }) async {
+    if (width != null) {
+      // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
+      // moves the render surface without moving `MediaQuery`. See
+      // docs/widget-tests.md.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = Size(width, 900);
+      addTearDown(tester.view.reset);
+    }
     await tester.pumpWidget(wrap(st, role: role));
     await tester.pumpAndSettle();
   }
@@ -202,6 +211,23 @@ void main() {
       expect(find.byTooltip('Import statement'), findsNothing);
     });
   });
+  /// The bar, at every width one is opened at.
+  ///
+  /// Six icon buttons and a title. No labelled text, so it is the
+  /// cheapest of the app bars in this app -- which is exactly why it is
+  /// worth rendering rather than assuming: 6 x 48 is 288 before the
+  /// title, and a `RenderFlex` overflow IS a test failure here while a
+  /// release build simply CLIPS it.
+  group('the bar fits', () {
+    for (final width in [1400.0, 1000.0, 800.0, 700.0, 600.0, 412.0, 360.0]) {
+      testWidgets('at ${width.toInt()} wide', (tester) async {
+        await show(tester, status(), width: width);
+
+        expect(find.byType(ReconciliationScreen), findsOneWidget);
+      });
+    }
+  });
+
 }
 
 /// Only what the screen asks for. Anything else throws, so a screen that
