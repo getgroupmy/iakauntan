@@ -470,6 +470,21 @@ jobs:
       - name: Check every list row leaves room for its own words
         run: python3 scripts/check_narrow_rows.py
 
+      # An inline <script> in web/index.html is refused by the deployed
+      # Content-Security-Policy on every load, on every browser, and the
+      # only trace is a console entry nobody is reading. The
+      # service-worker rescue -- the block that clears the stale worker
+      # keeping old code alive on installed phones -- was inline for its
+      # whole life and never ran once in production. The symptom was
+      # Android Chrome still showing a version replaced weeks earlier,
+      # which reads as a deployment problem and is not one.
+      #
+      # Nothing else sees it: the analyzer does not read web/, the widget
+      # tests never load index.html, and a local run applies no CSP at
+      # all -- so it works right up until it is deployed.
+      - name: Check every script is one the CSP will run
+        run: python3 scripts/check_inline_scripts.py
+
       # A test that catches `when others` and asserts nothing about the
       # error passes when the guard it is aimed at is deleted, and passes
       # when the statement under test has a typo in it. A sweep of

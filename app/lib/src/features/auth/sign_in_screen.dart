@@ -1406,7 +1406,20 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     ref.watch(platformLiveProvider);
 
     final scheme = Theme.of(context).colorScheme;
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+
+    // SHORTEST side, not width. A phone held sideways is 915 by 412 and
+    // was getting the two-column desktop layout on the strength of that
+    // 915 -- which put the Sign in button below the fold on a screen
+    // 412 tall, so the one thing the page exists for was off-screen and
+    // the panel beside it was decoration.
+    //
+    // A device's shortest side does not change when it is rotated, so
+    // this asks what KIND of screen it is rather than which way up it is
+    // being held. 900 stays the number: a laptop is at least 900 both
+    // ways round and a tablet in portrait is about 800, which is the
+    // line this was always meant to draw.
+    final size = MediaQuery.sizeOf(context);
+    final wide = size.shortestSide >= 900;
 
     // Nothing but the circle until there is something true to draw.
     // A page that is loading looks like a page that is loading; the

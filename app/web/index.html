@@ -112,41 +112,20 @@
     it would silently cancel the browser's push subscription, which is
     the sort of bug that looks like "notifications just stopped working
     on Chrome" and has no visible cause anywhere.
+
+    It is a FILE rather than an inline script, and that is the whole
+    point of this note. Inline, the Content-Security-Policy in
+    deploy/vercel-output-config.json refused it on every load — no
+    'unsafe-inline', no hash — so the rescue never ran once in
+    production and the stale workers it exists to clear were never
+    cleared. Not a hash either: a hash is of the exact bytes, so the
+    next person to fix a typo in the script ships a policy that blocks
+    it again.
+
+    NOT deferred, and before flutter_bootstrap.js: the point is to
+    unregister the worker before anything else asks it for an asset.
   -->
-  <script>
-    (function () {
-      if (!('serviceWorker' in navigator)) return;
-
-      function dropCaches() {
-        if (!window.caches) return Promise.resolve();
-        return caches.keys().then(function (keys) {
-          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-        });
-      }
-
-      function isPushWorker(reg) {
-        return reg.scope.indexOf('/push/') === reg.scope.length - 6;
-      }
-
-      navigator.serviceWorker.getRegistrations().then(function (all) {
-        var regs = all.filter(function (r) { return !isPushWorker(r); });
-        var had = regs.length > 0;
-        return Promise.all(regs.map(function (r) { return r.unregister(); }))
-          // Unconditional, because the pass that unregisters cannot also
-          // finish the cleanup: it reloads, and after the reload there is
-          // no registration left to notice by. A cache with no worker to
-          // read it is inert rather than harmful, but leaving one behind
-          // for good is the kind of debris that misleads whoever debugs
-          // this next.
-          .then(dropCaches)
-          .then(function () {
-            if (!had || sessionStorage.getItem('sw-evicted')) return;
-            sessionStorage.setItem('sw-evicted', '1');
-            window.location.reload();
-          });
-      }).catch(function () { /* Nothing useful to do; the app still loads. */ });
-    })();
-  </script>
+  <script src="sw_rescue.js"></script>
   <!-- The free reader, served from here rather than from a CDN.
 
        `tesseract.js` defaults to fetching its worker, its WebAssembly

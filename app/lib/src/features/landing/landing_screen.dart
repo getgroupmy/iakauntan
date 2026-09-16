@@ -339,8 +339,28 @@ class _Masthead extends StatelessWidget {
                       preview: preview,
                       onPick: _scrollTo,
                     ),
-                  Flexible(child: LandingMark(content: content, size: 32)),
-                  const Spacer(),
+                  // `Expanded` and NO `Spacer`. The mark used to be a
+                  // `Flexible` beside a `Spacer`, and both of them --
+                  // and the register button -- are flex children with a
+                  // factor of one, so the mark got a THIRD of the free
+                  // space and the Spacer took a third to draw nothing.
+                  // Measured: the wordmark rendered 17.8 pixels wide on
+                  // a 412px phone ("iAka…") and was still cut at 133
+                  // against its natural 165 at 760, which is the
+                  // desktop breakpoint.
+                  //
+                  // Expanded is the spacer now: it absorbs the free
+                  // space, which pushes the buttons right exactly as
+                  // before, and `LandingMark` draws from its left edge
+                  // and ellipsises only when the box really is too
+                  // small. The register button keeps its own `Flexible`
+                  // so it can still give ground at the extreme -- the
+                  // way in is the one thing on this bar that has to
+                  // survive.
+                  Expanded(
+                    flex: 4,
+                    child: LandingMark(content: content, size: 32),
+                  ),
                   if (wide) ...[
                     // The products link opens a panel of the blocks
                     // themselves rather than scrolling blindly: on a
@@ -462,22 +482,44 @@ class LandingMark extends StatelessWidget {
           )
         else
           _FallbackMark(size: size),
-        const SizedBox(width: 12),
-        // Shrinks rather than overflowing. On a phone the bar carries a
-        // menu button, this mark and a way in, and a long wordmark had
-        // no way to give ground — the row simply ran off the right of
-        // the screen.
+        // The word, WHOLE or not at all.
+        //
+        // It used to be a `Flexible` with an ellipsis, which meant a
+        // narrow bar drew "iAka…" — six letters of a brand name, which
+        // says less than the logo beside it does and looks like a
+        // rendering fault. Half a word is not a smaller wordmark.
+        //
+        // So the width is measured against what the word actually
+        // needs, and below that the logo carries the brand alone. A
+        // `LayoutBuilder` rather than a breakpoint because the wordmark
+        // is an operator's setting: "iA" and "Perakaunan Sinar
+        // Sdn Bhd" want to disappear at very different widths, and a
+        // number in here would be right for exactly one of them.
         Flexible(
-          child: Text(
-            content.wordmark,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: size * 0.62,
-              fontWeight: FontWeight.w700,
-              color: scheme.primary,
-              letterSpacing: -0.5,
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final style = TextStyle(
+                fontSize: size * 0.62,
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+                letterSpacing: -0.5,
+              );
+              final painter = TextPainter(
+                text: TextSpan(text: content.wordmark, style: style),
+                maxLines: 1,
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout();
+              // 12 is the gap above, which is already spent by the time
+              // this box is measured.
+              if (painter.width > constraints.maxWidth - 12) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(content.wordmark, maxLines: 1, style: style),
+              );
+            },
           ),
         ),
       ],
@@ -618,19 +660,42 @@ class _HeroFullBleed extends StatelessWidget {
                     : Container(color: const Color(0xFF0F172A)),
               ),
             ),
+            // The gradient's premise is that the copy is on the LEFT
+            // and the picture carries its subject on the right, so the
+            // scrim can thin out towards the far edge. That is true on
+            // a wide screen and false on a phone: the copy is capped at
+            // 640 and a handset is 412, so it spans the whole width and
+            // the right-hand end of the headline sat over the thinnest
+            // part of the scrim.
+            //
+            // Reported from an Android phone, and the uploaded hero on
+            // this deployment is a screenshot of the dashboard -- so
+            // what showed through under the words was other words:
+            // "e-Invoice", "26", "g drafts". Text over text, which is
+            // not a contrast problem but a legibility one.
+            //
+            // So on a narrow screen the scrim is nearly FLAT and dark
+            // the whole way across. The picture is texture there rather
+            // than content; there is no half of it being left alone,
+            // because there is no half of the screen without words on
+            // it.
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
-                    colors: [
-                      const Color(0xFF0F172A).withValues(alpha: 0.88),
-                      const Color(0xFF0F172A).withValues(alpha: 0.62),
-                      const Color(
-                        0xFF0F172A,
-                      ).withValues(alpha: wide ? 0.2 : 0.5),
-                    ],
+                    colors: wide
+                        ? [
+                            const Color(0xFF0F172A).withValues(alpha: 0.88),
+                            const Color(0xFF0F172A).withValues(alpha: 0.62),
+                            const Color(0xFF0F172A).withValues(alpha: 0.2),
+                          ]
+                        : [
+                            const Color(0xFF0F172A).withValues(alpha: 0.93),
+                            const Color(0xFF0F172A).withValues(alpha: 0.90),
+                            const Color(0xFF0F172A).withValues(alpha: 0.86),
+                          ],
                     stops: const [0, 0.55, 1],
                   ),
                 ),
@@ -1080,6 +1145,14 @@ class _Badges extends StatelessWidget {
                     ),
                     boxShadow: Land.lift(scheme, hovered: hovered),
                   ),
+                  // `Flexible` and an ellipsis on the words. A badge is
+                  // an operator's phrase and the pill had no width
+                  // bound, so a long one ran off its own pill and off
+                  // the line: measured at 52 pixels over on a 360px
+                  // phone, which is the narrowest Android in common
+                  // use. A `Wrap` moves a pill to the next line when it
+                  // does not fit BESIDE another; it cannot help one
+                  // that does not fit on a line at all.
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1089,12 +1162,16 @@ class _Badges extends StatelessWidget {
                         color: scheme.primary,
                       ),
                       const SizedBox(width: 9),
-                      Text(
-                        b.title,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurface,
+                      Flexible(
+                        child: Text(
+                          b.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurface,
+                          ),
                         ),
                       ),
                     ],
