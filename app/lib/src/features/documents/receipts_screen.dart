@@ -45,48 +45,61 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(
+          // A Wrap rather than a Row: the segmented control and two
+          // buttons want about 920 logical pixels between them, so a
+          // Row overflows at 800 and by half the screen again on a
+          // phone. `group_payment_screen.dart` -- the same feature, one
+          // route along -- already lays its controls out this way.
+          Wrap(
+            spacing: Space.sm,
+            runSpacing: Space.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
                     value: true,
                     label: Text('Received'),
-                    icon: Icon(Icons.south_west, size: 16)),
-                ButtonSegment(
+                    icon: Icon(Icons.south_west, size: 16),
+                  ),
+                  ButtonSegment(
                     value: false,
                     label: Text('Paid out'),
-                    icon: Icon(Icons.north_east, size: 16)),
-              ],
-              selected: {_isSales},
-              onSelectionChanged: (s) => setState(() => _isSales = s.first),
-            ),
-            const Spacer(),
-            // The other shape a payment comes in: one transfer covering
-            // documents in more than one company. Not a nav entry —
-            // it is asked in the same breath as "did they pay?", and
-            // this is where that is asked.
-            if (canPost)
-              TextButton.icon(
-                onPressed: () => context.push('/receipts/group'),
-                icon: const Icon(Icons.account_tree_outlined, size: 18),
-                label: const Text('Across companies'),
+                    icon: Icon(Icons.north_east, size: 16),
+                  ),
+                ],
+                selected: {_isSales},
+                onSelectionChanged: (s) => setState(() => _isSales = s.first),
               ),
-            const SizedBox(width: Space.sm),
-            if (canPost)
-              FilledButton.icon(
-                // Awaited, and the list re-read afterwards. Fired and
-                // forgotten, a payment recorded here landed in the
-                // ledger and left this screen showing the list without
-                // it — which reads as the payment not having been taken.
-                onPressed: () async {
-                  await showSettlementDialog(context, ref,
-                      kind: _isSales ? DocKind.sales : DocKind.purchase);
-                  ref.invalidate(settlementsProvider(_isSales));
-                },
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(_isSales ? 'Receive payment' : 'Pay supplier'),
-              ),
-          ]),
+              // The other shape a payment comes in: one transfer covering
+              // documents in more than one company. Not a nav entry —
+              // it is asked in the same breath as "did they pay?", and
+              // this is where that is asked.
+              if (canPost)
+                TextButton.icon(
+                  onPressed: () => context.push('/receipts/group'),
+                  icon: const Icon(Icons.account_tree_outlined, size: 18),
+                  label: const Text('Across companies'),
+                ),
+              if (canPost)
+                FilledButton.icon(
+                  // Awaited, and the list re-read afterwards. Fired and
+                  // forgotten, a payment recorded here landed in the
+                  // ledger and left this screen showing the list without
+                  // it — which reads as the payment not having been taken.
+                  onPressed: () async {
+                    await showSettlementDialog(
+                      context,
+                      ref,
+                      kind: _isSales ? DocKind.sales : DocKind.purchase,
+                    );
+                    ref.invalidate(settlementsProvider(_isSales));
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(_isSales ? 'Receive payment' : 'Pay supplier'),
+                ),
+            ],
+          ),
           const SizedBox(height: Space.md),
           Expanded(
             child: AsyncView(
@@ -100,18 +113,16 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
                           : 'Nothing paid out yet',
                       message: _isSales
                           ? 'Recording a payment sets it against the '
-                              'customer’s open invoices and posts it to the '
-                              'bank account it landed in.'
+                                'customer’s open invoices and posts it to the '
+                                'bank account it landed in.'
                           : 'Recording a payment sets it against the '
-                              'supplier’s open bills.',
+                                'supplier’s open bills.',
                     )
                   : ListView.separated(
                       itemCount: list.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) => _SettlementTile(
-                        row: list[i],
-                        isSales: _isSales,
-                      ),
+                      itemBuilder: (_, i) =>
+                          _SettlementTile(row: list[i], isSales: _isSales),
                     ),
             ),
           ),
@@ -131,7 +142,8 @@ class _SettlementTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final no = '${row[isSales ? 'receipt_no' : 'payment_no'] ?? ''}';
     final date = DateTime.tryParse(
-        '${row[isSales ? 'receipt_date' : 'payment_date'] ?? ''}');
+      '${row[isSales ? 'receipt_date' : 'payment_date'] ?? ''}',
+    );
     final contact = (row['contacts'] as Map?)?['name'] ?? '';
     final currency = '${row['currency'] ?? 'MYR'}';
     final unapplied = _num(row['unapplied_amount']);
@@ -139,36 +151,50 @@ class _SettlementTile extends ConsumerWidget {
 
     return ListTile(
       dense: true,
-      onTap: () => showSettlementDetail(
-          context, id: '${row['id']}', isSales: isSales),
-      title: Row(children: [
-        Text(no, style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(width: Space.sm),
-        StatusChip(status, compact: true),
-        // The number people chase. A receipt with money left on it is
-        // not finished business, and it is invisible on the invoice.
-        if (unapplied > 0) ...[
-          const SizedBox(width: Space.sm),
-          Text('${Fmt.money(unapplied, currency: currency)} on account',
-              style: TextStyle(fontSize: 11, color: context.colors.warning)),
+      onTap: () =>
+          showSettlementDetail(context, id: '${row['id']}', isSales: isSales),
+      // A Wrap, not a Row. The number, the chip and the on-account note
+      // want more than a phone gives a ListTile title, and the note is
+      // the thing somebody opened this screen for -- so it moves to a
+      // second line rather than being truncated or pushing the row off
+      // the side.
+      title: Wrap(
+        spacing: Space.sm,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(no, style: const TextStyle(fontWeight: FontWeight.w600)),
+          StatusChip(status, compact: true),
+          // The number people chase. A receipt with money left on it is
+          // not finished business, and it is invisible on the invoice.
+          if (unapplied > 0)
+            Text(
+              '${Fmt.money(unapplied, currency: currency)} on account',
+              style: TextStyle(fontSize: 11, color: context.colors.warning),
+            ),
         ],
-      ]),
-      subtitle: Text([
-        '$contact',
-        Fmt.date(date),
-        if (row['payment_mode_code'] != null) '${row['payment_mode_code']}',
-        if (row['reference'] != null &&
-            '${row['reference']}'.trim().isNotEmpty)
-          '${row['reference']}',
-      ].where((s) => s.trim().isNotEmpty).join('  ·  ')),
+      ),
+      subtitle: Text(
+        [
+          '$contact',
+          Fmt.date(date),
+          if (row['payment_mode_code'] != null) '${row['payment_mode_code']}',
+          if (row['reference'] != null &&
+              '${row['reference']}'.trim().isNotEmpty)
+            '${row['reference']}',
+        ].where((s) => s.trim().isNotEmpty).join('  ·  '),
+      ),
       trailing: Money(_num(row['amount']), currency: currency),
     );
   }
 }
 
 /// One settlement, what it was set against, and a copy for the customer.
-Future<void> showSettlementDetail(BuildContext context,
-    {required String id, required bool isSales}) {
+Future<void> showSettlementDetail(
+  BuildContext context, {
+  required String id,
+  required bool isSales,
+}) {
   return showDialog<void>(
     context: context,
     builder: (_) => _SettlementDetail(id: id, isSales: isSales),
@@ -251,35 +277,44 @@ class _SettlementDetail extends ConsumerWidget {
 
   Widget _body(BuildContext context, Map<String, dynamic> s) {
     final currency = '${s['currency'] ?? 'MYR'}';
-    final allocations =
-        (s['allocations'] as List? ?? const []).cast<Map<String, dynamic>>();
+    final allocations = (s['allocations'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
     final unapplied = _num(s['unapplied_amount']);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${s[isSales ? 'receipt_no' : 'payment_no'] ?? ''}',
-                    style: Theme.of(context).textTheme.titleMedium),
-                Text('${(s['contacts'] as Map?)?['name'] ?? ''}'),
-                Text(
-                  Fmt.longDate(DateTime.tryParse(
-                      '${s[isSales ? 'receipt_date' : 'payment_date'] ?? ''}')),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${s[isSales ? 'receipt_no' : 'payment_no'] ?? ''}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text('${(s['contacts'] as Map?)?['name'] ?? ''}'),
+                  Text(
+                    Fmt.longDate(
+                      DateTime.tryParse(
+                        '${s[isSales ? 'receipt_date' : 'payment_date'] ?? ''}',
+                      ),
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ),
-          Money(_num(s['amount']), currency: currency),
-        ]),
+            Money(_num(s['amount']), currency: currency),
+          ],
+        ),
         const Divider(height: Space.xl),
-        Text(isSales ? 'Set against' : 'Settling',
-            style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          isSales ? 'Set against' : 'Settling',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
         const SizedBox(height: Space.xs),
         if (allocations.isEmpty)
           const Padding(
@@ -290,12 +325,14 @@ class _SettlementDetail extends ConsumerWidget {
           for (final a in allocations)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(children: [
-                Expanded(
-                  child: Text('${_doc(a)?['doc_no'] ?? 'On account'}'),
-                ),
-                Text(Fmt.money(_num(a['amount']), currency: currency)),
-              ]),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('${_doc(a)?['doc_no'] ?? 'On account'}'),
+                  ),
+                  Text(Fmt.money(_num(a['amount']), currency: currency)),
+                ],
+              ),
             ),
         if (unapplied > 0) ...[
           const SizedBox(height: Space.sm),
@@ -314,7 +351,10 @@ class _SettlementDetail extends ConsumerWidget {
           ?.cast<String, dynamic>();
 
   Future<void> _email(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> s) async {
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> s,
+  ) async {
     final to = '${(s['contacts'] as Map?)?['email'] ?? ''}'.trim();
     await showReceiptEmailDialog(
       context,
@@ -338,7 +378,10 @@ class _SettlementDetail extends ConsumerWidget {
   }
 
   Future<void> _download(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> s) async {
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> s,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     final org = ref.read(currentOrgProvider).valueOrNull;
     if (org == null) return;
@@ -362,11 +405,15 @@ class _SettlementDetail extends ConsumerWidget {
         what: isSales ? 'Receipt' : 'Payment advice',
         detail: no,
       );
-      messenger.showSnackBar(SnackBar(
-        content: Text(saved
-            ? 'Downloaded'
-            : 'PDF download is only available in the browser'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            saved
+                ? 'Downloaded'
+                : 'PDF download is only available in the browser',
+          ),
+        ),
+      );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -425,8 +472,9 @@ class _ReceiptEmailDialog extends ConsumerStatefulWidget {
 }
 
 class _ReceiptEmailDialogState extends ConsumerState<_ReceiptEmailDialog> {
-  late final TextEditingController _to =
-      TextEditingController(text: widget.defaultTo ?? '');
+  late final TextEditingController _to = TextEditingController(
+    text: widget.defaultTo ?? '',
+  );
 
   /// On by default, unlike a document. The attachment is the point of a
   /// receipt — there is no link to send instead.
@@ -474,8 +522,9 @@ class _ReceiptEmailDialogState extends ConsumerState<_ReceiptEmailDialog> {
             ),
             CheckboxListTile(
               value: _attach,
-              onChanged:
-                  _busy ? null : (v) => setState(() => _attach = v ?? false),
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() => _attach = v ?? false),
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
               dense: true,
@@ -500,12 +549,16 @@ class _ReceiptEmailDialogState extends ConsumerState<_ReceiptEmailDialog> {
           child: const Text('Close'),
         ),
         OutlinedButton.icon(
-          onPressed: _busy || !_addressLooksSane ? null : () => _send(now: false),
+          onPressed: _busy || !_addressLooksSane
+              ? null
+              : () => _send(now: false),
           icon: const Icon(Icons.schedule_send_outlined, size: 18),
           label: const Text('Queue it'),
         ),
         FilledButton.icon(
-          onPressed: _busy || !_addressLooksSane ? null : () => _send(now: true),
+          onPressed: _busy || !_addressLooksSane
+              ? null
+              : () => _send(now: true),
           icon: const Icon(Icons.send_outlined, size: 18),
           label: const Text('Send now'),
         ),
@@ -533,23 +586,33 @@ class _ReceiptEmailDialogState extends ConsumerState<_ReceiptEmailDialog> {
             .toLowerCase();
         name = '$stem.pdf';
         path = await repo.uploadReceiptPdf(
-            widget.receiptId, name, await widget.buildPdf());
+          widget.receiptId,
+          name,
+          await widget.buildPdf(),
+        );
       }
 
       String message;
       var finished = true;
       if (now) {
-        final outcome = sendNowOutcome(await repo.emailReceiptNow(
+        final outcome = sendNowOutcome(
+          await repo.emailReceiptNow(
             widget.receiptId,
             to: to,
             attachmentPath: path,
-            attachmentName: name));
+            attachmentName: name,
+          ),
+        );
         message = outcome.message;
         finished = outcome.finished;
         _error = outcome.error;
       } else {
-        await repo.emailReceipt(widget.receiptId,
-            to: to, attachmentPath: path, attachmentName: name);
+        await repo.emailReceipt(
+          widget.receiptId,
+          to: to,
+          attachmentPath: path,
+          attachmentName: name,
+        );
         message = 'Queued — it will go out on the next send';
       }
 
