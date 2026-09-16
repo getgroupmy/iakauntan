@@ -43,6 +43,25 @@ void main() {
           signinShowHeadline: true,
           signinHeadline: 'Books that keep themselves',
           signinShowLogo: true,
+          // The points, which are the thing that was reported missing.
+          // The panel's own key can be present while the list inside it
+          // is empty, and an empty fixture cannot tell the two apart --
+          // so the earlier version of this file asserted the container
+          // and never the contents.
+          signinPoints: [
+            (
+              icon: null,
+              title: 'LHDN e-Invoice built in',
+              body: 'Submit to MyInvois and track validation without '
+                  'leaving your books.',
+            ),
+            (
+              icon: null,
+              title: 'Double-entry you can trust',
+              body: 'Every invoice, bill and payment posts to a balanced '
+                  'ledger.',
+            ),
+          ],
         ),
       ),
       workspaceHostProvider.overrideWith((ref) async => null),
@@ -79,6 +98,9 @@ void main() {
       await at(tester, const Size(915, 412));
 
       expect(panel, findsNothing);
+      // The other side of it: on one column the points are not drawn
+      // anywhere else either, so this is not a panel that merely moved.
+      expect(find.text('LHDN e-Invoice built in'), findsNothing);
     });
   });
 
@@ -121,6 +143,11 @@ void main() {
         await at(tester, size);
 
         expect(panel, findsOneWidget);
+        // And what is IN it. The report was not "the panel is missing",
+        // it was that the points beside the form had gone.
+        expect(find.text('LHDN e-Invoice built in'), findsOneWidget);
+        expect(find.text('Double-entry you can trust'), findsOneWidget);
+        expect(find.text('Books that keep themselves'), findsOneWidget);
       });
     }
 
