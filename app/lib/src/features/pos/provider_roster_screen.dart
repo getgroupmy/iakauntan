@@ -166,8 +166,25 @@ class _PersonSheetState extends ConsumerState<_PersonSheet> {
   late bool _active = widget.person?['is_active'] != false;
   bool _saving = false;
 
+  /// Save is gated on both boxes having something in them, and that
+  /// gate is read in `build`. Nothing rebuilt when either was typed
+  /// into, so the button on a NEW person stayed grey however much was
+  /// entered -- it woke only if the switch was flipped or an employee
+  /// picked, which is a thing nobody adding somebody does. Adding a
+  /// service provider was not possible at all.
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(_reread);
+    _code.addListener(_reread);
+  }
+
+  void _reread() => setState(() {});
+
   @override
   void dispose() {
+    _name.removeListener(_reread);
+    _code.removeListener(_reread);
     _code.dispose();
     _name.dispose();
     super.dispose();

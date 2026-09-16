@@ -195,7 +195,7 @@ The pattern to look for is a getter that recomputes rather than reads.
 stored; `isOverdue` was not because it worked the comparison out again,
 in a different unit, on the other side of the wire.
 
-## Two more worth knowing
+## Four more worth knowing
 
 **Rendering at phone width is itself an overflow test.** A `RenderFlex`
 overflow is a test failure in Flutter, so this needs no assertion —
@@ -234,3 +234,34 @@ on the screen itself — the failure is the overflow.
 **`Duration.inHours` truncates.** A fixture built exactly 70 hours out
 is computed a moment later and arrives as 69. Build it 70 hours and a
 half out, and say why.
+
+**A button gated on a `TextEditingController` never wakes up.** This
+shape is a dead button:
+
+```dart
+late final _name = TextEditingController();
+...
+FilledButton(
+  onPressed: _name.text.trim().isEmpty ? null : _save,
+```
+
+The gate is evaluated in `build`, and typing into a `TextField` does
+not rebuild its parent. Nothing listens, so the button stays grey
+however much is typed. It wakes only if something ELSE calls
+`setState` — a switch, a picker — which is why it can look like it
+works: on `stalls_screen.dart` the operator picker rebuilt the form, so
+saving a stall worked if the operator was chosen LAST and not if it was
+chosen first. On `provider_roster_screen.dart` nothing else was
+required at all and adding a person was simply impossible.
+
+`addListener` in `initState`, removed in `dispose`; or `onChanged: (_)
+=> setState(() {})` on the field, which `company_card.dart` already
+does.
+
+A widget test catches this and nothing else does: the analyzer sees a
+valid tree, and a static check over the eleven places this app reads
+`controller.text` in a `build` gets nine of them wrong — the other nine
+read it inside an `onPressed` closure, which runs later and is correct.
+So the test is to TYPE into every box the gate names, one at a time,
+and assert the button after each. The one that matters is the last
+keystroke before it should go live.

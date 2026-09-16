@@ -259,8 +259,29 @@ class _StallSheetState extends ConsumerState<_StallSheet> {
   late String? _operator = widget.stall?['operator_contact_id'] as String?;
   late bool _active = widget.stall?['is_active'] != false;
 
+  /// Save is gated on both boxes having something in them, and that
+  /// gate is read in `build`. Nothing rebuilt when either was typed
+  /// into, so the button woke only when the operator picker or the
+  /// switch was touched -- which means it worked if the operator was
+  /// chosen LAST and not if it was chosen first, from a form that
+  /// looks the same either way.
+  ///
+  /// The same defect, verbatim, was in `provider_roster_screen.dart`,
+  /// where nothing else was required and the button therefore never
+  /// woke at all.
+  @override
+  void initState() {
+    super.initState();
+    _code.addListener(_reread);
+    _name.addListener(_reread);
+  }
+
+  void _reread() => setState(() {});
+
   @override
   void dispose() {
+    _code.removeListener(_reread);
+    _name.removeListener(_reread);
     _code.dispose();
     _name.dispose();
     _commission.dispose();
