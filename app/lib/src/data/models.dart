@@ -1054,11 +1054,27 @@ class BusinessDocument {
   final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
-  bool get isOverdue =>
-      balanceAmount > 0 &&
-      dueDate != null &&
-      dueDate!.isBefore(DateTime.now()) &&
-      status != 'void';
+  /// Overdue is STRICTLY before today, on the date and not the moment.
+  ///
+  /// This has to mean what `v_ar_aging` means, because that view is
+  /// what the aging report, the collections worklist and every
+  /// statement are built from:
+  ///
+  ///     when d.due_date is null or current_date <= d.due_date
+  ///       then 'current'
+  ///
+  /// `dueDate` comes from a date column and so is MIDNIGHT. Comparing
+  /// it to `DateTime.now()` made every invoice overdue from 00:01 on
+  /// the day it fell due, while the report beside it still said
+  /// current -- one day wide, every invoice, every day of the year.
+  /// `Todo.isOverdue` had it right and this did not.
+  bool get isOverdue {
+    final due = dueDate;
+    if (due == null || balanceAmount <= 0 || status == 'void') return false;
+    final today = DateTime.now();
+    return DateTime(due.year, due.month, due.day)
+        .isBefore(DateTime(today.year, today.month, today.day));
+  }
 
   /// The fields this company added to a document.
   final Map<String, dynamic> customFields;
