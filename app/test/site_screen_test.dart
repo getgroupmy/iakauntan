@@ -44,16 +44,35 @@ void main() {
     'is_chargeable': isChargeable,
   };
 
+  /// A tenancy the way the query returns one, with the unit and the
+  /// tenant embedded.
+  Map<String, dynamic> tenancy({
+    String unitNo = 'A-12-03',
+    String tenant = 'Puan Aminah',
+    String status = 'active',
+  }) => {
+    'id': 't-$unitNo',
+    'tenancy_no': 'TEN-0001',
+    'property_units': {'unit_no': unitNo},
+    'contacts': {'name': tenant},
+    'status': status,
+    'start_date': '2026-01-01',
+    'end_date': '2026-12-31',
+    'deposit_held': 4500,
+    'monthly_rent': 1500,
+  };
+
   Widget wrap({
     Map<String, dynamic>? theSite,
     List<Map<String, dynamic>> units = const [],
+    List<Map<String, dynamic>> tenancies = const [],
     String role = 'owner',
   }) => ProviderScope(
     overrides: [
       propertySiteProvider('s1').overrideWith((ref) async => theSite ?? site()),
       propertyUnitsProvider('s1').overrideWith((ref) async => units),
       strataSchemeProvider('s1').overrideWith((ref) async => null),
-      tenanciesProvider('s1').overrideWith((ref) async => const []),
+      tenanciesProvider('s1').overrideWith((ref) async => tenancies),
       propertyStatutoryChargesProvider('s1')
           .overrideWith((ref) async => const []),
       memberRoleProvider.overrideWith((ref) async => role),
@@ -68,9 +87,26 @@ void main() {
     WidgetTester tester, {
     Map<String, dynamic>? theSite,
     List<Map<String, dynamic>> units = const [],
+    List<Map<String, dynamic>> tenancies = const [],
     String role = 'owner',
+    double? width,
   }) async {
-    await tester.pumpWidget(wrap(theSite: theSite, units: units, role: role));
+    if (width != null) {
+      // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
+      // moves the render surface without moving `MediaQuery`. See
+      // docs/widget-tests.md.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = Size(width, 900);
+      addTearDown(tester.view.reset);
+    }
+    await tester.pumpWidget(
+      wrap(
+        theSite: theSite,
+        units: units,
+        tenancies: tenancies,
+        role: role,
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -214,4 +250,25 @@ void main() {
       expect(find.text('A-12-03'), findsOneWidget);
     });
   });
+  testWidgets('a tenancy line fits on a phone', (tester) async {
+    // The line is a unit number, a tenant's NAME and a status chip,
+    // with the rent at the other end. A `Row` lays all of that out at
+    // its natural size whatever box it is given, so the chip went off
+    // the right edge -- silently, because Flutter clips in a release
+    // build. `check_narrow_rows.py` reads titles as well as trailings
+    // since this was found, and flagged this row before the test did.
+    await show(
+      tester,
+      theSite: site(tenure: 'freehold'),
+      tenancies: [tenancy(tenant: 'Encik Kamarul bin Abdullah')],
+      width: 360,
+    );
+
+    await tester.tap(find.text('Tenancies'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('TEN-0001 · 01/01/2026 to 31/12/2026 · '
+        'deposit held RM 4,500.00'), findsOneWidget);
+  });
+
 }

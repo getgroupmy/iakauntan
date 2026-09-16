@@ -107,14 +107,19 @@ class _RoundTile extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: onEdit,
-      title: Row(children: [
-        Text('Round ${Fmt.toInt(round['round_no'])}',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        if (outcome != null) ...[
-          const SizedBox(width: Space.sm),
-          StatusChip(outcome, compact: true),
+      // `Wrap`, so the outcome chip drops to a second line rather
+      // than off the right edge. See the header of
+      // check_narrow_rows.py.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Space.sm,
+        runSpacing: 2,
+        children: [
+          Text('Round ${Fmt.toInt(round['round_no'])}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (outcome != null) StatusChip(outcome, compact: true),
         ],
-      ]),
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

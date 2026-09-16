@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refuse a list row whose trailing widget cannot fit on a phone.
+"""Refuse a list row that cannot fit on a phone, from either end.
 
     python3 scripts/check_narrow_rows.py
 
@@ -27,10 +27,28 @@ money will ask for, and fail if that leaves too little for the words
 beside it — unless the row says, in a comment, that it has been made
 narrow-aware.
 
-THE ESTIMATE IS DELIBERATELY ROUGH. It is not trying to lay out text;
-it is trying to notice a row that has three or four labelled buttons in
-its trailing, which is the shape that fails. The numbers below are
-Material's own metrics rounded to something a reader can check.
+## And the same row from the other end
+
+The rule above asks whether the TRAILING leaves room for the words. It
+says nothing about what those words are, and that is the gap that let
+three overflows ship: two on `receipts_screen.dart` and one on
+`document_list_screen.dart`, where every line of every list lost its
+status chip off the right edge on a phone.
+
+The shape is always the same. A `title:` that is a `Row` of
+`Text(number)`, a gap and a `StatusChip` CANNOT SHRINK -- a Row lays
+its children out at their natural size and overflows the rest -- while
+the box it is given shrinks to whatever the trailing left. Forty-nine
+titles in this app are Rows with an `Expanded` or a `Flexible` in them
+and are fine; the ones without are the ones to look at.
+
+`Wrap` is the fix, not an ellipsis: the thing being truncated would be
+the document number, which is what somebody came to the list to read.
+
+THE ESTIMATE IS DELIBERATELY ROUGH, at both ends. It is not trying to
+lay out text; it is trying to notice a row whose two ends together want
+more than a phone has. The numbers below are Material's own metrics
+rounded to something a reader can check.
 """
 
 from __future__ import annotations
@@ -82,6 +100,25 @@ MONEY = 110.0
 # add up.
 ICON_BUTTON = 40.0
 
+# A `leading:` -- a checkbox, an avatar, an icon -- comes off the front
+# before the title sees anything. The widest of them is a Checkbox at
+# its 48px tap target plus the gap ListTile puts after it.
+LEADING = 56.0
+
+# `StatusChip(..., compact: true)` is 6px of padding each side around a
+# word like "outstanding" in a small style. Measured at the longest
+# status this app has.
+CHIP = 78.0
+
+# One `${...}` in a title. A document number, a person's name, a unit
+# number: eight characters is generous for the short ones and far too
+# little for a name, which is exactly why a title holding one should
+# not be a rigid Row in the first place.
+INTERPOLATION = 64.0
+
+# A bare `Icon` in a title -- the e-Invoice mark, a lock, a warning.
+ICON_GLYPH = 24.0
+
 BUTTON = re.compile(
     r"\b(TextButton|OutlinedButton|FilledButton|ElevatedButton)"
     r"(?:\.icon|\.tonal|\.tonalIcon)?\(")
@@ -92,6 +129,25 @@ LABEL = re.compile(r"(?:child|label):\s*(?:const\s+)?Text\(\s*'([^']*)'")
 # A row that has been made narrow-aware says so, and says it where the
 # next person will read it.
 EXEMPT = re.compile(r"narrow-ok", re.IGNORECASE)
+
+# Every tile whose title gets what the trailing did not take.
+TILE = re.compile(
+    r"\b(ListTile|ExpansionTile|CheckboxListTile|SwitchListTile"
+    r"|RadioListTile)\(")
+
+# A child of a title Row that yields when the box is small. One of
+# these anywhere in the Row is the whole difference: 49 titles here
+# have one and none of them can overflow.
+FLEX = re.compile(r"\b(Expanded|Flexible|Spacer)\(")
+
+TEXT_WIDGET = re.compile(r"\bText\(")
+CHIP_WIDGET = re.compile(r"\b(StatusChip|Chip|Badge)\(")
+ICON_WIDGET = re.compile(r"\bIcon\(")
+GAP = re.compile(r"\bSizedBox\(width:\s*(?:Space\.(\w+)|([\d.]+))")
+
+# `Space` in the app's theme, for the gaps a title Row puts between its
+# pieces.
+SPACE = {'xs': 4, 'sm': 8, 'md': 16, 'lg': 24, 'xl': 32}
 
 
 def balanced(source: str, open_at: int) -> str:
@@ -173,6 +229,86 @@ def width_of(expr: str) -> float:
             + MONEY * len(at_depth(expr, MONEY_WIDGET, MAX_DEPTH)))
 
 
+def text_width(expr: str) -> float:
+    """Roughly what one `Text(...)` will ask for.
+
+    A literal is counted by its characters. An interpolation is counted
+    at [INTERPOLATION] each, which is generous for a document number
+    and nowhere near enough for a person's name -- and a title holding
+    a name should not be a rigid Row at all, which is the finding
+    rather than a shortcoming of the estimate.
+    """
+    inner = balanced(expr, expr.index('(')) if '(' in expr else expr
+    holes = len(re.findall(r"\$\{|\$\w", inner))
+    literal = sum(len(m) for m in re.findall(r"'([^']*)'", inner))
+    # The `${` and the text inside it are already counted as a hole.
+    literal = max(0, literal - holes * 2)
+    return holes * INTERPOLATION + literal * CHAR
+
+
+def title_width(expr: str) -> float:
+    """What a rigid title Row asks for, laid out at its natural size."""
+    total = 0.0
+    for m in at_depth(expr, TEXT_WIDGET, MAX_DEPTH):
+        total += text_width(balanced(expr, m.end() - 1))
+    total += CHIP * len(at_depth(expr, CHIP_WIDGET, MAX_DEPTH))
+    total += ICON_GLYPH * len(at_depth(expr, ICON_WIDGET, MAX_DEPTH))
+    for gap in GAP.finditer(expr):
+        total += SPACE.get(gap.group(1), 0) if gap.group(1) else float(
+            gap.group(2))
+    return total
+
+
+def slot(expr: str, name: str) -> str | None:
+    """The bracketed value of `name:` directly inside this tile."""
+    for m in at_depth(expr, re.compile(rf"\b{name}:\s*"), 2):
+        rest = expr[m.end():]
+        if '(' not in rest[:40]:
+            return None
+        return balanced(expr, m.end() + rest.index('('))
+    return None
+
+
+def scan_titles(path: str, source: str) -> list[str]:
+    """Tiles whose title cannot shrink into what the trailing left."""
+    problems = []
+    for m in TILE.finditer(source):
+        expr = balanced(source, m.end() - 1)
+        head = source[max(0, m.start() - 400):m.start()]
+        if EXEMPT.search(head) or EXEMPT.search(expr):
+            continue
+
+        # Only a Row can fail this way. A bare Text is given a box and
+        # ellipsises inside it; a Wrap moves the chip to a second line.
+        start = expr.find('title:')
+        if start == -1:
+            continue
+        if not expr[start + len('title:'):].lstrip().startswith('Row('):
+            continue
+        title = balanced(expr, expr.index('Row(', start) + 3)
+        if at_depth(title, FLEX, MAX_DEPTH):
+            continue
+
+        trailing = slot(expr, 'trailing')
+        taken = TILE_PADDING
+        taken += width_of(trailing) if trailing else 0.0
+        if slot(expr, 'leading') is not None:
+            taken += LEADING
+
+        wants = title_width(title)
+        room = PHONE - taken
+        if wants > room:
+            line = source[:m.start()].count('\n') + 1
+            problems.append(
+                f'{os.path.relpath(path, ROOT)}:{line}: a title Row wants '
+                f'~{wants:.0f}px and the trailing and leading leave ~'
+                f'{room:.0f}px on a {PHONE}px phone. A Row cannot shrink, so '
+                f'the last thing in it -- usually the status chip -- goes off '
+                f'the right edge. Use a Wrap, or give the text a Flexible and '
+                f'an ellipsis -- or mark the row narrow-ok and say why.')
+    return problems
+
+
 def scan(path: str, source: str) -> list[str]:
     problems = []
     for m in re.finditer(r"\btrailing:\s*", source):
@@ -218,7 +354,9 @@ def main() -> int:
                 continue
             path = os.path.join(root, f)
             with open(path) as fh:
-                problems += scan(path, fh.read())
+                source = fh.read()
+            problems += scan(path, source)
+            problems += scan_titles(path, source)
 
     if problems:
         print('Rows that cannot fit on a phone:\n')
@@ -227,7 +365,7 @@ def main() -> int:
         print(f'\n{len(problems)} row(s). See the header of this script.')
         return 1
 
-    print('Every list row leaves room for its own words.')
+    print('Every list row leaves room for its own words, at both ends.')
     return 0
 
 

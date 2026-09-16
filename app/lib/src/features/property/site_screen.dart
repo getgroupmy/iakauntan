@@ -494,13 +494,20 @@ class _TenancyList extends ConsumerWidget {
               final unit = t['property_units'] as Map<String, dynamic>?;
               final tenant = t['contacts'] as Map<String, dynamic>?;
               return ListTile(
-                title: Row(
+                // A `Wrap`, not a `Row`. The line holds a unit number,
+                // the tenant's NAME and a chip, with the rent at the
+                // other end -- and a Row lays all of that out at its
+                // natural size whatever box it is given, so the chip
+                // went 480 pixels off the right edge of a phone.
+                title: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 2,
                   children: [
                     Text(
                       '${unit?['unit_no'] ?? '—'} · ${tenant?['name'] ?? '—'}',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(width: 8),
                     StatusChip(t['status'] as String? ?? '', compact: true),
                   ],
                 ),
