@@ -220,6 +220,25 @@ class Fmt {
     return _halfAwayFromZero(units * hundredths, 100 * scale) / 100;
   }
 
+  /// A figure already held to [from] decimals, rounded to [to] the way
+  /// Postgres `numeric` rounds it.
+  ///
+  /// This is the second half of a two-stage rounding, and it needs the
+  /// same care as [percentOf] for the same reason. `app.calc_document_line`
+  /// holds a line's gross as `numeric(18, 4)` and then rounds it to the
+  /// sen, and 50 grams at RM 2.90 is a gross of 0.1450 exactly — which
+  /// must charge 15 sen. Written as `(0.145 * 100).round() / 100` it is
+  /// 14, because 0.145 is 0.14499999999999999 in binary and multiplying
+  /// back lands just under the half.
+  ///
+  /// So the value is taken as an integer count of its smallest unit
+  /// first — which IS exact, because it is a whole number of them — and
+  /// the rounding is integer arithmetic from there.
+  static double reround(double value, {required int from, required int to}) {
+    final units = (value * _pow10[from]).round();
+    return _halfAwayFromZero(units, _pow10[from - to]) / _pow10[to];
+  }
+
   /// Tax on an amount at a percentage rate. The money case of
   /// [percentOf], named for what it is used for.
   static double taxOn(double amount, double ratePercent) =>

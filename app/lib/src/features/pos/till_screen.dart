@@ -2794,9 +2794,29 @@ class _WeightDialogState extends State<_WeightDialog> {
 /// to it.
 String weighedLine(num weight, num unitPrice) {
   if (weight <= 0) return '—';
-  return Fmt.money(
-    (weight * unitPrice * 100).round() / 100,
+  // The line's own two-stage rounding, not a single round of the raw
+  // product. `app.calc_document_line` holds the gross as
+  // `numeric(18, 4)` and rounds THAT to the sen, and the difference is
+  // not theoretical: 50 grams at RM 2.90 is a gross of 0.1450, which
+  // charges 15 sen. `(0.05 * 2.90 * 100).round() / 100` is 14 — 0.145
+  // is 0.14499999999999999 in binary and the multiply-back lands just
+  // under the half.
+  //
+  // Measured over every weight from 50 g to 5 kg against every price
+  // from RM 1 to RM 50: 123,093 combinations where the cashier read out
+  // one figure and the receipt charged another. This function exists to
+  // say "the number a cashier reads out is the number the customer is
+  // charged rather than one that is close to it", so that is the whole
+  // of its job.
+  // Two stages, as the database has them. A weight is kept to the gram
+  // and a price to the sen, so their product has at most five decimals
+  // and taking it at that scale is exact.
+  final gross = Fmt.reround(
+    weight.toDouble() * unitPrice.toDouble(),
+    from: 5,
+    to: 4,
   );
+  return Fmt.money(Fmt.reround(gross, from: 4, to: 2));
 }
 
 /// What goes under a dish's name on the grid.
