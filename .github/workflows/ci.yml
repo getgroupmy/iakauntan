@@ -678,6 +678,20 @@ jobs:
       - name: Check no setState returns a Future
         run: python3 scripts/check_setstate_futures.py
 
+      # And its neighbour. `ref.invalidate` inside `initState` reaches
+      # for the ProviderScope, and depending on an inherited widget
+      # there is what Flutter asserts against -- the screen renders
+      # NOTHING in a debug build and perfectly in a release one, so it
+      # is broken only for the people developing it.
+      # `salespeople_screen.dart` carried it until the screen got its
+      # first test and could not render at all.
+      #
+      # A call inside a Timer or a post-frame callback has left
+      # initState long before it fires: four POS boards refresh
+      # themselves that way and none is a finding.
+      - name: Check no initState invalidates a provider
+        run: python3 scripts/check_initstate_ref.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #

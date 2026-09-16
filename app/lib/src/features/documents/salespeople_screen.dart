@@ -36,10 +36,21 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
     _reload();
   }
 
+  /// Re-run the report for the current period.
+  ///
+  /// Does NOT touch `salespeopleProvider`. It used to, and being called
+  /// from `initState` that way threw before the first frame:
+  /// `ref.invalidate` reaches for the ProviderScope, and depending on an
+  /// inherited widget inside `initState` is what Flutter asserts
+  /// against. Assert-only, so the screen rendered perfectly in a release
+  /// build and not at all in a debug one.
+  ///
+  /// The two places that actually change the list of people say so
+  /// themselves, which is also where it belongs: picking a new date does
+  /// not change who works here.
   void _reload() {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
-    ref.invalidate(salespeopleProvider);
     setState(() {
       _report = repo.salesByPerson(from: _from, to: _to);
     });
@@ -74,14 +85,17 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
       successMessage: 'Saved',
       pendingMessage: 'Saving…',
     );
-    if (ok) _reload();
+    if (!ok) return;
+    ref.invalidate(salespeopleProvider);
+    _reload();
   }
 
   Future<void> _remove(Map<String, dynamic> person) async {
     final go = await confirm(
       context,
       title: 'Remove ${person['name']}?',
-      message: 'Documents they sold keep their figures and move to the '
+      message:
+          'Documents they sold keep their figures and move to the '
           'unattributed line on the report. Nothing is deleted from the '
           'ledger.',
       confirmLabel: 'Remove',
@@ -96,13 +110,16 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
       successMessage: 'Removed',
       pendingMessage: 'Removing…',
     );
-    if (ok) _reload();
+    if (!ok) return;
+    ref.invalidate(salespeopleProvider);
+    _reload();
   }
 
   @override
   Widget build(BuildContext context) {
     final canWrite = ref.watch(canWriteProvider);
-    final base = ref.watch(currentOrgProvider).valueOrNull?.baseCurrency ?? 'MYR';
+    final base =
+        ref.watch(currentOrgProvider).valueOrNull?.baseCurrency ?? 'MYR';
     final people = ref.watch(salespeopleProvider);
 
     return Scaffold(
@@ -162,35 +179,41 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
                           'The people',
                           subtitle: rows.isEmpty
                               ? 'Nobody yet. Until somebody is here the '
-                                  'salesperson field stays off the invoice.'
+                                    'salesperson field stays off the invoice.'
                               : 'A salesperson does not need a login. Link '
-                                  'one to an employee only if commission '
-                                  'will eventually run through payroll.',
+                                    'one to an employee only if commission '
+                                    'will eventually run through payroll.',
                         ),
                         for (final p in rows)
                           ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.zero,
                             title: Text(p['name']?.toString() ?? ''),
-                            subtitle: Text([
-                              p['code'],
-                              if (p['commission_rate'] != null)
-                                '${Fmt.rate(Fmt.toDouble(p['commission_rate']))}%',
-                              if (p['email'] != null) p['email'],
-                            ].where((e) => e != null).join('  ·  ')),
+                            subtitle: Text(
+                              [
+                                p['code'],
+                                if (p['commission_rate'] != null)
+                                  '${Fmt.rate(Fmt.toDouble(p['commission_rate']))}%',
+                                if (p['email'] != null) p['email'],
+                              ].where((e) => e != null).join('  ·  '),
+                            ),
                             trailing: !canWrite
                                 ? null
                                 : Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       IconButton(
-                                        icon: const Icon(Icons.edit_outlined,
-                                            size: 18),
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 18,
+                                        ),
                                         onPressed: () => _edit(p),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.delete_outline,
-                                            size: 18),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                        ),
                                         onPressed: () => _remove(p),
                                       ),
                                     ],
@@ -218,7 +241,10 @@ class _Report extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final net = rows.fold<double>(0, (a, r) => a + Fmt.toDouble(r['net_sales']));
+    final net = rows.fold<double>(
+      0,
+      (a, r) => a + Fmt.toDouble(r['net_sales']),
+    );
     final unattributed = rows
         .where((r) => r['salesperson_id'] == null)
         .fold<double>(0, (a, r) => a + Fmt.toDouble(r['net_sales']));
@@ -233,8 +259,8 @@ class _Report extends StatelessWidget {
               'Net sales',
               subtitle: unattributed > 0 && net > 0
                   ? '${Fmt.money(unattributed, currency: base)} of '
-                      '${Fmt.money(net, currency: base)} was not attributed '
-                      'to anybody.'
+                        '${Fmt.money(net, currency: base)} was not attributed '
+                        'to anybody.'
                   : 'Invoices less credit notes, posted documents only.',
             ),
             const SizedBox(height: Space.sm),
@@ -253,35 +279,66 @@ class _Report extends StatelessWidget {
                 ],
                 rows: [
                   for (final r in rows)
-                    DataRow(cells: [
-                      DataCell(Text(
-                        r['name']?.toString() ?? '',
-                        style: TextStyle(
-                          fontStyle: r['salesperson_id'] == null
-                              ? FontStyle.italic
-                              : FontStyle.normal,
-                          color: r['is_active'] == false
-                              ? Theme.of(context).disabledColor
-                              : null,
+                    DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            r['name']?.toString() ?? '',
+                            style: TextStyle(
+                              fontStyle: r['salesperson_id'] == null
+                                  ? FontStyle.italic
+                                  : FontStyle.normal,
+                              color: r['is_active'] == false
+                                  ? Theme.of(context).disabledColor
+                                  : null,
+                            ),
+                          ),
                         ),
-                      )),
-                      DataCell(Text(Fmt.money(Fmt.toDouble(r['invoiced']),
-                          currency: base))),
-                      DataCell(Text(Fmt.money(Fmt.toDouble(r['credited']),
-                          currency: base))),
-                      DataCell(Text(
-                        Fmt.money(Fmt.toDouble(r['net_sales']), currency: base),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      )),
-                      DataCell(Text('${r['documents'] ?? 0}')),
-                      DataCell(Text(r['commission_rate'] == null
-                          ? '—'
-                          : '${Fmt.rate(Fmt.toDouble(r['commission_rate']))}%')),
-                      DataCell(Text(r['commission'] == null
-                          ? '—'
-                          : Fmt.money(Fmt.toDouble(r['commission']),
-                              currency: base))),
-                    ]),
+                        DataCell(
+                          Text(
+                            Fmt.money(
+                              Fmt.toDouble(r['invoiced']),
+                              currency: base,
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            Fmt.money(
+                              Fmt.toDouble(r['credited']),
+                              currency: base,
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            Fmt.money(
+                              Fmt.toDouble(r['net_sales']),
+                              currency: base,
+                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        DataCell(Text('${r['documents'] ?? 0}')),
+                        DataCell(
+                          Text(
+                            r['commission_rate'] == null
+                                ? '—'
+                                : '${Fmt.rate(Fmt.toDouble(r['commission_rate']))}%',
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            r['commission'] == null
+                                ? '—'
+                                : Fmt.money(
+                                    Fmt.toDouble(r['commission']),
+                                    currency: base,
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -310,15 +367,19 @@ class _PersonDialog extends StatefulWidget {
 
 class _PersonDialogState extends State<_PersonDialog> {
   late final _code = TextEditingController(
-      text: widget.existing?['code']?.toString() ?? '');
+    text: widget.existing?['code']?.toString() ?? '',
+  );
   late final _name = TextEditingController(
-      text: widget.existing?['name']?.toString() ?? '');
+    text: widget.existing?['name']?.toString() ?? '',
+  );
   late final _rate = TextEditingController(
-      text: widget.existing?['commission_rate'] == null
-          ? ''
-          : Fmt.rate(Fmt.toDouble(widget.existing!['commission_rate'])));
+    text: widget.existing?['commission_rate'] == null
+        ? ''
+        : Fmt.rate(Fmt.toDouble(widget.existing!['commission_rate'])),
+  );
   late final _email = TextEditingController(
-      text: widget.existing?['email']?.toString() ?? '');
+    text: widget.existing?['email']?.toString() ?? '',
+  );
   late bool _active = widget.existing?['is_active'] as bool? ?? true;
 
   @override
@@ -335,7 +396,8 @@ class _PersonDialogState extends State<_PersonDialog> {
     final rate = _rate.text.trim().isEmpty
         ? null
         : double.tryParse(_rate.text.trim());
-    final rateBad = _rate.text.trim().isNotEmpty &&
+    final rateBad =
+        _rate.text.trim().isNotEmpty &&
         (rate == null || rate < 0 || rate > 100);
 
     return AlertDialog(
@@ -348,7 +410,9 @@ class _PersonDialogState extends State<_PersonDialog> {
             TextField(
               controller: _code,
               decoration: const InputDecoration(
-                  labelText: 'Code', border: OutlineInputBorder()),
+                labelText: 'Code',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: Space.sm),
             TextField(
@@ -356,18 +420,24 @@ class _PersonDialogState extends State<_PersonDialog> {
               autofocus: widget.existing == null,
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
-                  labelText: 'Name', border: OutlineInputBorder()),
+                labelText: 'Name',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: Space.sm),
             TextField(
               controller: _email,
               decoration: const InputDecoration(
-                  labelText: 'Email', border: OutlineInputBorder()),
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: Space.sm),
             TextField(
               controller: _rate,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: 'Commission rate',
@@ -383,7 +453,8 @@ class _PersonDialogState extends State<_PersonDialog> {
               onChanged: (v) => setState(() => _active = v),
               title: const Text('Still selling'),
               subtitle: const Text(
-                  'Off keeps their history and takes them off the invoice.'),
+                'Off keeps their history and takes them off the invoice.',
+              ),
             ),
           ],
         ),
@@ -394,21 +465,20 @@ class _PersonDialogState extends State<_PersonDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _name.text.trim().isEmpty ||
-                  _code.text.trim().isEmpty ||
-                  rateBad
+          onPressed:
+              _name.text.trim().isEmpty || _code.text.trim().isEmpty || rateBad
               ? null
               : () => Navigator.pop(context, {
-                    if (widget.existing?['id'] != null)
-                      'id': widget.existing!['id'],
-                    'code': _code.text.trim(),
-                    'name': _name.text.trim(),
-                    'email': _email.text.trim().isEmpty
-                        ? null
-                        : _email.text.trim(),
-                    'commission_rate': rate,
-                    'is_active': _active,
-                  }),
+                  if (widget.existing?['id'] != null)
+                    'id': widget.existing!['id'],
+                  'code': _code.text.trim(),
+                  'name': _name.text.trim(),
+                  'email': _email.text.trim().isEmpty
+                      ? null
+                      : _email.text.trim(),
+                  'commission_rate': rate,
+                  'is_active': _active,
+                }),
           child: const Text('Save'),
         ),
       ],
