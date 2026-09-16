@@ -1652,8 +1652,15 @@ Stated plainly so nothing here is mistaken for finished:
   Platform console → Site pages → "Offer a link by email", with
   `docs/magic-link.md` for what the Supabase dashboard needs first. Both
   ship OFF and for the same kind of reason: a button that fails silently
-  is worse than no button. What is still missing is **OAuth** (which
-  needs a provider's credentials in the dashboard) and **two-factor**
+  is worse than no button. `0613` also adds **two-factor**: a TOTP
+  authenticator under Settings → Your account, challenged at sign-in
+  inside the vetting hold so the app never opens on a session that has
+  not finished proving itself. Read `docs/two-factor.md` before relying
+  on it — the database does not require `aal2` on anything, so it stops
+  somebody with the password and not the phone and would not stop a
+  client that never drew the dialog, and that page says what closing
+  the gap would take. What is still missing is **OAuth**, which needs a
+  provider's credentials in the dashboard
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
   plans one from AutoCount Cloud and named what had to be built first —
   that **no table recorded where a row came from**, so no import could be

@@ -27,6 +27,7 @@ import 'sst_card.dart';
 import 'sst_returns_card.dart';
 import 'notifications_card.dart';
 import 'passkeys_card.dart';
+import 'two_factor_card.dart';
 import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
@@ -184,6 +185,16 @@ class SettingsScreen extends ConsumerWidget {
                   // project has passkeys off.
                   const SizedBox(height: 16),
                   const PasskeysCard(),
+                  const SizedBox(height: Space.lg),
+                  // `0613`. The third way to prove who you are, and
+                  // deliberately the middle one in strength: weaker
+                  // than a passkey, stronger than a password alone.
+                  // Offered beside it because a passkey is not
+                  // available everywhere — not on this app's Android
+                  // and iOS builds — and somebody who cannot use the
+                  // strongest thing should not be left with the
+                  // weakest.
+                  const TwoFactorCard(),
                   const SizedBox(height: 40),
                 ],
               ),

@@ -920,6 +920,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           // account open the till" with no account gets the answer no
           // for a reason that is not theirs.
           vet: () async {
+            // `0613`. Identity first: a stolen password that cannot
+            // produce a code should not be told which companies exist,
+            // which is what the door refusal below says.
+            if (await _challengeIfSecondFactor()) return;
             if (await _refuseIfNotTheirDoor()) return;
             await _refuseIfModuleNotActive();
           },
@@ -1126,6 +1130,87 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// A failure to reach the server leaves the session alone. Signing
   /// somebody out because a request timed out is a worse answer than
   /// letting a member through on a page that is theirs anyway.
+  /// A six-digit code, where the account has an authenticator on it.
+  ///
+  /// `0613`. Runs inside the vetting hold, before the door checks and
+  /// before the router sees the session, so the app is never briefly
+  /// open on a session that has not finished proving who it is.
+  ///
+  /// Identity before entitlement: this asks "is this you", the door
+  /// checks ask "may you be here", and asking the second first would
+  /// tell somebody with a stolen password which companies exist.
+  ///
+  /// ## What it does and does not enforce
+  ///
+  /// GoTrue's session is already valid at `aal1` — a password alone
+  /// produced it — and the DATABASE does not require `aal2` on
+  /// anything. So this is a gate on the screen rather than a wall:
+  /// cancelling signs the session out, which is what makes it worth
+  /// having, but a client that never drew this dialog would still be
+  /// able to read. `docs/two-factor.md` says what closing that would
+  /// take, and it is a change to every policy rather than to this
+  /// file.
+  Future<bool> _challengeIfSecondFactor() async {
+    final auth = ref.read(supabaseProvider).auth;
+
+    final AuthMFAGetAuthenticatorAssuranceLevelResponse levels;
+    try {
+      levels = auth.mfa.getAuthenticatorAssuranceLevel();
+    } catch (_) {
+      // An older GoTrue, or a project with MFA off. Nothing to ask
+      // for, and refusing the sign-in over it would lock out everybody
+      // on a deployment that has never enabled this.
+      return false;
+    }
+
+    // `nextLevel` above `currentLevel` is GoTrue's own way of saying
+    // "this account has a verified factor and this session has not
+    // used it". Reading the factor list instead would also count the
+    // unverified ones, which cannot answer a challenge.
+    if (levels.nextLevel != AuthenticatorAssuranceLevels.aal2 ||
+        levels.currentLevel == AuthenticatorAssuranceLevels.aal2) {
+      return false;
+    }
+
+    final factor = (await auth.mfa.listFactors()).totp
+        .where((f) => f.status == FactorStatus.verified)
+        .firstOrNull;
+    if (factor == null) return false;
+
+    if (!mounted) return false;
+    final code = await showDialog<String>(
+      context: context,
+      // A stray tap outside would leave the session at aal1 and let the
+      // hold drop, which is the app opening on a half-finished sign-in.
+      barrierDismissible: false,
+      builder: (context) => const _SecondFactorDialog(),
+    );
+
+    if (code == null) {
+      // Cancelled. The session exists and has to go: leaving it is
+      // leaving somebody signed in who declined to finish proving it.
+      await refuse(
+        title: 'Signed out',
+        message: 'Signing in on this account needs the code from your '
+            'authenticator app.',
+      );
+      return true;
+    }
+
+    try {
+      await auth.mfa.challengeAndVerify(factorId: factor.id, code: code);
+      return false;
+    } on AuthException catch (e) {
+      await refuse(
+        title: 'That code was not accepted',
+        message: '${e.message}\n\nCodes last about thirty seconds — sign '
+            'in again and use the next one. If every code is refused, '
+            'the phone\'s clock is out.',
+      );
+      return true;
+    }
+  }
+
   Future<bool> _refuseIfNotTheirDoor() async {
     // Asked at every address, always. It used to start with
     //
@@ -2442,6 +2527,88 @@ class _Banner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The six digits, asked for at sign-in.
+///
+/// Its own widget rather than an inline `showDialog` builder because it
+/// holds a controller and a busy flag, and a stateless builder that
+/// rebuilt would lose what somebody had typed.
+class _SecondFactorDialog extends StatefulWidget {
+  const _SecondFactorDialog();
+
+  @override
+  State<_SecondFactorDialog> createState() => _SecondFactorDialogState();
+}
+
+class _SecondFactorDialogState extends State<_SecondFactorDialog> {
+  final _code = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    // Spaces, because every authenticator app prints the code as
+    // "123 456" and that is what gets pasted.
+    final code = _code.text.replaceAll(RegExp(r'\s'), '');
+    if (code.length != 6) {
+      setState(() => _error = 'The code is six digits.');
+      return;
+    }
+    Navigator.pop(context, code);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Your authenticator code'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Open the app on your phone and type the six digits it '
+              'shows for iAkauntan.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('second-factor-code'),
+              controller: _code,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'Code',
+                counterText: '',
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(fontSize: 13, color: context.colors.danger),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          // Cancelling signs the session out. Said on the button
+          // rather than found out afterwards.
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel and sign out'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Continue')),
+      ],
     );
   }
 }
