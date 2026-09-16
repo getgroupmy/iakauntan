@@ -1,8 +1,9 @@
 # Widget tests that actually ask something
 
-Ten ways a Flutter widget test passes while asserting nothing. Every
-one of them happened in this repository, was caught by mutation
-testing, and is written down here so it is caught by reading next time.
+Ten ways a Flutter widget test passes while asserting nothing, and the
+one thing to check before writing it at all. Every entry happened in
+this repository, was caught by mutation testing, and is written down
+here so it is caught by reading next time.
 
 This is not a style guide. Each entry is a specific mechanism by which
 a green test covers a broken screen.
@@ -158,6 +159,41 @@ text, which reads as a failure of the code rather than of the test.
 Put every case on one screen as separate rows instead. It is also the
 stronger assertion: each must be distinguishable from the others beside
 it.
+
+## Before you write the test, read the SQL it has to agree with
+
+The most expensive defect found this way was not a vacuous assertion.
+It was a Dart getter that disagreed with the database.
+
+`BusinessDocument.isOverdue` compared `dueDate` — a date column, so
+midnight — against `DateTime.now()`. From 00:01 on the day an invoice
+fell due, the document list showed a red "overdue" chip. `v_ar_aging`,
+which the aging report, the collections worklist and every statement
+are built from, says:
+
+    when d.due_date is null or current_date <= d.due_date
+      then 'current'
+
+One day wide, every invoice, every day of the year, and two screens
+quoting different answers down the phone. It was found by reading the
+view BEFORE writing the test, then writing the test to say what the
+view says. Exactly one case failed.
+
+So: when a getter restates a rule the database also holds, open the
+migration. Four were checked after that one, and the other three agree
+— which is worth knowing so nobody checks them again:
+
+| Getter | The SQL it mirrors | Verdict |
+|---|---|---|
+| `BusinessDocument.isOverdue` | `v_ar_aging` aging bucket | **disagreed**, fixed |
+| `Item.isLowStock` | the `low_stock` count in `0014` | agrees, `track_inventory` and all |
+| `EinvoiceDocument.canCancel` | `set_einvoice_cancel_deadline` | agrees; reads the stored deadline rather than recomputing it, and LHDN is the real gate |
+| `Contact.readyForEinvoice` | `coalesce(nullif(tin, ''), app.general_public_tin())` | no conflict — the Dart WARNS, the SQL substitutes the general-public TIN |
+
+The pattern to look for is a getter that recomputes rather than reads.
+`canCancel` is safe because the 72 hours are set by a trigger and
+stored; `isOverdue` was not because it worked the comparison out again,
+in a different unit, on the other side of the wire.
 
 ## Two more worth knowing
 
