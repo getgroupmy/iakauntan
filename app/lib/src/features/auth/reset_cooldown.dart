@@ -129,6 +129,33 @@ bool looksLikeAnAddress(String email) {
       !email.contains(' ');
 }
 
+/// What it says when a sign-in link has gone.
+///
+/// The same shape as [resetSent] and for the same two reasons: GoTrue
+/// answers identically whether or not the address is registered, so a
+/// sentence claiming a link was sent would be untrue half the time —
+/// and two different answers would turn this form into a way to find
+/// out who has an account here by typing.
+///
+/// Different words, though, because it is a different thing arriving.
+/// Somebody told "a reset link is on its way" who then receives a
+/// sign-in link will click it looking for a password box.
+String magicLinkSent(String email) =>
+    'If there is an account for $email, a sign-in link is on its way. '
+    'Open it on this device — it signs you in directly, with no '
+    'password to type. It can take a minute and may be in the spam '
+    'folder; if nothing arrives, check the address for a typo and try '
+    'again.';
+
+/// What it says when the last link went out a moment ago.
+///
+/// Held in the client as well as the server for the reason the reset
+/// wait is: a link that can be asked for every few seconds is a way to
+/// fill somebody's inbox using nothing but their address.
+String magicLinkTooSoon(Duration left) =>
+    'For security reasons a sign-in link can only be resent after '
+    '${waitFor(left)}. Please try again later.';
+
 /// What it says about an address that cannot be one.
 const resetBadAddress =
     'That does not look like an email address. Check it for a typo and '

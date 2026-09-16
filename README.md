@@ -1646,8 +1646,14 @@ Stated plainly so nothing here is mistaken for finished:
   per terminal, because the front door's user 1 and the warehouse's are
   two different people. A reconnecting device's replay writes nothing,
   and out of order the earliest in and the latest out win
-- Sign-in with anything other than a password: no OAuth, no magic link,
-  no two-factor
+- Sign-in with anything other than a password. **Passkeys** have been
+  built since `0579` — console switch, WebAuthn on the web, saving and
+  revoking under Settings — and `0613` adds a **sign-in link by email**:
+  Platform console → Site pages → "Offer a link by email", with
+  `docs/magic-link.md` for what the Supabase dashboard needs first. Both
+  ship OFF and for the same kind of reason: a button that fails silently
+  is worse than no button. What is still missing is **OAuth** (which
+  needs a provider's credentials in the dashboard) and **two-factor**
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
   plans one from AutoCount Cloud and named what had to be built first —
   that **no table recorded where a row came from**, so no import could be

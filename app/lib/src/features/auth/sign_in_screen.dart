@@ -517,6 +517,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// still behind it.
   DateTime? _lastResetAt;
 
+  /// `0613`. Its own clock, not the reset's. Asking for a sign-in link
+  /// is not asking for a reset, and sharing the timer would tell
+  /// somebody who just reset their password that they cannot have a
+  /// link either — for a reason that is about a different button.
+  DateTime? _lastLinkAt;
+
   late bool _isSignUp = widget.startOnRegister;
 
   bool _busy = false;
@@ -1287,6 +1293,103 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
+  /// A link in the inbox instead of a password in the box.
+  ///
+  /// Deliberately the same shape as [_resetPassword] below, down to the
+  /// order of the checks: they are the same form, the same box, and the
+  /// same way of filling somebody's inbox using nothing but their
+  /// address. What differs is the clock — asking for a sign-in link is
+  /// not asking for a reset — and what arrives.
+  Future<void> _sendMagicLink() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'Enter your email first.');
+      return;
+    }
+    // The demo accounts share a fixed password and nobody reads their
+    // inbox. Said here rather than after somebody has gone looking.
+    if (demoAccounts.any((a) => a.email.toLowerCase() == email.toLowerCase())) {
+      setState(
+        () => _error =
+            'The demo accounts have no inbox to send a link to. Use the '
+            'buttons below to sign in.',
+      );
+      return;
+    }
+    if (_captchaPending) {
+      setState(() => _error = _captchaBroken ? captchaBroken : captchaNotDone);
+      return;
+    }
+    if (!looksLikeAnAddress(email)) {
+      setState(() {
+        _notice = null;
+        _error = resetBadAddress;
+      });
+      return;
+    }
+
+    final left = remainingWait(_lastLinkAt, DateTime.now());
+    if (left > Duration.zero) {
+      setState(() {
+        _error = null;
+        _notice = magicLinkTooSoon(left);
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await ref
+          .read(supabaseProvider)
+          .auth
+          .signInWithOtp(
+            email: email,
+            // Aimed at this deployment rather than left to the
+            // project's Site URL, for the reason the reset link is: a
+            // preview build otherwise sends people to production.
+            emailRedirectTo: kIsWeb ? Uri.base.origin : null,
+            // `false`, and it is the whole of the difference between
+            // this and registration. The default CREATES an account for
+            // any address typed into the box, so a sign-in form would
+            // silently become a sign-up form — on a platform whose
+            // operator may have switched registration off entirely.
+            shouldCreateUser: false,
+            captchaToken: _captchaToken,
+          );
+      if (mounted) {
+        setState(() {
+          _lastLinkAt = DateTime.now();
+          _notice = magicLinkSent(email);
+        });
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        final wait = statedWait(e.message);
+        if (wait != null) {
+          // The server's own rate limit. Its clock, not ours: told to
+          // wait forty seconds, saying "sixty" would be a second wrong
+          // answer on top of the first.
+          _lastLinkAt = DateTime.now().subtract(resetCooldown - wait);
+          _notice = magicLinkTooSoon(wait);
+        } else {
+          // Everything else, including "signups not allowed" — which is
+          // what GoTrue answers for an address with no account when
+          // `shouldCreateUser` is false, and which must NOT be shown as
+          // itself: it would turn this form into a way to find out who
+          // has an account here by typing.
+          _notice = magicLinkSent(email);
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _resetPassword() async {
     final email = _email.text.trim();
     if (email.isEmpty) {
@@ -1948,6 +2051,29 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     onPressed: _busy || _captchaPending ? null : _passkeySignIn,
                     icon: const Icon(Icons.fingerprint, size: 18),
                     label: const Text('Sign in with a passkey'),
+                  ),
+                ],
+                // `0613`. A link in the inbox instead of a password.
+                // Two conditions rather than the passkey's three:
+                // there is no device capability to check — every
+                // browser can open an email — so it is the console
+                // switch and the sign-in half.
+                //
+                // Not on the sign-up half, and the reason is the one
+                // line in `_sendMagicLink` that matters:
+                // `shouldCreateUser: false`. A link that made an
+                // account for any address typed into the box would
+                // turn this into a registration form, on a platform
+                // whose operator may have switched registration off.
+                if (!_isSignUp && (_brand?.signinShowMagicLink ?? false)) ...[
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    key: const ValueKey('magic-link'),
+                    onPressed: _busy || _captchaPending
+                        ? null
+                        : _sendMagicLink,
+                    icon: const Icon(Icons.mail_outline, size: 18),
+                    label: const Text('Email me a link instead'),
                   ),
                 ],
                 // Everything below the Sign in button is about joining

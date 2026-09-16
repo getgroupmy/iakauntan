@@ -529,6 +529,25 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'Android and iOS, which cannot reach one yet.',
                 onChanged: (v) => _save({'signin_show_passkey': v}),
               ),
+            // `0613`. Same order and the same reason as the passkey
+            // above: GoTrue sends the mail, and until a sender is
+            // configured the project's fallback rate is too low to be
+            // usable — so the button does nothing for almost everybody
+            // and they wait for a message that is not coming.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_magic_link'),
+                busy: _busy,
+                title: 'Offer a link by email',
+                subtitle:
+                    'Draws "Email me a link instead" under the button. '
+                    'Configure an SMTP sender in the Supabase dashboard '
+                    'FIRST — the built-in fallback sends a handful of '
+                    'messages an hour across every address, so almost '
+                    'everybody who presses it gets nothing and waits. '
+                    'See docs/magic-link.md.',
+                onChanged: (v) => _save({'signin_show_magic_link': v}),
+              ),
             const Divider(height: Space.lg),
             // The captcha. A box rather than a switch: there is nothing
             // to switch on until there is a key to draw the widget

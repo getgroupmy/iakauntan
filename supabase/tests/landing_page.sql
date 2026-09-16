@@ -1511,5 +1511,64 @@ begin
     '%front door%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0613: a link instead of a password
+--
+-- The second switch on this page that ships OFF, and for a sibling
+-- reason: GoTrue sends the mail, and until an SMTP sender is configured
+-- in the Supabase dashboard the project's fallback rate is a handful of
+-- messages an hour across every address. A button drawn before that
+-- does nothing for almost everybody who presses it -- and they wait,
+-- which is worse than a button that is not there.
+--
+-- The assertion that matters most is the last one: the two switches are
+-- independent. A patch that wrote one by clearing the other would take
+-- the passkey off every deployment that turned this on, silently.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'a sign-in link is not offered until somebody says so',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'false');
+
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_magic_link', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'and reaches the sign-in form before anything is published',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'true');
+
+  -- Both at once, which is the combination the docs recommend. And the
+  -- failure this catches: a patch that writes one switch by clearing
+  -- its neighbour.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_passkey', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'turning the passkey on leaves the link on',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'true');
+  perform pg_temp.check_eq(
+    'and both are offered together',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'true');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('lain@example.test'));
+  perform pg_temp.check_refused(
+    'and only a platform administrator may offer it',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_magic_link', false)),
+    '%front door%', '42501');
+end $$;
+
 
 rollback;

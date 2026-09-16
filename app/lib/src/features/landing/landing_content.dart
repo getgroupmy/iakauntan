@@ -367,6 +367,7 @@ class LandingContent {
     this.signinShowHeading = false,
     this.signinShowRegister = false,
     this.signinShowPasskey = false,
+    this.signinShowMagicLink = false,
     this.turnstileSiteKey,
     this.signinPoints = const [],
     this.signinEmailLabel,
@@ -647,6 +648,15 @@ class LandingContent {
   /// everybody who presses it.
   final bool signinShowPasskey;
 
+  /// `0613`. Draws "Email me a link instead" on the form.
+  ///
+  /// Ships FALSE, for the same reason as [signinShowPasskey] and in the
+  /// same order: GoTrue sends the mail, and until an SMTP sender is
+  /// configured in the Supabase dashboard the project falls back to a
+  /// rate deliberately too low to use — so the button quietly does
+  /// nothing for almost everybody who presses it, and they wait.
+  final bool signinShowMagicLink;
+
   /// Cloudflare Turnstile's site key, or null where no captcha is
   /// configured (`0556`).
   ///
@@ -831,6 +841,7 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowHeading: brandBool('signin_show_heading'),
       signinShowRegister: brandBool('signin_show_register'),
       signinShowPasskey: brandBool('signin_show_passkey'),
+      signinShowMagicLink: brandBool('signin_show_magic_link'),
       turnstileSiteKey: brandStr('turnstile_site_key'),
       signinPoints: blocks('signin_points'),
       signinEmailLabel: brandStr('signin_email_label'),
@@ -1061,6 +1072,7 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowHeading: brandBool('signin_show_heading'),
     signinShowRegister: brandBool('signin_show_register'),
     signinShowPasskey: brandBool('signin_show_passkey'),
+    signinShowMagicLink: brandBool('signin_show_magic_link'),
     turnstileSiteKey: brandStr('turnstile_site_key'),
     signinPoints: blocks('signin_points'),
     signinEmailLabel: brandStr('signin_email_label'),
