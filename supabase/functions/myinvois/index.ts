@@ -11,6 +11,8 @@
  *   action = "status"      -> poll validation outcomes
  *   action = "cancel"      -> cancel a validated document within 72h
  *   action = "validate-tin"-> confirm a TIN matches an identifier
+ *   action = "certificate" -> read a XAdES signing certificate, prove the
+ *                             key matches it, and put it on file
  */
 import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
 import { buildContext, HttpError } from "../_shared/context.ts";
@@ -18,6 +20,7 @@ import { submit } from "./submit.ts";
 import { checkStatus } from "./status.ts";
 import { cancel } from "./cancel.ts";
 import { validateTin } from "./tin.ts";
+import { saveCertificate } from "./certificate.ts";
 
 serveFunction("myinvois.failed", async (req: Request) => {
   if (req.method !== "POST") {
@@ -42,9 +45,12 @@ serveFunction("myinvois.failed", async (req: Request) => {
       case "validate-tin":
       case "validate_tin":
         return json(await validateTin(ctx));
+      case "certificate":
+        return json(await saveCertificate(ctx));
       default:
         return fail(
-          `Unknown action "${action}". Expected submit, status, cancel or validate-tin.`,
+          `Unknown action "${action}". Expected submit, status, cancel, ` +
+            `validate-tin or certificate.`,
         );
     }
   } catch (err) {

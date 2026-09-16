@@ -424,6 +424,7 @@ jobs:
                    supabase/tests/einvoice_payload_shapes.sql \
                    supabase/tests/pos_einvoice_consolidation.sql \
                    supabase/tests/einvoice_totals_reconcile.sql \
+                   supabase/tests/einvoice_signing_certificate.sql \
                    supabase/tests/mia_credentials.sql \
                    supabase/tests/ssm_register_lookup.sql \
                    supabase/tests/ssm_api_tables.sql \
@@ -1074,6 +1075,50 @@ jobs:
       # neither field.
       - run: deno check supabase/functions/_shared/myinvois_test.ts
       - run: deno test supabase/functions/_shared/myinvois_test.ts
+
+      # Reading a certificate, with no certificate library. Deno has
+      # WebCrypto and no X.509 parser, and the four fields a signature
+      # needs -- serial, issuer, validity, public key -- are all in the
+      # first hundred bytes of a 1988 structure.
+      #
+      # Every expected value was printed by `openssl x509 -nameopt
+      # RFC2253` rather than reasoned out, which is the point of the
+      # fixture. A distinguished name written least-specific-first, or
+      # a serial handed over in hex where LHDN wants decimal, produces
+      # a string that looks entirely plausible and matches nothing at
+      # the other end. The sample's organization carries a comma inside
+      # it, because that is the shape of a real Malaysian certification
+      # authority's name and it is the character RFC 4514 escapes.
+      #
+      # `testdata/sample_certificate.pem` is self-signed with a key
+      # that was discarded when it was made. A certificate is public;
+      # no private key is in this repository.
+      - run: deno check supabase/functions/_shared/der_test.ts
+      - run: deno test --allow-read supabase/functions/_shared/der_test.ts
+
+      # And the signature itself. A version 1.1 e-Invoice must carry a
+      # XAdES signature over the document, and LHDN recomputes both
+      # digests and the signature before it will validate anything.
+      #
+      # The key pair is generated in the test process every run and the
+      # certificate is the sample with that public key spliced in --
+      # both RSA-2048, so the SubjectPublicKeyInfo is the same length
+      # and the splice is byte for byte. That keeps a private key out
+      # of the repository while still giving the signer a pair that
+      # genuinely matches.
+      #
+      # What is asserted is the arithmetic: the version is raised
+      # BEFORE the digest is taken (a document hashed at 1.0 and
+      # relabelled 1.1 is rejected for its signature rather than its
+      # version), the properties digest covers the `Target` wrapper and
+      # not the bare properties, a tampered figure breaks exactly the
+      # document digest, a back-dated signing time breaks exactly the
+      # properties digest, and a mismatched pair is refused here rather
+      # than by LHDN hours later. What is NOT asserted, and cannot be
+      # from CI, is that LHDN agrees about the shape -- see
+      # docs/einvoice-signing.md.
+      - run: deno check supabase/functions/_shared/xades_test.ts
+      - run: deno test --allow-read supabase/functions/_shared/xades_test.ts
 
       # The forty lines that stand in for a Google SDK. A real RSA key
       # is generated in the test process and the assertion the function

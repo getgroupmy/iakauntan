@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'einvoice_certificate_card.dart';
 import 'module_offer.dart';
 import 'subscription_card.dart';
 import '../../data/ocr_repository.dart';
@@ -117,6 +118,15 @@ class SettingsScreen extends ConsumerWidget {
                     const AddressesCard(),
                     _EinvoiceCard(org: organization, canEdit: isAdmin),
                     const SizedBox(height: 16),
+                    // 0615. Under the credentials, because a certificate
+                    // signs documents for a submitter that can log in --
+                    // and the order on the screen is the order to do it
+                    // in.
+                    EinvoiceCertificateCard(
+                      canEdit: isAdmin,
+                      environment: organization.einvoiceEnvironment,
+                    ),
+                    const SizedBox(height: 16),
                     _ScanningCard(canEdit: isAdmin),
                     const SizedBox(height: 16),
                     _ModulesCard(canAdmin: isAdmin),
@@ -225,11 +235,46 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
   late String _environment;
   bool _saving = false;
 
+  /// Set from the status row rather than from the organization, because
+  /// `my_organizations` does not return `settings` and the version
+  /// lives on it. `einvoiceCredentialStatus` reads the same key and is
+  /// already being fetched for this card.
+  String? _version;
+
   @override
   void initState() {
     super.initState();
     _enabled = widget.org.einvoiceEnabled;
     _environment = widget.org.einvoiceEnvironment;
+  }
+
+  /// Saved as it is chosen, and put back if the database refuses.
+  ///
+  /// It refuses 1.1 without a signing certificate, and a dropdown left
+  /// showing the choice that was rejected is a screen disagreeing with
+  /// the row behind it — which is how somebody submits at a version
+  /// they believe they are on.
+  Future<void> _setVersion(String? value) async {
+    if (value == null || value == _version) return;
+    final previous = _version;
+    setState(() {
+      _version = value;
+      _saving = true;
+    });
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Filing at e-Invoice version $value',
+      action: () => ref.read(repoProvider)!.setEinvoiceVersion(value),
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (!ok) _version = previous;
+    });
+    if (ok) {
+      refreshOrganization(ref);
+      ref.invalidate(einvoiceStatusProvider);
+    }
   }
 
   @override
@@ -342,6 +387,17 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
   Widget build(BuildContext context) {
     final missingTin = (widget.org.tin ?? '').isEmpty;
 
+    // What the database says the version is, for the dropdown to start
+    // at. `_version` holds what somebody has since chosen — null until
+    // they do, so a refresh of the status row is reflected rather than
+    // frozen at whatever it said when the card was built.
+    final rows =
+        ref.watch(einvoiceStatusProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final storedVersion = rows.isEmpty
+        ? '1.0'
+        : '${rows.first['einvoice_version'] ?? '1.0'}';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.lg),
@@ -406,6 +462,33 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
                 helperText:
                     'Stored server-side only; never sent back to the app',
               ),
+            ),
+            const SizedBox(height: 16),
+            // 0615. Which version LHDN's rules are applied at. It is on
+            // `organizations.settings` and has been read by
+            // `prepare_einvoice` since 0015, and until now there was
+            // nowhere to set it.
+            //
+            // Saved on the spot rather than with the rest of the card,
+            // because the database refuses 1.1 without a signing
+            // certificate and that refusal has to arrive while somebody
+            // is looking at the switch that caused it.
+            DropdownButtonFormField<String>(
+              key: const ValueKey('einvoice-version'),
+              isExpanded: true,
+              value: _version ?? storedVersion,
+              decoration: const InputDecoration(
+                labelText: 'e-Invoice version',
+                helperText:
+                    'A 1.1 document carries a digital signature. A document '
+                    'already prepared keeps the version it was prepared '
+                    'under.',
+              ),
+              items: const [
+                DropdownMenuItem(value: '1.0', child: Text('1.0 — unsigned')),
+                DropdownMenuItem(value: '1.1', child: Text('1.1 — signed')),
+              ],
+              onChanged: widget.canEdit && !_saving ? _setVersion : null,
             ),
             const SizedBox(height: 16),
             if (widget.canEdit)

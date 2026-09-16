@@ -2681,6 +2681,47 @@ class Repo {
     params: {'p_org_id': orgId, 'p_environment': environment},
   );
 
+  /// Reads a signing certificate, proves the key matches it, and — unless
+  /// [checkOnly] — puts it on file.
+  ///
+  /// `0615`. Through the edge function rather than through an RPC,
+  /// because something has to PARSE the certificate: the serial, the
+  /// issuer and the expiry are in the DER, and the one parser in this
+  /// product is `supabase/functions/_shared/der.ts`. It is also the only
+  /// place that can answer the question worth asking while somebody is
+  /// still pasting — does this key match this certificate — which
+  /// otherwise arrives from LHDN hours later as a code naming neither.
+  ///
+  /// Neither PEM comes back. What comes back is what the certificate
+  /// SAYS: the issuer, the serial, and when it stops working.
+  Future<Map<String, dynamic>> saveEinvoiceCertificate({
+    required String certificatePem,
+    required String privateKeyPem,
+    String? environment,
+    bool checkOnly = false,
+  }) => callMyInvois('certificate', {
+    'certificate_pem': certificatePem,
+    'private_key_pem': privateKeyPem,
+    if (environment != null) 'environment': environment,
+    if (checkOnly) 'check_only': true,
+  });
+
+  /// Takes the signing certificate off one environment, leaving the
+  /// client id and secret — which is what you do when a certificate is
+  /// about to expire and the new one has not arrived.
+  Future<void> clearEinvoiceSigningCertificate(String environment) => callRpc(
+    'clear_einvoice_signing_certificate',
+    params: {'p_org_id': orgId, 'p_environment': environment},
+  );
+
+  /// Which version this company files at. The database refuses 1.1
+  /// without a certificate on file, because a 1.1 document that cannot
+  /// be signed is a submit button that stops working.
+  Future<void> setEinvoiceVersion(String version) => callRpc(
+    'set_einvoice_version',
+    params: {'p_org_id': orgId, 'p_version': version},
+  );
+
   // ------------------------------------------------------------------
   // Batches and serial numbers
   //

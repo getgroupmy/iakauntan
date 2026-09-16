@@ -117,7 +117,12 @@ const dropdownCensus = <String, int>{
   'features/settings/document_numbering_card.dart': 1,
   'features/settings/landing_settings.dart': 1,
   'features/settings/new_account_dialog.dart': 2,
-  'features/settings/settings_screen.dart': 1,
+  // Two since 0615. The second is the e-Invoice VERSION — 1.0 or 1.1,
+  // which is LHDN's list and not ours, and a third member would arrive
+  // by gazette. The choice is between two things whose whole
+  // difference has to be readable at a glance, which is what a
+  // dropdown of two labelled options is for.
+  'features/settings/settings_screen.dart': 2,
   'features/settings/tax_code_dialog.dart': 2,
   // The four kinds of entity SSM registers: Company, Business, Audit
   // Firm, Limited Liability Partnership. Not a list that grows -- it is

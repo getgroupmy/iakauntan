@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0614` (the highest applied migration).
-685 functions and 340 readable tables, of which
+Schema version `0615` (the highest applied migration).
+688 functions and 340 readable tables, of which
 258 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**544 of 685 functions carry a `comment on
+**548 of 688 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -363,7 +363,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (475)
+### general (478)
 
 Not gated on any module.
 
@@ -440,6 +440,7 @@ Not gated on any module.
 - `claims_awaiting_my_approval(p_org_id uuid)`
 - `clear_ai_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own key for one AI provider.
 - `clear_einvoice_credentials(p_org_id uuid, p_environment text)` *(writes)* — Removes a company's MyInvois credentials for one environment -- sandbox or production -- so nothing further is submitted with them.
+- `clear_einvoice_signing_certificate(p_org_id uuid, p_environment text)` *(writes)* — Takes the signing certificate off one environment, leaving the client id and secret.
 - `clear_ocr_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own document-scanning key and SWITCHES SCANNING OFF in the same call.
 - `clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` *(writes)* — Removes a company's own acquirer credentials for one gateway in one mode, live or test.
 - `clear_pdc(p_id uuid, p_on date, p_bank uuid)` *(writes)* — Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged.
@@ -518,7 +519,7 @@ Not gated on any module.
 - `document_activity(p_document_id uuid)` — One document's whole timeline: what was sent, what changed, what was paid, and what LHDN said.
 - `document_lot_problems(p_document_id uuid, p_kind text)`
 - `document_numbering(p_org_id uuid)` — Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it.
-- `einvoice_credential_status(p_org_id uuid)`
+- `einvoice_credential_status(p_org_id uuid)` — What is configured per environment, and never what it is.
 - `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a sales document and returns the outbox row.
 - `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a receipt and returns the outbox row.
 - `employee_directory(p_org_id uuid)` — Who works here: name, department, role and contact.
@@ -775,6 +776,8 @@ Not gated on any module.
 - `set_custom_field_active(p_org_id uuid, p_entity text, p_key text, p_active boolean)` *(writes)* — Switches one custom field on or off for an entity type.
 - `set_document_numbering(p_org_id uuid, p_doc_type text, p_prefix text, p_suffix text, p_padding integer, p_reset_policy text, p_next_value bigint)` *(writes)* — Set a series -- prefix, suffix, padding, reset policy, next number -- and return the sample of the next number.
 - `set_einvoice_credentials(p_org_id uuid, p_environment text, p_client_id text, p_client_secret text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` *(writes)* — Stores a company's MyInvois credentials and signing certificate for one environment, sandbox or production, replacing what was there.
+- `set_einvoice_signing_certificate(p_org_id uuid, p_environment text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` *(writes)* — Puts a XAdES signing certificate and its key on file for one environment.
+- `set_einvoice_version(p_org_id uuid, p_version text)` *(writes)* — Sets the e-Invoice version a company files at.
 - `set_expense_split(p_expense_id uuid, p_lines jsonb)` *(writes)* — Replace an expense's split.
 - `set_feedback_status(p_id uuid, p_status app.feedback_status, p_note text)` *(writes)* — Moves a piece of feedback somebody sent us along, with a note.
 - `set_fiscal_period_status(p_period_id uuid, p_status text)` *(writes)* — Opens, closes or LOCKS a fiscal period, which decides what the ledger will take: posting is refused outside an open period, so this is the switch behind every "the period is closed" refusal elsewhere.

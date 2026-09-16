@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0614",
+    "version": "0615",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -24880,6 +24880,64 @@
         }
       }
     },
+    "/rpc/clear_einvoice_signing_certificate": {
+      "post": {
+        "operationId": "clear_einvoice_signing_certificate",
+        "summary": "Takes the signing certificate off one environment, leaving the client id and secret",
+        "description": "Takes the signing certificate off one environment, leaving the client id and secret. 0615.\n\n`public.clear_einvoice_signing_certificate(p_org_id uuid, p_environment text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_environment": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_environment"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/clear_ocr_credentials": {
       "post": {
         "operationId": "clear_ocr_credentials",
@@ -31861,8 +31919,8 @@
     "/rpc/einvoice_credential_status": {
       "post": {
         "operationId": "einvoice_credential_status",
-        "summary": "Einvoice credential status",
-        "description": "`public.einvoice_credential_status(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "What is configured per environment, and never what it is",
+        "description": "What is configured per environment, and never what it is. 0107, extended by 0615 with which certificate and which version.\n\n`public.einvoice_credential_status(p_org_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31917,6 +31975,15 @@
                       "cert_expires_at": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "cert_issuer_name": {
+                        "type": "string"
+                      },
+                      "cert_serial_number": {
+                        "type": "string"
+                      },
+                      "einvoice_version": {
+                        "type": "string"
                       },
                       "updated_at": {
                         "type": "string",
@@ -60266,6 +60333,140 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/set_einvoice_signing_certificate": {
+      "post": {
+        "operationId": "set_einvoice_signing_certificate",
+        "summary": "Puts a XAdES signing certificate and its key on file for one environment",
+        "description": "Puts a XAdES signing certificate and its key on file for one environment. The fields describing the certificate are read off the DER by the edge function, which is the only thing here that parses one. 0615.\n\n`public.set_einvoice_signing_certificate(p_org_id uuid, p_environment text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_environment": {
+                    "type": "string"
+                  },
+                  "p_cert_pem": {
+                    "type": "string"
+                  },
+                  "p_cert_private_key_pem": {
+                    "type": "string"
+                  },
+                  "p_cert_serial_number": {
+                    "type": "string"
+                  },
+                  "p_cert_issuer_name": {
+                    "type": "string"
+                  },
+                  "p_cert_expires_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_environment",
+                  "p_cert_pem",
+                  "p_cert_private_key_pem"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/set_einvoice_version": {
+      "post": {
+        "operationId": "set_einvoice_version",
+        "summary": "Sets the e-Invoice version a company files at",
+        "description": "Sets the e-Invoice version a company files at. Refuses 1.1 without a signing certificate, because a 1.1 document that cannot be signed is a submit button that stops working. 0615.\n\n`public.set_einvoice_version(p_org_id uuid, p_version text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_version"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

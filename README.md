@@ -163,6 +163,7 @@ The `myinvois` edge function then handles the API side, routing on an
 | `status` | Polls validation, stores the long ID and QR validation link |
 | `cancel` | Cancels within LHDN's 72-hour window; refuses after it closes |
 | `validate-tin` | Confirms a TIN matches a BRN/NRIC, cached 30 days |
+| `certificate` | Reads a signing certificate, proves the key matches it, files it |
 
 Supported document types: 01 Invoice, 02 Credit Note, 03 Debit Note,
 04 Refund Note, and the 11–14 self-billed equivalents. Item lines carry
@@ -180,11 +181,59 @@ Every API call is written to `einvoice_logs` for the 7-year audit trail.
    policies** — only the edge function's service role can read it.
 3. Start in `sandbox`, switch to `production` when you are satisfied.
 
-**Digital signature.** Documents are submitted as version `1.0`
-(unsigned). Version 1.1 requires an XAdES signature from a Malaysian
-certificate authority; `einvoice_credentials` has the columns to hold that
-material, but the signing step itself is not implemented — you will need
-your organisation's certificate before enabling it.
+### Signing, and version 1.1
+
+A version `1.0` document is submitted as it stands. A version `1.1` one
+carries a **XAdES signature** made with a certificate issued to the
+taxpayer by a Malaysian certification authority, and LHDN recomputes
+both digests and the signature before it will validate anything.
+`0615` built it.
+
+The key goes in `einvoice_credentials`, in the columns `0107` created
+for it — the same table with no policies and no grants, whose only
+reader is the edge function's service role. Nothing an organization can
+call returns it: the status function says who ISSUED the certificate,
+its serial number and when it expires, and a test asserts that its
+declared output columns contain no certificate, no private key and no
+client secret.
+
+Deno has WebCrypto and no certificate parser, so
+`_shared/der.ts` reads the four fields a signature needs off the DER —
+serial, issuer as RFC 4514, validity, public key — and every expected
+value in its tests was printed by `openssl x509 -nameopt RFC2253` rather
+than reasoned out. A distinguished name written least-specific-first, or
+a serial handed over in hex where LHDN wants decimal, is a string that
+looks entirely plausible and matches nothing at the other end.
+
+The order to set it up in is **credentials, then certificate, then
+version**, and the database enforces each step: a certificate with no
+credentials behind it is refused naming what to do first, and version
+1.1 is refused without a certificate on the environment the company
+submits to — a sandbox certificate does not make a production company
+ready. A 1.1 document that cannot be signed is a submit button that
+stops working, and that refusal belongs on the screen that caused it
+rather than arriving later from LHDN.
+
+**Press Check before Save.** A key that does not match its certificate
+produces a structurally perfect document that LHDN rejects at
+validation, hours later, with a code naming neither half; checked at
+upload it is a sentence on the screen of the person holding both files.
+
+**It is built and unproven.** The structure is written to LHDN's
+published JSON binding and agrees with two independent implementations
+of it, and it has never been submitted to MyInvois from this repository
+— there is no sandbox credential here and `sdk.myinvois.hasil.gov.my` is
+unreachable from the network this is built on. What the tests prove is
+the arithmetic LHDN checks: both digests recompute from the emitted
+document, the signature verifies against the certificate in it, the
+version is raised before the digest is taken, the properties digest
+covers the `Target` wrapper, and a tampered figure breaks exactly the
+document digest while a back-dated signing time breaks exactly the
+properties digest. What they cannot prove is that LHDN agrees about the
+shape. `docs/einvoice-signing.md` names the two places the reference
+implementations disagree, and says what closing the gap takes: a preprod
+credential and one submission, not more code. **Leave production at
+1.0 until somebody has made that submission.**
 
 ---
 
@@ -1632,7 +1681,12 @@ will copy.
 
 Stated plainly so nothing here is mistaken for finished:
 
-- XAdES digital signature for e-Invoice version 1.1 (see above)
+- ~~XAdES digital signature for e-Invoice version 1.1.~~ Built, `0615`,
+  and **unproven**: the signature is made, both digests are asserted to
+  recompute and the certificate's key is proved to match it before
+  anything is stored, but nothing here has ever been submitted to
+  MyInvois. `docs/einvoice-signing.md` says what is unverified and what
+  closing it takes — a preprod credential and one submission, not code.
 - Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
   7-day clock, but **submitting** the consolidation is still manual — the
   scheduler does not hold MyInvois credentials
