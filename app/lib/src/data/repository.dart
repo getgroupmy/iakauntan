@@ -3674,8 +3674,12 @@ class Repo {
       .update({'deleted_at': DateTime.now().toIso8601String()})
       .eq('id', id);
 
-  Future<String> postDocument(DocKind kind, String id) async {
-    final data = await callRpc(kind.postRpc, params: {'p_id': id});
+  /// Posts a document. [rpc] overrides the one for its kind, which is
+  /// how a goods received note reaches `post_goods_received` — that one
+  /// accrues what is owed rather than recording it as payable, and
+  /// `post_purchase_document` refuses it by name.
+  Future<String> postDocument(DocKind kind, String id, {String? rpc}) async {
+    final data = await callRpc(rpc ?? kind.postRpc, params: {'p_id': id});
     return data as String;
   }
 

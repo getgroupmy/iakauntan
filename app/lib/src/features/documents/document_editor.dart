@@ -713,21 +713,31 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     final id = await _save(silent: true);
     if (id == null || !mounted) return;
 
+    // A receiving note is a different sentence. It does not put the
+    // supplier in the payables ledger — no bill has arrived — it puts
+    // the goods on the shelf and accrues what will be owed for them.
+    final receiving = _meta.postRpc == 'post_goods_received';
     final ok = await confirm(
       context,
-      title: 'Post to ledger?',
-      message:
-          'This writes a balanced journal entry and locks the document '
-          'for editing. Stock will move for inventory items.',
-      confirmLabel: 'Post',
+      title: receiving ? 'Receive the goods?' : 'Post to ledger?',
+      message: receiving
+          ? 'This puts the stock on the shelf and records what will be '
+                'owed for it under Goods Received Not Invoiced. The '
+                'supplier\'s bill clears that when it arrives.'
+          : 'This writes a balanced journal entry and locks the document '
+                'for editing. Stock will move for inventory items.',
+      confirmLabel: receiving ? 'Receive' : 'Post',
     );
     if (!ok || !mounted) return;
 
     final posted = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.postDocument(_kind, id),
-      successMessage: 'Posted to the general ledger',
-      pendingMessage: 'Posting…',
+      action: () =>
+          ref.read(repoProvider)!.postDocument(_kind, id, rpc: _meta.postRpc),
+      successMessage: receiving
+          ? 'Received — the stock is on the shelf'
+          : 'Posted to the general ledger',
+      pendingMessage: receiving ? 'Receiving…' : 'Posting…',
     );
 
     if (posted && mounted) {

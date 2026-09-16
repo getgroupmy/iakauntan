@@ -1587,8 +1587,16 @@ Stated plainly so nothing here is mistaken for finished:
   7-day clock, but **submitting** the consolidation is still manual — the
   scheduler does not hold MyInvois credentials
 - Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
-- Goods Received and Purchase Request screens (the types exist in the
-  schema; only PO, Bill and Purchase Credit Note are exposed in the app)
+- ~~Goods Received and Purchase Request screens.~~ Both are reachable —
+  they are rows in `docTypes` and the router builds their addresses from
+  the same table. What that made reachable was a defect: a goods received
+  note received no goods. Ten units bought through one arrived nowhere,
+  silently, because the bill skipped receiving on the grounds that the
+  note had already done it and nothing ever had. `0609` makes the note
+  post — Dr Inventory, Cr 2118 Goods Received Not Invoiced, cleared by
+  the bill — and **does not backfill**: a company that has used that path
+  has a stock count to do, and `docs/goods-received.md` has the query
+  that says how much is at stake
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0608` (the highest applied migration).
-673 functions and 334 readable tables, of which
+Schema version `0609` (the highest applied migration).
+674 functions and 334 readable tables, of which
 257 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**533 of 673 functions carry a `comment on
+**534 of 674 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -363,7 +363,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (463)
+### general (464)
 
 Not gated on any module.
 
@@ -659,6 +659,7 @@ Not gated on any module.
 - `post_client_transaction(p_id uuid)` *(writes)* — Posts money through a legal practice's CLIENT account -- money the firm holds and does not own.
 - `post_expense(p_id uuid)` *(writes)* — Posts a recorded expense.
 - `post_expense_claim(p_claim_id uuid, p_bank_account_id uuid)` *(writes)* — Pays an approved employee claim and posts it.
+- `post_goods_received(p_id uuid)` *(writes)* — Receives the stock on a goods received note and accrues what is owed for it: Dr Inventory, Cr 2118 Goods Received Not Invoiced.
 - `post_manual_journal(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text)` *(writes)* — Posts a journal typed by hand.
 - `post_manual_journal(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text, p_idempotency_key text)` *(writes)* — Posts a journal typed by hand, once.
 - `post_manufacturing_order(p_mo_id uuid, p_quantity_done numeric)` *(writes)* — Posts a production run: components out at what they are carried at, finished goods in at what they cost.

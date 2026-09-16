@@ -15,6 +15,7 @@ class DocTypeMeta {
     this.posts = false,
     this.einvoice = false,
     this.settles = false,
+    this.postRpc,
   });
 
   final String plural;
@@ -24,6 +25,14 @@ class DocTypeMeta {
 
   /// Writes a journal entry when posted. Quotations and orders do not.
   final bool posts;
+
+  /// Which function posts it, where it is not the one for its kind.
+  ///
+  /// `goods_received` is the only one. A receiving note is not a bill —
+  /// it accrues what is owed rather than recording it as payable — so
+  /// `post_purchase_document` refuses it by name, and `0609` gave it
+  /// `post_goods_received` of its own.
+  final String? postRpc;
 
   /// Can be submitted to LHDN MyInvois.
   final bool einvoice;
@@ -128,11 +137,22 @@ const docTypes = <String, DocTypeMeta>{
     icon: Icons.shopping_bag_outlined,
     kind: DocKind.purchase,
   ),
+  // The goods are here and the bill is not, which is a real position
+  // with a real name: goods received not invoiced.
+  //
+  // It POSTS, which reads oddly beside the purchase order above it and
+  // is the whole of `0609`. Until then the note wrote nothing anywhere
+  // — no journal and, despite what `post_purchase_document` assumed, no
+  // stock movement either — so ten units bought through one reached the
+  // shelf nowhere. It now debits inventory and credits 2118; the bill
+  // clears 2118 when it arrives.
   'goods_received': DocTypeMeta(
     plural: 'Goods Received',
     singular: 'Goods Received Note',
     icon: Icons.inventory_outlined,
     kind: DocKind.purchase,
+    posts: true,
+    postRpc: 'post_goods_received',
   ),
   'bill': DocTypeMeta(
     plural: 'Bills',

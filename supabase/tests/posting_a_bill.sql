@@ -295,16 +295,45 @@ begin
   -- ------------------------------------------------------------------
   -- 4. A bill for goods a goods-received note already received
   --
-  -- The GRN moved the stock when it was delivered. The bill that
-  -- follows is the money, not the goods -- receiving them again would
-  -- put the delivery on the shelf twice and value it twice.
+  -- The GRN moves the stock when it is delivered. The bill that follows
+  -- is the money, not the goods -- receiving them again would put the
+  -- delivery on the shelf twice and value it twice.
+  --
+  -- ## This assertion used to hold for the wrong reason
+  --
+  -- Until `0609` the note below was an EMPTY document, created draft
+  -- and never posted, and the assertion was that the bill moved no
+  -- stock. It passed -- and it would have passed just as well if the
+  -- GRN had never existed, because nothing in the schema had ever
+  -- received stock on one. Ten units bought through a receiving note
+  -- reached the shelf nowhere, and this test said so was correct.
+  --
+  -- So the premise is now established rather than assumed: the note
+  -- carries the lines, it is posted, and the stock it moved is
+  -- asserted BEFORE the bill is raised. The bill then adds nothing,
+  -- which is what "already received" means.
   -- ------------------------------------------------------------------
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
-     exchange_rate, status)
+     exchange_rate, status, subtotal, total_amount, base_total_amount,
+     balance_amount)
   values (v_org, 'goods_received', 'GRN-1', current_date, v_sup, 'MYR', 1,
-          'draft')
+          'draft', 200, 200, 200, 200)
   returning id into v_grn;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, line_subtotal, line_total,
+     warehouse_id)
+  values (v_org, v_grn, 1, 'item', v_stock, 'Simen, 50kg', 10, 'C62',
+          20.00, 200, 200, v_wh);
+
+  perform public.post_goods_received(v_grn);
+
+  select round(sl.quantity, 4) into v_n from public.stock_levels sl
+   where sl.item_id = v_stock and sl.warehouse_id = v_wh;
+  perform pg_temp.check_eq(
+    'the goods received note is what puts the delivery on the shelf',
+    v_n, 110::numeric);
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
@@ -320,13 +349,27 @@ begin
   values (v_org, v_child, 1, 'item', v_stock, 'Simen, 50kg', 10, 'C62',
           20.00, 200, 200, v_wh);
 
-  perform public.post_purchase_document(v_child);
+  v_entry := public.post_purchase_document(v_child);
 
   select round(sl.quantity, 4) into v_n from public.stock_levels sl
    where sl.item_id = v_stock and sl.warehouse_id = v_wh;
   perform pg_temp.check_eq(
-    'a bill for goods a delivery note already received moves no stock',
-    v_n, 100::numeric);
+    'a bill for goods a receiving note already received moves no stock',
+    v_n, 110::numeric);
+
+  -- And the bill clears what the note accrued rather than capitalising
+  -- the same stock a second time. 2118 nets to nothing across the two
+  -- documents; inventory carries the 200 once.
+  perform pg_temp.check_eq(
+    'the bill debits goods received not invoiced, not inventory again',
+    (select l.debit from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '2118'), 200.00);
+  perform pg_temp.check_eq(
+    'so the accrual the note raised is back to nothing',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '2118'), 0.00);
 
   -- ------------------------------------------------------------------
   -- 5. Sending it back
@@ -353,8 +396,13 @@ begin
 
   select round(sl.quantity, 4) into v_n from public.stock_levels sl
    where sl.item_id = v_stock and sl.warehouse_id = v_wh;
+  -- Ninety, not eighty. A hundred came in on BILL-1 and ten more on
+  -- GRN-1 -- which is new: before `0609` the receiving note above put
+  -- nothing on the shelf, so this file's running total was ten short
+  -- from section 4 onwards and nobody could see it, because every
+  -- figure after it was written to match.
   perform pg_temp.check_eq('twenty bags went back to the supplier',
-    v_n, 80::numeric);
+    v_n, 90::numeric);
 
   select m.movement_type::text into v_t from public.stock_movements m
    where m.source_id = v_note limit 1;

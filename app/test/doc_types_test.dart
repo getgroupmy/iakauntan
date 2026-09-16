@@ -166,17 +166,69 @@ void main() {
     test('the paperwork before the sale posts nothing', () {
       // Quotation, order, delivery order — and their purchase-side
       // counterparts. None of them is an accounting event.
+      //
+      // `goods_received` used to be on this list and is not: goods
+      // arriving IS an accounting event, and treating it as paperwork
+      // is what `0609` fixed. See the group below.
       for (final k in const [
         'quotation',
         'sales_order',
         'delivery_order',
         'purchase_request',
         'purchase_order',
-        'goods_received',
       ]) {
         expect(metaFor(k).posts, isFalse, reason: k);
         expect(metaFor(k).settles, isFalse, reason: k);
         expect(metaFor(k).einvoice, isFalse, reason: k);
+      }
+    });
+  });
+
+  group('the goods arriving is an accounting event', () {
+    // `0609`. A receiving note wrote nothing anywhere — no journal
+    // and, despite what `post_purchase_document` assumed, no stock
+    // movement either — so ten units bought through one reached the
+    // shelf nowhere. Measured:
+    //
+    //   PO -> Bill          : 1 movement(s), 10.0000 received
+    //   PO -> GRN -> Bill   : 0 movement(s), 0 received
+    //
+    // `goods_received.sql` asserts the arithmetic. These assert the
+    // three flags on the row that let the editor offer it at all.
+    test('so a receiving note posts', () {
+      expect(metaFor('goods_received').posts, isTrue);
+    });
+
+    test('through a function of its own', () {
+      // Not `post_purchase_document`, which refuses it by name: a
+      // receiving note is not a bill. It accrues what will be owed
+      // rather than recording it as payable.
+      expect(metaFor('goods_received').postRpc, 'post_goods_received');
+    });
+
+    test('and it is the only type that needs one', () {
+      // Every other document goes through the function for its kind.
+      // If a second one ever needs its own, somebody should have to
+      // come here and say which and why.
+      final overridden = {
+        for (final e in docTypes.entries)
+          if (e.value.postRpc != null) e.key,
+      };
+      expect(overridden, {'goods_received'});
+    });
+
+    test('but it carries no balance and reaches no registry', () {
+      // The supplier is not in the payables ledger until the bill
+      // arrives, and a receiving note is nobody's e-Invoice.
+      expect(metaFor('goods_received').settles, isFalse);
+      expect(metaFor('goods_received').einvoice, isFalse);
+    });
+
+    test('and an overridden posting function is only ever set on a type that posts', () {
+      for (final e in docTypes.entries) {
+        if (e.value.postRpc != null) {
+          expect(e.value.posts, isTrue, reason: e.key);
+        }
       }
     });
   });

@@ -188,6 +188,7 @@ jobs:
                    supabase/tests/document_dates.sql \
                    supabase/tests/bill_credit.sql \
                    supabase/tests/posting_a_bill.sql \
+                   supabase/tests/goods_received.sql \
                    supabase/tests/appraisals.sql \
                    supabase/tests/appraisal_guard_shapes.sql \
                    supabase/tests/alternates_and_verification.sql \
