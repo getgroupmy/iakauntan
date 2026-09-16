@@ -1606,6 +1606,33 @@ String roleLabel(String? role) => memberRoles[role]?.label ?? Fmt.label(role);
 Iterable<MapEntry<String, ({String label, String description})>>
 get assignableRoles => memberRoles.entries.where((e) => e.key != 'owner');
 
+/// Whether this row of the team list may be edited from it.
+///
+/// Three conditions, and each one prevents something different. Written
+/// out here rather than inside the row so that all three can be
+/// asserted, because a rule about who may change whose access is not
+/// one to discover was wrong.
+///
+///   * [canAdmin] — only an owner or a company admin changes anybody's
+///     access at all.
+///   * not [isSelf] — nobody edits their own row. An admin who demotes
+///     themselves by accident has locked the company out of its own
+///     administration, and there may be no one else who can undo it.
+///   * [role] is not `owner` — ownership is transferred deliberately
+///     and is not a line in a dropdown. Note that `assignableRoles`
+///     already withholds `owner` as a DESTINATION; this is the other
+///     direction, the owner as a subject.
+///
+/// The server refuses all three as well, and is the authority. This is
+/// what stops the screen offering a control whose only outcome is an
+/// error message.
+bool memberIsEditable({
+  required bool canAdmin,
+  required bool isSelf,
+  required String role,
+}) =>
+    canAdmin && !isSelf && role != 'owner';
+
 /// What an approval rule covers, in words. A null `docType` means every
 /// document of that kind, which is what the column's null means.
 ///

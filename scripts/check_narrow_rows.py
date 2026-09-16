@@ -116,6 +116,37 @@ MONEY = 110.0
 # add up.
 ICON_BUTTON = 40.0
 
+# A `DropdownButton` sizes itself to its WIDEST ITEM, whether or not
+# anybody has chosen that one — so the width of every row in a list is
+# decided by the longest label in the menu.
+#
+# This script counted it as NOTHING until the team list was rendered and
+# overflowed. The lesson was already in the repository: `reports_screen`
+# had its app bar pushed 116 pixels off a laptop by one account called
+# "Professional fees and subscriptions" in a dropdown. It had not
+# reached the estimate here.
+#
+# The arrow and the padding around it, on top of the widest label.
+DROPDOWN_CHROME = 36.0
+
+# A dropdown whose items are built from a LIST rather than written out
+# as literals — `for (final e in assignableRoles)` — and whose widest
+# label this script therefore cannot see.
+#
+# Counted generously, for the same reason `INTERPOLATION` is: an unknown
+# is the dangerous case rather than a free one. That is not a guess
+# either way — the team list is built exactly like this, its widest
+# label is "Company Admin", and it was overflowing a phone while this
+# script called the row clean.
+DROPDOWN_UNKNOWN = 140.0
+DROPDOWN = re.compile(r"\bDropdownButton(?:FormField)?\s*<")
+
+# A dropdown inside one of these is as wide as the box says and no
+# wider, which is the fix as well as the exemption: `isExpanded: true`
+# inside a `SizedBox(width:)` ellipsises the closed control and leaves
+# the open menu reading every option in full.
+BOUNDED = re.compile(r"\bSizedBox\(\s*width:\s*(?:([\d.]+)|(\w+))")
+
 # A `leading:` -- a checkbox, an avatar, an icon -- comes off the front
 # before the title sees anything. The widest of them is a Checkbox at
 # its 48px tap target plus the gap ListTile puts after it.
@@ -232,6 +263,39 @@ def labelled_width(expr: str) -> float:
     return total
 
 
+def bounded_spans(expr: str) -> list[tuple[int, int]]:
+    """Where a `SizedBox(width:)` holds something to a fixed width."""
+    out = []
+    for m in BOUNDED.finditer(expr):
+        own = balanced(expr, expr.index('(', m.start()))
+        out.append((m.start(), m.start() + len(own)))
+    return out
+
+
+def dropdown_width(expr: str) -> float:
+    """What the dropdowns in this row ask for.
+
+    Its widest item, because that is what a `DropdownButton` sizes
+    itself to. One inside a `SizedBox(width:)` is already answered for
+    and contributes nothing extra — the box is counted by the caller
+    only if it holds something else, and in practice a bounded dropdown
+    is the fix rather than a row to flag.
+    """
+    total = 0.0
+    bounded = bounded_spans(expr)
+    for m in at_depth(expr, DROPDOWN, MAX_DEPTH):
+        if any(a <= m.start() < b for a, b in bounded):
+            continue
+        own = balanced(expr, expr.index('(', m.end()))
+        literals = re.findall(r"'([^']*)'", own)
+        if literals:
+            total += max(len(label) for label in literals) * CHAR \
+                + DROPDOWN_CHROME
+        else:
+            total += DROPDOWN_UNKNOWN
+    return total
+
+
 def width_of(expr: str) -> float:
     """Roughly what this trailing will ask for, all of it.
 
@@ -242,7 +306,8 @@ def width_of(expr: str) -> float:
     """
     return (labelled_width(expr)
             + ICON_BUTTON * len(at_depth(expr, ICON, MAX_DEPTH))
-            + MONEY * len(at_depth(expr, MONEY_WIDGET, MAX_DEPTH)))
+            + MONEY * len(at_depth(expr, MONEY_WIDGET, MAX_DEPTH))
+            + dropdown_width(expr))
 
 
 def text_width(expr: str) -> float:

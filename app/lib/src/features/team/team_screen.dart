@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/row_actions.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -90,6 +91,15 @@ class TeamScreen extends ConsumerWidget {
   }
 }
 
+/// How much room the role control gets.
+///
+/// Measured rather than guessed: "Company Admin" is the widest of the
+/// labels, and a `DropdownButton` with nothing bounding it takes that
+/// width on every row in the list. 128 holds it at the default text
+/// scale and ellipsises past that; the open menu is unaffected and
+/// still reads every role in full, which is where the words are needed.
+const _roleWidth = 128.0;
+
 class _MemberTile extends ConsumerWidget {
   const _MemberTile({
     required this.member,
@@ -104,9 +114,14 @@ class _MemberTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    // An owner is never demoted or removed from here; ownership is
-    // transferred deliberately, not edited in a list.
-    final editable = canAdmin && !isSelf && member.role != 'owner';
+    // Three conditions, each preventing something different. See
+    // `memberIsEditable`, which is where they are written down and
+    // where all three are asserted.
+    final editable = memberIsEditable(
+      canAdmin: canAdmin,
+      isSelf: isSelf,
+      role: member.role,
+    );
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -146,37 +161,70 @@ class _MemberTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (editable)
-            DropdownButton<String>(
-              value: member.role,
-              underline: const SizedBox.shrink(),
-              onChanged: (role) => _changeRole(context, ref, role),
-              items: [
-                for (final e in assignableRoles)
-                  DropdownMenuItem(value: e.key, child: Text(e.value.label)),
-              ],
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(roleLabel(member.role),
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+      // `RowActions`, and the role control BOUNDED, because this row
+      // was overflowing and a `ListTile` does not report that as a
+      // squeeze — it hands the trailing whatever width it asks for and
+      // gives the title what is left, which on a phone was a name
+      // rendered one letter per line.
+      //
+      // Two things were asking. A `DropdownButton` sizes itself to its
+      // WIDEST item, so the width of every row in this list was decided
+      // by "Company Admin" whether or not anybody held that role; and
+      // two icon buttons beside it wanted another ninety pixels. The
+      // dropdown is bounded and ellipsises, which costs nothing since
+      // the open menu still shows every role in full, and the two
+      // buttons fold into one menu below 700.
+      trailing: RowActions(
+        narrowAt: 700,
+        menuKey: 'member-actions',
+        leading: SizedBox(
+          width: _roleWidth,
+          child: editable
+              ? DropdownButton<String>(
+                  value: member.role,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  onChanged: (role) => _changeRole(context, ref, role),
+                  items: [
+                    for (final e in assignableRoles)
+                      DropdownMenuItem(
+                        value: e.key,
+                        child: Text(
+                          e.value.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    roleLabel(member.role),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+        ),
+        actions: [
+          if (editable) ...[
+            RowAction(
+              label: 'Access type',
+              actionKey: 'member-access-type',
+              icon: Icons.key_outlined,
+              iconOnly: true,
+              onTap: () => _chooseAccessType(context, ref),
             ),
-          if (editable)
-            IconButton(
-              tooltip: 'Access type',
-              icon: const Icon(Icons.key_outlined, size: 18),
-              onPressed: () => _chooseAccessType(context, ref),
+            RowAction(
+              label: 'Remove from company',
+              actionKey: 'member-remove',
+              icon: Icons.person_remove_outlined,
+              iconOnly: true,
+              onTap: () => _remove(context, ref),
             ),
-          if (editable)
-            IconButton(
-              tooltip: 'Remove from company',
-              icon: const Icon(Icons.person_remove_outlined, size: 18),
-              onPressed: () => _remove(context, ref),
-            ),
+          ],
         ],
       ),
     );

@@ -21,6 +21,10 @@ checked by running the test one last time.
 
 ## Always include a control
 
+Its description must BEGIN with the word `CONTROL` — that is how one is
+recognised, and a mutant that merely mentions the word somewhere in its
+description is an ordinary mutant.
+
 The last mutant should be a no-op — a type annotation, a pair of
 brackets, a comment — that CANNOT change behaviour. If the control is
 reported killed, the harness is broken and every other line of the
@@ -128,7 +132,19 @@ def main(argv: list[str]) -> int:
                 handle.write(text.replace(old, new, 1))
             result = run()
             print(f"{name:<44} {result}")
-            if "CONTROL" in name.upper():
+            # STARTS WITH, not contains. A mutant whose description
+            # happens to use the word -- "the role control unbounded",
+            # "both controls are offered" -- was read as a no-op and
+            # counted among the controls. That fails loudly when such a
+            # mutant is killed, which is how it was found; the direction
+            # that matters is the other one, where a real mutant with
+            # "control" in its name SURVIVES and is filed as a healthy
+            # control instead of as a gap in the test.
+            #
+            # Every mutant file in this repository writes its control as
+            # `CONTROL -- ...`, which is what the docstring above asks
+            # for, so this is the convention rather than a new rule.
+            if name.strip().upper().startswith("CONTROL"):
                 controls.append((name, result))
             elif result == "passed":
                 survivors.append(name)
