@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
-import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/entity_types_repository.dart';
 import 'package:iakauntan/src/features/admin/entity_types_admin.dart';
 
