@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0609",
+    "version": "0610",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -8083,6 +8083,134 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/gl_lines"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/import_batches": {
+      "get": {
+        "operationId": "select_import_batches",
+        "summary": "Read import_batches",
+        "description": "One run of an importer. A migration is a process you rehearse, not an event -- this is what makes a rehearsal distinguishable from the real thing and from the one before it. 0610.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/import_batches"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/import_rows": {
+      "get": {
+        "operationId": "select_import_rows",
+        "summary": "Read import_rows",
+        "description": "What an importer pulled, as it arrived. Nothing is interpreted here -- the payload is what a disputed figure is settled against a year later. 0610.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/import_rows"
                   }
                 }
               }
@@ -32823,6 +32951,67 @@
         }
       }
     },
+    "/rpc/finish_import_batch": {
+      "post": {
+        "operationId": "finish_import_batch",
+        "summary": "Closes an import run as reconciling, posted or failed",
+        "description": "Closes an import run as reconciling, posted or failed. `reconciling` leaves `finished_at` null, because a dry run that has produced its report is not over -- somebody still has to read it. 0610.\n\n`public.finish_import_batch(p_batch_id uuid, p_status text, p_notes text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_batch_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_status": {
+                    "type": "string"
+                  },
+                  "p_notes": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_batch_id",
+                  "p_status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/firm_audit_trail": {
       "post": {
         "operationId": "firm_audit_trail",
@@ -34169,6 +34358,72 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/import_batch_summary": {
+      "post": {
+        "operationId": "import_batch_summary",
+        "summary": "Import batch summary",
+        "description": "`public.import_batch_summary(p_batch_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_batch_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_batch_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "target_table": {
+                        "type": "string"
+                      },
+                      "rows_written": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -57880,6 +58135,76 @@
         }
       }
     },
+    "/rpc/rollback_import_batch": {
+      "post": {
+        "operationId": "rollback_import_batch",
+        "summary": "Removes what an import wrote, backwards through app.import_target_tables()",
+        "description": "Removes what an import wrote, backwards through app.import_target_tables(). Refuses a posted batch \u2014 that has reached the ledger and is reversed with a journal \u2014 and refuses to delete anything somebody has since built on. 0610.\n\n`public.rollback_import_batch(p_batch_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_batch_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_batch_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "target_table": {
+                        "type": "string"
+                      },
+                      "rows_removed": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "rows_kept": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/route_category_to_station": {
       "post": {
         "operationId": "route_category_to_station",
@@ -62291,6 +62616,68 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/start_import_batch": {
+      "post": {
+        "operationId": "start_import_batch",
+        "summary": "Opens an import run",
+        "description": "Opens an import run. Refuses a second while one is staging or reconciling: two at once would race on the unique index and the loser's rows would read as failures. 0610.\n\n`public.start_import_batch(p_org_id uuid, p_import_source text, p_label text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_import_source": {
+                    "type": "string"
+                  },
+                  "p_label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_import_source"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -70917,6 +71304,20 @@
           "deleted_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -72063,6 +72464,20 @@
           },
           "is_client_account": {
             "type": "boolean"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -73952,6 +74367,20 @@
           "ssm_verified_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -75435,6 +75864,20 @@
             "type": "boolean"
           },
           "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -77191,6 +77634,20 @@
           "branch_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -77893,6 +78350,20 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -78625,6 +79096,20 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -78708,6 +79193,107 @@
           "entry_id",
           "line_no",
           "account_id"
+        ]
+      },
+      "import_batches": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "import_source"
+        ]
+      },
+      "import_rows": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "payload": {},
+          "mapped_table": {
+            "type": "string"
+          },
+          "mapped_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "batch_id",
+          "resource",
+          "import_ref",
+          "payload"
         ]
       },
       "inbound_email_attachments": {
@@ -78928,6 +79514,20 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -79376,6 +79976,20 @@
           "stall_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -82633,6 +83247,20 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -86354,6 +86982,20 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -86504,6 +87146,20 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -86615,6 +87271,20 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -87176,6 +87846,20 @@
           "source_sales_document_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -88137,6 +88821,20 @@
           },
           "ea_category": {
             "type": "string"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -88467,6 +89165,20 @@
           "service_charge_tax_code_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -89487,6 +90199,20 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -89942,6 +90668,20 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -90821,6 +91561,20 @@
           "branch_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "import_source": {
+            "type": "string"
+          },
+          "import_ref": {
+            "type": "string"
+          },
+          "import_batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [

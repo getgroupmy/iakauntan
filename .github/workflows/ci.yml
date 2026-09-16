@@ -304,6 +304,7 @@ jobs:
                    supabase/tests/close_my_account.sql \
                    supabase/tests/search_path.sql \
                    supabase/tests/tenant_foreign_keys.sql \
+                   supabase/tests/import_provenance.sql \
                    supabase/tests/two_companies_on_one_row.sql \
                    supabase/tests/a_colleague_not_a_stranger.sql \
                    supabase/tests/the_helpers_fail_loudly.sql \

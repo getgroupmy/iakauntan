@@ -266,6 +266,13 @@ declare
     -- `0441` as a limit rather than guessed at.
     -- Ours, not the customer's, and not part of what is billed.
     'internal_notes', 'attachments',
+    -- Where the row came from. `0610`. A recurring raise is this
+    -- product writing a new document this morning; it did not come out
+    -- of anybody's old system. Carrying the provenance would claim a
+    -- twelve-month schedule's every invoice was imported from
+    -- AutoCount -- and, because the triple is unique per company,
+    -- the second month's raise would collide on the first month's.
+    'import_source', 'import_ref', 'import_batch_id', 'imported_at',
     -- Audit. The raise writes its own.
     'created_by', 'created_at', 'updated_at', 'deleted_at'
   ];
@@ -286,6 +293,13 @@ declare
     'approved_by', 'approved_at',
     'einvoice_id', 'einvoice_status',
     'internal_notes', 'attachments',
+    -- Where the row came from. `0610`. A recurring raise is this
+    -- product writing a new document this morning; it did not come out
+    -- of anybody's old system. Carrying the provenance would claim a
+    -- twelve-month schedule's every invoice was imported from
+    -- AutoCount -- and, because the triple is unique per company,
+    -- the second month's raise would collide on the first month's.
+    'import_source', 'import_ref', 'import_batch_id', 'imported_at',
     'created_by', 'created_at', 'updated_at', 'deleted_at'
   ];
 begin

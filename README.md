@@ -1619,9 +1619,17 @@ Stated plainly so nothing here is mistaken for finished:
 - Sign-in with anything other than a password: no OAuth, no magic link,
   no two-factor
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
-  plans one from AutoCount Cloud and names what has to be built first —
-  chiefly that **no table records where a row came from**, so no import
-  can be re-run, reconciled or rolled back until it does
+  plans one from AutoCount Cloud and named what had to be built first —
+  that **no table recorded where a row came from**, so no import could be
+  re-run, reconciled or rolled back. `0610` built it: `import_source`,
+  `import_ref`, `import_batch_id` and `imported_at` on all nineteen
+  tables an import can write to, unique per company so a second run
+  collides on exactly the rows it already wrote; staging tables that keep
+  the raw payload a disputed figure is settled against; and a rollback
+  that refuses rather than cascades. **The importer itself is still
+  unbuilt** — no AutoCount client, no mapping, no reconciliation report —
+  and those are stages two and three of that document, which now have
+  somewhere to stand
 
 ### Built, but not reachable from the app
 

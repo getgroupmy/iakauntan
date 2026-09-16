@@ -413,6 +413,14 @@ declare
   --     supplier_doc_date, approved_at, approved_by
   --   bookkeeping ...................... created_at, created_by,
   --     updated_at, deleted_at
+  --   where the row came from .......... import_source, import_ref,
+  --     import_batch_id, imported_at. `0610`. Open rather than frozen,
+  --     and the test's own question decides it: the journal was not
+  --     built from any of them. They are bookkeeping ABOUT the row
+  --     rather than a figure inside it, and `import_batch_id` is
+  --     `on delete set null` -- so freezing it would make deleting an
+  --     import batch impossible the moment one of its documents
+  --     posted, which is a foreign key the schema could not honour.
   --   who the document names ........... contact_id. `0402` explains
   --     this one at length: a counter sale posts against the outlet's
   --     walk-in contact and `request_einvoice_for_sale` puts the
@@ -429,7 +437,8 @@ declare
     'expected_date', 'valid_until', 'payment_term_id', 'contact_person_id',
     'shipping_address_id', 'salesperson_id', 'opportunity_id',
     'supplier_doc_no', 'supplier_doc_date', 'approved_at', 'approved_by',
-    'created_at', 'created_by', 'updated_at', 'deleted_at'];
+    'created_at', 'created_by', 'updated_at', 'deleted_at',
+    'import_source', 'import_ref', 'import_batch_id', 'imported_at'];
   v_unclassified text;
   v_missing text;
 begin
