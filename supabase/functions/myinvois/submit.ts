@@ -2,8 +2,16 @@
  * Renders queued e-Invoice documents to UBL 2.1 JSON and submits the
  * batch to MyInvois.
  *
- * Payload: { einvoice_ids?: string[], sales_document_id?: string }
- * With neither, everything queued for the org is sent, up to the batch cap.
+ * Payload: { einvoice_ids?: string[], sales_document_id?: string,
+ *            purchase_document_id?: string }
+ * With none of them, everything queued for the org is sent, up to the
+ * batch cap.
+ *
+ * `purchase_document_id` is the SELF-BILLED path (0611): the e-Invoice a
+ * buyer owes LHDN for a supply the seller cannot file -- a foreign
+ * supplier, an unregistered individual. Same submission, different
+ * preparation, and the supplier block holds the supplier rather than
+ * this company.
  */
 import {
   Ctx,
@@ -27,7 +35,17 @@ export async function submit(ctx: Ctx) {
   requirePostingRole(ctx, "submit e-Invoices");
 
   const salesDocumentId = ctx.body.sales_document_id as string | undefined;
+  const purchaseDocumentId = ctx.body.purchase_document_id as
+    | string
+    | undefined;
   const einvoiceIds = ctx.body.einvoice_ids as string[] | undefined;
+
+  if (salesDocumentId && purchaseDocumentId) {
+    throw new HttpError(
+      400,
+      "Name a sales document or a purchase document, not both",
+    );
+  }
 
   // Snapshot the source document first when one was named.
   if (salesDocumentId) {
@@ -35,6 +53,18 @@ export async function submit(ctx: Ctx) {
       p_sales_document_id: salesDocumentId,
     });
     if (error) throw new HttpError(400, `Could not prepare e-Invoice: ${error.message}`);
+  }
+  if (purchaseDocumentId) {
+    const { error } = await ctx.userClient.rpc(
+      "prepare_self_billed_einvoice",
+      { p_purchase_document_id: purchaseDocumentId },
+    );
+    if (error) {
+      throw new HttpError(
+        400,
+        `Could not prepare self-billed e-Invoice: ${error.message}`,
+      );
+    }
   }
 
   const { data: org } = await ctx.admin
@@ -62,6 +92,10 @@ export async function submit(ctx: Ctx) {
     query = query
       .eq("source_table", "sales_documents")
       .eq("source_id", salesDocumentId);
+  } else if (purchaseDocumentId) {
+    query = query
+      .eq("source_table", "purchase_documents")
+      .eq("source_id", purchaseDocumentId);
   }
 
   const { data: docs, error: docsError } = await query;

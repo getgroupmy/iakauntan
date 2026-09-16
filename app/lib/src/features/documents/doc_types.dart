@@ -16,6 +16,7 @@ class DocTypeMeta {
     this.einvoice = false,
     this.settles = false,
     this.postRpc,
+    this.selfBillable = false,
   });
 
   final String plural;
@@ -34,8 +35,20 @@ class DocTypeMeta {
   /// `post_goods_received` of its own.
   final String? postRpc;
 
-  /// Can be submitted to LHDN MyInvois.
+  /// Can be submitted to LHDN MyInvois as OUR document — a supply we
+  /// made.
   final bool einvoice;
+
+  /// Can be submitted to LHDN as a SELF-BILLED e-Invoice: one we file
+  /// on the seller's behalf because they cannot.
+  ///
+  /// Never true alongside [einvoice], and the two are not alternatives
+  /// for the same reason — an invoice is a supply we made and a
+  /// self-billed invoice is one we received. Whether a particular bill
+  /// actually owes one is `requires_self_billed` on the row, which
+  /// `0611` sets from the supplier's country; this only says the
+  /// document TYPE is capable of it.
+  final bool selfBillable;
 
   /// Carries a balance that payments are applied against.
   final bool settles;
@@ -161,6 +174,7 @@ const docTypes = <String, DocTypeMeta>{
     kind: DocKind.purchase,
     posts: true,
     settles: true,
+    selfBillable: true,
   ),
   'purchase_credit_note': DocTypeMeta(
     plural: 'Purchase Credit Notes',
@@ -168,6 +182,7 @@ const docTypes = <String, DocTypeMeta>{
     icon: Icons.undo_outlined,
     kind: DocKind.purchase,
     posts: true,
+    selfBillable: true,
   ),
   // The supplier's debit note: an undercharge they are now billing for.
   // `0013` posts it, `0096` ages it alongside the bill it belongs to,
@@ -183,6 +198,7 @@ const docTypes = <String, DocTypeMeta>{
     icon: Icons.redo_outlined,
     kind: DocKind.purchase,
     posts: true,
+    selfBillable: true,
   ),
 };
 

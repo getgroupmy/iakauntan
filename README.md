@@ -1586,7 +1586,18 @@ Stated plainly so nothing here is mistaken for finished:
 - Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
   7-day clock, but **submitting** the consolidation is still manual — the
   scheduler does not hold MyInvois credentials
-- Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
+- ~~Self-billed e-Invoice for foreign suppliers: schema supports it, no
+  UI.~~ Built, `0611`. The schema half was real — codes 11 to 14 in
+  `ref_einvoice_types` since `0011`, `requires_self_billed` since `0006`
+  — and unreachable, because the only thing that ever built an
+  `einvoice_documents` row took a SALES document. A bill from a supplier
+  outside Malaysia is now marked as owing one when it is created,
+  `prepare_self_billed_einvoice` builds it, and the same MyInvois
+  submission sends it. The one thing worth knowing: the supplier block
+  still holds the supplier. On a self-billed invoice we are the buyer,
+  so our company goes in the BUYER block — the opposite way round from
+  a sale, and a document with it backwards validates, balances and
+  reports us as the vendor of a supply we bought
 - ~~Goods Received and Purchase Request screens.~~ Both are reachable —
   they are rows in `docTypes` and the router builds their addresses from
   the same table. What that made reachable was a defect: a goods received

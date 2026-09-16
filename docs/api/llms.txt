@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0610` (the highest applied migration).
-678 functions and 336 readable tables, of which
+Schema version `0611` (the highest applied migration).
+680 functions and 336 readable tables, of which
 258 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**537 of 678 functions carry a `comment on
+**539 of 680 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -363,7 +363,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (468)
+### general (470)
 
 Not gated on any module.
 
@@ -673,6 +673,7 @@ Not gated on any module.
 - `post_stock_adjustment(p_id uuid)` *(writes)* — Posts a stock take or write-off at current average cost, line by line, skipping lines where the count agreed.
 - `post_withholding(p_id uuid)` *(writes)* — Posts a withholding certificate: the control account comes down and the amount becomes owed to the Inland Revenue Board.
 - `prepare_einvoice(p_sales_document_id uuid)` *(writes)* — Snapshots a posted sales document into MyInvois e-Invoice form and queues it for submission.
+- `prepare_self_billed_einvoice(p_purchase_document_id uuid)` *(writes)* — Builds the e-Invoice a BUYER owes LHDN for a supply the seller cannot file -- a foreign supplier, an unregistered individual.
 - `property_statutory_due(p_org_id uuid, p_within_days integer)`
 - `public_pos_menu(p_token text)` — The menu behind one published link.
 - `public_pos_menu_modifiers(p_token text, p_item uuid)` — The option groups for one item on a QR menu, for a customer holding a phone at a table.
@@ -784,6 +785,7 @@ Not gated on any module.
 - `set_own_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)* — A company switches one of the paid add-ons on or off for itself.
 - `set_platform_ai_default(p_provider text, p_model text)` *(writes)* — Chooses which provider and model the assistant uses by default.
 - `set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` *(writes)* — Stores the PLATFORM's key for one AI provider -- ours, used by every company that has not set its own.
+- `set_requires_self_billed(p_document_id uuid, p_required boolean)` *(writes)* — Says whether a bill owes LHDN a self-billed e-Invoice.
 - `set_sst_registration(p_org_id uuid, p_registered boolean, p_from date, p_registration_no text, p_tax_code text)` *(writes)* — The only way to change a company's SST registration.
 - `settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` *(writes)* — Gives a deposit back or keeps it.
 - `settle_from_client_account(p_matter uuid, p_invoice uuid, p_amount numeric, p_date date, p_office_bank uuid, p_reference text)` *(writes)* — Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND arrives in the office one, which is what makes it a transfer rather than a disappearance.

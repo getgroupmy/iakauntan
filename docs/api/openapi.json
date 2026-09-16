@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0610",
+    "version": "0611",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -49658,6 +49658,61 @@
         }
       }
     },
+    "/rpc/prepare_self_billed_einvoice": {
+      "post": {
+        "operationId": "prepare_self_billed_einvoice",
+        "summary": "Builds the e-Invoice a BUYER owes LHDN for a supply the seller cannot file -- a foreign supplier, an\u2026",
+        "description": "Builds the e-Invoice a BUYER owes LHDN for a supply the seller cannot file -- a foreign supplier, an unregistered individual. Codes 11 to 14. The supplier block holds the supplier and the buyer block holds this company, which is the opposite way round from prepare_einvoice and is the whole difference between selling and buying. 0611.\n\n`public.prepare_self_billed_einvoice(p_purchase_document_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_purchase_document_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_purchase_document_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/property_statutory_due": {
       "post": {
         "operationId": "property_statutory_due",
@@ -61536,6 +61591,64 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/set_requires_self_billed": {
+      "post": {
+        "operationId": "set_requires_self_billed",
+        "summary": "Says whether a bill owes LHDN a self-billed e-Invoice",
+        "description": "Says whether a bill owes LHDN a self-billed e-Invoice. Refuses once one has been submitted -- that is cancelled at MyInvois, not un-ticked here. 0611.\n\n`public.set_requires_self_billed(p_document_id uuid, p_required boolean)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_document_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "p_document_id",
+                  "p_required"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
                 }
               }
             }

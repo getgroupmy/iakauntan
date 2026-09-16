@@ -4029,13 +4029,31 @@ class Repo {
     return Map<String, dynamic>.from(data as Map);
   }
 
+  /// Submits an e-Invoice to MyInvois.
+  ///
+  /// [purchaseDocumentId] is the SELF-BILLED path: the e-Invoice a buyer
+  /// owes LHDN for a supply the seller cannot file. Same submission,
+  /// different preparation, and on that one the supplier block holds the
+  /// supplier rather than this company. Name one or the other, never
+  /// both.
   Future<Map<String, dynamic>> submitEinvoice({
     String? salesDocumentId,
+    String? purchaseDocumentId,
     List<String>? einvoiceIds,
   }) => callMyInvois('submit', {
     if (salesDocumentId != null) 'sales_document_id': salesDocumentId,
+    if (purchaseDocumentId != null) 'purchase_document_id': purchaseDocumentId,
     if (einvoiceIds != null) 'einvoice_ids': einvoiceIds,
   });
+
+  /// Says whether a bill owes LHDN a self-billed e-Invoice. The database
+  /// refuses once one has been submitted — that is cancelled at
+  /// MyInvois, not un-ticked here.
+  Future<void> setRequiresSelfBilled(String documentId, bool required) =>
+      callRpc(
+        'set_requires_self_billed',
+        params: {'p_document_id': documentId, 'p_required': required},
+      );
 
   Future<Map<String, dynamic>> refreshEinvoiceStatus({List<String>? ids}) =>
       callMyInvois('status', {if (ids != null) 'einvoice_ids': ids});

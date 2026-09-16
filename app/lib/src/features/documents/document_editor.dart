@@ -131,6 +131,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// that has not, and transferring it twice is the mistake that follows.
   String _fulfilment = 'pending';
   String _einvoiceStatus = 'not_applicable';
+
+  /// Whether this bill owes LHDN an e-Invoice that WE have to file.
+  /// `0611`. Meaningless on a sales document and never read there.
+  bool _requiresSelfBilled = false;
   String? _glEntryId;
   double _paidAmount = 0;
 
@@ -209,6 +213,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _status = doc.status;
         _fulfilment = doc.fulfilmentStatus;
         _einvoiceStatus = doc.einvoiceStatus;
+        _requiresSelfBilled = doc.requiresSelfBilled;
         _glEntryId = doc.glEntryId;
         _paidAmount = doc.paidAmount;
         _projectCode = doc.lines
@@ -829,6 +834,28 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     }
   }
 
+  /// Says whether this bill owes LHDN a self-billed e-Invoice.
+  ///
+  /// Saved on its own rather than with the rest of the form. `0611`
+  /// refuses the change once one has been filed — that is cancelled at
+  /// MyInvois, not un-ticked here — and a refusal buried inside a
+  /// twenty-field save reads as "the save failed" rather than as what
+  /// it is.
+  Future<void> _setSelfBilled(bool value) async {
+    final id = await _save(silent: true);
+    if (id == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.setRequiresSelfBilled(id, value),
+      successMessage: value
+          ? 'This bill now owes LHDN a self-billed e-Invoice'
+          : 'No self-billed e-Invoice is owed for this bill',
+    );
+    if (ok && mounted) setState(() => _requiresSelfBilled = value);
+  }
+
   Future<void> _submitEinvoice() async {
     if (widget.documentId == null) return;
     final org = ref.read(currentOrgProvider).valueOrNull;
@@ -838,14 +865,25 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       return;
     }
 
+    final selfBilled = _kind != DocKind.sales;
     final ok = await confirm(
       context,
-      title: 'Submit to MyInvois?',
-      message: org?.einvoiceEnvironment == 'production'
-          ? 'This sends the document to LHDN production. Once validated it '
-                'can only be cancelled within 72 hours.'
-          : 'This sends the document to the LHDN sandbox for testing.',
-      confirmLabel: 'Submit',
+      title: selfBilled
+          ? 'File this on the supplier\'s behalf?'
+          : 'Submit to MyInvois?',
+      message:
+          (selfBilled
+              ? 'This supplier cannot file an e-Invoice for what they '
+                    'sold you, so LHDN expects one from you instead. It '
+                    'goes out under your TIN, with the supplier named as '
+                    'the supplier. '
+              : '') +
+          (org?.einvoiceEnvironment == 'production'
+              ? 'This sends the document to LHDN production. Once '
+                    'validated it can only be cancelled within 72 hours.'
+              : 'This sends the document to the LHDN sandbox for '
+                    'testing.'),
+      confirmLabel: selfBilled ? 'File it' : 'Submit',
     );
     if (!ok || !mounted) return;
 
@@ -853,8 +891,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       context,
       action: () async {
         final repo = ref.read(repoProvider)!;
+        // A sale is an e-Invoice we owe for a supply we made. A
+        // self-billed one is an e-Invoice we owe for a supply we
+        // RECEIVED, because the seller cannot file it. Same submission,
+        // different preparation.
         final result = await repo.submitEinvoice(
-          salesDocumentId: widget.documentId,
+          salesDocumentId: _kind == DocKind.sales ? widget.documentId : null,
+          purchaseDocumentId: _kind == DocKind.sales
+              ? null
+              : widget.documentId,
         );
         if ((result['rejected'] as int? ?? 0) > 0) {
           throw Exception('LHDN rejected the document: ${result['errors']}');
@@ -988,6 +1033,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _ when _isPosted && _meta.einvoice && einvoiceOn => (
         label: einvoiceValid ? 'e-Invoice valid' : 'Submit e-Invoice',
         short: einvoiceValid ? 'Valid' : 'Submit',
+        icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
+        onTap: einvoiceValid ? null : _submitEinvoice,
+      ),
+      // `0611`. Two conditions, not one: the document TYPE has to be
+      // capable of a self-billed e-Invoice, and this particular bill
+      // has to actually owe one. A bill from a Malaysian supplier who
+      // files their own is `selfBillable` and does not owe anything,
+      // and offering the button there would invite somebody to file a
+      // second e-Invoice for a supply LHDN already has one for.
+      _ when _isPosted &&
+              _meta.selfBillable &&
+              _requiresSelfBilled &&
+              einvoiceOn => (
+        label: einvoiceValid ? 'Self-billed e-Invoice filed' : 'File self-billed',
+        short: einvoiceValid ? 'Filed' : 'Self-bill',
         icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
         onTap: einvoiceValid ? null : _submitEinvoice,
       ),
@@ -1310,6 +1370,22 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                           total: _grandTotal,
                           kind: _kind,
                           settles: _meta.settles,
+                        ),
+                      // `0611`. Only where the document type can carry
+                      // one and the company files e-Invoices at all.
+                      // Everything else about this card is a question
+                      // nobody in that position has.
+                      if (_meta.selfBillable &&
+                          ref
+                                  .watch(currentOrgProvider)
+                                  .value
+                                  ?.einvoiceEnabled ==
+                              true)
+                        _SelfBilledCard(
+                          required: _requiresSelfBilled,
+                          locked: _einvoiceStatus == 'submitted' ||
+                              _einvoiceStatus == 'valid',
+                          onChanged: _setSelfBilled,
                         ),
                       _HeaderCard(
                         docNo: _docNo,
@@ -2521,6 +2597,63 @@ class _TotalRow extends StatelessWidget {
               : Theme.of(context).textTheme.bodyMedium,
         ),
       ],
+    );
+  }
+}
+
+/// Whether a bill owes LHDN an e-Invoice that WE have to file.
+///
+/// Where the seller cannot file one — a foreign supplier outside
+/// MyInvois, an individual who is not registered — LHDN requires the
+/// buyer to file on their behalf. `0611` sets this from the supplier's
+/// country when the bill is created, which is right for the common case
+/// and not the only one: an unregistered individual in Malaysia owes one
+/// too, and a supplier who has since registered does not.
+///
+/// So the switch exists to be disagreed with, and the subtitle says
+/// which way the guess went rather than leaving somebody to infer it
+/// from a toggle position.
+class _SelfBilledCard extends StatelessWidget {
+  const _SelfBilledCard({
+    required this.required,
+    required this.locked,
+    required this.onChanged,
+  });
+
+  final bool required;
+
+  /// Once it is with LHDN the answer is theirs, not ours. The database
+  /// refuses the change too; this stops somebody reaching a refusal.
+  final bool locked;
+
+  final Future<void> Function(bool) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: Space.lg),
+      child: SwitchListTile(
+        key: const ValueKey('requires-self-billed'),
+        value: required,
+        onChanged: locked ? null : (v) => onChanged(v),
+        title: const Text('We file the e-Invoice for this'),
+        subtitle: Text(
+          locked
+              ? 'Already filed with LHDN. Cancel it there to change this.'
+              : required
+              ? 'This supplier cannot issue a Malaysian e-Invoice, so LHDN '
+                    'expects one from you instead. It goes out under your '
+                    'TIN with the supplier named as the supplier.'
+              : 'This supplier files their own. Turn this on for a '
+                    'foreign supplier or anyone not registered with '
+                    'MyInvois.',
+          style: muted,
+        ),
+      ),
     );
   }
 }

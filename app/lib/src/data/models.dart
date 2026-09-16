@@ -984,6 +984,7 @@ class BusinessDocument {
     this.status = 'draft',
     this.fulfilmentStatus = 'pending',
     this.einvoiceStatus = 'not_applicable',
+    this.requiresSelfBilled = false,
     this.einvoiceId,
     this.glEntryId,
     this.notes,
@@ -1041,6 +1042,15 @@ class BusinessDocument {
   /// by the database from the lines that were transferred out of it.
   final String fulfilmentStatus;
   final String einvoiceStatus;
+
+  /// Whether this bill owes LHDN an e-Invoice that WE have to file.
+  ///
+  /// Where the seller cannot — a foreign supplier outside MyInvois, an
+  /// individual who is not registered — the buyer files one on their
+  /// behalf. `0611` sets it from the supplier's country on insert and
+  /// `set_requires_self_billed` lets somebody say otherwise. Meaningless
+  /// on a sales document, which is why nothing reads it there.
+  final bool requiresSelfBilled;
   final String? einvoiceId;
   final String? glEntryId;
   final String? notes;
@@ -1115,6 +1125,7 @@ class BusinessDocument {
       status: j['status']?.toString() ?? 'draft',
       fulfilmentStatus: j['fulfilment_status']?.toString() ?? 'pending',
       einvoiceStatus: j['einvoice_status']?.toString() ?? 'not_applicable',
+      requiresSelfBilled: j['requires_self_billed'] == true,
       einvoiceId: j['einvoice_id'] as String?,
       glEntryId: j['gl_entry_id'] as String?,
       notes: j['notes'] as String?,
