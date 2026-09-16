@@ -35,7 +35,13 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   Widget build(BuildContext context) {
     final items = ref.watch(itemsProvider(_search));
     final canWrite = ref.watch(canWriteProvider);
-    final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
+    // `valueOrNull` throughout this file. `?? const <String>{}` is
+    // "no modules", which is the right answer while the list loads
+    // AND if it failed -- the screen simply offers less. `.value`
+    // threw instead, taking the Items screen down over a module list
+    // that only decides which buttons are in the app bar.
+    final modules =
+        ref.watch(enabledModulesProvider).valueOrNull ?? const <String>{};
 
     return Scaffold(
       appBar: AppBar(
@@ -316,7 +322,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     setState(() => _saving = true);
 
     final posOn =
-        (ref.read(enabledModulesProvider).value ?? const <String>{})
+        (ref.read(enabledModulesProvider).valueOrNull ?? const <String>{})
             .contains('pos');
 
     final ok = await runWithFeedback(
@@ -361,10 +367,11 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
-    final uoms = ref.watch(_uomProvider).value ?? const [];
+    final modules =
+        ref.watch(enabledModulesProvider).valueOrNull ?? const <String>{};
+    final uoms = ref.watch(_uomProvider).valueOrNull ?? const [];
     final classifications =
-        ref.watch(classificationCodesProvider).value ?? const [];
+        ref.watch(classificationCodesProvider).valueOrNull ?? const [];
 
     return AlertDialog(
       title: Text(widget.item == null ? 'New item' : 'Edit item'),

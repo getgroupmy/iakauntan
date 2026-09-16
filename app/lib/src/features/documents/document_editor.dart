@@ -275,7 +275,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   double get _taxTotal => _lines.fold(0, (sum, l) => sum + l.totals.tax);
   double get _grandTotal {
     final raw = _subtotal + _taxTotal;
-    return switch (ref.read(currentOrgProvider).value?.roundingMethod) {
+    // `valueOrNull`. The `?.` already says an absent company means
+    // "no rounding method", but `AsyncError.value` THROWS, so a
+    // company that failed to load threw out of the getter that
+    // computes the invoice total -- from `build`, on a screen whose
+    // whole job is the total.
+    return switch (ref.read(currentOrgProvider).valueOrNull?.roundingMethod) {
       'nearest_5cent' => (raw * 20).round() / 20,
       'nearest_10cent' => (raw * 10).round() / 10,
       _ => (raw * 100).round() / 100,
@@ -816,7 +821,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
   Future<void> _submitEinvoice() async {
     if (widget.documentId == null) return;
-    final org = ref.read(currentOrgProvider).value;
+    final org = ref.read(currentOrgProvider).valueOrNull;
 
     if (org?.einvoiceEnabled != true) {
       _toast('Enable e-Invoice in Settings first.');
@@ -961,7 +966,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     // whose only outcome is being told to go to Settings, which is a
     // worse way to say "not set up" than not being there at all.
     final einvoiceOn =
-        ref.watch(currentOrgProvider).value?.einvoiceEnabled == true;
+        ref.watch(currentOrgProvider).valueOrNull?.einvoiceEnabled == true;
 
     final primary = switch (null) {
       _ when editable && canPost && _meta.posts => (
@@ -2044,7 +2049,8 @@ class _HeaderCard extends ConsumerWidget {
         (
           child: SearchablePicker<String>(
             options: [
-              for (final s in ref.watch(salespeopleProvider).value ?? const [])
+              for (final s
+                  in ref.watch(salespeopleProvider).valueOrNull ?? const [])
                 PickerOption(
                   value: s['id'] as String,
                   label: s['name']?.toString() ?? '',
@@ -2064,7 +2070,8 @@ class _HeaderCard extends ConsumerWidget {
         (
           child: SearchablePicker<String>(
             options: [
-              for (final p in ref.watch(projectsProvider).value ?? const [])
+              for (final p
+                  in ref.watch(projectsProvider).valueOrNull ?? const [])
                 PickerOption(
                   value: p['code'] as String,
                   label: '${p['code']} · ${p['name']}',
@@ -2088,7 +2095,8 @@ class _HeaderCard extends ConsumerWidget {
         (
           child: SearchablePicker<String>(
             options: [
-              for (final d in ref.watch(departmentsProvider).value ?? const [])
+              for (final d
+                  in ref.watch(departmentsProvider).valueOrNull ?? const [])
                 PickerOption(
                   value: d['code'] as String,
                   label: '${d['code']} · ${d['name']}',

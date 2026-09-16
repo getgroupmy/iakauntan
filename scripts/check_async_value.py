@@ -79,7 +79,27 @@ from pathlib import Path
 # `?? ''`, which is least privilege and is the right answer both while
 # the role is loading and if it failed. On a failure it never ran. What
 # watches them is everything.
-BUDGET = 50
+# 50 to 39: six in `document_editor.dart` and five in
+# `items_screen.dart`.
+#
+# Three of the six are real and one of those is the worst kind. The
+# `_grandTotal` getter read the company's rounding method with
+# `.value?.`, from `build`, on the screen whose entire job is the total
+# -- so a company that failed to load did not draw an invoice with no
+# rounding applied, it drew nothing. The other two decide whether the
+# e-Invoice button is offered.
+#
+# The remaining three each sit behind a `valueOrNull?.isNotEmpty` guard
+# on the line ABOVE, so the error state cannot reach them. Changed
+# anyway: this ratchet counts lines, and a reader should not have to
+# prove to themselves that a `.value` here is the safe one.
+#
+# All five in `items_screen.dart` are real. `?? const <String>{}` is
+# "no modules", which is right while the list loads and right if it
+# failed -- the screen offers less. `.value` threw instead, taking the
+# Items screen down over a list that only decides which buttons are in
+# the app bar.
+BUDGET = 39
 
 LIB = Path(__file__).resolve().parent.parent / 'app' / 'lib'
 
