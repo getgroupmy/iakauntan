@@ -180,20 +180,40 @@ view BEFORE writing the test, then writing the test to say what the
 view says. Exactly one case failed.
 
 So: when a getter restates a rule the database also holds, open the
-migration. Four were checked after that one, and the other three agree
-— which is worth knowing so nobody checks them again:
+migration. Six have been checked, and two of them were wrong:
 
-| Getter | The SQL it mirrors | Verdict |
+| Getter | What it is compared against | Verdict |
 |---|---|---|
 | `BusinessDocument.isOverdue` | `v_ar_aging` aging bucket | **disagreed**, fixed |
+| `CorpOfficer.licenceLapsed` | `licence_expires_on`, a `date` | **disagreed**, fixed |
 | `Item.isLowStock` | the `low_stock` count in `0014` | agrees, `track_inventory` and all |
 | `EinvoiceDocument.canCancel` | `set_einvoice_cancel_deadline` | agrees; reads the stored deadline rather than recomputing it, and LHDN is the real gate |
+| `PayslipAccessRequest.hasLapsed` | `expires_at`, a `timestamptz` | agrees — a moment compared to a moment |
 | `Contact.readyForEinvoice` | `coalesce(nullif(tin, ''), app.general_public_tin())` | no conflict — the Dart WARNS, the SQL substitutes the general-public TIN |
 
 The pattern to look for is a getter that recomputes rather than reads.
 `canCancel` is safe because the 72 hours are set by a trigger and
 stored; `isOverdue` was not because it worked the comparison out again,
 in a different unit, on the other side of the wire.
+
+**And the unit is the tell.** A `date` column arrives as MIDNIGHT.
+Compared against `DateTime.now()` it is true from 00:01 on the day
+itself, so every such getter is a day early — the invoice due today
+reads overdue, the licence expiring today reads expired. A
+`timestamptz` compared to `DateTime.now()` is right, which is why
+`canCancel` and `hasLapsed` are fine and the other two were not.
+
+So the check is one line of grep and then one line of SQL:
+
+```sh
+grep -rn 'isBefore(DateTime.now())\|isAfter(DateTime.now())' lib/src/data/
+grep -rn '<column_name>' supabase/migrations/   # date, or timestamptz?
+```
+
+Three hits in this app, and the one against a `date` column was the
+bug. It had shipped for a year, on every company secretary's licence,
+raising "the company has no validly appointed secretary" in the danger
+colour one day early.
 
 ## Four more worth knowing
 

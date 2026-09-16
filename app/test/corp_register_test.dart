@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/data/corp_models.dart';
 import 'package:iakauntan/src/features/secretarial/beneficial_owner_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/charge_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
@@ -123,7 +124,9 @@ void main() {
       );
       expect(
         officerBlockedBecause(
-            role: 'alternate_director', alternateFor: 'officer-lim'),
+          role: 'alternate_director',
+          alternateFor: 'officer-lim',
+        ),
         isNull,
       );
     });
@@ -306,7 +309,11 @@ void beneficialOwners() {
       // name rather than a register entry.
       expect(
         hasGround(
-            shares: false, voting: false, directors: false, influence: false),
+          shares: false,
+          voting: false,
+          directors: false,
+          influence: false,
+        ),
         isFalse,
       );
     });
@@ -473,10 +480,7 @@ void beneficialOwners() {
 void charges() {
   group('the thirty days (s.352)', () {
     test('run from the date of the instrument', () {
-      expect(
-        registrationDeadline(DateTime(2026, 8, 1)),
-        DateTime(2026, 8, 31),
-      );
+      expect(registrationDeadline(DateTime(2026, 8, 1)), DateTime(2026, 8, 31));
       // Across a month boundary, and across February.
       expect(
         registrationDeadline(DateTime(2026, 2, 10)),
@@ -510,20 +514,14 @@ void charges() {
       // they can still lodge it is the worst possible moment to be
       // wrong by one day.
       expect(
-        registrationOverdue(
-          DateTime(2026, 8, 1),
-          asAt: DateTime(2026, 8, 31),
-        ),
+        registrationOverdue(DateTime(2026, 8, 1), asAt: DateTime(2026, 8, 31)),
         isFalse,
       );
     });
 
     test('the day after is not', () {
       expect(
-        registrationOverdue(
-          DateTime(2026, 8, 1),
-          asAt: DateTime(2026, 9, 1),
-        ),
+        registrationOverdue(DateTime(2026, 8, 1), asAt: DateTime(2026, 9, 1)),
         isTrue,
       );
     });
@@ -540,8 +538,11 @@ void charges() {
       expect(amountOf('abc'), isNull);
       expect(amountOf('-1'), isNull);
       expect(amountOf('250000'), 250000);
-      expect(amountOf('250,000.50'), 250000.5,
-          reason: 'typed the way somebody reads it off an instrument');
+      expect(
+        amountOf('250,000.50'),
+        250000.5,
+        reason: 'typed the way somebody reads it off an instrument',
+      );
     });
 
     test('a satisfaction cannot be filed for an unsatisfied charge', () {
@@ -654,7 +655,8 @@ void shares() {
       // changes the type. The transferor is still selected in the
       // dropdown, and sending it fails the CHECK constraint.
       final v = shareEventValues(
-        entityId: 'e', shareClassId: 'c',
+        entityId: 'e',
+        shareClassId: 'c',
         eventType: 'allotment',
         eventDate: DateTime(2026, 3, 1),
         quantity: 1000,
@@ -667,7 +669,8 @@ void shares() {
 
     test('a transferee left over on a cancellation is dropped', () {
       final v = shareEventValues(
-        entityId: 'e', shareClassId: 'c',
+        entityId: 'e',
+        shareClassId: 'c',
         eventType: 'cancellation',
         eventDate: DateTime(2026, 3, 1),
         quantity: 500,
@@ -701,7 +704,8 @@ void shares() {
       // zero total would assert they were issued for nothing.
       expect(considerationFor(null, 1000), isNull);
       final v = shareEventValues(
-        entityId: 'e', shareClassId: 'c',
+        entityId: 'e',
+        shareClassId: 'c',
         eventType: 'allotment',
         eventDate: DateTime(2026, 3, 1),
         quantity: 1000,
@@ -719,7 +723,8 @@ void shares() {
       // not cash, and only then. A note left on a cash allotment says
       // the company took something it did not.
       final v = shareEventValues(
-        entityId: 'e', shareClassId: 'c',
+        entityId: 'e',
+        shareClassId: 'c',
         eventType: 'allotment',
         eventDate: DateTime(2026, 3, 1),
         quantity: 1000,
@@ -736,7 +741,8 @@ void shares() {
   group('what belongs to a transfer only', () {
     test('Form 32A, the duty and the stamp certificate are kept', () {
       final v = shareEventValues(
-        entityId: 'e', shareClassId: 'c',
+        entityId: 'e',
+        shareClassId: 'c',
         eventType: 'transfer',
         eventDate: DateTime(2026, 3, 1),
         quantity: 200,
@@ -758,10 +764,15 @@ void shares() {
       // filed against Form 32A/2026/004 points at an instrument of
       // transfer that does not exist, and stamp duty on it asserts a
       // payment to the Collector that was never made.
-      for (final t in ['allotment', 'transmission', 'cancellation',
-                       'conversion']) {
+      for (final t in [
+        'allotment',
+        'transmission',
+        'cancellation',
+        'conversion',
+      ]) {
         final v = shareEventValues(
-          entityId: 'e', shareClassId: 'c',
+          entityId: 'e',
+          shareClassId: 'c',
           eventType: t,
           eventDate: DateTime(2026, 3, 1),
           quantity: 200,
@@ -785,8 +796,11 @@ void shares() {
       // names for one thing, and the uniqueness constraint will not
       // notice.
       final v = shareClassValues(
-        entityId: 'e', code: '  ord ', name: 'Ordinary',
-        currency: 'myr', votesPerShare: 1,
+        entityId: 'e',
+        code: '  ord ',
+        name: 'Ordinary',
+        currency: 'myr',
+        votesPerShare: 1,
       );
       expect(v['code'], 'ORD');
       expect(v['currency'], 'MYR');
@@ -794,16 +808,23 @@ void shares() {
 
     test('a blank name means the default, not a class with no name', () {
       final v = shareClassValues(
-        entityId: 'e', code: 'ORD', name: '   ',
-        currency: 'MYR', votesPerShare: 1,
+        entityId: 'e',
+        code: 'ORD',
+        name: '   ',
+        currency: 'MYR',
+        votesPerShare: 1,
       );
       expect(v['name'], 'Ordinary');
     });
 
     test('blank rights are null, not an empty string', () {
       final v = shareClassValues(
-        entityId: 'e', code: 'ORD', name: 'Ordinary',
-        currency: 'MYR', votesPerShare: 1, rights: '   ',
+        entityId: 'e',
+        code: 'ORD',
+        name: 'Ordinary',
+        currency: 'MYR',
+        votesPerShare: 1,
+        rights: '   ',
       );
       expect(v['rights'], isNull);
     });
@@ -819,6 +840,150 @@ void shares() {
       expect(votesOf('-1'), isNull);
       expect(votesOf(''), isNull);
       expect(votesOf('one'), isNull);
+    });
+  });
+
+  /// When a secretary's licence stops being one.
+  ///
+  /// `licence_expires_on` is a `date` column, so it arrives as
+  /// midnight. Compared against `DateTime.now()` the flag came up from
+  /// 00:01 on the day of expiry -- a whole day early, on every
+  /// secretary, every year. The sentence it raises is not a mild one:
+  /// "the company has no validly appointed secretary", in the danger
+  /// colour, on the register a secretary is required to keep.
+  ///
+  /// Nothing in SQL computes this, so there is no view to agree with.
+  /// The rule is the ordinary meaning of an expiry date: the 30th is
+  /// the last day it is valid, not the first day it is not.
+  group('a secretary whose licence has run out', () {
+    CorpOfficer secretary({String role = 'secretary', DateTime? expires}) =>
+        CorpOfficer(
+          id: 'o1',
+          personId: 'p1',
+          role: role,
+          appointedOn: DateTime(2020, 3, 1),
+          name: 'Puan Aminah',
+          licenceNo: 'LS0001234',
+          licenceBody: 'MAICSA',
+          licenceExpiresOn: expires,
+        );
+
+    // The Malaysian date, not the device's. A licence is issued by the
+    // Registrar and expires on a Malaysian day; a secretary on a laptop
+    // set to London must not see a different answer from the one the
+    // server would give. `corp_filing_clock_test.dart` established this
+    // for filings and computes it the same way.
+    DateTime today() => corpToday();
+
+    test('is not lapsed on the day it expires', () {
+      expect(secretary(expires: today()).licenceLapsed, isFalse);
+    });
+
+    test('and is the day after', () {
+      expect(
+        secretary(
+          expires: today().subtract(const Duration(days: 1)),
+        ).licenceLapsed,
+        isTrue,
+      );
+    });
+
+    test('a licence with no expiry on file is not lapsed', () {
+      // A member of a prescribed body holds no dated licence at all.
+      // Flagging them would be the register asserting something it has
+      // no evidence for.
+      expect(secretary(expires: null).licenceLapsed, isFalse);
+    });
+
+    test('and a director is not asked for one', () {
+      // s.20G requires a licence of a secretary and of no other
+      // officer. `officerValues` clears it on a role change, but a row
+      // written before 0380 can still carry one.
+      expect(
+        secretary(
+          role: 'director',
+          expires: DateTime(2020, 1, 1),
+        ).licenceLapsed,
+        isFalse,
+      );
+    });
+  });
+
+  /// ## One mutant that survives here, and why
+  ///
+  /// Replacing `corpToday()`'s body with the DEVICE date — dropping the
+  /// `toUtc().add(8h)` — is not killed by anything in this file, and is
+  /// only killed by `corp_filing_clock_test.dart` for eight hours out
+  /// of every twenty-four: the Malaysian date and a UTC device's date
+  /// are the same except between 16:00 and midnight UTC.
+  ///
+  /// It cannot be killed deterministically without injecting a clock,
+  /// and `corpToday()` reads the wall clock by design. What stands in
+  /// for it is that `corp_filing_clock_test.dart` computes UTC+8 again,
+  /// independently, from the statute's own reasoning — so the two files
+  /// agreeing is the assertion, and a change to one without the other
+  /// is what would show up.
+  ///
+  /// Recorded here rather than left as a silent survivor, per the
+  /// header of `scripts/mutate.py`.
+
+  /// Thirty days to register a charge, and what happens on day thirty.
+  ///
+  /// s.352: a charge not registered within thirty days of creation is
+  /// VOID AGAINST THE LIQUIDATOR. That is the sentence the screen puts
+  /// on the row, in the danger colour, and it was being put there a day
+  /// early — on day thirty, which is still inside the thirty days.
+  ///
+  /// `corp_filing_clock_test.dart` had already written the rule down
+  /// for filings: "a deadline is missed the day after it falls, not on
+  /// it". This is the same rule on a different register, and it also
+  /// now reads the Malaysian date rather than the device's, for the
+  /// reason `0305` gives.
+  group('the thirty days a charge has', () {
+    CorpCharge created(DateTime on, {DateTime? registered}) => CorpCharge(
+      id: 'c1',
+      chargeeName: 'Maybank Islamic Berhad',
+      createdOn: on,
+      registeredOn: registered,
+    );
+
+    DateTime daysAgo(int n) => corpToday().subtract(Duration(days: n));
+
+    test('day thirty is still in time', () {
+      // Created thirty days ago: today IS the thirtieth day, and the
+      // charge can still be lodged before the office closes. Telling a
+      // secretary it is void sends them to argue with SSM about a
+      // deadline they have not missed.
+      expect(created(daysAgo(30)).registrationLate, isFalse);
+    });
+
+    test('and day thirty-one is not', () {
+      expect(created(daysAgo(31)).registrationLate, isTrue);
+    });
+
+    test('a charge created today has thirty days left', () {
+      expect(created(corpToday()).registrationLate, isFalse);
+    });
+
+    test('and one registered in time is never late, however old', () {
+      // The register keeps it forever — s.357 requires that, and a
+      // charge discharged last year is what a lender's solicitor is
+      // searching for. A flag on a properly registered 2019 charge
+      // would be the register libelling its own paperwork.
+      expect(
+        created(
+          DateTime(2019, 1, 1),
+          registered: DateTime(2019, 1, 20),
+        ).registrationLate,
+        isFalse,
+      );
+    });
+
+    test('the due date is the thirtieth day after creation', () {
+      expect(
+        created(DateTime(2026, 1, 1)).registrationDue,
+        DateTime(2026, 1, 31),
+      );
     });
   });
 }
