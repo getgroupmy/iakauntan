@@ -960,11 +960,20 @@ through a real call, so this cannot come back quietly.
 `.github/workflows/ci.yml` analyzes and tests the Flutter app, then
 starts a throwaway Supabase stack and runs every file in
 `supabase/tests/` against the migrations *in that commit* rather than
-against the hosted project. A third job, `edge`, runs `deno test` over
-the one piece of edge-function logic worth asserting — the check that
-decides whether a caller may act for every organization at once, where a
-mistake in the permissive direction does not fail but hands the outbox to
+against the hosted project. A third job, `edge`, type-checks every
+function and runs seventeen `deno test` files over the logic worth
+asserting: the whole LHDN path — the UBL document, the MyInvois client
+and the credentials it picks — the CORS preflight, the VAPID keygen
+checked against the code that consumes it, and the check that decides
+whether a caller may act for every organization at once, where a mistake
+in the permissive direction does not fail but hands the outbox to
 whoever asks.
+
+The Flutter side is held to the same standard, which is harder than it
+sounds: a widget test can pass while asserting nothing at all, and
+[docs/widget-tests.md](docs/widget-tests.md) lists ten specific ways it
+does. `scripts/mutate.py` is how they were found — break the screen on
+purpose and watch the test fail.
 
 Two more jobs publish what those have passed, and wait on them: `deploy`
 builds the web bundle and hands it to Vercel — see the Vercel pipeline

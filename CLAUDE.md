@@ -5,7 +5,7 @@ accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for
 Malaysian businesses. `README.md` is the real orientation — read it before
 changing anything statutory.
 
-Two things to know before you touch the code:
+Three things to know before you touch the code:
 
 - **The database is the application.** Business rules live in SQL — numbered,
   append-only migrations in `supabase/migrations/`, applied in order and never
@@ -15,6 +15,12 @@ Two things to know before you touch the code:
 - **Statutory arithmetic is asserted, not eyeballed.** `supabase/tests/*.sql`
   runs in CI. Anything touching EPF, SOCSO, EIS, PCB or an SSM deadline needs a
   test that would fail if the number moved.
+- **A widget test that passes has not yet proved anything.** Break the screen
+  on purpose and watch the test fail: `python3 scripts/mutate.py <source>
+  <test> <mutants.py>`, always with a no-op control, because a harness that
+  errors on every run reports a clean sweep. `docs/widget-tests.md` lists ten
+  ways a green test covers a broken screen — every one of them happened here,
+  and three of them hid a real defect.
 
 ## After every push: watch CI to green
 
@@ -52,10 +58,11 @@ locked-down network refuses, but Deno is published to npm as well, and
 under `$TMPDIR/iakauntan-deno`; `DENO_SKIP_NPM=1` goes straight to the
 fallback.
 
-It then runs **the ten `deno test` files CI runs**, reading their names and
-flags out of `ci.yml` so the list cannot drift, and refusing to start if the
-count it matched disagrees with the count the workflow names. Those tests had
-never run anywhere but CI.
+It then runs **every `deno test` file CI runs** — seventeen of them now, and
+the number is not worth keeping in prose — reading their names and flags out of
+`ci.yml` so the list cannot drift, and refusing to start if the count it
+matched disagrees with the count the workflow names. Those tests had never run
+anywhere but CI.
 
 Only where npm cannot supply one either does it hand over to
 `check_with_tsc.sh` — same entry points, same supabase-js stub, plus a narrow
