@@ -250,7 +250,83 @@ class _DependantDialog extends ConsumerStatefulWidget {
   ConsumerState<_DependantDialog> createState() => _DependantDialogState();
 }
 
+/// The row a dependant dialog sends.
+///
+/// Public and out here so the figure that goes to the database can be
+/// asserted. `Repo.saveEmployeeRow` is on `extension RepoHrSetup` and
+/// writes straight through `client.from(table)`, and a Dart extension
+/// method binds to the static type — so a `_FakeRepo implements Repo`
+/// cannot intercept it and a widget test cannot see what was saved.
+/// See `docs/widget-tests.md`.
+///
+/// `Fmt.typedNumber`, not `double.tryParse`. The two DISAGREE on the
+/// text the validator now allows: `dependantReliefProblem` accepts
+/// "50%" — the box's own suffix is a per-cent sign — and
+/// `double.tryParse('50%')` is null, which the `?? 100` would turn into
+/// the whole claim. Reading it the same way twice is what stops the
+/// figure on the screen and the figure in the database being different
+/// numbers.
+///
+/// The `?? 100` that remains is not a guess: the validator has refused
+/// anything unreadable before this runs, so the only text reaching it
+/// that comes back null is a box the dialog is not showing — the case
+/// where the dependant is not claimed for relief at all and `calc_pcb`
+/// never reads the figure.
+Map<String, dynamic> dependantValues({
+  required String employeeId,
+  required String name,
+  required String relationship,
+  required String nric,
+  required DateTime? dateOfBirth,
+  required bool isDisabled,
+  required bool inHigherEducation,
+  required bool isTaxDependant,
+  required String reliefTyped,
+}) => {
+  'employee_id': employeeId,
+  'name': name.trim(),
+  'relationship': relationship,
+  'nric': nric.trim().isEmpty ? null : nric.trim(),
+  'date_of_birth': dateOfBirth == null ? null : Fmt.iso(dateOfBirth),
+  'is_disabled': isDisabled,
+  'in_higher_education': inHigherEducation,
+  'is_tax_dependant': isTaxDependant,
+  'relief_claim_percent': Fmt.typedNumber(reliefTyped.trim()) ?? 100,
+};
+
+/// What is wrong with a dependant's share of a tax relief, if anything.
+///
+/// `relief_claim_percent` scales a child's relief straight into PCB:
+/// `0446` and every version of `calc_pcb` before it compute
+///
+///     sum(case ... 2000 / 6000 / 8000 ... end
+///         * d.relief_claim_percent / 100)
+///
+/// so this number is a multiplier on somebody's income tax. The column
+/// is `numeric(5, 2) not null default 100` with no check constraint, so
+/// the database will take 150, or -50, without a word.
+///
+/// The box had NO validator at all -- it was a bare `TextField` in a
+/// dialog with no `Form` -- and the save read it as
+/// `double.tryParse(text) ?? 100`. A parent claiming half who typed
+/// "50%" into a box whose own suffix is `%` got ONE HUNDRED: the whole
+/// relief instead of half of it, silently, and PCB under-withheld for
+/// the rest of the year.
+///
+/// Empty is refused rather than treated as the whole claim. The box is
+/// always pre-filled, so an empty one is somebody who cleared it and
+/// meant to type something.
+String? dependantReliefProblem(String raw) {
+  if (raw.trim().isEmpty) return 'Enter a share, or 100 for the whole claim.';
+  final value = Fmt.typedNumber(raw);
+  if (value == null) return 'Enter a percentage, such as 50.';
+  if (value < 0) return 'A share cannot be below zero.';
+  if (value > 100) return 'A share cannot be more than the whole claim.';
+  return null;
+}
+
 class _DependantDialogState extends ConsumerState<_DependantDialog> {
+  final _formKey = GlobalKey<FormState>();
   late final _name =
       TextEditingController(text: widget.row?['name']?.toString() ?? '');
   late final _nric =
@@ -279,7 +355,13 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
       title: Text(widget.row == null ? 'Add dependant' : 'Edit dependant'),
       content: SizedBox(
         width: 440,
-        child: SingleChildScrollView(
+        // A `Form`, which this dialog did not have. Without one there is
+        // nothing for a validator to hang on and nothing to stop
+        // `_save`, which is how a share of a tax relief came to be read
+        // with `?? 100`.
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -336,8 +418,10 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
               // Two parents may each claim part of the same child, which
               // is why this is a percentage rather than a flag.
               if (_taxDependant)
-                TextField(
+                TextFormField(
                   controller: _relief,
+                  validator: (v) => dependantReliefProblem(v ?? ''),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
@@ -360,6 +444,7 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
               ),
             ],
           ),
+          ),
         ),
       ),
       actions: [
@@ -381,6 +466,7 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
   }
 
   Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
     if (_name.text.trim().isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Name the dependant')));
@@ -392,18 +478,17 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
       context,
       action: () => ref.read(repoProvider)!.saveEmployeeRow(
             'employee_dependants',
-            {
-              'employee_id': widget.employeeId,
-              'name': _name.text.trim(),
-              'relationship': _relationship,
-              'nric': _nric.text.trim().isEmpty ? null : _nric.text.trim(),
-              'date_of_birth': _dob == null ? null : Fmt.iso(_dob!),
-              'is_disabled': _disabled,
-              'in_higher_education': _education,
-              'is_tax_dependant': _taxDependant,
-              'relief_claim_percent':
-                  double.tryParse(_relief.text.trim()) ?? 100,
-            },
+            dependantValues(
+              employeeId: widget.employeeId,
+              name: _name.text,
+              relationship: _relationship,
+              nric: _nric.text,
+              dateOfBirth: _dob,
+              isDisabled: _disabled,
+              inHigherEducation: _education,
+              isTaxDependant: _taxDependant,
+              reliefTyped: _relief.text,
+            ),
             id: widget.row?['id'] as String?,
           ),
       successMessage: 'Saved',
