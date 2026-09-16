@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/business_types_repository.dart';
+import '../../data/entity_types_repository.dart';
 import '../../data/my_profile_repository.dart';
 import '../../data/places_repository.dart';
 import '../settings/msic_picker.dart';
@@ -393,7 +394,11 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
         if (theirName.isNotEmpty && _name.text.trim().isEmpty) {
           _name.text = theirName;
         }
-        if (entityTypes.containsKey(theirEntity)) _entityType = theirEntity;
+        // Any code they gave, not only one of the ten this shipped
+        // with: `0607` made the list a table, so what registration
+        // recorded may be a kind added since. `create_organization`
+        // refuses one that is not on the list, by name.
+        if (theirEntity.isNotEmpty) _entityType = theirEntity;
         // The same tick `_chooseUse` applies, for somebody who
         // answered at registration and never sees that screen.
         if (said == UseKind.accountant) _ticked.addAll(accountantModules);
@@ -612,20 +617,53 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 // invoicing under their own name is a dropdown with one
                 // right answer hidden in it.
                 if (!_personal) ...[
-                  DropdownButtonFormField<String>(
-                    // Same reason as the sign-up form's copy of this
-                    // dropdown: the longest label overflows a narrow
-                    // column rather than ellipsising, and a phone is
-                    // narrow.
-                    isExpanded: true,
-                    value: _entityType,
-                    decoration: const InputDecoration(labelText: 'Entity type'),
-                    items: [
-                      for (final e in entityTypes.entries)
-                        DropdownMenuItem(value: e.key, child: Text(e.value)),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _entityType = v ?? defaultEntityType),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      // Signed in by this screen, so the table itself
+                      // rather than `signup_reference()`. The constant
+                      // is still the fallback for the moment before it
+                      // loads: a dropdown with no items cannot be
+                      // opened, and this one sits above the button that
+                      // finishes setup.
+                      final rows =
+                          ref
+                              .watch(organizationEntityTypesProvider)
+                              .valueOrNull;
+                      final offered = rows == null
+                          ? entityTypes
+                          : {for (final e in rows) e.code: e.display};
+                      final choices = offered.isEmpty ? entityTypes : offered;
+                      // What registration recorded, even where it is no
+                      // longer offered. A dropdown whose `value` is not
+                      // among its `items` throws.
+                      final extra = !choices.containsKey(_entityType);
+                      return DropdownButtonFormField<String>(
+                        // Same reason as the sign-up form's copy of
+                        // this dropdown: the longest label overflows a
+                        // narrow column rather than ellipsising, and a
+                        // phone is narrow.
+                        isExpanded: true,
+                        value: _entityType,
+                        decoration: const InputDecoration(
+                          labelText: 'Entity type',
+                        ),
+                        items: [
+                          if (extra)
+                            DropdownMenuItem(
+                              value: _entityType,
+                              child: Text(_entityType),
+                            ),
+                          for (final e in choices.entries)
+                            DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ),
+                        ],
+                        onChanged: (v) => setState(
+                          () => _entityType = v ?? defaultEntityType,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 14),
                 ],

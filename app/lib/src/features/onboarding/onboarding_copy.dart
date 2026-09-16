@@ -222,6 +222,30 @@ const entityTypes = <String, String>{
 /// The one a form starts on.
 const defaultEntityType = 'sdn_bhd';
 
+/// The kinds of business to offer, given what the server sent.
+///
+/// Public and pure, and the reason this is a function rather than a
+/// `??`: `0607` made the list a table, and the two screens that draw it
+/// have to keep working against a deployment whose `signup_reference()`
+/// predates that. An empty or absent list is the constant above; a list
+/// that came back is used in the order it came back in, which is the
+/// table's own `sort_order`.
+///
+/// Rows with no `code` are dropped rather than drawn as a blank line:
+/// a dropdown item whose value is the empty string is one somebody can
+/// select, and it would be saved.
+Map<String, String> signupEntityTypes(List<Map<String, dynamic>>? rows) {
+  if (rows == null || rows.isEmpty) return entityTypes;
+  final out = <String, String>{};
+  for (final row in rows) {
+    final code = '${row['code'] ?? ''}'.trim();
+    if (code.isEmpty) continue;
+    final label = '${row['label'] ?? ''}'.trim();
+    out[code] = label.isEmpty ? code : label;
+  }
+  return out.isEmpty ? entityTypes : out;
+}
+
 /// The number the register issued BEFORE 2019, which half the country
 /// still has on file.
 ///

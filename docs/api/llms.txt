@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0606` (the highest applied migration).
+Schema version `0607` (the highest applied migration).
 671 functions and 333 readable tables, of which
 255 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**530 of 671 functions carry a `comment on
+**531 of 671 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -482,7 +482,7 @@ Not gated on any module.
 - `create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` *(writes)* — Starts an accounting practice and makes the caller a partner in it -- without that, nobody could do anything with it afterwards.
 - `create_fiscal_year(p_org_id uuid, p_start_date date)` *(writes)* — Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the company's own year-end day.
 - `create_item_variants(p_parent uuid, p_axes jsonb)` *(writes)* — Expands a style into its variants across the axes given -- size and colour and the like -- returning a row per combination saying whether it was created or already existed, so re-running after adding one axis value is safe.
-- `create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` *(writes)* — Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner.
+- `create_organization(p_name text, p_slug text, p_entity_type text, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` *(writes)* — Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner.
 - `create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` *(writes)* — Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed.
 - `create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` *(writes)* — Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended.
 - `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` *(writes)* — Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this.
@@ -528,7 +528,7 @@ Not gated on any module.
 - `firm_team(p_firm_id uuid)`
 - `fs_audit_exemption(p_filing_id uuid)`
 - `fs_balance_check(p_filing_id uuid)`
-- `fs_deadlines(p_filing_id uuid)`
+- `fs_deadlines(p_filing_id uuid)` — CA 2016 s.258/s.259, or s.340/s.259 for a public company.
 - `fs_export(p_filing_id uuid)`
 - `fs_freeze(p_filing_id uuid)` *(writes)* — Fixes a set of financial statements as the reviewed version, and returns how many figures were captured.
 - `fs_lodge(p_filing_id uuid, p_reference text, p_lodged_on date)` *(writes)* — Records that the accounts have been lodged at SSM through MBRS, with the reference mPortal gave back.
@@ -625,7 +625,7 @@ Not gated on any module.
 - `platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` *(writes)* — Publishes a statutory rate table -- EPF, SOCSO, EIS or PCB -- that EVERY company's payroll is then computed from.
 - `platform_reservations()`
 - `platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` *(writes)* — Holds a name on our domain -- for a company, for the platform's own use, or parked so nobody else takes it.
-- `platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean)` *(writes)* — Adds or amends a kind of business.
+- `platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean, p_is_individual boolean)` *(writes)* — Adds or amends a kind of business.
 - `platform_save_landing_app_link(p_store_code text, p_label text, p_url text, p_badge_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits a download button -- App Store, Play Store -- on the landing page.
 - `platform_save_landing_logo(p_id uuid, p_name text, p_logo_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits a customer logo on the landing page.
 - `platform_save_landing_page(p_patch jsonb)` *(writes)* — Patches the landing page: only the fields present in the patch are changed.
@@ -781,7 +781,7 @@ Not gated on any module.
 - `share_customer_portal(p_contact_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues one customer a link to their whole account and emails it.
 - `share_document(p_document_id uuid, p_valid_days integer, p_email text)` *(writes)* — Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN — the only time it can be read.
 - `shared_payment_options(p_token text)` — Which acquirers a customer can pay a shared invoice through: the gateway code and its name, and nothing else.
-- `signup_reference()` — The dialling codes, salutations and Malaysian states the registration form offers, readable with no session because that form has none.
+- `signup_reference()` — Everything the registration form needs before anybody is signed in: whether registration is open and what to say if not, the dialling codes, the salutations, the Malaysian states, and the kinds of business a company may be.
 - `site_pages()` — The published pages of the marketing site, plus `signin`, `signup` and `login` whether or not they are published.
 - `sst_return_lines(p_org_id uuid, p_period_end date)`
 - `sst_taxable_periods(p_org_id uuid, p_from date, p_to date)`

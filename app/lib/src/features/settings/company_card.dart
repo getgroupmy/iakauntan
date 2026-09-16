@@ -7,12 +7,34 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/entity_types_repository.dart';
 import '../../data/models.dart';
 import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 import 'msic_picker.dart';
 
 bool _present(String? s) => s != null && s.trim().isNotEmpty;
+
+/// What to call a kind of business, given the list and the code on the
+/// company.
+///
+/// Public and pure. Three cases, and the third is the one that matters:
+/// the list has loaded and the code is on it, so its own label wins;
+/// the list has not loaded yet, so `Fmt.label` guesses from the code;
+/// and the code is not on the list at all, which after `0607` means a
+/// kind that was retired and then removed -- the foreign key stops it
+/// from being removed while a company holds it, but a company read out
+/// of a cache can still name one. Showing the raw code is right there:
+/// it is what is actually stored, and inventing a label for it would
+/// hide that.
+String entityTypeLabel(List<EntityType>? types, String code) {
+  if (code.trim().isEmpty) return 'Not set';
+  if (types == null) return Fmt.label(code);
+  for (final t in types) {
+    if (t.code == code) return t.display;
+  }
+  return code;
+}
 
 /// The parts of an address that exist, on one line. Empty is "Not set"
 /// rather than a run of commas, because a company with no address needs
@@ -62,7 +84,18 @@ class CompanyCard extends ConsumerWidget {
             _StationeryRow(org: org),
             const Divider(height: Space.xl),
             FieldRow(label: 'Name', value: org.name),
-            FieldRow(label: 'Entity type', value: Fmt.label(org.entityType)),
+            FieldRow(
+              label: 'Entity type',
+              // The table's own name for the kind, where the list has
+              // loaded. `Fmt.label` turns `sole_proprietor` into
+              // "Sole proprietor", which is right for the ten that
+              // shipped and wrong for a kind whose name is not its
+              // code -- "LLP (PLT)" reads as "Llp plt".
+              value: entityTypeLabel(
+                ref.watch(allEntityTypesProvider).valueOrNull,
+                org.entityType,
+              ),
+            ),
             FieldRow(
               label: 'SSM registration',
               value: org.registrationNo ?? 'Not set',
@@ -164,19 +197,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
   late String _rounding;
   bool _saving = false;
 
-  static const _entityTypes = {
-    'sdn_bhd': 'Private limited (Sdn Bhd)',
-    'bhd': 'Public limited (Berhad)',
-    'llp': 'Limited liability partnership (PLT)',
-    'enterprise': 'Enterprise',
-    'sole_proprietor': 'Sole proprietor',
-    'partnership': 'Partnership',
-    'association': 'Association',
-    'government': 'Government',
-    'individual': 'Individual',
-    'other': 'Other',
-  };
-
   static const _roundings = {
     'none': 'None',
     'nearest_5cent': 'Nearest 5 sen',
@@ -192,9 +212,13 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _tin.text = o.tin ?? '';
     _msic.text = o.msicCode ?? '';
     _currency.text = o.baseCurrency;
-    _entityType = _entityTypes.containsKey(o.entityType)
-        ? o.entityType
-        : 'other';
+    // Verbatim, and deliberately. This used to fall back to `other`
+    // when the code was not in a hardcoded map, which was harmless
+    // while the map WAS the enum and could not go stale. After `0607`
+    // the list is a table an administrator adds to, so the same line
+    // would quietly refile a company on a new kind as `other` the next
+    // time anybody opened this dialog and pressed Save.
+    _entityType = o.entityType;
     _rounding = _roundings.containsKey(o.roundingMethod)
         ? o.roundingMethod
         : 'none';
@@ -333,17 +357,51 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 decoration: const InputDecoration(labelText: 'Name'),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: _entityType,
-                decoration: const InputDecoration(labelText: 'Entity type'),
-                items: [
-                  for (final e in _entityTypes.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _entityType = v!),
+              Builder(
+                builder: (context) {
+                  final offered =
+                      ref
+                          .watch(organizationEntityTypesProvider)
+                          .valueOrNull ??
+                      const <EntityType>[];
+                  // The kind this company is already filed as, even
+                  // where it is switched off or not offered to
+                  // companies. A dropdown whose `value` is not among
+                  // its `items` throws, and the company that would
+                  // throw is exactly the one somebody opened this
+                  // dialog to correct.
+                  final codes = [for (final e in offered) e.code];
+                  final extra = !codes.contains(_entityType);
+                  return DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: offered.isEmpty && !extra ? null : _entityType,
+                    decoration: const InputDecoration(
+                      labelText: 'Entity type',
+                    ),
+                    items: [
+                      if (extra)
+                        DropdownMenuItem(
+                          value: _entityType,
+                          child: Text(
+                            entityTypeLabel(
+                              ref
+                                  .watch(allEntityTypesProvider)
+                                  .valueOrNull,
+                              _entityType,
+                            ),
+                          ),
+                        ),
+                      for (final e in offered)
+                        DropdownMenuItem(
+                          value: e.code,
+                          child: Text(e.display),
+                        ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _entityType = v!),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               TextField(

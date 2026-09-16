@@ -19,6 +19,7 @@ class EntityType {
     this.isPublicCompany = false,
     this.forContacts = true,
     this.forOrganizations = true,
+    this.isIndividual = false,
     this.isBuiltin = false,
   });
 
@@ -36,17 +37,24 @@ class EntityType {
   /// no longer offered is still filed under it.
   final bool isActive;
 
-  /// The MBRS answer. `0172` decides whether a company files its
-  /// accounts as a public company, and until `0605` it did so by
+  /// The MBRS answer. `fs_deadlines` decides whether a company files
+  /// its accounts as a public company, and until `0607` it did so by
   /// comparing against the string `bhd`. A new kind has to say.
   final bool isPublicCompany;
 
   final bool forContacts;
   final bool forOrganizations;
 
+  /// Whether this kind is a natural person. LHDN will not accept a
+  /// business registration number for one, so `0607` files them under
+  /// NRIC or PASSPORT instead — which until then was a trigger
+  /// comparing against the string `individual`.
+  final bool isIndividual;
+
   /// One of the ten this shipped with. They may be renamed and retired
-  /// but not deleted: `organizations.entity_type` is still the enum and
-  /// still holds these values.
+  /// but not deleted: companies and contacts are still filed as them,
+  /// and the foreign keys `0605` and `0607` added would refuse it
+  /// anyway.
   final bool isBuiltin;
 
   /// What to show. The Malay label where there is one and the interface
@@ -64,6 +72,7 @@ class EntityType {
     isPublicCompany: j['is_public_company'] == true,
     forContacts: j['for_contacts'] != false,
     forOrganizations: j['for_organizations'] != false,
+    isIndividual: j['is_individual'] == true,
     isBuiltin: j['is_builtin'] == true,
   );
 }
@@ -83,7 +92,8 @@ class EntityTypesRepo {
         .from('entity_types')
         .select(
           'code, label, label_my, sort_order, is_active, '
-          'is_public_company, for_contacts, for_organizations, is_builtin',
+          'is_public_company, for_contacts, for_organizations, '
+          'is_individual, is_builtin',
         )
         // Said out loud, because supabase-js defaults ascending to true
         // and postgrest-dart defaults it to false: an order with no
@@ -104,6 +114,7 @@ class EntityTypesRepo {
     bool? isPublicCompany,
     bool? forContacts,
     bool? forOrganizations,
+    bool? isIndividual,
   }) async {
     final out = await client.rpc(
       'platform_save_entity_type',
@@ -116,6 +127,7 @@ class EntityTypesRepo {
         if (isPublicCompany != null) 'p_is_public_company': isPublicCompany,
         if (forContacts != null) 'p_for_contacts': forContacts,
         if (forOrganizations != null) 'p_for_organizations': forOrganizations,
+        if (isIndividual != null) 'p_is_individual': isIndividual,
       },
     );
     return '$out';
@@ -148,4 +160,18 @@ final contactEntityTypesProvider = FutureProvider<List<EntityType>>((
 ) async {
   final all = await ref.watch(allEntityTypesProvider.future);
   return all.where((e) => e.isActive && e.forContacts).toList();
+});
+
+/// The kinds a COMPANY may be, switched on, in the order they should
+/// appear.
+///
+/// Not the same list as [contactEntityTypesProvider], and deliberately
+/// so: `individual` is `for_organizations = false`, because a company
+/// registering itself is not a person. A person is filed as one by
+/// answering "Myself", which is a different question.
+final organizationEntityTypesProvider = FutureProvider<List<EntityType>>((
+  ref,
+) async {
+  final all = await ref.watch(allEntityTypesProvider.future);
+  return all.where((e) => e.isActive && e.forOrganizations).toList();
 });

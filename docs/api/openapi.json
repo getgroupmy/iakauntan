@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0606",
+    "version": "0607",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -28763,7 +28763,7 @@
       "post": {
         "operationId": "create_organization",
         "summary": "Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal\u2026",
-        "description": "Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner. Refuses a second company without the Multi-Company module, naming the way out. `p_old_registration_no` is optional and always will be -- a company incorporated after 2019 has never had one.\n\n`public.create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` Writes. Requires a signed-in user.",
+        "description": "Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner. Refuses a second company without the Multi-Company module, naming the way out. `p_old_registration_no` is optional and always will be -- a company incorporated after 2019 has never had one. `p_entity_type` became text in 0607 so a kind of business added in the console can actually be chosen.\n\n`public.create_organization(p_name text, p_slug text, p_entity_type text, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28785,19 +28785,7 @@
                     "type": "string"
                   },
                   "p_entity_type": {
-                    "type": "string",
-                    "enum": [
-                      "sdn_bhd",
-                      "bhd",
-                      "enterprise",
-                      "partnership",
-                      "llp",
-                      "sole_proprietor",
-                      "association",
-                      "government",
-                      "individual",
-                      "other"
-                    ]
+                    "type": "string"
                   },
                   "p_registration_no": {
                     "type": "string"
@@ -33163,8 +33151,8 @@
     "/rpc/fs_deadlines": {
       "post": {
         "operationId": "fs_deadlines",
-        "summary": "Fs deadlines",
-        "description": "`public.fs_deadlines(p_filing_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "CA 2016 s.258/s.259, or s.340/s.259 for a public company",
+        "description": "CA 2016 s.258/s.259, or s.340/s.259 for a public company. Which of the two is decided by `entity_types.is_public_company` from 0607, not by comparing the company's kind against the string 'bhd'.\n\n`public.fs_deadlines(p_filing_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41017,7 +41005,7 @@
       "post": {
         "operationId": "platform_delete_entity_type",
         "summary": "Removes a kind of business that nothing is filed as",
-        "description": "Removes a kind of business that nothing is filed as. Refuses a built-in one and refuses one in use, naming how many \u2014 both are cases where switching it off is what was wanted.\n\n`public.platform_delete_entity_type(p_code text)` Writes. Requires a signed-in user.",
+        "description": "Removes a kind of business that nothing is filed as. Refuses a built-in one, and refuses one that any contact or any company is filed as, naming how many \u2014 all three are cases where switching it off is what was wanted. 0607 added the company half.\n\n`public.platform_delete_entity_type(p_code text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41782,19 +41770,7 @@
                         "type": "string"
                       },
                       "entity_type": {
-                        "type": "string",
-                        "enum": [
-                          "sdn_bhd",
-                          "bhd",
-                          "enterprise",
-                          "partnership",
-                          "llp",
-                          "sole_proprietor",
-                          "association",
-                          "government",
-                          "individual",
-                          "other"
-                        ]
+                        "type": "string"
                       },
                       "registration_no": {
                         "type": "string"
@@ -42247,7 +42223,7 @@
       "post": {
         "operationId": "platform_save_entity_type",
         "summary": "Adds or amends a kind of business",
-        "description": "Adds or amends a kind of business. Platform administrators only. An absent argument means leave it alone, so correcting a label cannot switch a kind off. `p_is_public_company` is the MBRS answer and a new kind must state it; the default is the safe one.\n\n`public.platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean)` Writes. Requires a signed-in user.",
+        "description": "Adds or amends a kind of business. An absent argument means \"leave it alone\", so correcting a label cannot switch a kind off. 0607 added `p_is_individual` and the rule that a kind cannot be both a person and a public company.\n\n`public.platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean, p_is_individual boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42285,6 +42261,9 @@
                     "type": "boolean"
                   },
                   "p_for_organizations": {
+                    "type": "boolean"
+                  },
+                  "p_is_individual": {
                     "type": "boolean"
                   }
                 },
@@ -61629,8 +61608,8 @@
     "/rpc/signup_reference": {
       "post": {
         "operationId": "signup_reference",
-        "summary": "The dialling codes, salutations and Malaysian states the registration form offers, readable with no session\u2026",
-        "description": "The dialling codes, salutations and Malaysian states the registration form offers, readable with no session because that form has none. 0554, 0555.\n\n`public.signup_reference()` Reads only. Reachable without signing in.",
+        "summary": "Everything the registration form needs before anybody is signed in: whether registration is open and what to\u2026",
+        "description": "Everything the registration form needs before anybody is signed in: whether registration is open and what to say if not, the dialling codes, the salutations, the Malaysian states, and the kinds of business a company may be. One call, answered as anon, all of it public. 0607 added the kinds.\n\n`public.signup_reference()` Reads only. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -76926,6 +76905,9 @@
           "updated_by": {
             "type": "string",
             "format": "uuid"
+          },
+          "is_individual": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -81837,19 +81819,7 @@
             "type": "string"
           },
           "entity_type": {
-            "type": "string",
-            "enum": [
-              "sdn_bhd",
-              "bhd",
-              "enterprise",
-              "partnership",
-              "llp",
-              "sole_proprietor",
-              "association",
-              "government",
-              "individual",
-              "other"
-            ]
+            "type": "string"
           },
           "registration_no": {
             "type": "string"

@@ -423,6 +423,7 @@ jobs:
                    supabase/tests/ssm_register_lookup.sql \
                    supabase/tests/ssm_api_tables.sql \
                    supabase/tests/entity_types.sql \
+                   supabase/tests/entity_types_for_companies.sql \
                    supabase/tests/search_registers.sql \
                    supabase/tests/recurring_template_carries_the_document.sql \
                    supabase/tests/transfer_carries_the_price_agreed.sql \

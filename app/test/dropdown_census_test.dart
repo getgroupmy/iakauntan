@@ -36,11 +36,19 @@ const dropdownCensus = <String, int>{
   'features/admin/promotions_admin.dart': 1,
   'features/admin/statutory_rates_admin.dart': 3,
   'features/approvals/rule_editor.dart': 4,
-  // The entity type a business chooses at REGISTRATION -- the same
-  // eight `app.entity_type` labels the setup form offers, out of the
-  // one map in `onboarding_copy.dart`. Fixed by an enum in the
-  // database: a ninth would arrive by migration, and a migration that
-  // added one would have to come here anyway.
+  // The entity type a business chooses at REGISTRATION. This was
+  // frozen here on the grounds that `app.entity_type` was an enum and
+  // a ninth member would arrive by migration -- which stopped being
+  // true at `0605`, when the list became a table a platform
+  // administrator adds to, and stopped being true for COMPANIES at
+  // `0607`, which is when this comment was rewritten.
+  //
+  // It stays a dropdown, and the reason is now about the list rather
+  // than about the schema: there are ten kinds of business in Malaysia
+  // that anybody registers under, an eleventh is a rare event handled
+  // by one person in a console, and nobody has ever needed to SEARCH
+  // for "Sdn Bhd". If that list ever reaches the size where somebody
+  // would, this entry comes off and a `SearchablePicker` goes in.
   'features/auth/sign_in_screen.dart': 1,
   'features/banking/new_bank_account_dialog.dart': 1,
   'features/collections/log_attempt_sheet.dart': 2,

@@ -59,6 +59,10 @@ void main() {
           states: const [
             {'code': '10', 'name': 'Selangor'},
           ],
+          entityTypes: const [
+            {'code': 'sdn_bhd', 'label': 'Sdn Bhd'},
+            {'code': 'bhd', 'label': 'Berhad'},
+          ],
           signupsOpen: true,
           closedMessage: null,
         ),

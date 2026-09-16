@@ -35,12 +35,14 @@ class _RecordingRepo extends EntityTypesRepo {
     bool? isPublicCompany,
     bool? forContacts,
     bool? forOrganizations,
+    bool? isIndividual,
   }) async {
     saved.add({
       'code': code,
       'label': label,
       'sort_order': sortOrder,
       'is_public_company': isPublicCompany,
+      'is_individual': isIndividual,
       'is_active': isActive,
     });
     return code;

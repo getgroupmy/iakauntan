@@ -12,16 +12,27 @@ import '../../data/entity_types_repository.dart';
 /// page could exist: an eleventh kind used to need a migration and a
 /// deploy.
 ///
-/// ## The one that is not cosmetic
+/// ## The two that are not cosmetic
 ///
-/// Everything on this page is a label and an order, except
-/// `is_public_company`. `0172` decides whether a company files its
-/// accounts to MBRS as a public company, and until `0605` it did so by
-/// comparing the entity type against the string `bhd`. A kind added
-/// here has to answer that question, and the answer defaults to no —
-/// so the way to get it wrong is to say a private company is public,
-/// which is visible, rather than to forget and have MBRS quietly file
-/// the wrong return.
+/// Everything on this page is a label and an order, except two
+/// switches, and both replaced a string comparison against a single
+/// member of the old enum:
+///
+///   * **A public company.** `fs_deadlines` decides whether a company
+///     files its accounts to MBRS under CA 2016 s.340 or s.258, and
+///     until `0607` it did so by comparing the entity type against the
+///     string `bhd`.
+///   * **A person.** LHDN will not take a business registration number
+///     for one, so a company filed as a person is identified by NRIC
+///     or passport instead. Until `0607` that was a trigger comparing
+///     against the string `individual`.
+///
+/// Both default to no, so the way to get either wrong is to say
+/// something that is visible on this page rather than to forget and
+/// have a statutory filing quietly go out under the wrong rule.
+///
+/// They are mutually exclusive, and the database says so: a kind that
+/// is a person has no AGM, and a kind with an AGM has no NRIC.
 class EntityTypesAdminTab extends ConsumerWidget {
   const EntityTypesAdminTab({super.key});
 
@@ -144,17 +155,20 @@ class _TypeRow extends StatelessWidget {
         width: 44,
         child: Text('${type.sortOrder}', style: muted),
       ),
-      title: Row(
+      // A Wrap rather than a Row: `0607` added a third chip, and a
+      // name beside "off", "public company" and "a person" is wider
+      // than a 360px phone. A Row would have put the last of them off
+      // the right edge, which is what `check_narrow_rows.py` said.
+      title: Wrap(
+        spacing: Space.sm,
+        runSpacing: Space.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Flexible(child: Text(type.label)),
-          if (!type.isActive) ...[
-            const SizedBox(width: Space.sm),
-            const StatusChip('off', compact: true),
-          ],
-          if (type.isPublicCompany) ...[
-            const SizedBox(width: Space.sm),
+          Text(type.label),
+          if (!type.isActive) const StatusChip('off', compact: true),
+          if (type.isPublicCompany)
             const StatusChip('public company', compact: true),
-          ],
+          if (type.isIndividual) const StatusChip('a person', compact: true),
         ],
       ),
       subtitle: Text(
@@ -209,6 +223,7 @@ class _EntityTypeDialogState extends ConsumerState<_EntityTypeDialog> {
   );
   late bool _active = widget.existing?.isActive ?? true;
   late bool _public = widget.existing?.isPublicCompany ?? false;
+  late bool _individual = widget.existing?.isIndividual ?? false;
   late bool _forContacts = widget.existing?.forContacts ?? true;
   late bool _forOrgs = widget.existing?.forOrganizations ?? true;
   bool _busy = false;
@@ -263,6 +278,7 @@ class _EntityTypeDialogState extends ConsumerState<_EntityTypeDialog> {
             isPublicCompany: _public,
             forContacts: _forContacts,
             forOrganizations: _forOrgs,
+            isIndividual: _individual,
           ),
     );
     if (!mounted) return;
@@ -357,12 +373,43 @@ class _EntityTypeDialogState extends ConsumerState<_EntityTypeDialog> {
                 key: const ValueKey('entity-type-public'),
                 contentPadding: EdgeInsets.zero,
                 value: _public,
-                onChanged: _busy ? null : (v) => setState(() => _public = v),
+                // Turning one on turns the other off rather than
+                // leaving both on for the database to refuse at the end
+                // of the form. The refusal still exists -- an RPC is
+                // reachable without this page -- but nobody reaches it
+                // from here.
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                        _public = v;
+                        if (v) _individual = false;
+                      }),
                 title: const Text('A public company'),
                 subtitle: Text(
-                  'Decides how its accounts are filed to MBRS. Berhad is '
-                  'the one this shipped with. Leave it off unless the kind '
-                  'really is a public company.',
+                  'Decides how its accounts are filed to MBRS — laid at '
+                  'an AGM under s.340 rather than circulated to members '
+                  'under s.258. Berhad is the one this shipped with. '
+                  'Leave it off unless the kind really is a public '
+                  'company.',
+                  style: muted,
+                ),
+              ),
+              SwitchListTile(
+                key: const ValueKey('entity-type-individual'),
+                contentPadding: EdgeInsets.zero,
+                value: _individual,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                        _individual = v;
+                        if (v) _public = false;
+                      }),
+                title: const Text('A person'),
+                subtitle: Text(
+                  'A natural person rather than a business. MyInvois '
+                  'rejects a business registration number for one, so '
+                  'they are identified by NRIC — or by passport outside '
+                  'Malaysia — instead.',
                   style: muted,
                 ),
               ),

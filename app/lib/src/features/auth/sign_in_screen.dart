@@ -1559,25 +1559,51 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                           : null,
                     ),
                     const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
-                      key: const ValueKey('signup-entity-type'),
-                      // Without this the longest label -- "Limited
-                      // Liability Partnership" -- is laid out at its
-                      // natural width and overflows the sign-up
-                      // column, which in a release web build is not a
-                      // striped bar but a line of text running off the
-                      // card. It ellipsises instead.
-                      isExpanded: true,
-                      value: _entityType,
-                      decoration: const InputDecoration(
-                        labelText: 'Entity type',
-                      ),
-                      items: [
-                        for (final e in entityTypes.entries)
-                          DropdownMenuItem(value: e.key, child: Text(e.value)),
-                      ],
-                      onChanged: (v) =>
-                          setState(() => _entityType = v ?? defaultEntityType),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        // `0607`. The kinds of business are a table an
+                        // administrator adds to, and they reach this
+                        // screen through `signup_reference()` because
+                        // nobody here is signed in.
+                        //
+                        // The constant is the fallback rather than the
+                        // source: a deployment whose function predates
+                        // 0607 answers without the list, and a sign-up
+                        // form that cannot offer an entity type is a
+                        // sign-up form nobody can finish.
+                        final offered = signupEntityTypes(
+                          ref
+                              .watch(signupReferenceProvider)
+                              .valueOrNull
+                              ?.entityTypes,
+                        );
+                        return DropdownButtonFormField<String>(
+                          key: const ValueKey('signup-entity-type'),
+                          // Without this the longest label -- "Limited
+                          // Liability Partnership" -- is laid out at
+                          // its natural width and overflows the sign-up
+                          // column, which in a release web build is not
+                          // a striped bar but a line of text running
+                          // off the card. It ellipsises instead.
+                          isExpanded: true,
+                          value: offered.containsKey(_entityType)
+                              ? _entityType
+                              : offered.keys.first,
+                          decoration: const InputDecoration(
+                            labelText: 'Entity type',
+                          ),
+                          items: [
+                            for (final e in offered.entries)
+                              DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value),
+                              ),
+                          ],
+                          onChanged: (v) => setState(
+                            () => _entityType = v ?? offered.keys.first,
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 14),
                   ],

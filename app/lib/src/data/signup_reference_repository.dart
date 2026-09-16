@@ -23,10 +23,19 @@ import '../core/providers.dart';
 /// malformed, or a deployment whose function predates `0563`, must not
 /// close registration by accident — the database is what enforces the
 /// setting, and this is only what saves somebody the typing.
+///
+/// `0607` adds the kinds of business. That list was an enum until
+/// `0605`, so the form had it hardcoded; it is a table an administrator
+/// adds to now, and `entity_types` is granted to `authenticated`, which
+/// nobody on this screen is. It comes through here for the same reason
+/// the salutations do — and empty where it does not, so a deployment
+/// whose function predates this falls back to the constant rather than
+/// drawing an empty dropdown.
 final signupReferenceProvider =
     FutureProvider<({List<Map<String, dynamic>> dialCodes,
                     List<Map<String, dynamic>> salutations,
                     List<Map<String, dynamic>> states,
+                    List<Map<String, dynamic>> entityTypes,
                     bool signupsOpen,
                     String? closedMessage})>((ref) async {
   final data = await ref.read(supabaseProvider).rpc('signup_reference');
@@ -39,6 +48,7 @@ final signupReferenceProvider =
     dialCodes: rows(map['dial_codes']),
     salutations: rows(map['salutations']),
     states: rows(map['states']),
+    entityTypes: rows(map['entity_types']),
     signupsOpen: map['signups_open'] != false,
     closedMessage: map['signups_closed_message'] as String?,
   );
