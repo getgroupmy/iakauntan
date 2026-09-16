@@ -337,10 +337,18 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
       });
 
   double get _tax {
-    final codes = ref.read(taxCodesProvider).value ?? const <TaxCode>[];
+    // `valueOrNull`: `AsyncError.value` throws, so the `??` beside it
+    // never ran and a failed tax-code load took this dialog down from
+    // inside `build`. See scripts/check_async_value.py.
+    final codes = ref.read(taxCodesProvider).valueOrNull ?? const <TaxCode>[];
     final rate =
         codes.where((t) => t.id == _taxCodeId).firstOrNull?.rate ?? 0;
-    return ((_net * rate / 100) * 100).roundToDouble() / 100;
+    // `Fmt.taxOn`, not the arithmetic spelled out here, which was a
+    // cent low whenever the answer sat exactly on a half-cent -- and
+    // this figure is STORED: `recordExpense` inserts it as
+    // `tax_amount`, and `0286` only checks that the total agrees with
+    // it, so nothing downstream would have noticed.
+    return Fmt.taxOn(_net, rate);
   }
 
   Future<void> _save() async {

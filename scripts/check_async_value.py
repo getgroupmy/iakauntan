@@ -27,7 +27,7 @@ the author already meant null.
 
 ## A ratchet, not a rule
 
-Sixty of these are left and they are not all dangerous -- a screen
+Sixty-five of these are left and they are not all dangerous -- a screen
 where the only reachable failure is one the router already guards is
 fine as it is. But each one is a place where a failed provider takes a
 screen down instead of falling back, and the number should go DOWN. So
@@ -51,7 +51,11 @@ from pathlib import Path
 # error on a screen. The other three are `_available`, `_held` and the
 # transfer dialog's matter list, all `.value ?? const []` in or under a
 # `build`.
-BUDGET = 66
+#
+# 66 to 65: `_tax` in `expenses_screen.dart`, which is read from
+# `build` -- so a failed tax-code load did not draw an expense dialog
+# with no tax figure on it, it drew an error instead of the dialog.
+BUDGET = 65
 
 LIB = Path(__file__).resolve().parent.parent / 'app' / 'lib'
 
