@@ -390,7 +390,11 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     postcode: _nullIfEmpty(_c('postcode').text),
     stateCode: _stateCode,
     entityType: _entityType,
-    creditLimit: double.tryParse(_c('creditLimit').text) ?? 0,
+    // `?? 0` and not a guess: `_creditLimitProblem` has already
+    // refused anything `typedNumber` will not read, so the only text
+    // that reaches here and comes back null is an empty field -- which
+    // is the same no-limit the helper text offers.
+    creditLimit: Fmt.typedNumber(_c('creditLimit').text) ?? 0,
     creditHold: _creditHold,
     receivableAccountId: _receivableAccountId,
     payableAccountId: _payableAccountId,
@@ -399,6 +403,20 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   );
 
   static String? _nullIfEmpty(String v) => v.trim().isEmpty ? null : v.trim();
+
+  /// What is wrong with the credit limit as typed, if anything.
+  ///
+  /// Empty is allowed and means the same as zero, which is what the
+  /// field's helper text promises. Everything else has to be a figure,
+  /// because the alternative -- the old `?? 0` -- turned a mistyped
+  /// limit into no limit at all.
+  static String? _creditLimitProblem(String raw) {
+    if (raw.trim().isEmpty) return null;
+    final value = Fmt.typedNumber(raw);
+    if (value == null) return 'Enter an amount, or leave it empty for none.';
+    if (value < 0) return 'A credit limit cannot be below zero.';
+    return null;
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -933,11 +951,30 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
                       const SizedBox(height: 24),
                       const SectionHeader('Commercial terms'),
+                      // Validated, and that is not a nicety here.
+                      //
+                      // This used to be `double.tryParse(text) ?? 0`
+                      // with nothing refusing anything, and zero is the
+                      // OFF position on this particular field: the
+                      // helper text below says so, and `0467` agrees --
+                      // `if coalesce(v_limit, 0) <= 0 then return new`.
+                      //
+                      // So a limit typed as "10,000", which is how the
+                      // figure is written, saved as nought and the
+                      // customer somebody was trying to cap came out
+                      // with NO limit at all. No error, no warning; the
+                      // field only admitted to it on the next load, as
+                      // "0.00".
+                      //
+                      // It reads the comma now, and refuses what it
+                      // cannot read rather than substituting for it.
                       TextFormField(
                         controller: _c('creditLimit'),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
+                        validator: (v) => _creditLimitProblem(v ?? ''),
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
                         decoration: const InputDecoration(
                           labelText: 'Credit limit',
                           prefixText: 'RM ',

@@ -197,4 +197,162 @@ void main() {
       expect(rateTableProblem(gapped), contains('gap or overlap'));
     });
   });
+
+  group('a box that is not a number', () {
+    // The four boxes used to read `double.tryParse(v) ?? 0`, so text
+    // the parser could not read became a nought. Three of those noughts
+    // are caught by the arithmetic above -- a `From` of zero on a band
+    // that is not the lowest overlaps the one below it, a `To` that
+    // reads as empty is an open-ended band in the middle.
+    //
+    // The RATE boxes have nothing behind them. Zero per cent is a real
+    // band: the lowest EPF band contributes nothing, and SOCSO's second
+    // category takes nothing from the employee. So no later check can
+    // tell a deliberate nought from "11.5%" with the sign left on, and
+    // the schedule publishes, and that wage band deducts nothing on
+    // every payslip until somebody audits it.
+
+    test('an unreadable employee rate stops the schedule', () {
+      final rates = wholeSchedule();
+      rates.first.unreadable.add('Employee %');
+
+      expect(rateTableProblem(rates), contains('Employee %'));
+      expect(rateTableProblem(rates), contains('not a number'));
+    });
+
+    test('and so does an unreadable employer rate', () {
+      final rates = wholeSchedule();
+      rates.last.unreadable.add('Employer %');
+
+      expect(rateTableProblem(rates), contains('Employer %'));
+    });
+
+    test('it is refused before the arithmetic, not after', () {
+      // A band with an unreadable box usually has bad numbers too --
+      // `_read` leaves the previous value in place, so the band no
+      // longer lines up with its neighbours. If the contiguity check
+      // ran first the message would be about a gap, which tells the
+      // person nothing about the box they are looking at.
+      final rates = [
+        band(from: 0, to: 5000),
+        band(from: 9999),
+      ];
+      rates.last.unreadable.add('From');
+
+      final problem = rateTableProblem(rates);
+      expect(problem, contains('From'));
+      expect(problem, isNot(contains('gap or overlap')));
+    });
+
+    test('both boxes are named when both are wrong', () {
+      final rates = wholeSchedule();
+      // Added in the order the boxes sit in the row, which is the order
+      // somebody types them. A set keeps insertion order, so a version
+      // that reported them unsorted would look correct here unless the
+      // two orders differ -- they do, this way round.
+      rates.first.unreadable.add('Employee %');
+      rates.first.unreadable.add('Employer %');
+
+      final problem = rateTableProblem(rates)!;
+      expect(problem, contains('Employee %'));
+      expect(problem, contains('Employer %'));
+      // Sorted, so the same two bad boxes always produce the same
+      // sentence rather than one that moves between rebuilds.
+      expect(
+        problem.indexOf('Employee %'),
+        lessThan(problem.indexOf('Employer %')),
+      );
+    });
+
+    test('a schedule with every box read is not stopped by this', () {
+      // The control. Without it every assertion above passes against a
+      // function that refuses everything.
+      final rates = wholeSchedule();
+      for (final r in rates) {
+        expect(r.unreadable, isEmpty);
+      }
+
+      expect(rateTableProblem(rates), isNull);
+    });
+
+    group('as the box is typed into', () {
+      /// The four boxes, each with what an empty one means.
+      double? apply(RateDraft rate, String field, String raw) {
+        double? seen;
+        var called = false;
+        readRateField(rate, field, raw, (n) {
+          seen = n;
+          called = true;
+        });
+        return called ? seen : double.nan;
+      }
+
+      test('a figure is read and the box is clean', () {
+        final rate = band();
+        expect(apply(rate, 'Employee %', '11.5'), 11.5);
+        expect(rate.unreadable, isEmpty);
+      });
+
+      test('the per-cent sign the label asks for does not break it', () {
+        // The box is labelled "Employee %". Typing the sign back into
+        // it is the obvious thing to do, and it used to publish a
+        // schedule that deducted nothing from that band.
+        final rate = band();
+        expect(apply(rate, 'Employee %', '11.5%'), 11.5);
+        expect(rate.unreadable, isEmpty);
+      });
+
+      test('text that is not a figure is refused, not zeroed', () {
+        final rate = band(employee: 0.11);
+        final result = apply(rate, 'Employee %', '11,5');
+
+        // `apply` was never called: nothing was written.
+        expect(result, isNaN);
+        expect(rate.unreadable, contains('Employee %'));
+        // And the previous value is untouched, rather than cleared to
+        // the nought this whole exercise is about.
+        expect(rate.employeeRate, 0.11);
+      });
+
+      test('emptying the box clears the complaint', () {
+        final rate = band();
+        apply(rate, 'Employee %', 'not a number');
+        expect(rate.unreadable, isNotEmpty);
+
+        expect(apply(rate, 'Employee %', ''), isNull);
+        expect(rate.unreadable, isEmpty);
+      });
+
+      test('and so does correcting it', () {
+        final rate = band();
+        apply(rate, 'From', 'five thousand');
+        expect(rate.unreadable, contains('From'));
+
+        expect(apply(rate, 'From', '5,000'), 5000);
+        expect(rate.unreadable, isEmpty);
+      });
+
+      test('each box is remembered separately', () {
+        // One bad box must not clear another's complaint, or correcting
+        // the second would publish while the first is still wrong.
+        final rate = band();
+        apply(rate, 'Employee %', 'x');
+        apply(rate, 'Employer %', 'y');
+        expect(rate.unreadable, {'Employee %', 'Employer %'});
+
+        apply(rate, 'Employer %', '13');
+        expect(rate.unreadable, {'Employee %'});
+      });
+    });
+
+    test('and a nought typed on purpose is still a nought', () {
+      // The distinction the whole thing rests on. An empty box clears
+      // the flag rather than setting it, so a band that genuinely
+      // contributes nothing stays publishable.
+      final rates = [band(from: 0, to: 10, employee: 0, employer: 0),
+                     band(from: 10.01)];
+
+      expect(rateTableProblem(rates), isNull);
+    });
+  });
 }

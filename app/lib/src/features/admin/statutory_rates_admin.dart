@@ -160,6 +160,26 @@ class RateDraft {
   double? employerAmount;
   double? wageCeiling;
 
+  /// The fields of this band whose text is not a number.
+  ///
+  /// Each of the four boxes used to read `double.tryParse(v) ?? 0`, and
+  /// three of those zeros are caught downstream: a `wageFrom` of nought
+  /// on a band that is not the lowest overlaps the one below it, and a
+  /// `wageTo` that reads as null is an open-ended band in the middle --
+  /// both refused by [rateTableProblem] and both asserted.
+  ///
+  /// The rate boxes are the ones with nothing behind them. Zero per
+  /// cent is a LEGITIMATE band -- the lowest EPF band contributes
+  /// nothing, and SOCSO's second category takes nothing from the
+  /// employee -- so no downstream check can tell a deliberate nought
+  /// from "11.5%" with the sign left on, or from a comma typed where a
+  /// point was meant. Both of those published a schedule that deducts
+  /// nothing from that wage band, on every payslip, until an audit.
+  ///
+  /// So the text is judged where it is typed, and a box that is not a
+  /// number is remembered here rather than silently becoming one.
+  final unreadable = <String>{};
+
   Map<String, dynamic> toJson() => {
         'category': category,
         'wage_from': wageFrom,
@@ -172,6 +192,44 @@ class RateDraft {
       };
 }
 
+/// Reads one box of a rate row, and refuses rather than substitutes.
+///
+/// [apply] is handed the figure, or null where the box is EMPTY -- which
+/// means something different in each of the four boxes and is therefore
+/// decided by the caller: an empty `From` is zero, an empty `To` is "and
+/// over", an empty rate is no contribution.
+///
+/// What [apply] is never handed is a nought standing in for text nobody
+/// could read. That goes on [RateDraft.unreadable] instead, where
+/// [rateTableProblem] finds it and keeps the Publish button off.
+///
+/// Public, and next to [rateTableProblem] rather than inside the row
+/// widget, for the reason that function is: the arithmetic of a
+/// statutory schedule is the part worth asserting, and a private method
+/// on a private `State` cannot be.
+void readRateField(
+  RateDraft rate,
+  String field,
+  String raw,
+  void Function(double?) apply,
+) {
+  if (raw.trim().isEmpty) {
+    rate.unreadable.remove(field);
+    apply(null);
+    return;
+  }
+  final value = Fmt.typedNumber(raw);
+  if (value == null) {
+    // Left where it was, deliberately. Clearing it to zero would be the
+    // same silent substitution by another route, and the schedule
+    // cannot be published while this is set anyway.
+    rate.unreadable.add(field);
+    return;
+  }
+  rate.unreadable.remove(field);
+  apply(value);
+}
+
 /// What is wrong with a set of bands, or null if nothing is.
 ///
 /// The database refuses an empty schedule and an unknown rounding mode.
@@ -181,6 +239,16 @@ class RateDraft {
 /// on somebody's payslip.
 String? rateTableProblem(List<RateDraft> rates) {
   if (rates.isEmpty) return 'A schedule needs at least one band.';
+
+  // Before any arithmetic, because arithmetic on a figure that was
+  // never read is the thing being prevented. See `RateDraft.unreadable`.
+  for (final r in rates) {
+    if (r.unreadable.isNotEmpty) {
+      final fields = r.unreadable.toList()..sort();
+      return 'A band has something that is not a number in '
+          '${fields.join(' and ')}.';
+    }
+  }
 
   final byCategory = <String, List<RateDraft>>{};
   for (final r in rates) {
@@ -483,6 +551,11 @@ class _RateRowState extends State<_RateRow> {
     super.dispose();
   }
 
+  void _read(String raw, String field, void Function(double?) apply) {
+    readRateField(widget.rate, field, raw, apply);
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -508,10 +581,10 @@ class _RateRowState extends State<_RateRow> {
             textAlign: TextAlign.right,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(isDense: true, labelText: 'From'),
-            onChanged: (v) {
-              widget.rate.wageFrom = double.tryParse(v) ?? 0;
-              widget.onChanged();
-            },
+            onChanged: (v) => _read(v, 'From', (n) {
+              // Empty is the lowest band starting where it has to.
+              widget.rate.wageFrom = n ?? 0;
+            }),
           ),
         ),
         const SizedBox(width: 8),
@@ -523,10 +596,11 @@ class _RateRowState extends State<_RateRow> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
                 isDense: true, labelText: 'To', hintText: 'and over'),
-            onChanged: (v) {
-              widget.rate.wageTo = v.trim().isEmpty ? null : double.tryParse(v);
-              widget.onChanged();
-            },
+            onChanged: (v) => _read(v, 'To', (n) {
+              // Empty is "and over", which the hint says and which only
+              // the topmost band may be.
+              widget.rate.wageTo = n;
+            }),
           ),
         ),
         const SizedBox(width: 8),
@@ -538,10 +612,8 @@ class _RateRowState extends State<_RateRow> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration:
                 const InputDecoration(isDense: true, labelText: 'Employee %'),
-            onChanged: (v) {
-              widget.rate.employeeRate = double.tryParse(v) ?? 0;
-              widget.onChanged();
-            },
+            onChanged: (v) =>
+                _read(v, 'Employee %', (n) => widget.rate.employeeRate = n ?? 0),
           ),
         ),
         const SizedBox(width: 8),
@@ -553,10 +625,8 @@ class _RateRowState extends State<_RateRow> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration:
                 const InputDecoration(isDense: true, labelText: 'Employer %'),
-            onChanged: (v) {
-              widget.rate.employerRate = double.tryParse(v) ?? 0;
-              widget.onChanged();
-            },
+            onChanged: (v) =>
+                _read(v, 'Employer %', (n) => widget.rate.employerRate = n ?? 0),
           ),
         ),
         IconButton(

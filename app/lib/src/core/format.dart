@@ -118,6 +118,61 @@ class Fmt {
     return DateTime.tryParse(value.toString());
   }
 
+  /// A figure as somebody actually typed it, or null if it is not one.
+  ///
+  /// The point of this is the NULL. `double.tryParse(text) ?? 0` is
+  /// written in two hundred places in this app, and in most of them a
+  /// zero is a harmless default. In a few it is the opposite of one:
+  ///
+  ///   * a contact's credit limit, where the field's own helper says
+  ///     "Zero means no limit" and `0467` agrees -- `if coalesce(
+  ///     v_limit, 0) <= 0 then return new` -- so a credit limit that
+  ///     fails to parse does not become a small limit, it removes the
+  ///     limit;
+  ///   * a statutory rate, where zero is no contribution at all.
+  ///
+  /// Both fail OPEN, silently, on a typo. Returning null lets the field
+  /// refuse instead.
+  ///
+  /// What it accepts is what people write in a money field here: a
+  /// leading RM or MYR, a trailing per-cent sign, spaces anywhere, and
+  /// grouping commas.
+  ///
+  /// What it REFUSES, rather than guessing at, is a comma that is not a
+  /// grouping separator. Half the world writes 11,5 for eleven and a
+  /// half; stripping the comma would read it as a hundred and fifteen,
+  /// which on an EPF rate is a ten-fold error arrived at silently. A
+  /// comma is only dropped where it separates exactly three digits, all
+  /// the way along -- 1,234,567.89 -- and anything else is not a number
+  /// this function is willing to have an opinion about.
+  static double? typedNumber(String text) {
+    var s = text.trim();
+    if (s.isEmpty) return null;
+
+    // What people put AROUND a figure rather than in it.
+    s = s.replaceFirst(RegExp(r'^(RM|MYR)', caseSensitive: false), '');
+    if (s.endsWith('%')) s = s.substring(0, s.length - 1);
+    s = s.replaceAll(RegExp(r'\s'), '');
+    if (s.isEmpty) return null;
+
+    var sign = '';
+    if (s.startsWith('-') || s.startsWith('+')) {
+      if (s.startsWith('-')) sign = '-';
+      s = s.substring(1);
+    }
+
+    if (s.contains(',')) {
+      if (!RegExp(r'^\d{1,3}(,\d{3})+(\.\d+)?$').hasMatch(s)) return null;
+      s = s.replaceAll(',', '');
+    }
+
+    // No exponents, no hex, no infinity: `double.tryParse` accepts all
+    // three and none of them is a figure anybody typed into a money
+    // field on purpose.
+    if (!RegExp(r'^(\d+(\.\d*)?|\.\d+)$').hasMatch(s)) return null;
+    return double.tryParse('$sign$s');
+  }
+
   static double toDouble(dynamic value) {
     if (value == null) return 0;
     if (value is num) return value.toDouble();
