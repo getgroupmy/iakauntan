@@ -29,6 +29,38 @@ import '../landing/landing_screen.dart';
 /// `landing_page()` gives a visitor nothing — the site falls back to
 /// the copy the product was built with. Drafting in the open is the
 /// point; publishing a draft by accident is what the switch prevents.
+/// Why the Order box will not take "1O".
+///
+/// Every one of the five dialogs on this page reads its order with
+/// `int.tryParse`, and every one sends the result to a function whose
+/// SQL is `sort_order = coalesce(p_sort_order, s.sort_order)`. So an
+/// unreadable box is not an error anywhere: it is null on the way out,
+/// "leave it as it was" on the way in, and "Saved" on the screen.
+///
+/// An administrator retypes an order to move a block, fat-fingers a
+/// letter O for a nought, is told it saved, and the page is exactly as
+/// it was. Nothing anywhere says otherwise. `keyboardType` does not
+/// help — it is a hint to a phone keyboard and does nothing at all in
+/// a browser, which is where this screen is used.
+///
+/// BLANK STAYS ALLOWED, and that is the whole reason this is a
+/// function rather than a validator that demands a number. The helper
+/// text under the box says "Leave blank to put it last", and it means
+/// it: a null order on an insert becomes `max(sort_order) + 10`. Empty
+/// is an instruction. Unreadable is a mistake.
+///
+/// Returns null when the box is fine, or the words to show when it is
+/// not. Public and pure so the rule can be asserted directly, and
+/// shared so the five dialogs cannot drift apart.
+String? landingSortProblem(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  if (int.tryParse(text) == null) {
+    return 'The order has to be a whole number, or blank to put it last.';
+  }
+  return null;
+}
+
 class LandingCmsTab extends ConsumerWidget {
   const LandingCmsTab({super.key});
 
@@ -701,6 +733,13 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
       ).showSnackBar(const SnackBar(content: Text('A block needs a title.')));
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -785,7 +824,11 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Order',
@@ -958,6 +1001,13 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
       );
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -1026,7 +1076,11 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Order'),
               ),
@@ -1204,6 +1258,13 @@ class _StatDialogState extends ConsumerState<_StatDialog> {
       );
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -1281,7 +1342,11 @@ class _StatDialogState extends ConsumerState<_StatDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Order',
@@ -1471,6 +1536,13 @@ class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
       );
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -1543,7 +1615,11 @@ class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Order',
@@ -1716,6 +1792,13 @@ class _LogoDialogState extends ConsumerState<_LogoDialog> {
       );
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -1778,7 +1861,11 @@ class _LogoDialogState extends ConsumerState<_LogoDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Order',
