@@ -69,6 +69,13 @@ const dropdownCensus = <String, int>{
   'features/ledger/recurring_screen.dart': 1,
   'features/legal/matter_detail_screen.dart': 3,
   'features/legal/matters_screen.dart': 1,
+  // Two, and both are TRI-STATE on purpose. A practising certificate
+  // and a firm's audit/non-audit classification each have a third
+  // answer -- "the register did not say" -- which is not the same as
+  // "no", and a row pasted without that column must not assert one.
+  // Three fixed options is exactly what a dropdown is for; neither list
+  // can grow without MIA changing its own register.
+  'features/mia/mia_verify_dialog.dart': 2,
   'features/onboarding/create_org_screen.dart': 3,
   'features/pos/pos_reports_screen.dart': 1,
   'features/pos/scales_screen.dart': 1,
