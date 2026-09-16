@@ -164,6 +164,7 @@ jobs:
                    supabase/tests/control_accounts.sql \
                    supabase/tests/activity_reminders.sql \
                    supabase/tests/payroll_run.sql \
+                   supabase/tests/terminal_punches.sql \
                    supabase/tests/ea_form.sql \
                    supabase/tests/payroll_engine_sweep.sql \
                    supabase/tests/utc_is_not_today.sql \
@@ -1190,6 +1191,21 @@ jobs:
       # firm read as a person.
       - run: deno check supabase/functions/ssm-search/bar_provider_test.ts
       - run: deno test supabase/functions/ssm-search/bar_provider_test.ts
+
+      # The clock on the wall. `0612`. What is asserted here is the
+      # reading of the device's OWN timestamp, because that is the whole
+      # of whether this feature works: a terminal that lost its network
+      # at 08:55 and reconnected at 17:30 sends the morning's punches
+      # when it reconnects, and `clock_in` would file every one of them
+      # at half past five.
+      #
+      # A bare local time is read as Malaysian rather than as UTC. That
+      # one is not a preference: reading it as UTC files the morning
+      # shift as the night before, which is a whole day out rather than
+      # a plausible eight hours -- the difference between somebody
+      # noticing and nobody noticing.
+      - run: deno check supabase/functions/punch/punch_test.ts
+      - run: deno test supabase/functions/punch/punch_test.ts
 
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and

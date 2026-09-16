@@ -70,6 +70,11 @@ NO_CALLER = {
         "secret in the request",
     "fetch-rates":
         "scheduled job; runs on a timer with no request behind it",
+    "punch":
+        "a clock bolted to a door frame has no login; the terminal's "
+        "own secret is checked in SQL by public.terminal_secret_matches "
+        "against a bcrypt hash before any punch is read, and the org_id "
+        "is taken from the terminal row rather than from the body",
 }
 
 SERVICE_KEY = "SUPABASE_SERVICE_ROLE_KEY"

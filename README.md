@@ -1635,8 +1635,17 @@ Stated plainly so nothing here is mistaken for finished:
   looks correct in a diff and is refused at the counter. What is needed
   is the layout specification for each, not more code
 - The gazetted KWSP and PERKESO contribution tables (see HRMS above)
-- Biometric terminal integration: attendance records carry a terminal
-  identifier, but nothing pushes punches in from a device yet
+- ~~Biometric terminal integration: attendance records carry a terminal
+  identifier, but nothing pushes punches in from a device yet.~~ Built,
+  `0612`. A terminal registers under HR, gets a secret once (bcrypt on
+  the way in, unreadable afterwards) and posts batches to the `punch`
+  edge function. The point of the exercise is that **the punch carries
+  its own time**: `clock_in` stamps `now()`, and a terminal that lost
+  its network at 08:55 and reconnected at 17:30 would have every one of
+  the morning's punches filed at half past five. Enrolment numbers are
+  per terminal, because the front door's user 1 and the warehouse's are
+  two different people. A reconnecting device's replay writes nothing,
+  and out of order the earliest in and the latest out win
 - Sign-in with anything other than a password: no OAuth, no magic link,
   no two-factor
 - Migration from another accounting system. `docs/migrating-from-autocount.md`

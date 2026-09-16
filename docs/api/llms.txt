@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0611` (the highest applied migration).
-680 functions and 336 readable tables, of which
+Schema version `0612` (the highest applied migration).
+682 functions and 339 readable tables, of which
 258 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**539 of 680 functions carry a `comment on
+**541 of 682 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -363,7 +363,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (470)
+### general (472)
 
 Not gated on any module.
 
@@ -689,7 +689,9 @@ Not gated on any module.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)* — The same as the eleven-argument `record_pdc`, and THE ONE TO CALL: the extra `p_idempotency_key` makes a retry return the cheque the first attempt recorded rather than recording a second one.
 - `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)* — Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period.
 - `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` *(writes)* — Records a device to send push notifications to, and returns its row.
+- `register_time_terminal(p_org_id uuid, p_name text, p_branch_id uuid, p_device_ref text)` *(writes)* — Adds a clock and returns its secret, once.
 - `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
+- `reissue_terminal_secret(p_terminal_id uuid)` *(writes)* — Replaces a terminal's secret and returns the new one, once.
 - `remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` *(writes)* — Records that a withholding certificate has been paid over to the Inland Revenue Board, and posts the payment.
 - `renew_employee_document(p_document uuid, p_expires_date date, p_issued_date date, p_title text, p_notes text)` *(writes)* — Files the replacement for a permit, visa or certificate and returns it, carrying the type, title and notes across unless new ones are given, and linking it to what it supersedes.
 - `rent_preview(p_site_id uuid, p_period_from date, p_period_to date)`
@@ -1167,6 +1169,8 @@ inconsistent.
 - `tax_codes`
 - `tax_reliefs`
 - `tenancies`
+- `terminal_enrolments`
+- `terminal_punches`
 - `ticket_categories`
 - `ticket_comments`
 - `ticket_events`
@@ -1175,6 +1179,7 @@ inconsistent.
 - `ticket_teams`
 - `tickets`
 - `time_entries`
+- `time_terminals`
 - `tin_validations`
 - `todos`
 - `user_preferences`

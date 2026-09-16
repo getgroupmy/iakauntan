@@ -11,6 +11,7 @@ import 'holidays_tab.dart';
 import 'onboarding_template_dialog.dart';
 import 'leave_bands_dialog.dart';
 import 'statutory_rates_tab.dart';
+import 'time_terminals_tab.dart';
 
 /// Everything a company has to set up before payroll means anything.
 /// All of this was SQL-only, which made the module unusable by the
@@ -21,7 +22,7 @@ class HrSetupScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 9,
+      length: 10,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('HR setup'),
@@ -38,6 +39,7 @@ class HrSetupScreen extends ConsumerWidget {
               Tab(text: 'Holidays'),
               Tab(text: 'Statutory rates'),
               Tab(text: 'Onboarding'),
+              Tab(text: 'Clocks'),
             ],
           ),
         ),
@@ -52,6 +54,7 @@ class HrSetupScreen extends ConsumerWidget {
             HolidaysTab(),
             StatutoryRatesTab(),
             _OnboardingTemplatesTab(),
+            TimeTerminalsTab(),
           ],
         ),
       ),
