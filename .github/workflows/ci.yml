@@ -1168,6 +1168,24 @@ jobs:
       - run: deno check supabase/functions/ssm-search/api_provider_test.ts
       - run: deno test supabase/functions/ssm-search/api_provider_test.ts
 
+      # The Malaysian Bar's directory, read the way a browser reads it.
+      #
+      # These prove the READER and not the shape. Nobody has seen that
+      # site's markup from a machine that could also run this code --
+      # the network the repository is edited on refuses the host with a
+      # 403 from its own egress proxy -- so the fixtures are what a
+      # directory of this kind plausibly emits, not what this one does.
+      #
+      # Worth running anyway, because the failure being guarded against
+      # is the quiet one: a table heading read as a solicitor, or a
+      # postcode written into a contact's registration number. Two real
+      # defects in the parser were caught here before it ever ran: a
+      # nested-`<div>` match that dropped every field after the name,
+      # and a `\b` before an ampersand, which can never match, so every
+      # firm read as a person.
+      - run: deno check supabase/functions/ssm-search/bar_provider_test.ts
+      - run: deno test supabase/functions/ssm-search/bar_provider_test.ts
+
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and
       # nothing else in this file would execute it.

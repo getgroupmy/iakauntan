@@ -67,6 +67,12 @@ import {
   chosenProvider,
   SsmSearchApi,
 } from "./api_provider.ts";
+import {
+  BarDirectoryWeb,
+  type BarRoutes,
+  DEFAULT_BAR_ROUTES,
+  probeBar,
+} from "./bar_provider.ts";
 
 /**
  * The body shape, and NOT the CORS headers.
@@ -198,6 +204,22 @@ serveFunction("ssm-search", async (req: Request): Promise<Response> => {
         return json({ ok: true, api_root: routes().apiRoot, ...found });
       }
 
+      case "bar_probe": {
+        if (!await isAdmin()) {
+          return fail("FORBIDDEN", "Platform staff only.", 403);
+        }
+        // The answer to "the Bar's routes are a guess". One press from
+        // somebody who can reach the site reports which parameter
+        // produced rows, and that goes into `BAR_QUERY_PARAM`.
+        //
+        // No credentials are sent because there are none: the
+        // directory is public. This is one page per candidate against
+        // somebody else's server, which is why it is behind the
+        // platform-admin check rather than on a user's screen.
+        const hits = await probeBar(fetch, barRoutes());
+        return json({ ok: true, routes: barRoutes(), hits });
+      }
+
       case "clear_session": {
         if (!await isAdmin()) {
           return fail("FORBIDDEN", "Platform staff only.", 403);
@@ -241,6 +263,52 @@ serveFunction("ssm-search", async (req: Request): Promise<Response> => {
  * resolves the stub rather than the real package, was perfectly happy.
  * Exactly the gap `check_locally.sh` warns about in its own output.
  */
+/**
+ * Which register, and therefore which provider.
+ *
+ * `register` defaults to `ssm`, so every caller that predates Entity
+ * Search (0606) goes on meaning what it meant.
+ *
+ * The Bar is a SCRAPER over a public directory, with the same
+ * terms-of-service position `provider.ts` records about ssmsearch.com
+ * and the same cache and per-minute limit for the same reason. Its
+ * routes are a GUESS -- nobody has seen that site's HTML from a
+ * machine that could run this -- which is why `bar_probe` exists.
+ */
+// deno-lint-ignore no-explicit-any
+function providerFor(
+  admin: any,
+  register: string,
+): SsmSearchWeb | SsmSearchApi | BarDirectoryWeb {
+  if (register === "bar") return new BarDirectoryWeb(admin, barRoutes());
+  if (register !== "ssm") {
+    throw new SsmError(
+      "SSM_NOT_CONFIGURED",
+      `Nothing here knows how to search ${register}. Its register opens ` +
+        "instead.",
+      503,
+    );
+  }
+  return provider(admin);
+}
+
+/**
+ * Where to send the Bar's requests.
+ *
+ * Overridable for the reason `routes()` below is: the defaults are a
+ * guess, and an operator who can watch their own browser's network tab
+ * corrects one here and the next search uses it, with no deploy.
+ */
+function barRoutes(): BarRoutes {
+  return {
+    root: Deno.env.get("BAR_DIRECTORY_ROOT") || DEFAULT_BAR_ROUTES.root,
+    searchPath: Deno.env.get("BAR_SEARCH_PATH") ||
+      DEFAULT_BAR_ROUTES.searchPath,
+    queryParam: Deno.env.get("BAR_QUERY_PARAM") ||
+      DEFAULT_BAR_ROUTES.queryParam,
+  };
+}
+
 // deno-lint-ignore no-explicit-any
 function provider(admin: any): SsmSearchWeb | SsmSearchApi {
   if (chosenProvider(Deno.env.get("SSM_PROVIDER")) === "api") {
@@ -343,9 +411,18 @@ async function search(
     );
   }
 
+  // Which register. Defaults to SSM so every caller that predates
+  // Entity Search goes on meaning what it meant.
+  const register = String(body.register ?? "ssm").trim().toLowerCase() ||
+    "ssm";
+
   // Keyed on the provider that is switched on, so a cached answer from
-  // ssmsearch.com is never served as an answer from SSM's own API.
-  const name = providerName();
+  // ssmsearch.com is never served as an answer from SSM's own API --
+  // and on the REGISTER, so an advocate is never handed back as a
+  // company. Two registers sharing a cache row would be the worst
+  // version of this: a plausible name under a field the app shows as
+  // verified.
+  const name = register === "ssm" ? providerName() : `${register}_web`;
   const key = [
     name,
     query.toLowerCase().replace(/\s+/g, " "),
@@ -364,12 +441,19 @@ async function search(
       cached: true,
       result_count: (hit.payload?.items ?? []).length,
     });
-    return json({ ok: true, provider: name, cached: true, ...hit.payload });
+    return json({
+      ok: true,
+      provider: name,
+      register,
+      cached: true,
+      ...hit.payload,
+    });
   }
 
   let result;
   try {
-    result = await provider(admin).search(query, typeId, page, perPage);
+    result = await providerFor(admin, register)
+      .search(query, typeId, page, perPage);
   } catch (e) {
     await admin.from("ssm_search_log").insert({
       searched_by: userId,
@@ -396,5 +480,11 @@ async function search(
     result_count: result.items.length,
   });
 
-  return json({ ok: true, provider: name, cached: false, ...result });
+  return json({
+    ok: true,
+    provider: name,
+    register,
+    cached: false,
+    ...result,
+  });
 }
