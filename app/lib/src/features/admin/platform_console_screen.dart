@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'entity_types_admin.dart';
+import 'search_registers_admin.dart';
 import 'ai_providers_admin.dart';
 import 'branding_admin.dart';
 import 'credit_admin.dart';
@@ -105,6 +106,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/entity-types',
     primary: false,
     page: EntityTypesAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Entity Search',
+    icon: Icons.travel_explore_outlined,
+    selectedIcon: Icons.travel_explore,
+    path: '/admin/registers',
+    primary: false,
+    page: SearchRegistersAdminTab(),
   ),
   (
     group: 'Service',

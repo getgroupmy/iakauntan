@@ -6,7 +6,7 @@ import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/ssm_repository.dart';
-import 'ssm_entity_picker.dart';
+import 'entity_search.dart';
 import 'ssm_query_hints.dart';
 
 /// Finding the supplier a scanned document came from, and offering to
@@ -523,7 +523,7 @@ class _SupplierDraftState extends State<_SupplierDraft> {
       ].firstWhere((s) => s.trim().isNotEmpty, orElse: () => ''),
     );
 
-    final chosen = await showSsmEntityPicker(context, initialQuery: seed);
+    final chosen = await showEntitySearch(context, initialQuery: seed);
     if (chosen == null || !mounted) return;
     setState(() {
       _ssm = chosen;
@@ -591,7 +591,7 @@ class _SupplierDraftState extends State<_SupplierDraft> {
                     key: const ValueKey('scan-supplier-ssm'),
                     onPressed: _lookUpSsm,
                     icon: const Icon(Icons.travel_explore_outlined, size: 18),
-                    label: const Text('Check the SSM register'),
+                    label: const Text('Entity Search'),
                   ),
                 ),
                 if (_ssm != null)

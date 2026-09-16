@@ -25,7 +25,7 @@ import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 import '../../data/ssm_repository.dart';
 import '../../data/entity_types_repository.dart';
-import '../shared/ssm_entity_picker.dart';
+import '../shared/entity_search.dart';
 import '../shared/ssm_query_hints.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
@@ -511,7 +511,11 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   Future<void> _lookUpSsm() async {
     final typed = _nullIfEmpty(_c('registrationNo').text) ?? _c('name').text;
     setState(() => _ssmBusy = true);
-    final chosen = await showSsmEntityPicker(
+    // Entity Search asks WHICH register first (0606). It used to go
+    // straight to SSM, which is the right register for a company and
+    // the wrong one for an audit firm or a law firm — and a contact is
+    // as often one of those.
+    final chosen = await showEntitySearch(
       context,
       initialQuery: SsmQueryHints.bestQuery(typed),
     );
@@ -758,8 +762,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           ),
                           label: Text(
                             _ssmChosen == null
-                                ? 'Check the SSM register'
-                                : 'Check the SSM register again',
+                                ? 'Entity Search'
+                                : 'Entity Search again',
                           ),
                         ),
                       ),

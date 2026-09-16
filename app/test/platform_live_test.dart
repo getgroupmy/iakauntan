@@ -42,6 +42,8 @@ void main() {
       // the telephone with a contact form already open — so "log out
       // and back in" is not an answer to give them.
       'entity_types',
+      // 0606. The registers Entity Search offers.
+      'search_registers',
     });
   });
 
