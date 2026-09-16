@@ -123,6 +123,16 @@ Three separate times:
 Use `find.text` with the exact string, or include the separator that
 follows: `find.textContaining('Every day · ')`.
 
+The mirror of this is a check for a **doubled separator** — `'·  ·'` —
+meant to catch a field that rendered empty. Four tests here had one and
+in three of them nothing could ever produce a doubled separator,
+because the `.where(isNotEmpty)` before the join drops an empty entry
+first. In the fourth the real damage was a LEADING separator,
+`'  ·  20 to make'`, which the doubled check does not match either.
+
+Assert the whole line. It fails when a field goes missing, when one
+appears that should not, and when a separator lands anywhere at all.
+
 ### 8. A `?? default` in a fixture helper undoes the null case
 
 `myEmployeeProvider.overrideWith((ref) async => me ?? employee())`

@@ -178,19 +178,33 @@ void main() {
       expect(find.text('Trace'), findsNothing);
     });
 
+    testWidgets('a lot says which warehouse it is in', (tester) async {
+      // Which shelf the batch is on. For a recall that is the whole
+      // question, and nothing else on this screen answers it -- without
+      // this assertion the field could be dropped entirely and every
+      // other test here would still pass.
+      await show(tester, balances: [
+        lot(itemName: 'Fresh Milk 1L', warehouse: 'Cold Room 2'),
+      ]);
+
+      expect(find.textContaining('Fresh Milk 1L  ·  Cold Room 2'),
+          findsOneWidget);
+    });
+
     testWidgets('a lot with no warehouse leaves the field out',
         (tester) async {
       await show(tester, balances: [lot(warehouse: null)]);
 
       expect(find.textContaining('Fresh Milk 1L'), findsOneWidget);
-      // No doubled separator where the warehouse would have been.
+      // The whole subtitle, with the warehouse simply absent.
       //
-      // The `if (r['warehouse'] != null)` guard is belt and braces: the
-      // `.where((e) => e != null)` below it already drops a null, so
-      // removing the guard changes nothing and no test can tell. Said
-      // here so the next person does not go hunting for the assertion
-      // that would catch it.
-      expect(find.textContaining('·  ·'), findsNothing);
+      // NOT a `textContaining('·  ·')` check for a doubled separator:
+      // nothing can produce one here. The `if (r['warehouse'] != null)`
+      // guard sits above a `.where((e) => e != null)` that already
+      // drops a null, so removing the guard changes nothing and that
+      // assertion could never fail. An exact match at least fails if
+      // the line grows or loses a field.
+      expect(find.text('Fresh Milk 1L'), findsOneWidget);
     });
   });
 

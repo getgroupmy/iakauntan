@@ -177,7 +177,11 @@ void main() {
       // string.
       expect(find.text('Puan Aminah  ·  14/09/2026'), findsOneWidget);
       expect(find.textContaining('null'), findsNothing);
-      expect(find.textContaining('·  ·'), findsNothing);
+      // There is deliberately no `textContaining('·  ·')` check here.
+      // The `.where((s) => s.trim().isNotEmpty)` below the list drops an
+      // empty entry before it can double a separator, so that assertion
+      // cannot fail whatever the guards above it do. The exact match is
+      // what catches a dropped guard -- via the "null" it renders.
     });
 
     testWidgets('a reference of nothing but spaces is not a reference',

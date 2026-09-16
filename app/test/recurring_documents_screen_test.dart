@@ -237,8 +237,12 @@ void main() {
 
       expect(find.textContaining(' of '), findsNothing);
       expect(find.textContaining('until'), findsNothing);
-      // And no dangling separator where the limit would have been.
-      expect(find.textContaining('· ·'), findsNothing);
+      // The whole line, with the limit simply absent. Not a check for a
+      // doubled separator: `_limit` returns '' and the
+      // `.where((s) => s.isNotEmpty)` drops it before the join, so no
+      // doubling is reachable and that assertion would pass whatever
+      // happened.
+      expect(find.text('Every month · next 01/10/2026'), findsOneWidget);
     });
   });
 
