@@ -31,6 +31,48 @@ import 'contact_extras.dart';
 import 'customer_portal_card.dart';
 import 'contact_lookalikes.dart';
 
+/// Whether the form still says what the register said.
+///
+/// Somebody may look a company up and then correct the name by hand,
+/// and stamping `ssm_verified_at` on that would be recording a
+/// verification that did not happen — which is precisely the
+/// distinction the column exists to make.
+///
+/// The consequence of getting it wrong in each direction is not
+/// symmetric, which is why this is pinned rather than left in the
+/// widget:
+///
+///   * too EAGER and the contact carries `ssm_verified_at` against a
+///     name nobody at SSM ever confirmed, and `set_contact_ssm_entity`
+///     writes the registry's name over whatever was typed;
+///   * too SHY and a verification that really happened is not recorded,
+///     which costs a second lookup and nothing else.
+///
+/// So every comparison below errs shy on purpose. Case is ignored --
+/// the registry SHOUTS and an operator need not -- and nothing else is.
+/// A double space inside a name, or a digit changed in the number, is a
+/// different answer from the one the register gave.
+///
+/// Public and outside the State so it can be asserted; a private getter
+/// on a private `State` cannot be.
+bool ssmStillMatches({
+  required SsmEntity? chosen,
+  required String name,
+  required String registrationNo,
+}) {
+  if (chosen == null) return false;
+
+  final sameName = name.trim().toUpperCase() == chosen.name.trim().toUpperCase();
+
+  final typedReg = registrationNo.trim().isEmpty ? null : registrationNo.trim();
+  final registryReg = (chosen.regNo ?? '').trim().isEmpty
+      ? null
+      : (chosen.regNo ?? '').trim();
+  final sameReg = typedReg == registryReg;
+
+  return sameName && sameReg;
+}
+
 class ContactEditor extends ConsumerStatefulWidget {
   const ContactEditor({
     super.key,
@@ -495,24 +537,11 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     _scheduleLookalikes();
   }
 
-  /// Whether the form still says what the register said.
-  ///
-  /// Somebody may look a company up and then correct the name by hand,
-  /// and stamping `ssm_verified_at` on that would be recording a
-  /// verification that did not happen — which is precisely the
-  /// distinction the column exists to make.
-  bool get _ssmStillMatches {
-    final chosen = _ssmChosen;
-    if (chosen == null) return false;
-    final sameName =
-        _c('name').text.trim().toUpperCase() == chosen.name.toUpperCase();
-    final sameReg =
-        _nullIfEmpty(_c('registrationNo').text) ==
-            (chosen.regNo ?? '').trim() ||
-        (chosen.regNo == null &&
-            _nullIfEmpty(_c('registrationNo').text) == null);
-    return sameName && sameReg;
-  }
+  bool get _ssmStillMatches => ssmStillMatches(
+    chosen: _ssmChosen,
+    name: _c('name').text,
+    registrationNo: _c('registrationNo').text,
+  );
 
   /// Records the registry's answer against the saved contact.
   ///
