@@ -889,21 +889,30 @@ class AppShell extends ConsumerWidget {
   /// Destinations this user can actually reach: modules the company
   /// holds and has not put away, plus the platform console for staff.
   List<_Dest> _visible(WidgetRef ref) {
-    final isPlatformAdmin = ref.watch(isPlatformAdminProvider).value ?? false;
+    // `valueOrNull` at all five sites in this method, and the reason is
+    // the shell rather than taste. `AsyncError.value` THROWS, so the
+    // `??` beside it never runs -- and a throw HERE is not one screen
+    // failing to load. It is the navigation rail failing to build, so
+    // there is no rail to navigate away with and nothing on screen but
+    // grey. The fallbacks below are all "show less", which is the safe
+    // direction: a door that is missing for a moment beats every door
+    // missing until a reload.
+    final isPlatformAdmin =
+        ref.watch(isPlatformAdminProvider).valueOrNull ?? false;
 
     // Every destination but the console reads from an organization, so
     // with none selected they are doors onto an empty room. A platform
     // operator belongs to no company and would otherwise be handed a full
     // rail of screens that can only fail.
     final hasOrg =
-        (ref.watch(organizationsProvider).value ?? const []).isNotEmpty;
+        (ref.watch(organizationsProvider).valueOrNull ?? const []).isNotEmpty;
 
     final isAdmin = ref.watch(canAdminProvider);
 
     // Read once for the rail rather than by the screen, so the door
     // appears the moment somebody is taken on at a practice.
     final atAPractice =
-        (ref.watch(myFirmsProvider).value ?? const []).isNotEmpty;
+        (ref.watch(myFirmsProvider).valueOrNull ?? const []).isNotEmpty;
 
     return _destinations.where((d) {
       if (d.platformOnly) return isPlatformAdmin;
@@ -1008,7 +1017,10 @@ class AppShell extends ConsumerWidget {
   /// starting a heartbeat in a company that never bought chat. So this
   /// waits for the real answer.
   Widget _reachableByCall(WidgetRef ref, Widget child) {
-    final modules = ref.watch(enabledModulesProvider).value;
+    // The null check below already says what this means to do when the
+    // answer has not arrived; a failed load is the same situation and
+    // must not throw out of the shell.
+    final modules = ref.watch(enabledModulesProvider).valueOrNull;
     if (modules == null || !modules.contains('chat')) return child;
     if (!moduleEnabled(ref, 'chat')) return child;
 
@@ -1509,7 +1521,7 @@ class _RailHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final org = ref.watch(currentOrgProvider).value;
+    final org = ref.watch(currentOrgProvider).valueOrNull;
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
@@ -1549,7 +1561,7 @@ class _OrgSwitcher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final orgs =
-        ref.watch(organizationsProvider).value ?? const <Organization>[];
+        ref.watch(organizationsProvider).valueOrNull ?? const <Organization>[];
 
     // Multi-Company is a module (0486). The sheet opens for somebody
     // who has one company and may add another, as well as for somebody
@@ -1668,7 +1680,7 @@ class _AccountButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    final role = ref.watch(memberRoleProvider).value ?? '';
+    final role = ref.watch(memberRoleProvider).valueOrNull ?? '';
 
     return PopupMenuButton<String>(
       tooltip: user?.email ?? 'Account',

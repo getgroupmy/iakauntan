@@ -176,7 +176,7 @@ final currentOrgProvider = FutureProvider<Organization?>((ref) async {
 
 /// Repository bound to the active org. Null until an org is resolved.
 final repoProvider = Provider<Repo?>((ref) {
-  final org = ref.watch(currentOrgProvider).value;
+  final org = ref.watch(currentOrgProvider).valueOrNull;
   if (org == null) return null;
   return Repo(ref.watch(supabaseProvider), org.id);
 });
@@ -226,16 +226,24 @@ final memberRoleProvider = FutureProvider<String>((ref) async {
 // These mirror app.can_post / can_write / can_read_ledger in the
 // database. They only decide what the UI offers; RLS is what actually
 // enforces it, so a stale copy here cannot become a security hole.
+//
+// `valueOrNull`, not `.value`. `?? 'viewer'` is least privilege and is
+// the right answer while the role is loading AND if the load failed --
+// but `AsyncError.value` THROWS, so on a failure the fallback never ran
+// and the exception came out of whatever was watching. What watches
+// these is everything: `canAdminProvider` is read by the navigation
+// rail, so a role that failed to load took the whole shell down rather
+// than showing somebody a viewer's menu for a second.
 
 /// Whether the current member may post to the ledger. An accounts clerk
 /// deliberately sits outside this: they prepare, someone else posts.
 final canPostProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin', 'accountant'].contains(role);
 });
 
 final canWriteProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const [
     'owner',
     'admin',
@@ -247,14 +255,14 @@ final canWriteProvider = Provider<bool>((ref) {
 });
 
 final canAdminProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin'].contains(role);
 });
 
 /// Who may see the journals and audit trail. Auditors get read access to
 /// everything; sales and purchasing staff do not.
 final canReadLedgerProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const [
     'owner',
     'admin',
@@ -1480,13 +1488,13 @@ void refreshMatter(WidgetRef ref, String matterId) {
 // comes back.
 // ---------------------------------------------------------------------
 final canManageHrProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin', 'hr_manager'].contains(role);
 });
 
 /// Payroll touches the ledger, so it needs a finance role as well as HR.
 final canRunPayrollProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin', 'hr_manager', 'accountant'].contains(role);
 });
 
@@ -1814,7 +1822,7 @@ final payslipAccessRequestsProvider =
 
 /// True for an auditor: no payroll rights, but may ask for them.
 final canRequestPayslipAccessProvider = Provider<bool>((ref) {
-  return (ref.watch(memberRoleProvider).value ?? '') == 'auditor';
+  return (ref.watch(memberRoleProvider).valueOrNull ?? '') == 'auditor';
 });
 
 final payslipAccessLogProvider =

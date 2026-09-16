@@ -55,7 +55,31 @@ from pathlib import Path
 # 66 to 65: `_tax` in `expenses_screen.dart`, which is read from
 # `build` -- so a failed tax-code load did not draw an expense dialog
 # with no tax figure on it, it drew an error instead of the dialog.
-BUDGET = 65
+#
+# 65 to 58: all seven in `app_shell.dart`, which are the worst of them
+# and were the whole reason to look at this file next. The others take a
+# SCREEN down. These take the NAVIGATION down: `_visible` builds the
+# rail, so a failed `isPlatformAdminProvider`, `organizationsProvider`
+# or `myFirmsProvider` meant no rail to navigate away with and nothing
+# on screen but grey -- on every route at once, recoverable only by
+# reloading the page. `_RailHeader`, the company switcher and the
+# account button are the same shape.
+#
+# Each one already had a `??` or a null check beside it, so the author
+# had already said what to do when the answer is not there. The
+# fallbacks are all "show less", which is the safe direction: a door
+# missing for a moment beats every door missing until a reload.
+# 58 to 50: all eight in `core/providers.dart`, found by the test
+# written for the seven above -- `nor a failed role` went on throwing
+# after `app_shell.dart` was clean, because `canAdminProvider` reads
+# `memberRoleProvider.value` and the shell watches it.
+#
+# That is the whole of the argument for these being worth fixing. The
+# six role gates and the auditor check each carry `?? 'viewer'` or
+# `?? ''`, which is least privilege and is the right answer both while
+# the role is loading and if it failed. On a failure it never ran. What
+# watches them is everything.
+BUDGET = 50
 
 LIB = Path(__file__).resolve().parent.parent / 'app' / 'lib'
 
