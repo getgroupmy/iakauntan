@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0602` (the highest applied migration).
-665 functions and 330 readable tables, of which
+Schema version `0603` (the highest applied migration).
+667 functions and 331 readable tables, of which
 255 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**524 of 665 functions carry a `comment on
+**526 of 667 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -356,7 +356,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (457)
+### general (459)
 
 Not gated on any module.
 
@@ -498,6 +498,7 @@ Not gated on any module.
 - `decide_mailbox(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for an email address.
 - `decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` *(writes)* — Approves or refuses an auditor's request to see payslips.
 - `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for a name on our domain.
+- `delete_mia_credential(p_id uuid)` *(writes)* — Removes a recorded MIA credential.
 - `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)* — Marks a held cheque as paid in, and POSTS NOTHING.
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
@@ -809,6 +810,7 @@ Not gated on any module.
 - `upsert_ai_provider(p_code text, p_name text, p_wire text, p_base_url text, p_docs_url text, p_key_hint text, p_needs_key boolean, p_is_active boolean, p_sort_order integer)` *(writes)* — Creates or edits an AI provider in the platform's catalogue -- how to reach it, whether it needs a key, and what a key looks like so an operator can tell they have pasted the right thing.
 - `upsert_bank_account(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid)` *(writes)* — Adds or amends a bank account and the GL account behind it, as one act, so the two cannot disagree.
 - `upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` *(writes)* — Creates or edits a custom field on a master record.
+- `upsert_mia_credential(p_subject_type text, p_subject_id uuid, p_kind app.mia_credential_kind, p_fields jsonb)` *(writes)* — Records what MIA's members and firms register said about a corporate officer or a practice, and stamps who looked it up and when.
 - `verify_person_identity(p_person uuid, p_document_type text, p_verified_on date, p_notes text)` *(writes)* — Records a CDD check as what it is — this document, seen by this individual, on this day.
 - `void_bank_transfer(p_id uuid, p_reason text)` *(writes)* — Voids a transfer between the company's own bank accounts and reverses its journal if it had one.
 - `void_deposit(p_id uuid, p_reason text)` *(writes)* — Voids a deposit and reverses its journal.
@@ -988,6 +990,7 @@ inconsistent.
 - `matters`
 - `mbrs_elements`
 - `membership_items`
+- `mia_credentials`
 - `mo_components`
 - `mo_operations`
 - `module_promotions`
