@@ -198,17 +198,38 @@ in a different unit, on the other side of the wire.
 ## Two more worth knowing
 
 **Rendering at phone width is itself an overflow test.** A `RenderFlex`
-overflow is a test failure in Flutter, so this needs no assertion:
+overflow is a test failure in Flutter, so this needs no assertion —
+but there are two ways to make the screen narrow and only one of them
+works:
 
 ```dart
-await tester.binding.setSurfaceSize(const Size(393, 852));
-addTearDown(() => tester.binding.setSurfaceSize(null));
+tester.view.devicePixelRatio = 1.0;          // this one
+tester.view.physicalSize = const Size(393, 852);
+addTearDown(tester.view.reset);
+
+await tester.binding.setSurfaceSize(const Size(393, 852));   // not this one
 ```
+
+`setSurfaceSize` resizes the RENDER SURFACE, so it does catch an
+overflow. It does NOT move `MediaQuery`, which goes on reporting 800 —
+so every `MediaQuery.sizeOf(context).width < 700` in the app still
+takes the DESKTOP branch, and a test asserting the narrow one is
+asserting against a layout that is not on the screen. Fourteen files
+here branch on that expression. `tester.view.physicalSize` drives both,
+and forty-odd tests already use it; the shorter call is the trap.
 
 The default surface is 800 wide and hides what a phone would show.
 `check_narrow_rows.py` reads `trailing:` widgets only, so an
 overflowing `title:` row is uncovered by it — `receipts_screen.dart`
-had two.
+had two and `document_list_screen.dart` had a third.
+
+**An overflow sweep is worth more than one phone-width test.** The
+document list takes a document type, a role and a width, and the app
+bar it builds is different for each. One screenshot at 393 found one of
+three overflows; a loop over 5 types × 2 roles × 7 widths found all of
+them, and is what now holds the two width constants in that screen
+honest. It costs seventy tests that assert nothing but `findsOneWidget`
+on the screen itself — the failure is the overflow.
 
 **`Duration.inHours` truncates.** A fixture built exactly 70 hours out
 is computed a moment later and arrives as 69. Build it 70 hours and a

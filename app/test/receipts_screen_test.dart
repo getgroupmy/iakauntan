@@ -208,8 +208,9 @@ void main() {
       // There is no assertion to write. A RenderFlex overflow IS a test
       // failure in Flutter, so rendering the screen at this size is the
       // whole check, and it fails against the Row it replaced.
-      await tester.binding.setSurfaceSize(const Size(393, 852));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(393, 852);
+      addTearDown(tester.view.reset);
 
       await show(tester, [settlement(unapplied: 300)]);
 
@@ -222,8 +223,9 @@ void main() {
       // A viewer gets neither action, so the header is the segmented
       // control alone -- the case that would have passed all along and
       // hidden the one above.
-      await tester.binding.setSurfaceSize(const Size(393, 852));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(393, 852);
+      addTearDown(tester.view.reset);
 
       await show(tester, [settlement()], role: 'viewer');
 

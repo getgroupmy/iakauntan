@@ -783,8 +783,9 @@ void main() {
   });
 
   testWidgets('renders at phone width', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(393, 852));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(393, 852);
+    addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       wrap(
