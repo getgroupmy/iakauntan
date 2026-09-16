@@ -120,6 +120,43 @@ Noto fallbacks from there for glyphs the bundled font does not have, and
 this is an application whose customer names include Chinese and Tamil
 script. Left alone deliberately.
 
+### The fallback list is not the corrupt font
+
+Reported from an Android handset: one web font fails to load, the
+browser calls the WOFF2 corrupt, and some text falls back. The obvious
+suspect is that list -- the engine bakes 725 `fonts.gstatic.com` URLs
+into the bundle and a stale one would return an HTML 404 page that a
+font decoder describes exactly that way.
+
+It is not that. All 725 were fetched on 2026-09-16 and every one
+answered `200 font/woff2`:
+
+```sh
+python3 - <<'EOF' > /tmp/noto.txt
+import re
+s = open('app/build/web/main.dart.js', errors='replace').read()
+print('\n'.join(sorted(set(
+    re.findall(r'"([a-z0-9]+/v\d+/[A-Za-z0-9_.\-]+\.woff2)"', s)))))
+EOF
+xargs -P 16 -I{} sh -c 'printf "%s {}\n" "$(curl -s -o /dev/null \
+  -w "%{http_code}:%{content_type}" "https://fonts.gstatic.com/s/{}")"' \
+  < /tmp/noto.txt | grep -v '^200:font/woff2 '
+```
+
+An empty result means the list is sound. Worth re-running before
+blaming it again, since the engine's list changes with every Flutter
+upgrade.
+
+The app itself ships no WOFF2 at all -- every font it carries is a
+`.ttf` asset under `assets/fonts/` -- so a same-origin request for one
+is a request for a file that is not there. Until `check_spa_fallback.py`
+the deploy config answered those with `/index.html` and a `200`, which
+is what turns a missing file into a corrupt one in the browser's
+telling. The two remaining explanations are that, and a stale service
+worker serving its own cache; both had a fix land the same day, so if
+the report survives them the Network tab's URL is the next thing to
+read.
+
 ## 5. Rate limiting
 
 The login and password-reset paths are Supabase Auth, not application
