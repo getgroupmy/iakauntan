@@ -383,8 +383,12 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
   }
 
   double get _available {
-    final list = ref.read(clientTransactionsProvider(widget.matterId)).value ??
-        const <ClientTransaction>[];
+    // `valueOrNull`: `AsyncError.value` throws, so the `??` beside it
+    // never runs and this getter takes the dialog down instead of
+    // reading an empty account. See scripts/check_async_value.py.
+    final list =
+        ref.read(clientTransactionsProvider(widget.matterId)).valueOrNull ??
+            const <ClientTransaction>[];
     return list.fold<double>(0, (sum, t) => sum + t.amount);
   }
 
@@ -607,7 +611,7 @@ class _MoveClientMoneyDialogState
 
   double get _held {
     final list =
-        ref.read(clientTransactionsProvider(widget.matterId)).value ??
+        ref.read(clientTransactionsProvider(widget.matterId)).valueOrNull ??
             const <ClientTransaction>[];
     return list.fold<double>(0, (sum, t) => sum + t.amount);
   }
@@ -646,7 +650,7 @@ class _MoveClientMoneyDialogState
   @override
   Widget build(BuildContext context) {
     final matters =
-        ref.watch(mattersProvider((status: 'all', search: ''))).value ??
+        ref.watch(mattersProvider((status: 'all', search: ''))).valueOrNull ??
             const <Matter>[];
     final from = matters.where((m) => m.id == widget.matterId).firstOrNull;
     if (from == null) {
@@ -850,6 +854,33 @@ class _TimeDialog extends ConsumerStatefulWidget {
   ConsumerState<_TimeDialog> createState() => _TimeDialogState();
 }
 
+/// What is wrong with an hourly rate as typed, if anything.
+///
+/// Empty is allowed: the box is not marked required, and a matter with
+/// no agreed rate leaves it blank.
+///
+/// Anything else has to be a figure, and that is the point. The amount
+/// on a time entry is worked out by `app.calc_time_entry` in `0021` as
+/// `minutes / 60 * coalesce(hourly_rate, 0)`, and nothing anywhere
+/// fills the rate in from the matter afterwards. So a rate typed as
+/// "1,200" -- which is how twelve hundred ringgit an hour is written --
+/// used to read as nought through `double.tryParse(...) ?? 0` and
+/// record BILLABLE time worth nothing. The entry looks ordinary on the
+/// matter and goes onto the bill at zero.
+///
+/// The box is pre-filled from the matter's agreed rate, so editing it
+/// is the ordinary path into this rather than an unusual one.
+///
+/// Public, and not a static on the private dialog's State, so it can be
+/// asserted.
+String? timeEntryRateProblem(String raw) {
+  if (raw.trim().isEmpty) return null;
+  final value = Fmt.typedNumber(raw);
+  if (value == null) return 'Enter an hourly rate, or leave it empty.';
+  if (value < 0) return 'A rate cannot be below zero.';
+  return null;
+}
+
 class _TimeDialogState extends ConsumerState<_TimeDialog> {
   final _formKey = GlobalKey<FormState>();
   final _description = TextEditingController();
@@ -865,7 +896,18 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
   void initState() {
     super.initState();
     // Default the rate to the matter's agreed hourly rate.
-    final matters = ref.read(mattersProvider((status: 'all', search: ''))).value;
+    //
+    // `valueOrNull`, and not `.value`. Riverpod's `AsyncError.value`
+    // THROWS -- its own doc says "reading .value will be throw during
+    // error" -- so with the matters list in a failed state this line
+    // threw out of `initState`, and pressing Record time got a broken
+    // screen instead of a dialog. There is nowhere to catch that: an
+    // exception from `initState` takes the route down with it.
+    //
+    // A missing rate is the right answer here anyway. The box is not
+    // required, and somebody can type one.
+    final matters =
+        ref.read(mattersProvider((status: 'all', search: ''))).valueOrNull;
     final matter = matters?.where((m) => m.id == widget.matterId).firstOrNull;
     if (matter != null && matter.hourlyRate > 0) {
       _rate.text = matter.hourlyRate.toStringAsFixed(2);
@@ -880,9 +922,20 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
     super.dispose();
   }
 
+  /// The two figures in the boxes, read in ONE place.
+  ///
+  /// The dialog shows the value of the entry under the boxes and then
+  /// sends a value to the repository, and those were two separate
+  /// parses of the same two strings. Two parses can disagree -- they
+  /// did, when only one of them was taught to read a comma -- and the
+  /// disagreement is invisible: the screen says RM 2,400.00 and the
+  /// hour is recorded at nought.
+  double get _hoursTyped => Fmt.typedNumber(_hours.text) ?? 0;
+  double get _rateTyped => Fmt.typedNumber(_rate.text) ?? 0;
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    final hours = double.tryParse(_hours.text) ?? 0;
+    final hours = _hoursTyped;
 
     setState(() => _saving = true);
     final ok = await runWithFeedback(
@@ -891,7 +944,7 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
             matterId: widget.matterId,
             description: _description.text.trim(),
             minutes: (hours * 60).round(),
-            hourlyRate: double.tryParse(_rate.text) ?? 0,
+            hourlyRate: _rateTyped,
             date: _date,
             activityCode: _activity,
             billable: _billable,
@@ -908,8 +961,8 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final hours = double.tryParse(_hours.text) ?? 0;
-    final rate = double.tryParse(_rate.text) ?? 0;
+    final hours = _hoursTyped;
+    final rate = _rateTyped;
 
     return AlertDialog(
       title: const Text('Record time'),
@@ -940,7 +993,7 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                         labelText: 'Hours *', hintText: '1.5'),
-                    validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0
+                    validator: (v) => (Fmt.typedNumber(v ?? '') ?? 0) <= 0
                         ? 'Enter hours'
                         : null,
                   ),
@@ -952,6 +1005,8 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (_) => setState(() {}),
+                    validator: (v) => timeEntryRateProblem(v ?? ''),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     decoration: const InputDecoration(
                         labelText: 'Rate', prefixText: 'RM '),
                   ),

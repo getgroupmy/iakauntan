@@ -246,4 +246,131 @@ void main() {
       });
     }
   });
+
+  group('the rate on an hour of somebody\'s time', () {
+    // `app.calc_time_entry` in `0021` values an entry as
+    // `minutes / 60 * coalesce(hourly_rate, 0)`, and nothing fills the
+    // rate in from the matter afterwards. So a rate that reads as
+    // nought is a billable hour worth nothing -- on the matter, and on
+    // the bill.
+    //
+    // The box was read with `double.tryParse(text) ?? 0` and had no
+    // validator, so "1,200" was that nought. It is also pre-filled from
+    // the matter's agreed rate, which makes editing it the ordinary
+    // path rather than an unusual one.
+
+    test('a figure is accepted, however it is written', () {
+      expect(timeEntryRateProblem('1200'), isNull);
+      expect(timeEntryRateProblem('1,200'), isNull);
+      expect(timeEntryRateProblem('RM 1,200.00'), isNull);
+      expect(timeEntryRateProblem('  850.50  '), isNull);
+    });
+
+    test('an empty box is allowed, because the rate is not required', () {
+      // A matter with no agreed rate leaves it blank, and the entry is
+      // recorded unvalued on purpose. Refusing this would be a
+      // different bug in the other direction.
+      expect(timeEntryRateProblem(''), isNull);
+      expect(timeEntryRateProblem('   '), isNull);
+    });
+
+    test('text that is not a figure is refused rather than zeroed', () {
+      expect(timeEntryRateProblem('twelve hundred'), isNotNull);
+      expect(timeEntryRateProblem('1,20'), isNotNull);
+      expect(timeEntryRateProblem('1.2.0'), isNotNull);
+    });
+
+    test('and so is a negative rate', () {
+      expect(timeEntryRateProblem('-500'), contains('below zero'));
+    });
+
+    testWidgets('and the box in the dialog actually uses it', (tester) async {
+      // The two mutants a unit test of the function above cannot kill:
+      // dropping the `validator:` from the field, and reading the box
+      // with `double.tryParse` at save time anyway. Either leaves
+      // `timeEntryRateProblem` perfect and the dialog broken, which is
+      // the whole defect back again.
+      await show(tester);
+      // The button lives on the Time tab, behind `canWrite`.
+      await tester.tap(find.widgetWithText(Tab, 'Time'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(
+        FloatingActionButton,
+        'Record time',
+      ));
+      await tester.pumpAndSettle();
+
+      final rate = find.ancestor(
+        of: find.text('Rate'),
+        matching: find.byType(TextFormField),
+      );
+      expect(rate, findsOneWidget);
+
+      await tester.enterText(rate, 'twelve hundred');
+      await tester.pump();
+
+      expect(
+        find.text('Enter an hourly rate, or leave it empty.'),
+        findsOneWidget,
+      );
+
+      // And the live value line, which reads the same box, does not
+      // quietly price the hour at nothing.
+      await tester.enterText(
+        find.ancestor(
+          of: find.text('Hours *'),
+          matching: find.byType(TextFormField),
+        ),
+        '2',
+      );
+      await tester.pump();
+      // Scoped to the dialog: the summary card behind it is full of
+      // zero figures, and an unscoped `find.text('RM 0.00')` matches
+      // those instead of the line being tested.
+      Finder inDialog(String text) => find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text(text),
+      );
+      expect(inDialog('RM 0.00'), findsNothing);
+
+      // Corrected, with a comma, the value appears and is right.
+      await tester.enterText(rate, '1,200');
+      await tester.pump();
+      expect(find.text('Enter an hourly rate, or leave it empty.'),
+          findsNothing);
+      expect(inDialog('RM 2,400.00'), findsOneWidget);
+    });
+
+    // TWO MUTANTS SURVIVE HERE, and neither is a missing assertion that
+    // could be added from a widget test.
+    //
+    // Reading the HOURS box with `double.tryParse` instead survives
+    // because the two readings differ only on text nobody puts in an
+    // hours box -- "2%" or "1 5". The box uses the same function as the
+    // rate for the sake of one rule rather than two, not because the
+    // difference is observable.
+    //
+    // Parsing the rate box a SECOND time inside `_save`, loosely, also
+    // survives, and that one is a real defect that cannot be caught
+    // here: `Repo.addTimeEntry` is declared on `extension RepoExtras on
+    // Repo`, and a Dart extension method binds to the STATIC type. A
+    // `_FakeRepo implements Repo` does not intercept it -- the real
+    // body runs against the fake and reaches `client`, which is not
+    // something a test can stand in for. Checked, not assumed: a fake
+    // with `addTimeEntry` on it never saw the call.
+    //
+    // What closes it instead is that `_save` and the value line on the
+    // screen now read `_rateTyped`, one getter, so a mutant that
+    // changes the getter is caught by the figure the dialog shows. A
+    // second parse written back into `_save` would get past this file
+    // and is what `docs/widget-tests.md` now warns about.
+
+    test('the refusal says what to do about it', () {
+      // Including that leaving it empty is an option -- somebody who
+      // has just been refused needs to know the blank box was allowed
+      // all along, or they invent a number.
+      final problem = timeEntryRateProblem('twelve hundred')!;
+      expect(problem.toLowerCase(), contains('empty'));
+    });
+  });
 }

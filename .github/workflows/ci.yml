@@ -495,6 +495,14 @@ jobs:
       - name: Check a missing asset 404s instead of returning the app
         run: python3 scripts/check_spa_fallback.py
 
+      # `ref.watch(p).value ?? const []` reads as a fallback and is not
+      # one: riverpod's own doc says ".value will be throw during
+      # error", so the `??` never runs and a provider that failed takes
+      # the screen down instead. A ratchet -- the count may fall, never
+      # rise.
+      - name: Check nothing new reads .value on a provider
+        run: python3 scripts/check_async_value.py
+
       # A test that catches `when others` and asserts nothing about the
       # error passes when the guard it is aimed at is deleted, and passes
       # when the statement under test has a typo in it. A sweep of

@@ -215,6 +215,55 @@ bug. It had shipped for a year, on every company secretary's licence,
 raising "the company has no validly appointed secretary" in the danger
 colour one day early.
 
+## A test double cannot intercept an extension method
+
+`_FakeRepo implements Repo` with a `noSuchMethod` that throws is the
+test double this repository uses everywhere, and it has a hole in it
+that reports nothing.
+
+About half of `Repo`'s surface is not on the class. It is on
+`extension RepoExtras on Repo`, `extension RepoGroupContacts on Repo`
+and a dozen more, which is how a 12,000-line repository is kept in
+readable pieces. A Dart extension method binds to the STATIC type of
+the receiver, so it is not a virtual call and there is nothing to
+override:
+
+```dart
+class _FakeRepo implements Repo {
+  @override                                    // the analyzer says this
+  Future<void> addTimeEntry({...}) async {}    // is not an override
+}
+```
+
+With the `@override` the analyzer catches it — `override_on_non_overriding_member`,
+which is a warning and `--fatal-warnings` makes it a build failure.
+WITHOUT the annotation nothing says anything at all. The method sits
+there looking like a stub, the real extension body runs against the
+fake, reaches `client` or `callRpc`, and either throws into whatever
+catches errors on that screen or does something worse.
+
+Both halves of that happened in one afternoon:
+
+  * `contact_credit_limit_test.dart` declared `linkGroupContact`, which
+    is on `RepoGroupContacts`. The real body ran, hit `callRpc` on the
+    fake, threw, and `runWithFeedback` caught it — so the form showed a
+    failed save while every assertion in the file passed, because they
+    all read a field set earlier in `_save`.
+  * `matter_client_ledger_test.dart` tried the same for `addTimeEntry`
+    and never saw the call.
+
+Two rules follow.
+
+**Check where a method is declared before faking it.** If it is inside
+an `extension ... on Repo`, a double cannot see it; answer the thing
+the extension body calls instead (`callRpc`, usually) and assert
+somewhere else.
+
+**Assert something the whole action produces, not only a field set
+partway through it.** `expect(repo.saved, ...)` is true the moment the
+first call lands. `expect(find.text('Contact saved'), findsOneWidget)`
+is true only if the action finished.
+
 ## Four more worth knowing
 
 **Rendering at phone width is itself an overflow test.** A `RenderFlex`
