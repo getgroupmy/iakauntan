@@ -372,6 +372,7 @@ class LandingContent {
     // The odd one out, and deliberately: see the field.
     this.signinShowRegisterMobile = true,
     this.signinShowMagicLink = false,
+    this.signinShowGoogle = false,
     this.turnstileSiteKey,
     this.signinPoints = const [],
     this.signinEmailLabel,
@@ -691,6 +692,22 @@ class LandingContent {
   /// nothing for almost everybody who presses it, and they wait.
   final bool signinShowMagicLink;
 
+  /// Whether to draw "Continue with Google" on the sign-in form.
+  ///
+  /// Off by default, for two walls rather than the usual one. Google
+  /// has to be enabled in the Supabase dashboard with a client id and
+  /// secret, or the button takes somebody to an error page — the same
+  /// argument [signinShowMagicLink] makes about SMTP.
+  ///
+  /// And it is drawn on the WEB only however this switch is set.
+  /// `signInWithOAuth` comes back through a `redirectTo`, and neither
+  /// platform registers a URL scheme — `AndroidManifest.xml` has none
+  /// in its intent filters and `Info.plist` has no
+  /// `CFBundleURLSchemes` — so on a phone a provider would have
+  /// nowhere to send the visitor back to. A platform file, not a line
+  /// of Dart; see `0645`.
+  final bool signinShowGoogle;
+
   /// Cloudflare Turnstile's site key, or null where no captcha is
   /// configured (`0556`).
   ///
@@ -893,6 +910,7 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowRegisterMobile:
           brandBoolUnlessOff('signin_show_register_mobile'),
       signinShowMagicLink: brandBool('signin_show_magic_link'),
+      signinShowGoogle: brandBool('signin_show_google'),
       turnstileSiteKey: brandStr('turnstile_site_key'),
       signinPoints: blocks('signin_points'),
       signinEmailLabel: brandStr('signin_email_label'),
@@ -1127,6 +1145,7 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowPasskeyIos: brandBool('signin_show_passkey_ios'),
     signinShowRegisterMobile: brandBoolUnlessOff('signin_show_register_mobile'),
     signinShowMagicLink: brandBool('signin_show_magic_link'),
+    signinShowGoogle: brandBool('signin_show_google'),
     turnstileSiteKey: brandStr('turnstile_site_key'),
     signinPoints: blocks('signin_points'),
     signinEmailLabel: brandStr('signin_email_label'),

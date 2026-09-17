@@ -1386,6 +1386,43 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// same way of filling somebody's inbox using nothing but their
   /// address. What differs is the clock — asking for a sign-in link is
   /// not asking for a reset — and what arrives.
+  /// Hands the browser to Google and comes back to the sign-in page.
+  ///
+  /// `redirectTo` is the app's own origin, the way `_sendMagicLink` and
+  /// the password reset already build theirs. It is not optional on the
+  /// web: without it GoTrue returns to whatever `SITE_URL` the project
+  /// holds, which on a platform serving several hostnames is somebody
+  /// else's front door.
+  ///
+  /// There is no `await` on a session here and nothing to do after the
+  /// call. `signInWithOAuth` navigates the page away; the session
+  /// arrives on the way back, and `onAuthStateChange` — which this
+  /// screen already listens to — is what notices.
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: kIsWeb ? '${Uri.base.origin}/#/signin' : null,
+      );
+    } on AuthException catch (e) {
+      // The one everybody will hit first: the provider is not enabled
+      // in the Supabase dashboard. GoTrue's own sentence for it names
+      // no dashboard and no provider, so it is said here.
+      if (mounted) setState(() => _error = googleProblem(e.message));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = googleProblem(null));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _sendMagicLink() async {
     final email = _email.text.trim();
     if (email.isEmpty) {
@@ -2173,6 +2210,38 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                         : _sendMagicLink,
                     icon: const Icon(Icons.mail_outline, size: 18),
                     label: const Text('Email me a link instead'),
+                  ),
+                ],
+                // 0645. Continue with Google.
+                //
+                // `googleButtonShown` rather than the switch alone, and
+                // the `kIsWeb` inside it is the whole of it:
+                // `signInWithOAuth` comes back through a `redirectTo`,
+                // and neither platform registers a URL scheme, so on a
+                // phone the provider would have nowhere to send
+                // somebody back to. Drawing the button there would be
+                // a way out of the app with no way back in.
+                //
+                // Not on the sign-up half either, for the reason the
+                // magic link is not: signing in with a provider
+                // CREATES an account for any address the provider
+                // vouches for, which would be a registration form on a
+                // platform whose operator may have registration
+                // switched off. `0563`'s door is the one that decides
+                // that, and it is not this button.
+                if (!_isSignUp &&
+                    googleButtonShown(
+                      offered: _brand?.signinShowGoogle ?? false,
+                      onWeb: kIsWeb,
+                    )) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const ValueKey('google-signin'),
+                    onPressed: _busy || _captchaPending
+                        ? null
+                        : _signInWithGoogle,
+                    icon: const Icon(Icons.account_circle_outlined, size: 18),
+                    label: const Text('Continue with Google'),
                   ),
                 ],
                 // Everything below the Sign in button is about joining

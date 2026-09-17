@@ -1902,23 +1902,32 @@ Stated plainly so nothing here is mistaken for finished:
   on it — the database does not require `aal2` on anything, so it stops
   somebody with the password and not the phone and would not stop a
   client that never drew the dialog, and that page says what closing
-  the gap would take. What is still missing is **OAuth**, and the line
+  the gap would take. **OAuth** was the last of these, and the line
   that stood here said it "needs a provider's credentials in the
-  dashboard" — which implied the code was waiting on a secret. Checked
-  rather than re-read, like the three entries below: **there is no
-  OAuth code at all.** Nothing in `app/lib` calls `signInWithOAuth`,
-  names an `OAuthProvider`, or draws a provider button; the credentials
-  would have nothing to arrive at.
+  dashboard" — which implied code waiting on a secret. Checked rather
+  than re-read, like the three entries below: there was no OAuth code
+  at all. Nothing called `signInWithOAuth`, named an `OAuthProvider` or
+  drew a provider button, so the credentials would have had nothing to
+  arrive at.
 
-  And on a phone it needs more than credentials even once it is
-  written. `signInWithOAuth` comes back through a `redirectTo`, and
-  **neither platform registers a URL scheme** — `AndroidManifest.xml`
-  has no scheme in its intent filters and `Info.plist` has no
-  `CFBundleURLSchemes` — so a provider would have nowhere to return the
-  visitor to. That is the same class of blocker as the two passkey
-  association files: a platform file, not a line of Dart. The web half
-  has no such problem, because the redirect is an ordinary URL on the
-  site's own origin
+  `0645` writes it: **Continue with Google**, Platform console → Site
+  pages, off by default like every other way in. Google alone, because
+  that is the account a Malaysian business has; a second provider is a
+  column, a switch and a button when somebody asks for one.
+
+  Two walls rather than the usual one, and the console says both. The
+  provider needs a client ID and secret in the Supabase dashboard, or
+  the button lands on an error page — the same argument the magic link
+  makes about SMTP. And **the button is drawn on the web only, however
+  the switch is set**: `signInWithOAuth` returns through a `redirectTo`
+  and neither platform registers a URL scheme — `AndroidManifest.xml`
+  has none in its intent filters, `Info.plist` has no
+  `CFBundleURLSchemes` — so on a phone a provider would have nowhere
+  to send the visitor back to, and the button would be a way out of
+  the app with no way back in. That is a platform file rather than a
+  line of Dart, the same class of blocker as the two passkey
+  association files, and `googleButtonShown` is the one place that
+  changes when a scheme exists
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
   plans one from AutoCount Cloud and named what had to be built first —
   that **no table recorded where a row came from**, so no import could be

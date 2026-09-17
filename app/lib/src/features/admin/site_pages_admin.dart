@@ -622,6 +622,26 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'See docs/magic-link.md.',
                 onChanged: (v) => _save({'signin_show_magic_link': v}),
               ),
+            // `0645`. Continue with Google, and it says BOTH walls
+            // rather than only the one an operator can clear. A
+            // console that mentioned the dashboard and not the phones
+            // would have somebody turn it on, test it on a handset and
+            // conclude the switch is broken.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_google'),
+                busy: _busy,
+                title: 'Continue with Google',
+                subtitle:
+                    'Draws a Google button on the sign-in form. Enable '
+                    'Google in the Supabase dashboard under '
+                    'Authentication → Providers FIRST, with its client '
+                    'ID and secret — without them the button lands on '
+                    'an error page. WEB ONLY however this is set: the '
+                    'apps register no URL scheme for the provider to '
+                    'return to, so the button is not drawn there.',
+                onChanged: (v) => _save({'signin_show_google': v}),
+              ),
             const Divider(height: Space.lg),
             // The captcha. A box rather than a switch: there is nothing
             // to switch on until there is a key to draw the widget

@@ -1562,11 +1562,42 @@ begin
     'and both are offered together',
     v_out -> 'brand' ->> 'signin_show_passkey', 'true');
 
+  -- 0645: Continue with Google, on the same switch shelf and with the
+  -- same failure to catch -- a patch that writes one switch by
+  -- clearing its neighbour.
+  perform pg_temp.check_eq(
+    'and Google is not offered until somebody says so',
+    v_out -> 'brand' ->> 'signin_show_google', 'false');
+
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_google', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('turning Google on reaches the sign-in form',
+    v_out -> 'brand' ->> 'signin_show_google', 'true');
+  perform pg_temp.check_eq('and leaves the link on',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'true');
+  perform pg_temp.check_eq('and the passkey',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'true');
+
+  -- And back off again. A switch that can only be turned on is a
+  -- switch an operator cannot undo after testing it against a
+  -- dashboard that is not configured yet.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_google', false));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('and it can be turned back off',
+    v_out -> 'brand' ->> 'signin_show_google', 'false');
+
   perform pg_temp.sign_in_as(pg_temp.another_user('lain@example.test'));
   perform pg_temp.check_refused(
     'and only a platform administrator may offer it',
     format('select public.platform_save_landing_page(%L::jsonb)',
            jsonb_build_object('signin_show_magic_link', false)),
+    '%front door%', '42501');
+  perform pg_temp.check_refused(
+    'nor may anybody else offer Google',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_google', true)),
     '%front door%', '42501');
 end $$;
 
