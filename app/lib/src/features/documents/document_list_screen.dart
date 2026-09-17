@@ -9,8 +9,10 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/repository.dart';
 import 'bulk_plan.dart';
 import 'doc_types.dart';
+import 'duplicate_bill.dart';
 import 'late_orders_dialog.dart';
 import '../shared/scan_intake.dart';
 import '../shared/supplier_from_scan.dart';
@@ -67,6 +69,30 @@ Future<void> _scanInto(
     return;
   }
 
+  // 0628. Before anything is created, not after: a duplicate caught
+  // here is a decision, and one caught after the draft exists is a
+  // second draft to go and delete. The same receipt photographed twice
+  // is the ordinary way this happens, and the second photograph is
+  // taken by somebody who does not remember the first.
+  //
+  // Only on the purchase side. A sales document's number is this
+  // company's own sequence and cannot collide.
+  if (!meta.kind.isSales) {
+    if (!context.mounted) return;
+    final go = await _clearOfDuplicates(
+      context,
+      ref,
+      contactId: contactId,
+      docType: docType,
+      read: read,
+    );
+    if (!go) {
+      await repo.deleteAttachmentById(staged.attachmentId);
+      return;
+    }
+    if (!context.mounted) return;
+  }
+
   try {
     final saved = await repo.saveDocument(
       kind: meta.kind,
@@ -95,6 +121,94 @@ Future<void> _scanInto(
       ).showSnackBar(SnackBar(content: Text('Could not start it: $e')));
     }
   }
+}
+
+
+/// Warns about a bill already on the books, and lets it go on anyway.
+///
+/// `0628`. Returns true to carry on. A check that REFUSED would refuse
+/// a supplier's corrected re-issue and a genuine second delivery on one
+/// day, and what people do with a check that is wrong a tenth of the
+/// time is type the number differently — which destroys the only field
+/// it runs on.
+///
+/// A lookup that fails is not a duplicate. It carries on: a network
+/// error must not stop somebody entering a bill.
+Future<bool> _clearOfDuplicates(
+  BuildContext context,
+  WidgetRef ref, {
+  required String contactId,
+  required String docType,
+  required OcrExtraction? read,
+}) async {
+  final number = read?.documentNo?.trim();
+  final date = read?.documentDate;
+  final total = read?.totalAmount;
+  if ((number == null || number.isEmpty) && (date == null || total == null)) {
+    return true;
+  }
+
+  final List<DuplicateBill> found;
+  try {
+    final rows = await ref.read(repoProvider)!.duplicatePurchaseDocuments(
+      contactId: contactId,
+      docType: docType,
+      supplierDocNo: number,
+      docDate: date,
+      totalAmount: total,
+    );
+    found = [for (final r in rows) DuplicateBill.fromMap(r)];
+  } catch (_) {
+    return true;
+  }
+  if (found.isEmpty || !context.mounted) return found.isEmpty;
+
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.copy_all_outlined),
+      title: Text(
+        duplicateHeadline(found),
+        key: const ValueKey('duplicate-headline'),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            duplicateAdvice(found),
+            key: const ValueKey('duplicate-advice'),
+          ),
+          const SizedBox(height: Space.md),
+          for (final d in found)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                duplicateLine(d),
+                key: ValueKey('duplicate-line-${d.id}'),
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('duplicate-stop'),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Stop'),
+        ),
+        // Deliberately not styled as the primary action. Going on is
+        // allowed and is sometimes right; it should not be the button
+        // somebody presses without reading.
+        TextButton(
+          key: const ValueKey('duplicate-go-on'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Enter it anyway'),
+        ),
+      ],
+    ),
+  );
+  return go ?? false;
 }
 
 /// Which supplier this is from — the one thing no scan can decide.

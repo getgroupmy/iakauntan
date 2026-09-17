@@ -304,6 +304,7 @@ jobs:
                    supabase/tests/bank_reconciliation.sql \
                    supabase/tests/bank_rules.sql \
                    supabase/tests/tax_details.sql \
+                   supabase/tests/duplicate_bills.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/account_closure.sql \
                    supabase/tests/trigger_reachable_grants.sql \

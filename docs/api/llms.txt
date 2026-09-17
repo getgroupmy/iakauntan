@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0627` (the highest applied migration).
-708 functions and 343 readable tables, of which
-266 functions only read.
+Schema version `0628` (the highest applied migration).
+709 functions and 343 readable tables, of which
+267 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**568 of 708 functions carry a `comment on
+**569 of 709 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (497)
+### general (498)
 
 Not gated on any module.
 
@@ -529,6 +529,7 @@ Not gated on any module.
 - `document_activity(p_document_id uuid)` — One document's whole timeline: what was sent, what changed, what was paid, and what LHDN said.
 - `document_lot_problems(p_document_id uuid, p_kind text)`
 - `document_numbering(p_org_id uuid)` — Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it.
+- `duplicate_purchase_documents(p_contact_id uuid, p_doc_type text, p_supplier_doc_no text, p_doc_date date, p_total_amount numeric, p_exclude_id uuid)` — Purchase documents already on the books that look like the one being entered -- by the supplier's own number, or by amount and date where there is no number.
 - `einvoice_credential_status(p_org_id uuid)` — What is configured per environment, and never what it is.
 - `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a sales document and returns the outbox row.
 - `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a receipt and returns the outbox row.

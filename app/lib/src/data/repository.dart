@@ -7317,6 +7317,33 @@ extension RepoHrSetup on Repo {
         .limit(10),
   );
 
+  /// Purchase documents already on the books that look like this one.
+  ///
+  /// 0628. By the supplier's own number, or -- where the paper carries
+  /// no number, which is most till receipts -- by amount and date. It
+  /// warns and refuses nothing: a supplier re-issuing a corrected
+  /// invoice under the same number is real, and the workaround people
+  /// find for a check that is wrong a tenth of the time is to type the
+  /// number differently, which destroys the only field it runs on.
+  Future<List<Map<String, dynamic>>> duplicatePurchaseDocuments({
+    required String contactId,
+    String docType = 'bill',
+    String? supplierDocNo,
+    DateTime? docDate,
+    double? totalAmount,
+    String? excludeId,
+  }) async => Repo._rows(await callRpc(
+    'duplicate_purchase_documents',
+    params: {
+      'p_contact_id': contactId,
+      'p_doc_type': docType,
+      'p_supplier_doc_no': supplierDocNo,
+      'p_doc_date': docDate == null ? null : Fmt.iso(docDate),
+      'p_total_amount': totalAmount,
+      'p_exclude_id': excludeId,
+    },
+  ));
+
   // ------------------------------------------------------------------
   // 0626. Asking a customer for their own tax details.
   //
