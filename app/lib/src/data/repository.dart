@@ -3844,6 +3844,25 @@ class Repo {
   }
 
   /// Open documents for a contact, used by the settlement dialog.
+  /// What is still open against one contact, for the statement.
+  ///
+  /// **Not invoices alone.** This asked for `doc_type = 'invoice'` until
+  /// it was noticed that a credit note, a debit note and a refund note
+  /// all move the receivable and none of them appeared — on a document
+  /// that goes to the customer. Somebody holding a credit note was sent
+  /// a statement that overstated what they owed, and it disagreed with
+  /// `report_ar_aging`, which signs all four correctly.
+  ///
+  /// The sign is not applied here. These rows are returned as the
+  /// ledger stores them — `balance_amount` is positive on a credit note
+  /// too — and [statementSign] in `features/contacts/statement.dart`
+  /// decides what each type does to the total. A repository that
+  /// negated a column would be answering a question about presentation.
+  ///
+  /// Unapplied receipts are still absent and are a different shape: a
+  /// receipt is not a document and has no row in this table. They are
+  /// on the brought-forward statement (`report_statement_of_account`,
+  /// 0624), which is where they belong.
   Future<List<BusinessDocument>> outstandingFor({
     required DocKind kind,
     required String contactId,
@@ -3853,7 +3872,17 @@ class Repo {
         .select('*, ${kind.contactEmbed}(name, code)')
         .eq('org_id', orgId)
         .eq('contact_id', contactId)
-        .eq('doc_type', kind.isSales ? 'invoice' : 'bill')
+        .inFilter(
+          'doc_type',
+          kind.isSales
+              ? const ['invoice', 'credit_note', 'debit_note', 'refund_note']
+              : const [
+                  'bill',
+                  'purchase_credit_note',
+                  'purchase_debit_note',
+                  'purchase_return',
+                ],
+        )
         .gt('balance_amount', 0)
         .isFilter('deleted_at', null)
         .order('doc_date', ascending: true);

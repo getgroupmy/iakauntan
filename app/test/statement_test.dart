@@ -16,10 +16,11 @@ void main() {
     double balance, {
     String currency = 'MYR',
     double rate = 1,
+    String docType = 'invoice',
   }) =>
       BusinessDocument(
         id: no,
-        docType: 'invoice',
+        docType: docType,
         docNo: no,
         docDate: DateTime(2026, 1, 1),
         dueDate: due,
@@ -174,6 +175,59 @@ void main() {
           asAt: asAt,
           mode: LetterheadMode.stationery);
       expect(onPaper.length, lessThan(printed.length));
+    });
+  });
+
+  group('what a document type does to the balance', () {
+    // `outstandingFor` asked for `doc_type = 'invoice'` and nothing
+    // else, so none of these reached the statement at all. Widening the
+    // query was half the fix; the other half is that they arrive from
+    // the ledger POSITIVE — `sales_documents` stores what a document is
+    // worth, not what it does — and printing a credit note that way
+    // asks the customer for it.
+    test('a credit note subtracts', () {
+      expect(statementSign('credit_note'), -1);
+    });
+
+    test('so does a refund note', () {
+      expect(statementSign('refund_note'), -1);
+    });
+
+    test('and a purchase return, on the other side', () {
+      expect(statementSign('purchase_return'), -1);
+      expect(statementSign('purchase_credit_note'), -1);
+    });
+
+    test('an invoice and a debit note add', () {
+      expect(statementSign('invoice'), 1);
+      expect(statementSign('debit_note'), 1);
+      expect(statementSign('bill'), 1);
+    });
+
+    test('and a type nobody has taught it about adds', () {
+      // Guessing the other way would quietly subtract a new kind of
+      // charge, which is the failure that does not look like one.
+      expect(statementSign('some_future_document'), 1);
+    });
+
+    test('the ageing total nets the credit note off', () {
+      final aged = ageing([
+        doc('INV-1', DateTime(2026, 7, 1), 10000),
+        doc('CN-1', null, 1000, docType: 'credit_note'),
+      ], asAt);
+
+      // 10,000 overdue since 1 July, less a 1,000 credit note that has
+      // no due date and is therefore "not yet due".
+      expect(aged.total, 9000);
+      expect(aged.current, -1000);
+      expect(aged.upTo60, 10000);
+    });
+
+    test('and a statement of nothing but credit is negative', () {
+      final aged = ageing([
+        doc('CN-1', null, 500, docType: 'credit_note'),
+      ], asAt);
+      expect(aged.total, -500);
     });
   });
 }

@@ -139,6 +139,11 @@ Future<Uint8List> buildStatementPdf({
               // would leave the reader unable to match this against
               // their own ledger, which is the only thing either side of
               // a statement is ever trying to do.
+              // Signed, so the column foots to the total underneath. A
+              // credit note arrives from the ledger positive -- the
+              // table stores what a document is worth, not what it does
+              // -- and printing it that way was how a customer holding
+              // one was asked for more than they owed.
               for (final d in open)
                 [
                   Fmt.date(d.docDate),
@@ -146,14 +151,20 @@ Future<Uint8List> buildStatementPdf({
                     d.docNo,
                     if (_present(d.reference)) d.reference!,
                     if (d.currency != org.baseCurrency)
-                      Fmt.money(d.balanceAmount, currency: d.currency),
+                      Fmt.money(d.balanceAmount * statementSign(d.docType),
+                          currency: d.currency),
                   ].join('  ·  '),
                   d.dueDate == null ? '—' : Fmt.date(d.dueDate!),
-                  Fmt.money(d.totalAmount * d.exchangeRate,
+                  Fmt.money(
+                      d.totalAmount * d.exchangeRate * statementSign(d.docType),
                       currency: org.baseCurrency),
-                  Fmt.money(d.paidAmount * d.exchangeRate,
+                  Fmt.money(
+                      d.paidAmount * d.exchangeRate * statementSign(d.docType),
                       currency: org.baseCurrency),
-                  Fmt.money(d.balanceAmount * d.exchangeRate,
+                  Fmt.money(
+                      d.balanceAmount *
+                          d.exchangeRate *
+                          statementSign(d.docType),
                       currency: org.baseCurrency),
                 ],
             ],
