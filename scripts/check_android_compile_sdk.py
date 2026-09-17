@@ -52,6 +52,36 @@ GRADLE = ROOT / 'app' / 'android' / 'build.gradle.kts'
 COMPILE_SDK = re.compile(r'compileSdk(?:Version)?\s*[= ]\s*([0-9]+)')
 FLOOR = re.compile(r'^\s*val floor = ([0-9]+)\s*$', re.M)
 
+# The floor is applied from an `afterEvaluate` hook, and the same file
+# later calls `evaluationDependsOn(":app")`, which evaluates eagerly.
+# A hook registered AFTER that is refused outright --
+#
+#     Cannot run Project.afterEvaluate(Action) when the project is
+#     already evaluated.
+#
+# -- which is how the first version of the floor failed: in ninety
+# seconds, with a message that says nothing about compileSdk. Order is
+# therefore part of the contract and not a matter of taste.
+AFTER_EVALUATE = re.compile(r'^\s*afterEvaluate \{', re.M)
+DEPENDS_ON = re.compile(r'evaluationDependsOn\(')
+
+
+def without_comments(kotlin: str) -> str:
+    """Kotlin with its comments removed.
+
+    Needed because the file this scans EXPLAINS the ordering hazard, and
+    the explanation quotes `evaluationDependsOn(":app")` by name. The
+    first version of the ordering check matched that prose, decided the
+    hook came after it, and refused the very arrangement it exists to
+    require -- a check that punishes writing down why, which is the same
+    mistake `scripts/check_web_plugin_registrant.py` made for the same
+    reason.
+    """
+    kotlin = re.sub(r'/\*.*?\*/', '', kotlin, flags=re.S)
+    return '\n'.join(
+        line for line in kotlin.splitlines()
+        if not line.lstrip().startswith('//'))
+
 
 def floor_from_gradle():
     """The floor the build actually applies, read rather than repeated."""
@@ -86,6 +116,25 @@ def main() -> int:
         print('    block. If that block has been removed, this check has')
         print('    nothing to measure against and should go with it.')
         return 2
+
+    gradle = without_comments(GRADLE.read_text())
+    hook = AFTER_EVALUATE.search(gradle)
+    eager = DEPENDS_ON.search(gradle)
+    if hook and eager and hook.start() > eager.start():
+        print('The compileSdk floor is registered too late to run.')
+        print()
+        print(f'    In {GRADLE.relative_to(ROOT)}, the `afterEvaluate` hook')
+        print('    that raises compileSdk appears AFTER a call to')
+        print('    `evaluationDependsOn(...)`, which evaluates its target')
+        print('    eagerly. Gradle then refuses the hook outright:')
+        print()
+        print('        Cannot run Project.afterEvaluate(Action) when the')
+        print('        project is already evaluated.')
+        print()
+        print('    Move the floor block above it. That failure takes ninety')
+        print('    seconds of Gradle to produce and its message says')
+        print('    nothing about compileSdk.')
+        return 1
 
     roots = plugin_roots()
     if roots is None:
