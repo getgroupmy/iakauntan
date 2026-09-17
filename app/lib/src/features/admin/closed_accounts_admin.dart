@@ -97,7 +97,7 @@ class _ClosedAccountsAdminTabState
                       else
                         for (var i = 0; i < list.length; i++) ...[
                           if (i > 0) const Divider(height: 1),
-                          _ClosureRow(closure: list[i]),
+                          ClosureRow(closure: list[i]),
                         ],
                     ],
                   ),
@@ -119,8 +119,14 @@ class _ClosedAccountsAdminTabState
 }
 
 /// One closure, with what the product no longer shows.
-class _ClosureRow extends ConsumerWidget {
-  const _ClosureRow({required this.closure});
+///
+/// Public so a test can pump one row on its own. What it has to get
+/// right is not layout: a login's real address appears here and only
+/// here, and a closure that has already been reopened must not offer
+/// to be reopened again -- the database refuses that, and a button
+/// that always fails is worse than one that is absent.
+class ClosureRow extends ConsumerWidget {
+  const ClosureRow({super.key, required this.closure});
 
   final Map<String, dynamic> closure;
 

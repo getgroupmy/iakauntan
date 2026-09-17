@@ -2276,9 +2276,9 @@ class _CloseAccount extends ConsumerWidget {
     WidgetRef ref,
     List<Map<String, dynamic>> blockers,
   ) async {
-    final answer = await showDialog<_CloseAccountAnswer>(
+    final answer = await showDialog<CloseAccountAnswer>(
       context: context,
-      builder: (_) => _CloseAccountDialog(blockers: blockers),
+      builder: (_) => CloseAccountDialog(blockers: blockers),
     );
     if (answer == null || !context.mounted) return;
 
@@ -2298,7 +2298,13 @@ class _CloseAccount extends ConsumerWidget {
 }
 
 /// What the dialog came back with.
-typedef _CloseAccountAnswer = ({String? reason, bool closeCompanies});
+///
+/// Public, with the dialog, so a test can pump the dialog on its own
+/// and read what it hands back. The rest of this screen is private and
+/// stays so; this is the one piece whose behaviour is a decision rather
+/// than a layout — a confirm button that is live when it should not be
+/// is the difference between a refusal and an orphaned company.
+typedef CloseAccountAnswer = ({String? reason, bool closeCompanies});
 
 /// The confirmation, which asks two things rather than one.
 ///
@@ -2312,16 +2318,16 @@ typedef _CloseAccountAnswer = ({String? reason, bool closeCompanies});
 /// nobody who can invite a replacement and no way back in. It still
 /// will not, unless they say here what should happen to those companies
 /// — which is a decision, and so is asked as one.
-class _CloseAccountDialog extends StatefulWidget {
-  const _CloseAccountDialog({required this.blockers});
+class CloseAccountDialog extends StatefulWidget {
+  const CloseAccountDialog({super.key, required this.blockers});
 
   final List<Map<String, dynamic>> blockers;
 
   @override
-  State<_CloseAccountDialog> createState() => _CloseAccountDialogState();
+  State<CloseAccountDialog> createState() => CloseAccountDialogState();
 }
 
-class _CloseAccountDialogState extends State<_CloseAccountDialog> {
+class CloseAccountDialogState extends State<CloseAccountDialog> {
   final _reason = TextEditingController();
   bool _closeCompanies = false;
 
@@ -2428,7 +2434,7 @@ class _CloseAccountDialogState extends State<_CloseAccountDialog> {
           // is.
           onPressed: sole.isNotEmpty && !_closeCompanies
               ? null
-              : () => Navigator.pop<_CloseAccountAnswer>(context, (
+              : () => Navigator.pop<CloseAccountAnswer>(context, (
                   reason: _reason.text.trim().isEmpty
                       ? null
                       : _reason.text.trim(),
