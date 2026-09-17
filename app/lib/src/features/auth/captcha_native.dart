@@ -151,9 +151,40 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
     }
   }
 
+  /// Build the webview, or report that there is none.
+  ///
+  /// `WebViewController()` THROWS where no platform implementation is
+  /// registered — a widget test, a platform the plugin does not cover,
+  /// a build where it failed to link. Uncaught, that takes the whole
+  /// sign-in screen down with a red error rather than failing the one
+  /// field that cannot draw.
+  ///
+  /// So it is caught and reported as the failure it is: the form shows
+  /// [captchaBroken] and refuses, which is what it already does for a
+  /// challenge blocked by a network. A sign-in screen that cannot draw
+  /// a captcha is a screen that cannot be submitted; it is not a screen
+  /// that should crash.
   void _build(bool dark) {
     _dark = dark;
-    _web = WebViewController()
+    try {
+      _web = _controller(dark);
+    } on Object {
+      _web = null;
+      // Deferred to after the frame. Calling it straight from here
+      // does NOT throw — measured, not assumed: `_build` runs during
+      // this element's own first build, where setState only marks it
+      // dirty again. So a mutant that swaps the two survives, and it
+      // is kept anyway: it works because of where `_build` happens to
+      // be called from, and "setState during build is fine here" stops
+      // being true the moment that moves.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onMessage('{"kind":"failed","value":"no webview"}');
+      });
+    }
+  }
+
+  WebViewController _controller(bool dark) {
+    return WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       // Transparent so the challenge sits on the form's own colour
       // rather than in a white rectangle on a dark theme.
@@ -181,9 +212,9 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    if (_web == null || dark != _dark) _build(dark);
+    if (!_failed && (_web == null || dark != _dark)) _build(dark);
 
-    if (_failed) return const SizedBox.shrink();
+    if (_failed || _web == null) return const SizedBox.shrink();
     return SizedBox(
       height: captchaHeight,
       child: WebViewWidget(controller: _web!),

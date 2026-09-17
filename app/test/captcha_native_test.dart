@@ -3,6 +3,7 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/features/auth/captcha_native.dart';
 
@@ -111,6 +112,70 @@ void main() {
 
     test('an empty message', () {
       expect(captchaMessage(''), isNull);
+    });
+  });
+
+  group('when there is no webview to draw in', () {
+    // A unit test registers no webview platform, so `WebViewController()`
+    // throws here exactly as it would in a build where the plugin
+    // failed to link. That makes this the one part of the widget a
+    // test can actually exercise — and the part where getting it wrong
+    // takes the whole sign-in screen down rather than one field.
+    testWidgets('it reports a failure instead of crashing', (tester) async {
+      var failed = 0;
+      String? token = 'stale';
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TurnstileWidget(
+            siteKey: 'abc',
+            onToken: (t) => token = t,
+            onFailed: () => failed++,
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'a missing webview must not take the screen down',
+      );
+      expect(failed, 1, reason: 'the form has to be told it cannot draw');
+      expect(
+        token,
+        'stale',
+        reason: 'a widget that cannot draw must not emit a token, and '
+            'must not clear one the form already holds on its behalf',
+      );
+    });
+
+    testWidgets('and says it once, not on every rebuild', (tester) async {
+      var failed = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TurnstileWidget(
+            siteKey: 'abc',
+            onToken: (_) {},
+            onFailed: () => failed++,
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // A form that is told repeatedly would setState per frame.
+      expect(failed, 1);
+
+      // Note for a future sweep: this holds with the `!_failed` guard
+      // in build() removed as well, because _onMessage's own `if
+      // (_failed) return` already stops the second report. The guard
+      // stops the widget CONSTRUCTING a webview on every rebuild after
+      // it has given up, which costs something and shows up nowhere a
+      // test can see. Both mutants are equivalent on behaviour and the
+      // guards are kept for what they cost rather than what they
+      // assert.
     });
   });
 
