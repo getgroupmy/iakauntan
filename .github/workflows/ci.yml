@@ -307,6 +307,7 @@ jobs:
                    supabase/tests/duplicate_bills.sql \
                    supabase/tests/credit_note_allocation.sql \
                    supabase/tests/knock_off.sql \
+                   supabase/tests/import_transactions.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/account_closure.sql \
                    supabase/tests/trigger_reachable_grants.sql \

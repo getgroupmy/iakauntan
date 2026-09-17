@@ -110,6 +110,30 @@ const openInvoiceColumns = <String, List<String>>{
   'description': ['particulars', 'remarks'],
 };
 
+/// 0631. One row per LINE, grouped by `doc_no`.
+///
+/// The aliases are the ones other packages actually print. `doc_type`
+/// has none worth guessing at: a column called "type" in an export is
+/// as likely to mean the item type or the tax type, and reading it as
+/// the document type would turn every row into a credit note without
+/// saying so.
+const salesTransactionColumns = <String, List<String>>{
+  'doc_no': ['invoice no', 'invoice number', 'document no', 'no'],
+  'doc_type': ['document type'],
+  'contact_code': ['customer code', 'customer', 'account code'],
+  'doc_date': ['invoice date', 'date'],
+  'due_date': ['due', 'payment due'],
+  'currency': ['ccy'],
+  'exchange_rate': ['rate', 'fx rate'],
+  'reference': ['your ref', 'po no', 'order no'],
+  'item_code': ['item', 'product code', 'stock code'],
+  'description': ['particulars', 'remarks', 'details'],
+  'quantity': ['qty', 'units'],
+  'unit_price': ['price', 'rate per unit', 'unit rate'],
+  'discount_percent': ['discount', 'disc %'],
+  'tax_code': ['tax', 'sst code'],
+};
+
 const openBillColumns = <String, List<String>>{
   'doc_no': ['bill no', 'our ref', 'document no', 'no'],
   'supplier_doc_no': ['supplier invoice no', 'their ref', 'invoice no'],
@@ -160,6 +184,10 @@ enum ImportKind {
   openBills,
   openingBalances,
   openingStock,
+  // 0631, and last in the order for the reason the comment below gives:
+  // the transactions name contacts, items and tax codes, so they are
+  // imported after everything they refer to.
+  salesTransactions,
 }
 
 /// What each importer is called on the button that selects it.
@@ -172,6 +200,45 @@ enum ImportKind {
 /// the job is done in: the master files first because the documents
 /// name their rows, and the chart before the opening balances because
 /// those name account numbers.
+/// The columns a file of this kind cannot import without.
+///
+/// A top-level function rather than a getter on the screen's State, so
+/// it can be asserted: which columns an importer REFUSES without is a
+/// decision, and it was reachable from nothing until the mutation sweep
+/// pointed out that deleting `doc_no` from the transaction importer's
+/// list changed no test.
+List<String> requiredColumnsFor(ImportKind kind) => switch (kind) {
+  // A contact file may leave the code blank: the database draws one
+  // from the row's series -- customer, supplier or prospect -- when
+  // the file is imported, and says so at preview. An item file may
+  // not, because the item code is what every later document line
+  // names the item by.
+  ImportKind.contacts => const ['name'],
+  ImportKind.items => const ['code', 'name'],
+  // The subtype and not the type: the subtype decides which line of
+  // which statement the account lands on, and the type follows from
+  // it (0550). A file naming only the type would leave every account
+  // needing a decision this screen cannot make.
+  ImportKind.accounts => const ['code', 'name', 'account_subtype'],
+  ImportKind.openInvoices || ImportKind.openBills => const [
+    'doc_no',
+    'contact_code',
+    'doc_date',
+    'outstanding_amount',
+  ],
+  ImportKind.openingBalances => const ['account_code'],
+  ImportKind.openingStock => const ['item_code', 'quantity', 'unit_cost'],
+  // One row per line, so the required set is what a LINE needs:
+  // which document it belongs to, whose it is, when, and what it
+  // costs.
+  ImportKind.salesTransactions => const [
+    'doc_no',
+    'contact_code',
+    'doc_date',
+    'unit_price',
+  ],
+};
+
 String importKindLabel(ImportKind kind) => switch (kind) {
   ImportKind.contacts => 'Contacts',
   ImportKind.items => 'Items',
@@ -180,6 +247,7 @@ String importKindLabel(ImportKind kind) => switch (kind) {
   ImportKind.openBills => 'Open bills',
   ImportKind.openingBalances => 'Opening balances',
   ImportKind.openingStock => 'Opening stock',
+  ImportKind.salesTransactions => 'Sales transactions',
 };
 
 /// Whether this kind writes to the ledger.
@@ -284,28 +352,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Map<String, List<String>> get _aliases => importColumnsFor(_kind);
 
-  List<String> get _required => switch (_kind) {
-    // A contact file may leave the code blank: the database draws one
-    // from the row's series -- customer, supplier or prospect -- when
-    // the file is imported, and says so at preview. An item file may
-    // not, because the item code is what every later document line
-    // names the item by.
-    ImportKind.contacts => const ['name'],
-    ImportKind.items => const ['code', 'name'],
-    // The subtype and not the type: the subtype decides which line of
-    // which statement the account lands on, and the type follows from
-    // it (0550). A file naming only the type would leave every account
-    // needing a decision this screen cannot make.
-    ImportKind.accounts => const ['code', 'name', 'account_subtype'],
-    ImportKind.openInvoices || ImportKind.openBills => const [
-      'doc_no',
-      'contact_code',
-      'doc_date',
-      'outstanding_amount',
-    ],
-    ImportKind.openingBalances => const ['account_code'],
-    ImportKind.openingStock => const ['item_code', 'quantity', 'unit_cost'],
-  };
+  List<String> get _required => requiredColumnsFor(_kind);
 
   int get _errorCount => importBlockingErrors(_verdict ?? const []);
 
@@ -355,6 +402,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         ImportKind.openingStock => await repo.importOpeningStock(
           rows: table.rows,
           asAt: _asAt,
+          commit: commit,
+        ),
+        // No `asAt`: these are not a changeover balance taken on one
+        // day, they are the documents themselves and each keeps its own
+        // date.
+        ImportKind.salesTransactions => await repo.importSalesTransactions(
+          rows: table.rows,
           commit: commit,
         ),
       };
@@ -444,6 +498,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.openBills => 'open bills',
     ImportKind.openingBalances => 'opening balances',
     ImportKind.openingStock => 'opening stock lines',
+    ImportKind.salesTransactions => 'transaction lines',
   };
 
   @override
@@ -522,6 +577,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           ImportKind.openingBalances =>
                             'The opening trial balance',
                           ImportKind.openingStock => 'Stock on hand',
+                          ImportKind.salesTransactions =>
+                            'Invoices and credit notes, in full',
                         },
                         subtitle:
                             'Upload the file, or paste it with its header '
@@ -662,6 +719,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ImportKind.openingStock =>
                               'item_code,quantity,unit_cost\n'
                                   'WIDGET-1,100,10.00',
+                            // Two lines of ONE invoice, because that is
+                            // the shape people get wrong: the number
+                            // repeats down the file and the header
+                            // repeats with it.
+                            ImportKind.salesTransactions =>
+                              'doc_no,contact_code,doc_date,description,'
+                                  'quantity,unit_price\n'
+                                  'INV-2025-0912,C-001,2025-11-03,'
+                                  'Consulting,2,500.00\n'
+                                  'INV-2025-0912,C-001,2025-11-03,'
+                                  'Travel,1,250.00',
                           },
                         ),
                       ),

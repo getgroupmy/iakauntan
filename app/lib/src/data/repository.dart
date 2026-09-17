@@ -1429,6 +1429,32 @@ class Repo {
     return _rows(data);
   }
 
+  /// A file of transactions from the old system: one row per LINE,
+  /// grouped by document number.
+  ///
+  /// 0631. Sales invoices, credit notes and debit notes, imported as
+  /// DRAFTS — this is the one importer that could create five hundred
+  /// documents in a statement, and posting them would put five hundred
+  /// journals in the ledger before anybody had read one.
+  ///
+  /// No `asAt`: unlike the open-item importers, these documents are not
+  /// a changeover balance taken on one day. They are the documents
+  /// themselves and each keeps its own date.
+  ///
+  /// Returns the per-row verdicts, the same shape every other importer
+  /// here returns, so the screen reads one kind of answer.
+  Future<List<Map<String, dynamic>>> importSalesTransactions({
+    required List<Map<String, String>> rows,
+    required bool commit,
+  }) async {
+    final data = await callRpc(
+      'import_sales_transactions',
+      params: {'p_org_id': orgId, 'p_rows': rows, 'p_commit': commit},
+    );
+    final map = Map<String, dynamic>.from(data as Map);
+    return _rows(map['rows']);
+  }
+
   /// The opening trial balance from the old system.
   ///
   /// The control accounts are compared against the open items already
