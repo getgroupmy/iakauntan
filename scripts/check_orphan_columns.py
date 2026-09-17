@@ -209,16 +209,17 @@ SUPERSEDED: dict[str, str] = {
 # The column is not the finding -- the TABLE is. Reporting the column
 # sends the next person to the wrong question.
 WHOLE_TABLE_UNREACHED: dict[str, str] = {
-    # `public.notes`: free-form notes attachable to anything, on the
-    # `entity_table`/`entity_id` shape `attachments` uses. The
-    # attachments half was built; this half never was. No function and
-    # no Dart touches the table.
+    # `notes.is_pinned` was here. `0644` names it in a comment, so the
+    # sweep counts it as mentioned and this gate refuses an entry for a
+    # column something reaches.
     #
-    # Whether it SHOULD be built has a real answer on both sides:
-    # `activities` already carries a CRM timeline, and a good many
-    # tables carry their own `notes` text column. Pinning a note is not
-    # a feature until there are notes.
-    'notes.is_pinned': 'nothing reaches public.notes at all',
+    # The table is still screenless, and the finding moved on: its
+    # POLICIES were the naive version -- `is_org_member` to read,
+    # `can_write` to edit or delete anybody's -- so a note filed
+    # against an `employee_documents` row would have been company
+    # reading, which is the hole `app.can_read_attachment` exists to
+    # close for the file. 0644 replaced all four before anything is
+    # built on them, and `notes.sql` proves the passport case.
 
     # `public.fs_disclosures`: one row per MBRS disclosure code on a
     # financial-statements filing. No function reads or writes the

@@ -1295,10 +1295,30 @@ rather than the exemption —
   and no entry to point at. A trigger scoped to the API roles closed
   it; the six reports are untouched, because the term is provably
   zero while nothing can write it.
-- `WHOLE_TABLE_UNREACHED` (2) — the column is not the finding, the
-  table is. `notes.is_pinned` and `fs_disclosures.value_text`: notes
-  attachable to anything, and MBRS disclosures, both tabled and never
-  built.
+- `WHOLE_TABLE_UNREACHED` — the column is not the finding, the table
+  is. Two were listed: notes attachable to anything, and MBRS
+  disclosures.
+
+  `public.notes` came off the list, and what it turned up was worse
+  than a missing screen. Its four policies were the naive version —
+  `is_org_member` to read, `can_write` to edit or **delete anybody's**
+  — written before the question had been thought through. A note is
+  filed against a ROW, so a note on an `employee_documents` row
+  ("passport expires in March") would have been readable by every
+  member of the company, and one on a `payslips` row too. That is the
+  exact hole `app.can_read_attachment` exists to close for the file
+  itself. `0644` replaced all four before anything is built on them:
+  reading asks the same question the row asks, writing asks
+  `app.can_attach_to`, editing asks authorship as well, and
+  `created_by` is set by a trigger from `auth.uid()` and never moves.
+  Nothing was lost, because the table is empty everywhere — nothing
+  could write to it. `notes.sql` proves the passport case, with the
+  clerk who IS an org member as the specimen.
+
+  The table still has no screen, and whether it should is a real
+  question both ways: `activities` already carries a CRM timeline and
+  many tables carry their own `notes` text column, so pinning a note
+  is not a feature until there are notes.
 - `KNOWN_GAPS` — a ratchet, in the shape `check_unreachable.py` uses
   for the providers nobody had drawn. **The number goes down.** It
   started at four and is **empty**; all four were closed rather than
