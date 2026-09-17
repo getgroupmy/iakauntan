@@ -1571,4 +1571,110 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0638: the door a phone opens
+--
+-- Three switches about the app rather than the website. What is
+-- asserted is what a wrong default would cost:
+--
+--   * the two passkey switches ship OFF, like `signin_show_passkey`
+--     and for a longer version of the same reason -- Android wants an
+--     `assetlinks.json` and iOS wants an entitlement and an
+--     `apple-app-site-association`, neither of which the app can check
+--     before somebody presses the button;
+--   * `signin_show_register_mobile` ships ON, because it takes
+--     something away, and a switch that ships in the state that
+--     changes behaviour is a migration that changes behaviour;
+--   * all three are INDEPENDENT of each other and of the web's. That
+--     is the assertion with teeth: "separately" is the whole request,
+--     and a patch that wrote one column by clearing its neighbours
+--     would turn the button off on the surface that was already
+--     working, silently, on the day somebody switched on the other.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  -- Out of the box. Two off, one on, and the asymmetry is the point.
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('iOS is not offered a passkey until somebody says so',
+    v_out -> 'brand' ->> 'signin_show_passkey_ios', 'false');
+  perform pg_temp.check_eq('nor is Android',
+    v_out -> 'brand' ->> 'signin_show_passkey_android', 'false');
+  perform pg_temp.check_eq('and the app offers registration until told not to',
+    v_out -> 'brand' ->> 'signin_show_register_mobile', 'true');
+
+  -- One surface at a time, which is how the setup actually finishes:
+  -- whoever serves `assetlinks.json` is not whoever holds the Apple
+  -- team ID, and they are not done on the same day.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_passkey_android', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('Android can be offered one on its own',
+    v_out -> 'brand' ->> 'signin_show_passkey_android', 'true');
+  perform pg_temp.check_eq('without offering it on iOS',
+    v_out -> 'brand' ->> 'signin_show_passkey_ios', 'false');
+  perform pg_temp.check_eq('or on the web',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'false');
+
+  -- And the other way round, because a switch that only works in one
+  -- order is a switch that was tested in one order.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_passkey_ios', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('then iOS as well',
+    v_out -> 'brand' ->> 'signin_show_passkey_ios', 'true');
+  perform pg_temp.check_eq('and Android is still offered one',
+    v_out -> 'brand' ->> 'signin_show_passkey_android', 'true');
+
+  -- The web's switch is the third, and turning it on must not be the
+  -- thing that turns the other two on -- otherwise "separately" is a
+  -- word in a comment rather than a property of the table.
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true, 'signin_show_passkey', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the web''s switch is only the web''s',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'true');
+  perform pg_temp.check_eq('and does not offer one on iOS',
+    v_out -> 'brand' ->> 'signin_show_passkey_ios', 'false');
+  perform pg_temp.check_eq('nor on Android',
+    v_out -> 'brand' ->> 'signin_show_passkey_android', 'false');
+
+  -- Closing the app's door leaves the website's open. That is the
+  -- whole shape of the mobile register switch: a veto, not a
+  -- replacement.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_register', true,
+                       'signin_show_register_mobile', false));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the app can stop offering registration',
+    v_out -> 'brand' ->> 'signin_show_register_mobile', 'false');
+  perform pg_temp.check_eq('while the website goes on offering it',
+    v_out -> 'brand' ->> 'signin_show_register', 'true');
+
+  -- And it is not a security control, which is worth saying in an
+  -- assertion rather than only in a comment: `signup_enabled` is
+  -- untouched by any of this, and 0563's trigger is what refuses.
+  perform pg_temp.check_eq('and none of it touched whether signups are open',
+    (select value ->> 'enabled' from public.platform_settings
+      where key = 'signup_enabled'), 'true');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('phone@example.test'));
+  perform pg_temp.check_refused(
+    'and only a platform administrator may change any of them',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_passkey_ios', false)),
+    '%front door%', '42501');
+end $$;
+
+
 rollback;

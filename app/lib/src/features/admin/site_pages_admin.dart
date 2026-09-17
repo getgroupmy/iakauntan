@@ -402,6 +402,13 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
       _siteKey.text = '${row['turnstile_site_key'] ?? ''}';
     }
     bool on(String key) => row?[key] == true;
+    // For the one switch on this screen that ships ON. Absent reads as
+    // on, the way `landing_cms.dart` already reads the twelve way-in
+    // switches — a payload saved before the column existed, or still
+    // in flight, must not draw a switch in the off position for a
+    // deployment where the door is open. `on` above is the right
+    // answer for every switch that ships off, and the wrong one here.
+    bool onUnlessOff(String key) => row?[key] != false;
 
     return Card(
       child: Padding(
@@ -506,6 +513,33 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'is always drawn.',
                 onChanged: (v) => _save({'signin_show_register': v}),
               ),
+            // `0638`. The same question asked again for the apps,
+            // because it can have a different answer there: an app
+            // store has rules about what an account costs and who may
+            // open one, and "may a stranger sign up here" is not
+            // necessarily the same answer on the website and in the
+            // build in the store.
+            //
+            // A veto over the switch above rather than a replacement
+            // for it — the app draws the link when both are on — so it
+            // is drawn beside it and says so. Ships ON, unlike the two
+            // passkey switches, because it takes something away.
+            if (!widget.login)
+              _Switch(
+                value: onUnlessOff('signin_show_register_mobile'),
+                busy: _busy,
+                title: 'Offer an account in the apps',
+                subtitle:
+                    'The same link in the iOS and Android apps. Both '
+                    'this and the switch above have to be on for the '
+                    'apps to draw it, so turning this off closes the '
+                    'door in the apps and leaves the website alone. It '
+                    'does not stop anybody registering — the website '
+                    'still does, and an invitation still works. To '
+                    'close registration everywhere, use Signups in '
+                    'Platform settings.',
+                onChanged: (v) => _save({'signin_show_register_mobile': v}),
+              ),
             // `0579`. The passkey button, and the only switch on this
             // screen that ships OFF.
             //
@@ -522,12 +556,50 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 title: 'Offer a passkey',
                 subtitle:
                     'Draws "Sign in with a passkey" under the '
-                    'button. Turn passkeys on in the Supabase dashboard '
-                    'FIRST — until then every press is refused. The '
-                    'button is also absent on a device with no '
-                    'fingerprint reader, face camera or PIN, and on '
-                    'Android and iOS, which cannot reach one yet.',
+                    'button ON THE WEBSITE. Turn passkeys on in the '
+                    'Supabase dashboard FIRST — until then every press '
+                    'is refused. The button is also absent in a browser '
+                    'that cannot run the ceremony at all. The apps have '
+                    'their own two switches below: each surface needs '
+                    'something different done to it first, and they are '
+                    'not finished on the same day.',
                 onChanged: (v) => _save({'signin_show_passkey': v}),
+              ),
+            // `0638`. The same button in the two apps, and one switch
+            // each rather than one between them.
+            //
+            // Each of these needs the dashboard setting above AND a
+            // file served from the domain that names this build, and
+            // the two files are different files written by different
+            // people. A single switch would turn the button on for
+            // whichever surface was not ready.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_passkey_android'),
+                busy: _busy,
+                title: 'Offer a passkey in the Android app',
+                subtitle:
+                    'Needs the Supabase setting above, AND an '
+                    'assetlinks.json served from this domain naming the '
+                    'app package and BOTH signing certificates — the '
+                    'upload key and Play App Signing. Listing only the '
+                    'first works on the developer\'s handset and '
+                    'nowhere else. See docs/passkeys.md.',
+                onChanged: (v) => _save({'signin_show_passkey_android': v}),
+              ),
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_passkey_ios'),
+                busy: _busy,
+                title: 'Offer a passkey in the iOS app',
+                subtitle:
+                    'Needs the Supabase setting above, AND an '
+                    'Associated Domains entitlement on the app, AND an '
+                    'apple-app-site-association served from this '
+                    'domain. Apple caches that file for about a day, so '
+                    'a correction is not immediate. See '
+                    'docs/passkeys.md.',
+                onChanged: (v) => _save({'signin_show_passkey_ios': v}),
               ),
             // `0613`. Same order and the same reason as the passkey
             // above: GoTrue sends the mail, and until a sender is

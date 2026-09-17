@@ -15,6 +15,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import '../onboarding/onboarding_copy.dart';
+import '../../core/surface.dart';
 import 'captcha.dart';
 import 'passkey.dart';
 import 'confirmation_resend.dart';
@@ -2124,9 +2125,22 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 // disabled control invites somebody to work out why,
                 // and there is nothing they can do about a dashboard
                 // setting or a laptop with no fingerprint reader.
+                //
+                // `0638`: which console switch that is depends on the
+                // surface. Three switches and not one, because the
+                // three need different things done to them first — a
+                // dashboard setting for all of them, an
+                // `assetlinks.json` for Android, an entitlement and an
+                // `apple-app-site-association` for iOS — and they are
+                // finished on different days by different people.
                 if (!_isSignUp &&
                     _passkeyUsable &&
-                    (_brand?.signinShowPasskey ?? false)) ...[
+                    passkeyOffered(
+                      currentSurface,
+                      onWeb: _brand?.signinShowPasskey ?? false,
+                      onAndroid: _brand?.signinShowPasskeyAndroid ?? false,
+                      onIos: _brand?.signinShowPasskeyIos ?? false,
+                    )) ...[
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     key: const ValueKey('passkey-sign-in'),
@@ -2187,7 +2201,19 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       signupsOpen: _signupsOpen,
                       alreadyThere: _isSignUp,
                     ) &&
-                    (_isSignUp || (_brand?.signinShowRegister ?? false))) ...[
+                    // `0638`. The console can close this door in the
+                    // apps and leave the website's open — an app store
+                    // can have rules about what an account costs and
+                    // who may open one. `_isSignUp` still wins, for
+                    // the reason above: it is the way BACK from a form
+                    // somebody is already looking at.
+                    (_isSignUp ||
+                        registrationOffered(
+                          currentSurface,
+                          console: _brand?.signinShowRegister ?? false,
+                          inTheApps:
+                              _brand?.signinShowRegisterMobile ?? true,
+                        ))) ...[
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _busy

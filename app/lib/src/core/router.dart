@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'surface.dart';
+
 import '../features/ai/ask_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/firms/practice_screen.dart';
@@ -223,6 +225,15 @@ bool? moduleHeldFor(Confinement? door, AsyncValue<Set<String>> enabled) {
   );
 }
 
+/// Whether this is the iOS or Android app rather than a browser.
+///
+/// One line, and the whole of it is in `core/surface.dart` — the same
+/// fact decides whether a passkey button can be drawn and whether a
+/// stranger is offered an account, and three copies of `!kIsWeb &&
+/// (android || iOS)` is three places for the subtle half to be dropped
+/// from. [currentSurface] says which half that is.
+bool get runningInTheApp => currentSurface.isApp;
+
 /// signed-in visitor is not bounced anywhere.
 String? routeFor({
   required String path,
@@ -232,6 +243,21 @@ String? routeFor({
   required bool? isPlatformAdmin,
   bool atCompanyDoor = false,
   bool doorKnown = true,
+
+  /// Whether this is the iOS or Android app rather than a browser.
+  ///
+  /// The website has a shopfront and the app does not. Somebody who
+  /// typed `iakauntan.com` has not come to sign in -- they have come to
+  /// find out what this is -- so `/` is the landing page and the form
+  /// is one button away. Nobody installs an accounting system from an
+  /// app store to read about accounting systems: they installed it
+  /// because they already have books here, or because somebody at work
+  /// told them to. Every question the landing page answers for a
+  /// stranger was answered before the download finished.
+  ///
+  /// Defaults false, so the web is unchanged and every existing caller
+  /// and test means what it meant.
+  bool nativeApp = false,
   bool vetting = false,
   String? confinedTo,
   Set<String> confinedAllows = const {},
@@ -301,6 +327,47 @@ String? routeFor({
   // not a shopfront — a stranger who typed it was looking for Sinar,
   // not for what iAkauntan is — so its `/` is the sign-in form. Only
   // `/`: a signed-in visitor on any other route is left alone.
+  //
+  // Unless this is the app, where there is no shopfront to stand in
+  // front of. Checked BEFORE the company-door rule and before the
+  // signed-out rule below, because it is the stronger fact: a build in
+  // an app store has no hostname for `atCompanyDoor` to be about, and
+  // an app that opened on a marketing page would be an app whose first
+  // screen is an advertisement for the thing already installed.
+  //
+  // `/signin` and not `/login`: `/login` is a company's own door,
+  // reached by typing that company's address, and there is no address
+  // to type here.
+  //
+  // Answered in ONE hop, by asking what `/signin` itself answers, and
+  // that is not tidiness. Returning `/signin` flat put a signed-in
+  // platform operator through `/` to `/signin` to `/dashboard` to
+  // `/admin` -- four -- and the sweep at the bottom of
+  // `router_redirect_test.dart` refused it for taking more than three.
+  // It was right to: every hop in that chain is a `GoRouter` rebuild,
+  // and the bound is what keeps a rule like this one from quietly
+  // becoming a chain nobody can follow.
+  //
+  // The recursion is one deep and cannot be more: `/signin` is neither
+  // `/` nor `/welcome`, so the branch it re-enters is not this one.
+  if (nativeApp && (path == '/' || path == '/welcome')) {
+    return routeFor(
+          path: '/signin',
+          signedIn: signedIn,
+          recovering: recovering,
+          hasOrg: hasOrg,
+          isPlatformAdmin: isPlatformAdmin,
+          atCompanyDoor: atCompanyDoor,
+          doorKnown: doorKnown,
+          nativeApp: nativeApp,
+          vetting: vetting,
+          confinedTo: confinedTo,
+          confinedAllows: confinedAllows,
+          moduleHeld: moduleHeld,
+          landingRoute: landingRoute,
+        ) ??
+        '/signin';
+  }
   if (path == '/') return atCompanyDoor ? '/login' : null;
   // Kept because it was the address for a while and links to it exist.
   // One redirect, not a second copy of the page.
@@ -336,6 +403,12 @@ String? routeFor({
       final door = atCompanyDoor ? '/login' : '/signin';
       return path == door ? null : door;
     }
+    // `/` is the front page on the web and a redirect to `/signin` in
+    // the app, and saying so in one hop rather than two is the same
+    // choice the block above this one makes and for the same reason:
+    // the chain resolves either way, and the answer to "where does
+    // signing out go" should not depend on a second rule further up.
+    if (nativeApp) return '/signin';
     return atCompanyDoor ? '/login' : '/';
   }
 
@@ -472,6 +545,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         atCompanyDoor: ref.read(workspaceLookupProvider).valueOrNull?.host ==
             WorkspaceHost.found,
         doorKnown: ref.read(workspaceLookupProvider).hasValue,
+        nativeApp: runningInTheApp,
         vetting: ref.read(vettingProvider),
         // 0342. An address the operator pointed at one module opens
         // that and nothing else. All three are null or empty at every

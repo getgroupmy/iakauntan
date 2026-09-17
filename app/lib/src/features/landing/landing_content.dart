@@ -367,6 +367,10 @@ class LandingContent {
     this.signinShowHeading = false,
     this.signinShowRegister = false,
     this.signinShowPasskey = false,
+    this.signinShowPasskeyAndroid = false,
+    this.signinShowPasskeyIos = false,
+    // The odd one out, and deliberately: see the field.
+    this.signinShowRegisterMobile = true,
     this.signinShowMagicLink = false,
     this.turnstileSiteKey,
     this.signinPoints = const [],
@@ -648,6 +652,36 @@ class LandingContent {
   /// everybody who presses it.
   final bool signinShowPasskey;
 
+  /// `0638`. Draws the same button in the Android app.
+  ///
+  /// A switch of its own rather than a second reading of
+  /// [signinShowPasskey], because Android needs something the web does
+  /// not: an `assetlinks.json` served from this domain that names the
+  /// app package and both of its signing certificates. Until that file
+  /// is right, Credential Manager refuses the ceremony and the button
+  /// does nothing at all. Ships FALSE.
+  final bool signinShowPasskeyAndroid;
+
+  /// `0638`. Draws the same button in the iOS app.
+  ///
+  /// And a third switch, because iOS needs a third thing: an
+  /// Associated Domains entitlement on the build AND an
+  /// `apple-app-site-association` served from this domain. Apple
+  /// caches that file for about a day, so getting it wrong is not a
+  /// mistake you can correct and retry in a minute. Ships FALSE.
+  final bool signinShowPasskeyIos;
+
+  /// `0638`. Whether the apps offer the way on to registration.
+  ///
+  /// Ships TRUE, unlike every other switch added since 0579, because
+  /// it takes something away rather than offering something new.
+  ///
+  /// A veto over [signinShowRegister] rather than a replacement: the
+  /// app draws the link when both are on. That is what lets a platform
+  /// take strangers on the website and not in the app, which one
+  /// switch could not say.
+  final bool signinShowRegisterMobile;
+
   /// `0613`. Draws "Email me a link instead" on the form.
   ///
   /// Ships FALSE, for the same reason as [signinShowPasskey] and in the
@@ -770,6 +804,19 @@ LandingContent parseLandingContent(Object? raw) {
     return false;
   }
 
+  // And the same lookup for the one switch that ships ON. `0638`'s
+  // `signin_show_register_mobile` takes something away rather than
+  // offering something new, so absent has to read as on: a payload
+  // written before the column existed, or one that lost the field on
+  // the way, must not close the app's door on a platform that never
+  // asked for it closed.
+  bool brandBoolUnlessOff(String key) {
+    if (brand[key] is bool) return brand[key] as bool;
+    final pg = page;
+    if (pg is Map && pg[key] is bool) return pg[key] as bool;
+    return true;
+  }
+
   // A key that arrived as something other than a list is no rows, not
   // a crash. `as List?` throws on a string, and the whole point of this
   // function is that the front page survives whatever comes back — it
@@ -841,6 +888,10 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowHeading: brandBool('signin_show_heading'),
       signinShowRegister: brandBool('signin_show_register'),
       signinShowPasskey: brandBool('signin_show_passkey'),
+      signinShowPasskeyAndroid: brandBool('signin_show_passkey_android'),
+      signinShowPasskeyIos: brandBool('signin_show_passkey_ios'),
+      signinShowRegisterMobile:
+          brandBoolUnlessOff('signin_show_register_mobile'),
       signinShowMagicLink: brandBool('signin_show_magic_link'),
       turnstileSiteKey: brandStr('turnstile_site_key'),
       signinPoints: blocks('signin_points'),
@@ -1072,6 +1123,9 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowHeading: brandBool('signin_show_heading'),
     signinShowRegister: brandBool('signin_show_register'),
     signinShowPasskey: brandBool('signin_show_passkey'),
+    signinShowPasskeyAndroid: brandBool('signin_show_passkey_android'),
+    signinShowPasskeyIos: brandBool('signin_show_passkey_ios'),
+    signinShowRegisterMobile: brandBoolUnlessOff('signin_show_register_mobile'),
     signinShowMagicLink: brandBool('signin_show_magic_link'),
     turnstileSiteKey: brandStr('turnstile_site_key'),
     signinPoints: blocks('signin_points'),
