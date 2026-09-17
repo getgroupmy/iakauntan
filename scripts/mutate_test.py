@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which SDK the mutation harness reaches for.
+"""The mutation harnesses' own assertions.
 
     python3 scripts/mutate_test.py
 
@@ -25,6 +25,11 @@ SPEC = importlib.util.spec_from_file_location(
     'mutate', Path(__file__).with_name('mutate.py'))
 mutate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(mutate)
+
+SQL_SPEC = importlib.util.spec_from_file_location(
+    'mutate_sql', Path(__file__).with_name('mutate_sql.py'))
+mutate_sql = importlib.util.module_from_spec(SQL_SPEC)
+SQL_SPEC.loader.exec_module(mutate_sql)
 
 
 class SdkResolution(unittest.TestCase):
@@ -117,6 +122,84 @@ class PinnedVersion(unittest.TestCase):
                 '/opt/flutter-sdk/bin/flutter'):
             self.skipTest('no Flutter SDK on this machine')
         self.assertTrue(mutate._flutter_bin() or shutil.which('flutter'))
+
+
+class GrantsCarriedWithTheBlock(unittest.TestCase):
+    """`mutate_sql.grants`, and why it exists.
+
+    A function's privileges do not always survive a replace here. When
+    `open_shared_document` is restated, `proacl` comes back without
+    `anon`, which is why the migrations that restate it re-grant on the
+    next line.
+
+    `mutate_sql.py` applies the BLOCK ALONE, so before this the sweep
+    took that privilege away for its whole run. `document_share.sql`
+    asserts it, so every mutant was reported killed -- and so was the
+    control, which is the only reason anybody found out. Worse, the
+    restore did not put it back: the harness left the database with a
+    share link that no longer opened for the customer it was emailed to.
+    """
+
+    MIGRATION = """
+create or replace function public.open_shared_document(p_token text)
+ returns jsonb
+ language plpgsql
+as $function$
+begin
+  return jsonb_build_object('state', 'open');
+end;
+$function$;
+
+grant execute on function public.open_shared_document(text)
+  to anon, authenticated;
+
+create or replace function app.calc_document_line()
+ returns trigger
+ language plpgsql
+as $function$
+begin
+  return new;
+end;
+$function$;
+"""
+
+    def test_a_granted_function_carries_its_grant(self):
+        keep = mutate_sql.grants(self.MIGRATION, 'open_shared_document')
+        self.assertIn('grant execute', keep)
+        self.assertIn('anon', keep)
+
+    def test_a_trigger_function_carries_nothing(self):
+        # Nothing is granted on a trigger function and nothing should be
+        # invented. `calc_document_line` is the one 0641 swept.
+        self.assertEqual(
+            mutate_sql.grants(self.MIGRATION, 'calc_document_line'), '')
+
+    def test_another_function_s_grant_is_not_taken(self):
+        # The regex has to be anchored on the NAME. Carrying one
+        # function's grant onto another would hand a privilege to a
+        # role during a sweep, which is the opposite failure and a
+        # worse one.
+        migration = self.MIGRATION + (
+            '\ngrant execute on function public.share_document(uuid)'
+            ' to authenticated;\n')
+        keep = mutate_sql.grants(migration, 'open_shared_document')
+        self.assertNotIn('share_document', keep)
+
+    def test_a_revoke_is_not_mistaken_for_a_grant(self):
+        migration = (
+            'revoke execute on function public.open_shared_document(text)'
+            ' from anon;\n')
+        self.assertEqual(
+            mutate_sql.grants(migration, 'open_shared_document'), '')
+
+    def test_the_real_migration_this_came_out_of(self):
+        # 0642 restates `open_shared_document` and re-grants it. If a
+        # later edit drops that line, this fails here rather than by
+        # killing a control on somebody's next sweep.
+        path = (Path(__file__).parent.parent / 'supabase' / 'migrations'
+                / '0642_the_other_number_a_hotel_has_to_print.sql')
+        keep = mutate_sql.grants(path.read_text(), 'open_shared_document')
+        self.assertIn('anon', keep)
 
 
 if __name__ == '__main__':

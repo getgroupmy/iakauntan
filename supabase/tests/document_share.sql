@@ -30,6 +30,11 @@ declare
 begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
 
+  -- An accommodation operator, so the payload has both registrations
+  -- to carry. See the 0642 assertions further down.
+  update public.organizations
+     set tourism_tax_reg_no = 'TTX-0001234' where id = v_org;
+
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-001', 'Buyer Bhd', 'customer')
   returning id into v_contact;
@@ -81,6 +86,29 @@ begin
     v_result::text not like '%Chase this one hard%');
   perform pg_temp.check_true('and neither is what the line cost us',
     not (v_result -> 'lines' -> 0 ? 'cost_amount'));
+
+  -- 0642: both of the company's tax registrations, and the reason
+  -- this is asserted on the PAYLOAD rather than on the page.
+  --
+  -- `tourism_tax_reg_no` had existed since `0001` and nothing read it.
+  -- The PDF and this page are one document seen two ways -- one is
+  -- emailed, the other is opened from the link in that email -- so a
+  -- registration printed on the file and missing from the page is a
+  -- customer reading a different tax invoice from the one they were
+  -- sent, and only a difference of one number in a grey line nobody
+  -- looks at twice.
+  perform pg_temp.check_true('the SST registration reaches the customer',
+    v_result -> 'company' ? 'sst_registration_no');
+  perform pg_temp.check_true('and the Tourism Tax one beside it',
+    v_result -> 'company' ? 'tourism_tax_reg_no');
+
+  -- Not merely present as a key: the value, from the row. A payload
+  -- that carries the key with a null in it passes a `?` test and prints
+  -- nothing on the page. The number is set at the top of this block
+  -- rather than here, because opening the link again is counted and the
+  -- assertion below is about the count.
+  perform pg_temp.check_eq('with the number the company was issued',
+    v_result -> 'company' ->> 'tourism_tax_reg_no', 'TTX-0001234');
 
   perform pg_temp.check_true('opening is recorded',
     (select opened_at is not null and open_count = 1

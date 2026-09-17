@@ -4774,6 +4774,7 @@ extension RepoOrgLogo on Repo {
     required String roundingMethod,
     String? registrationNo,
     String? tin,
+    String? tourismTaxRegNo,
     String? msicCode,
     String? addressLine1,
     String? addressLine2,
@@ -4797,6 +4798,11 @@ extension RepoOrgLogo on Repo {
         'rounding_method': roundingMethod,
         'registration_no': _orNull(registrationNo),
         'tin': _orNull(tin),
+        // Not beside the SST number, which lives on its own card
+        // because registering for SST is four facts and a default tax
+        // code. This one is only a number: a company either has a
+        // Tourism Tax registration or it has not.
+        'tourism_tax_reg_no': _orNull(tourismTaxRegNo),
         'msic_code': _orNull(msicCode),
         // The business address, which is what goes on the invoice and
         // what `app.prepare_einvoice` sends LHDN as the supplier.

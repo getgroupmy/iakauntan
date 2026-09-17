@@ -111,6 +111,14 @@ class CompanyCard extends ConsumerWidget {
                     ].join(' · ')
                   : 'Not registered',
             ),
+            // Shown only where it applies. A row reading "Not set"
+            // against a register almost no company is on would read as
+            // something missing rather than something irrelevant.
+            if ((org.tourismTaxRegNo ?? '').trim().isNotEmpty)
+              FieldRow(
+                label: 'Tourism Tax',
+                value: org.tourismTaxRegNo!,
+              ),
             FieldRow(label: 'MSIC code', value: org.msicCode ?? 'Not set'),
             // Shown rather than only editable. An address that goes to
             // LHDN on every invoice is worth being able to check at a
@@ -292,6 +300,7 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
   final _name = TextEditingController();
   final _registrationNo = TextEditingController();
   final _tin = TextEditingController();
+  final _tourismTax = TextEditingController();
   final _msic = TextEditingController();
   final _currency = TextEditingController();
   final _line1 = TextEditingController();
@@ -331,6 +340,7 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _name.text = o.name;
     _registrationNo.text = o.registrationNo ?? '';
     _tin.text = o.tin ?? '';
+    _tourismTax.text = o.tourismTaxRegNo ?? '';
     _msic.text = o.msicCode ?? '';
     _currency.text = o.baseCurrency;
     // Verbatim, and deliberately. This used to fall back to `other`
@@ -367,6 +377,7 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _name.dispose();
     _registrationNo.dispose();
     _tin.dispose();
+    _tourismTax.dispose();
     _msic.dispose();
     _currency.dispose();
     for (final c in [
@@ -403,6 +414,7 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
           roundingMethod: _rounding,
           registrationNo: _registrationNo.text,
           tin: _tin.text,
+          tourismTaxRegNo: _tourismTax.text,
           msicCode: _msic.text,
           addressLine1: _line1.text,
           addressLine2: _line2.text,
@@ -543,6 +555,22 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 decoration: const InputDecoration(
                   labelText: 'LHDN TIN',
                   helperText: 'Required before anything goes to MyInvois',
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Blank for almost every company, and that is the right
+              // default: this is the register an accommodation operator
+              // is on, not one every business has. Left empty it prints
+              // nothing, which is the state a company that never stays
+              // anybody overnight should be in.
+              TextField(
+                key: const ValueKey('company-tourism-tax'),
+                controller: _tourismTax,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  labelText: 'Tourism Tax registration',
+                  helperText: 'Only for accommodation registered with '
+                      'RMCD. Printed on the invoice beside the SST number.',
                 ),
               ),
               const SizedBox(height: 12),

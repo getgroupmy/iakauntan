@@ -109,12 +109,7 @@ class PdfKit {
       org.stateCode,
     ].where(_present).cast<String>().toList();
 
-    final ids = [
-      if (_present(org.registrationNo)) 'Reg. No. ${org.registrationNo}',
-      if (_present(org.tin)) 'TIN ${org.tin}',
-      if (org.isSstRegistered && _present(org.sstRegistrationNo))
-        'SST ${org.sstRegistrationNo}',
-    ];
+    final ids = letterheadIds(org);
 
     if (mode == LetterheadMode.stationery) {
       return pw.Column(
@@ -259,3 +254,28 @@ class PdfKit {
 
   static bool _present(String? s) => s != null && s.trim().isNotEmpty;
 }
+
+/// The statutory identifiers that print under a company's name, in the
+/// order a Malaysian tax invoice carries them.
+///
+/// A function rather than four lines inside `letterhead` because it is
+/// the half worth asserting and a PDF is the worst thing to assert
+/// against: a test over rendered bytes can only ask whether the file
+/// got bigger, which passes for a number printed in the wrong place,
+/// under the wrong label, or twice.
+///
+/// SST is gated on the registration FLAG as well as the number -- a
+/// company taken off the register keeps its old number in the column
+/// and must stop printing it. Tourism Tax has no flag beside it and
+/// does not need one: RMCD's register is separate from SST's, an
+/// operator can be on one and not the other, and having the number is
+/// the registration.
+List<String> letterheadIds(Organization org) => [
+  if (_notBlank(org.registrationNo)) 'Reg. No. ${org.registrationNo}',
+  if (_notBlank(org.tin)) 'TIN ${org.tin}',
+  if (org.isSstRegistered && _notBlank(org.sstRegistrationNo))
+    'SST ${org.sstRegistrationNo}',
+  if (_notBlank(org.tourismTaxRegNo)) 'TTx ${org.tourismTaxRegNo}',
+];
+
+bool _notBlank(String? s) => s != null && s.trim().isNotEmpty;

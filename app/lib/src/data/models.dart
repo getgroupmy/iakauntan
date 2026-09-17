@@ -13,6 +13,7 @@ class Organization {
     this.registrationNo,
     this.tin,
     this.sstRegistrationNo,
+    this.tourismTaxRegNo,
     this.msicCode,
     this.businessActivity,
     this.addressLine1,
@@ -52,6 +53,15 @@ class Organization {
   final String? registrationNo;
   final String? tin;
   final String? sstRegistrationNo;
+
+  /// The Tourism Tax registration RMCD issued, for an operator within
+  /// the Tourism Tax Act 2017 — accommodation, and the platforms that
+  /// sell it. A separate register from SST with a separate number, and
+  /// a registered operator prints it on the invoice beside the SST one.
+  ///
+  /// Held here and nowhere else: the column has existed since `0001`
+  /// beside `sst_registration_no` and nothing had ever written to it.
+  final String? tourismTaxRegNo;
   final String? msicCode;
   final String? businessActivity;
   final String? addressLine1;
@@ -117,6 +127,7 @@ class Organization {
     registrationNo: j['registration_no'] as String?,
     tin: j['tin'] as String?,
     sstRegistrationNo: j['sst_registration_no'] as String?,
+    tourismTaxRegNo: j['tourism_tax_reg_no'] as String?,
     msicCode: j['msic_code'] as String?,
     businessActivity: j['business_activity'] as String?,
     addressLine1: j['address_line1'] as String?,
