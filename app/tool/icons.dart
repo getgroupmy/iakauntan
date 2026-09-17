@@ -17,27 +17,47 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
-/// One file to write, named as it is named in `web/`.
+/// One file to write, named as it is named in the project.
 class GeneratedIcon {
   const GeneratedIcon(this.path, this.bytes, {required this.maskable});
 
-  /// Relative to `web/`, so the caller does not have to know the layout.
+  /// Relative to the project root.
   final String path;
   final Uint8List bytes;
   final bool maskable;
 }
 
-/// The five files `web/manifest.json` and `web/index.html` already name.
-///
-/// Fixed, not derived: the manifest lists these paths and these sizes,
-/// and generating a sixth nothing references would be a file nobody
-/// fetches. Change one here and change it there.
+/// The files the three platforms want.
 const iconPlan = <({String path, int size, bool maskable})>[
-  (path: 'favicon.png', size: 32, maskable: false),
-  (path: 'icons/Icon-192.png', size: 192, maskable: false),
-  (path: 'icons/Icon-512.png', size: 512, maskable: false),
-  (path: 'icons/Icon-maskable-192.png', size: 192, maskable: true),
-  (path: 'icons/Icon-maskable-512.png', size: 512, maskable: true),
+  // Web
+  (path: 'web/favicon.png', size: 32, maskable: false),
+  (path: 'web/icons/Icon-192.png', size: 192, maskable: false),
+  (path: 'web/icons/Icon-512.png', size: 512, maskable: false),
+  (path: 'web/icons/Icon-maskable-192.png', size: 192, maskable: true),
+  (path: 'web/icons/Icon-maskable-512.png', size: 512, maskable: true),
+
+  // Android
+  (path: 'android/app/src/main/res/mipmap-mdpi/ic_launcher.png', size: 48, maskable: false),
+  (path: 'android/app/src/main/res/mipmap-hdpi/ic_launcher.png', size: 72, maskable: false),
+  (path: 'android/app/src/main/res/mipmap-xhdpi/ic_launcher.png', size: 96, maskable: false),
+  (path: 'android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png', size: 144, maskable: false),
+  (path: 'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', size: 192, maskable: false),
+
+  // iOS
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@2x.png', size: 40, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@3x.png', size: 60, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@1x.png', size: 29, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@2x.png', size: 58, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@3x.png', size: 87, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@2x.png', size: 80, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@3x.png', size: 120, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png', size: 120, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png', size: 180, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@1x.png', size: 20, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@1x.png', size: 76, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png', size: 152, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-83.5x83.5@2x.png', size: 167, maskable: false),
+  (path: 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png', size: 1024, maskable: false),
 ];
 
 /// How much of a maskable icon the mark may occupy.

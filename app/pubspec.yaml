@@ -79,7 +79,7 @@ dependencies:
   # the platform recorder on Android and iOS, so one call site covers
   # all of them. Both of these need microphone permission on mobile,
   # which the manifests below declare.
-  record: ^5.2.0
+  record: ^7.1.1
   # Playing one back. Chosen over just_audio for having a web
   # implementation in the same package rather than a federated one.
   audioplayers: ^6.1.0

@@ -12574,3 +12574,78 @@ extension RepoPaymentMethods on Repo {
         'p_amount': amount,
       }));
 }
+
+/// A company's own report layouts. 0637.
+extension RepoReportLayouts on Repo {
+  // -------------------------------------------------------------------
+  // Report layouts (0637)
+  // -------------------------------------------------------------------
+
+  /// A P&L or Balance Sheet, composed by the database from this
+  /// company's layout.
+  ///
+  /// The rows come back already totalled — one per section, formula and
+  /// account. Nothing on this side adds anything up, because the
+  /// arithmetic on a document somebody signs belongs in one place.
+  Future<List<Map<String, dynamic>>> reportWithLayout({
+    required String kind,
+    DateTime? from,
+    DateTime? to,
+    String? layoutId,
+    String? projectCode,
+    String? departmentCode,
+  }) async {
+    final data = await callRpc('report_with_layout', params: {
+      'p_org_id': orgId,
+      'p_kind': kind,
+      'p_from': from == null ? null : Fmt.iso(from),
+      'p_to': to == null ? null : Fmt.iso(to),
+      'p_layout_id': layoutId,
+      'p_project_code': projectCode,
+      'p_department_code': departmentCode,
+    });
+    return Repo._rows(data);
+  }
+
+  /// This company's layouts for one report, the active one first.
+  Future<List<ReportLayout>> reportLayouts(String kind) async {
+    final data = await callRpc('report_layouts_for', params: {
+      'p_org_id': orgId,
+      'p_kind': kind,
+    });
+    return Repo._rows(data).map(ReportLayout.fromJson).toList();
+  }
+
+  /// One layout's rows, in order, for the builder.
+  Future<List<LayoutRow>> layoutRows(String layoutId) async {
+    final data = await callRpc('layout_rows', params: {
+      'p_layout_id': layoutId,
+    });
+    return Repo._rows(data).map(LayoutRow.fromJson).toList();
+  }
+
+  /// Copy the standard layout into an editable one and make it active.
+  Future<String> createLayoutFromBuiltin(String kind, {String? name}) async =>
+      (await callRpc('create_layout_from_builtin', params: {
+        'p_org_id': orgId,
+        'p_kind': kind,
+        'p_name': name,
+      })).toString();
+
+  /// Replace a layout's rows in one go.
+  ///
+  /// All of them, because rows refer to each other by key and applying
+  /// a builder's changes one at a time would pass through states where
+  /// a formula points at a row that has not arrived.
+  Future<void> saveLayoutRows(String layoutId, List<LayoutRow> rows) async =>
+      await callRpc('save_layout_rows', params: {
+        'p_layout_id': layoutId,
+        'p_rows': [for (final r in rows) r.toJson()],
+      });
+
+  Future<void> activateReportLayout(String id) async =>
+      await callRpc('activate_report_layout', params: {'p_layout_id': id});
+
+  Future<void> archiveReportLayout(String id) async =>
+      await callRpc('archive_report_layout', params: {'p_layout_id': id});
+}

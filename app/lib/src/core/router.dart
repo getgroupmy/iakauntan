@@ -86,6 +86,7 @@ import '../features/documents/withholding_screen.dart';
 import '../features/imports/import_screen.dart';
 import '../features/ledger/recurring_screen.dart';
 import '../features/reports/group_reports_screen.dart';
+import '../features/reports/layout_builder_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
 import '../features/documents/customer_portal_page.dart';
@@ -866,6 +867,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/knock-off',
             builder: (_, __) => const KnockOffScreen(),
+          ),
+          // 0637. The report kind is in the path because the two
+          // layouts are separate things a company edits separately.
+          GoRoute(
+            path: '/reports/layout/:kind',
+            builder: (_, state) => LayoutBuilderScreen(
+              kind: state.pathParameters['kind'] ?? 'profit_loss',
+            ),
           ),
           GoRoute(
             path: '/deposits',

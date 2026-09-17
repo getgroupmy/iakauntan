@@ -1970,6 +1970,12 @@ final auditTrailProvider = FutureProvider.autoDispose<List<AuditEntry>>((ref) {
   );
 });
 
+/// A company's report layouts, by report kind. 0637.
+final reportLayoutsProvider = FutureProvider.autoDispose
+    .family<List<ReportLayout>, String>((ref, kind) {
+      return requireRepo(ref).reportLayouts(kind);
+    });
+
 /// A company's own payment methods. 0635.
 final paymentMethodsProvider =
     FutureProvider.autoDispose<List<PaymentMethod>>((ref) {
