@@ -83,6 +83,29 @@ alter default privileges for role postgres in schema public
   grant all on tables to service_role;
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
+-- FUNCTIONS, which this stub did not reproduce and which is the one
+-- that matters most. `0165`'s own comment states it, and states that it
+-- was verified against the hosted project rather than assumed:
+-- Supabase ships `alter default privileges in schema public grant all
+-- on functions to anon, authenticated, service_role`, so a new function
+-- in `public` arrives with those three grants already attached and
+-- 0165's event trigger strips PUBLIC and `anon` back off.
+--
+-- Without this line the local machine was STRICTER than the hosted
+-- project for every function: one created with no explicit grant was
+-- reachable by nobody here and by every signed-in user there. That is
+-- the 0496 trap in the direction nothing can catch -- a SECURITY
+-- DEFINER function in `public` that forgets to revoke from
+-- `authenticated` passes every local run and is open in production, and
+-- no test on this machine could see it because the privilege it would
+-- test for did not exist here.
+--
+-- `anon` is in the list on purpose even though the event trigger takes
+-- it away again. Modelling the grant and the revoke separately is what
+-- makes a function that re-grants anon AFTER its create -- which the
+-- three token-gated ones do -- behave here the way it behaves there.
+alter default privileges for role postgres in schema public
+  grant all on functions to anon, authenticated, service_role;
 -- The second entry, which governs only what `supabase_admin` creates
 -- and therefore governs nothing in this schema. Here so that a check
 -- which forgets to say whose default it is asking about fails on this

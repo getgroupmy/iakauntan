@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0616` (the highest applied migration).
-689 functions and 340 readable tables, of which
-258 functions only read.
+Schema version `0617` (the highest applied migration).
+691 functions and 340 readable tables, of which
+259 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**549 of 689 functions carry a `comment on
+**551 of 691 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -364,7 +364,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (478)
+### general (480)
 
 Not gated on any module.
 
@@ -507,6 +507,7 @@ Not gated on any module.
 - `decide_mailbox(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for an email address.
 - `decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` *(writes)* — Approves or refuses an auditor's request to see payslips.
 - `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for a name on our domain.
+- `declarable_reliefs(p_tax_year integer)` — The reliefs an employee may put on a TP1 for a tax year, with LHDN's ceiling on each.
 - `delete_mia_credential(p_id uuid)` *(writes)* — Removes a recorded MIA credential.
 - `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)* — Marks a held cheque as paid in, and POSTS NOTHING.
@@ -790,6 +791,7 @@ Not gated on any module.
 - `set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` *(writes)* — Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's.
 - `set_onboarding_task_done(p_task_id uuid, p_done boolean)` *(writes)* — Ticks or unticks one task on somebody's onboarding checklist.
 - `set_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text, p_api_key text, p_collection_ref text, p_signature_key text, p_is_active boolean)` *(writes)* — Stores a company's own acquirer credentials for one gateway in one mode.
+- `set_org_payment_settlement(p_org_id uuid, p_gateway text, p_mode text, p_bank_account uuid, p_payment_mode text)` *(writes)* — Says which bank account a gateway's takings settle into, and under which payment mode.
 - `set_own_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)* — A company switches one of the paid add-ons on or off for itself.
 - `set_platform_ai_default(p_provider text, p_model text)` *(writes)* — Chooses which provider and model the assistant uses by default.
 - `set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` *(writes)* — Stores the PLATFORM's key for one AI provider -- ours, used by every company that has not set its own.
