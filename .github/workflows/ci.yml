@@ -180,6 +180,61 @@ jobs:
           cache: true
       - run: flutter pub get
 
+      # BEFORE the build, not after. The first version of this job had it
+      # afterwards, the build failed on the deployment target, and this
+      # step -- the one that names the cause in a sentence -- was
+      # skipped because the step it explains had already failed.
+      #
+      # Both files, because they are read by different things and only
+      # one of them is read by the thing that fails. CocoaPods reads the
+      # PODFILE: with no `platform` line it assigns iOS 12.0 to Runner
+      # and resolves every pod against that, before `post_install` runs,
+      # whatever `project.pbxproj` says. A check on the project file
+      # alone passed while the build failed for exactly the reason the
+      # check exists to catch.
+      - name: The deployment target is what ML Kit needs, in both files
+        run: |
+          set -euo pipefail
+          need=15.5
+
+          # What CocoaPods reads.
+          podfile=$(grep -oE "^platform :ios, *'[0-9.]+'" ios/Podfile |
+                    grep -oE "[0-9.]+" || true)
+          if [ -z "$podfile" ]; then
+            echo "::error file=app/ios/Podfile::No platform line in ios/Podfile."
+            echo
+            echo "CocoaPods then assigns iOS 12.0 to Runner and resolves"
+            echo "every pod against it, whatever the project file says."
+            echo "Add: platform :ios, '$need'"
+            exit 1
+          fi
+
+          # What Xcode reads.
+          project=$(grep -o "IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*" \
+                      ios/Runner.xcodeproj/project.pbxproj |
+                    sed 's/.*= //' | sort -V | head -1)
+
+          echo "Podfile platform:  $podfile"
+          echo "project.pbxproj:   $project"
+
+          for pair in "Podfile:$podfile" "project.pbxproj:$project"; do
+            what=${pair%%:*}
+            got=${pair#*:}
+            if [ "$(printf '%s\n%s\n' "$need" "$got" | sort -V | head -1)" \
+                 != "$need" ]; then
+              echo "::error::$what says $got; Google ML Kit needs $need."
+              exit 1
+            fi
+          done
+
+          # Agreeing matters as much as being high enough: a Podfile
+          # above the project builds pods the app cannot load, and the
+          # failure names a pod rather than the disagreement.
+          if [ "$podfile" != "$project" ]; then
+            echo "::error::Podfile says $podfile and project.pbxproj says $project. Keep them in step."
+            exit 1
+          fi
+
       # `--no-codesign` because this job answers "does it compile and
       # link", which is the question a signing identity does not change.
       # Signing belongs to a release, needs secrets, and would make
@@ -187,23 +242,6 @@ jobs:
       # the diff.
       - name: Build
         run: flutter build ios --no-codesign --debug
-
-      # Read back rather than trusted. `flutter build` succeeds against
-      # a Podfile pinned too low if no pod happens to object on the day,
-      # and the next plugin added is then the one that breaks -- with
-      # the cause months behind it.
-      - name: The deployment target is what ML Kit needs
-        run: |
-          set -euo pipefail
-          target=$(grep -o "IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*" \
-                     ios/Runner.xcodeproj/project.pbxproj |
-                   sed 's/.*= //' | sort -V | head -1)
-          echo "lowest deployment target in the project: $target"
-          lowest=$(printf '15.5\n%s\n' "$target" | sort -V | head -1)
-          if [ "$lowest" != "15.5" ]; then
-            echo "::error::iOS deployment target is $target; Google ML Kit needs 15.5."
-            exit 1
-          fi
   database:
     name: Statutory engine and ledger rules
     runs-on: ubuntu-latest
