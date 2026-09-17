@@ -1902,8 +1902,23 @@ Stated plainly so nothing here is mistaken for finished:
   on it — the database does not require `aal2` on anything, so it stops
   somebody with the password and not the phone and would not stop a
   client that never drew the dialog, and that page says what closing
-  the gap would take. What is still missing is **OAuth**, which needs a
-  provider's credentials in the dashboard
+  the gap would take. What is still missing is **OAuth**, and the line
+  that stood here said it "needs a provider's credentials in the
+  dashboard" — which implied the code was waiting on a secret. Checked
+  rather than re-read, like the three entries below: **there is no
+  OAuth code at all.** Nothing in `app/lib` calls `signInWithOAuth`,
+  names an `OAuthProvider`, or draws a provider button; the credentials
+  would have nothing to arrive at.
+
+  And on a phone it needs more than credentials even once it is
+  written. `signInWithOAuth` comes back through a `redirectTo`, and
+  **neither platform registers a URL scheme** — `AndroidManifest.xml`
+  has no scheme in its intent filters and `Info.plist` has no
+  `CFBundleURLSchemes` — so a provider would have nowhere to return the
+  visitor to. That is the same class of blocker as the two passkey
+  association files: a platform file, not a line of Dart. The web half
+  has no such problem, because the redirect is an ordinary URL on the
+  site's own origin
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
   plans one from AutoCount Cloud and named what had to be built first —
   that **no table recorded where a row came from**, so no import could be
@@ -1922,11 +1937,22 @@ Stated plainly so nothing here is mistaken for finished:
 Worse than unbuilt, because the schema suggests otherwise.
 `docs/gaps-against-autocount.md` has the detail.
 
-This list was four items and is now one, and three of them were not
-closed by building anything — they were closed by *checking*. Two had
-been built and the list never caught up; the third was half true. That
-is the failure mode this section is itself prone to, so each entry below
-now says what was verified rather than what was believed:
+**This list is empty.** All three entries are closed, and two of them
+were not closed by building anything — they were closed by *checking*.
+Multi-currency and price levels had both been built and the list never
+caught up; the dimensions entry was half true, and `0639`/`0640` built
+the other half.
+
+The sentence that stood here said the list "was four items and is now
+one". Both halves were wrong, and neither was checked: the section has
+had three bullets in every commit it appears in, and by the time that
+sentence was written all three were struck through. It is the exact
+failure this section is about — a claim about the code, believed rather
+than read — made in the paragraph introducing a list whose own rule is
+that each entry says what was *verified*. It is worth leaving the
+correction visible rather than quietly fixing the number.
+
+Each entry below says what was verified rather than what was believed:
 
 - ~~**Multi-currency.**~~ Stale on both counts, and checked rather than
   re-read: the document editor's header carries an
