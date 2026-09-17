@@ -242,6 +242,88 @@ jobs:
       # the diff.
       - name: Build
         run: flutter build ios --no-codesign --debug
+
+  android:
+    name: Build the Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    # No scope gate, unlike the iOS job above, and the difference is
+    # money rather than judgement: a macOS runner bills at ten times an
+    # Ubuntu one, so the Mac is asked for only when something native
+    # moved. This runner costs what every other job here costs, so it
+    # runs on every push -- which is the better arrangement, because
+    # the commonest way an Android build breaks is a plugin added for
+    # some entirely unrelated reason.
+    steps:
+      - uses: actions/checkout@v4
+
+      # `jetbrains`, and that is not a preference. `android/gradle/
+      # gradle-daemon-jvm.properties` names `toolchainVendor=jetbrains`
+      # and `toolchainVersion=21`, so Gradle looks for a JetBrains
+      # Runtime and refuses to start its daemon without one. A Temurin
+      # 21 -- what a runner has installed already -- does not satisfy a
+      # vendor criterion, and the failure is a Gradle message about
+      # toolchain provisioning that says nothing about this file.
+      #
+      # Matching what the repository asks for rather than editing the
+      # repository to match the runner: that file came from a developer
+      # machine running `updateDaemonJvm`, and changing it here would
+      # move the disagreement rather than remove it.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: jetbrains
+          java-version: '21'
+
+      # The Gradle wrapper's PROPERTIES are committed and the `gradlew`
+      # script is not, which is deliberate and worth stating because it
+      # looks like an omission. Flutter's Gradle tooling writes a
+      # `gradlew` when one is missing and leaves an existing
+      # `gradle-wrapper.properties` alone, so the version this project
+      # pins is the version that runs. A missing properties file would
+      # silently build on whatever Flutter ships with instead.
+      - name: The Gradle version has to be the one this project pins
+        run: |
+          set -euo pipefail
+          props=android/gradle/wrapper/gradle-wrapper.properties
+          if [ ! -f "$props" ]; then
+            echo "::error file=app/$props::$props is missing."
+            echo
+            echo "Flutter will then generate a wrapper pinned to"
+            echo "whatever the SDK ships with, and this job stops"
+            echo "testing the Gradle this project actually uses."
+            exit 1
+          fi
+          grep -oE 'gradle-[0-9.]+-(all|bin)\.zip' "$props"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # The same pin as the `flutter` and `ios` jobs, and for the
+          # same reason given in the first of them.
+          flutter-version: 3.32.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # `--debug`, and not `appbundle` or `--release`. A release build
+      # needs a signing configuration, which needs the upload keystore,
+      # which is a secret this repository does not hold and must not --
+      # and a pull request from a fork would fail on it rather than on
+      # the diff. A debug APK is signed with the automatically generated
+      # debug key and compiles all the same code, which is what this
+      # job is for: the Dart, the plugin manifests, the manifest merge,
+      # and every native dependency resolving against this minSdk.
+      #
+      # That last one is the point. `passkeys_android` brings
+      # Credential Manager, `google_mlkit_text_recognition` brings ML
+      # Kit, `flutter_webrtc` brings its own native libraries -- any of
+      # them can demand a higher minSdk than this app declares, and the
+      # manifest merger is the only thing that says so.
+      - name: Build
+        run: flutter build apk --debug
+
   database:
     name: Statutory engine and ledger rules
     runs-on: ubuntu-latest
