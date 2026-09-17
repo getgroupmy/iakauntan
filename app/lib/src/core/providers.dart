@@ -854,6 +854,26 @@ final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
   return ref.watch(platformRepoProvider).modules();
 });
 
+/// The bank rules, in the order they are tried. 0625.
+final bankRulesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).bankRules();
+    });
+
+/// How many unclaimed statement lines each rule would take, and how
+/// many nothing describes. Keyed by bank account, null meaning all.
+final bankRuleCoverageProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, bankAccountId) {
+      return requireRepo(ref).bankRuleCoverage(bankAccountId: bankAccountId);
+    });
+
+final bankLinesUnexplainedProvider =
+    FutureProvider.autoDispose.family<int, String?>((ref, bankAccountId) {
+      return requireRepo(ref).bankLinesUnexplained(
+        bankAccountId: bankAccountId,
+      );
+    });
+
 /// What has been closed, for the console. 0619.
 final platformClosuresProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({String? kind, bool includeRestored})>(

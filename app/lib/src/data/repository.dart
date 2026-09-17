@@ -3889,6 +3889,116 @@ class Repo {
     return _rows(data).map(BusinessDocument.fromJson).toList();
   }
 
+  // ------------------------------------------------------------------
+  // Bank rules (0625)
+  //
+  // Read and write the table directly, behind its policies, which is
+  // what this repository does for master data everywhere else. The
+  // policies are `can_read_ledger` to see and `can_post` to change, so
+  // a clerk who may not post the books cannot rewrite what a bank line
+  // means.
+  // ------------------------------------------------------------------
+
+  /// Every rule, in the order they are tried.
+  Future<List<Map<String, dynamic>>> bankRules() async => _rows(
+    await client
+        .from('bank_rules')
+        .select('*, accounts!bank_rules_account_same_org(code, name), '
+            'contacts!bank_rules_contact_same_org(name)')
+        .eq('org_id', orgId)
+        .order('sort_order', ascending: true)
+        .order('id', ascending: true),
+  );
+
+  /// How many unclaimed lines each rule would take, and how many the
+  /// rules explain nothing about. Two calls rather than one because
+  /// the second is a single number and the screen shows it even while
+  /// the list is still loading.
+  Future<List<Map<String, dynamic>>> bankRuleCoverage({
+    String? bankAccountId,
+  }) async => _rows(
+    await callRpc(
+      'bank_rule_coverage',
+      params: {'p_org_id': orgId, 'p_bank_account_id': bankAccountId},
+    ),
+  );
+
+  Future<int> bankLinesUnexplained({String? bankAccountId}) async {
+    final data = await callRpc(
+      'bank_lines_unexplained',
+      params: {'p_org_id': orgId, 'p_bank_account_id': bankAccountId},
+    );
+    return (data as num?)?.toInt() ?? 0;
+  }
+
+  /// What the rules say one line is. Null when nothing describes it.
+  Future<Map<String, dynamic>?> suggestBankCoding(String transactionId) async {
+    final rows = _rows(
+      await callRpc('suggest_bank_coding',
+          params: {'p_transaction_id': transactionId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Save a rule. [id] null inserts.
+  ///
+  /// The empty strings are turned into nulls here rather than in the
+  /// form, because `bank_rules_says_something` counts a null as "no
+  /// condition" and an empty string as one that matches everything —
+  /// and a rule that silently matches every line is the worst thing a
+  /// rule can be.
+  Future<String> saveBankRule({
+    String? id,
+    required String name,
+    int sortOrder = 100,
+    bool isActive = true,
+    String? bankAccountId,
+    String? direction,
+    String? descriptionContains,
+    String? referenceContains,
+    double? amountMin,
+    double? amountMax,
+    String? accountId,
+    String? contactId,
+    String? taxCodeId,
+    String? memo,
+  }) async {
+    String? trimmed(String? v) {
+      final t = v?.trim();
+      return (t == null || t.isEmpty) ? null : t;
+    }
+
+    final values = {
+      'org_id': orgId,
+      'name': name.trim(),
+      'sort_order': sortOrder,
+      'is_active': isActive,
+      'bank_account_id': bankAccountId,
+      'direction': trimmed(direction),
+      'description_contains': trimmed(descriptionContains),
+      'reference_contains': trimmed(referenceContains),
+      'amount_min': amountMin,
+      'amount_max': amountMax,
+      'account_id': accountId,
+      'contact_id': contactId,
+      'tax_code_id': taxCodeId,
+      'memo': trimmed(memo),
+    };
+
+    final row = id == null
+        ? await client.from('bank_rules').insert(values).select('id').single()
+        : await client
+              .from('bank_rules')
+              .update(values)
+              .eq('id', id)
+              .select('id')
+              .single();
+    return '${row['id']}';
+  }
+
+  Future<void> deleteBankRule(String id) =>
+      client.from('bank_rules').delete().eq('id', id);
+
   /// Add or amend a bank account.
   ///
   /// 0529. One call, because a bank account is TWO rows that must not
