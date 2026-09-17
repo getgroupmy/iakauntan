@@ -120,6 +120,15 @@ begin
     (select full_name from public.profiles where id = v_mate), 'Team Mate');
   perform pg_temp.check_true('and still holds the company',
     app.is_org_member(v_org));
+
+  -- And cannot read the leaver's profile row at all. `profiles_select`
+  -- is `id = auth.uid() or app.shares_org_with(id)`, and both sides of
+  -- that ask for an ACTIVE membership -- so suspending the leaver's
+  -- does not leave a scrubbed row on the staff list, it takes the row
+  -- off it. Better than "Closed account" in the team sheet, and it
+  -- came out of the suspension rather than being arranged.
+  perform pg_temp.check_true('and can no longer see the leaver at all',
+    not app.shares_org_with(v_leaving));
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -244,6 +253,14 @@ begin
   perform pg_temp.sign_in_as(v_hand);
   perform pg_temp.check_true('and dark for everybody else on it',
     not app.is_org_member(v_shut));
+
+  -- 0622. Closing a company suspends nobody -- those rows are the
+  -- record 0619 exists to keep -- so `shares_org_with` went on reading
+  -- them and two people whose only connection was a company that closed
+  -- last year kept each other's name, address and phone number.
+  perform pg_temp.check_true(
+    'a closed company introduces its members to nobody',
+    not app.shares_org_with(v_owner));
 
   -- Kept: the rows are all still there.
   perform pg_temp.check_eq('nothing was deleted',
@@ -561,6 +578,12 @@ begin
   perform pg_temp.check_true('and the org switcher',
     has_function_privilege('authenticated', 'public.my_organizations()',
                            'execute'));
+  perform pg_temp.check_true('and the one behind the profiles policy',
+    has_function_privilege('authenticated', 'app.shares_org_with(uuid)',
+                           'execute'));
+  perform pg_temp.check_true('which is likewise not a stranger''s',
+    not has_function_privilege('anon', 'app.shares_org_with(uuid)',
+                               'execute'));
 
   perform pg_temp.check_true('closing your own account is authenticated''s',
     has_function_privilege('authenticated',
