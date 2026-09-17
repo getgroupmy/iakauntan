@@ -1314,6 +1314,18 @@ found by breaking it on purpose:
   `tourism_tax_reg_no`. Proved, not assumed;
   `check_orphan_columns_test.py` carries a named assertion for each of
   the two columns the sweep found, so a revert is caught by something.
+- **A column whose name is an ordinary word.**
+  `corp_entities.phone` was unreachable in exactly the way
+  `corp_entities.correspondence_email` was — declared on the next line
+  of `0061`, asked for by nothing — and the sweep cannot see it,
+  because a name is matched as a word across the whole tree and
+  `phone` appears in a hundred places with nothing to do with that
+  table. Nor can it see `notes`, `status`, `code` or `name`. Matching
+  `table.column` instead does not help: almost nothing writes the
+  pair, since a `select *` names no column and `_blank('phone')` names
+  no table. So the sweep finds the unusually-named half, and the way
+  to find the rest is to **read the row beside a column it does
+  report**. That is how `phone` was found.
 - **Its own documentation, if you let it read it.** The first version
   searched `docs` and `scripts` too. `scripts` holds the gate itself,
   whose exemption lists name every column they clear as a string

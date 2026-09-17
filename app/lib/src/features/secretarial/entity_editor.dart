@@ -59,6 +59,8 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
     _ctl('old_registration_no').text = e.oldRegistrationNo ?? '';
     _ctl('registered_office').text = e.registeredOffice ?? '';
     _ctl('business_address').text = e.businessAddress ?? '';
+    _ctl('correspondence_email').text = e.correspondenceEmail ?? '';
+    _ctl('phone').text = e.phone ?? '';
     _ctl('nature_of_business').text = e.natureOfBusiness ?? '';
     _ctl('client_ref').text = e.clientRef ?? '';
     _ctl('notes').text = e.notes ?? '';
@@ -228,6 +230,18 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
                       _text('business_address', 'Business address'),
                       _text('nature_of_business', 'Nature of business'),
                     ]),
+                    // Two columns since 0061 that nothing ever asked
+                    // for. Where a reminder about a lodgement is sent
+                    // from, and the number to ring when the Registrar
+                    // queries a form — kept in the engagement letter
+                    // until now, which is not somewhere this product
+                    // can read.
+                    _Section('Who the Registrar writes to', [
+                      _text('correspondence_email', 'Correspondence email',
+                          helper: 'Where SSM notices and our reminders go',
+                          email: true),
+                      _text('phone', 'Phone'),
+                    ]),
                     _Section('The file', [
                       _text('client_ref', 'Our reference'),
                       const SizedBox(height: Space.sm),
@@ -284,12 +298,15 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
       );
 
   Widget _text(String key, String label,
-          {bool required = false, String? helper}) =>
+          {bool required = false, String? helper, bool email = false}) =>
       TextFormField(
         controller: _ctl(key),
         decoration: InputDecoration(labelText: label, helperText: helper),
-        validator: (v) =>
-            required && (v ?? '').trim().isEmpty ? 'Required' : null,
+        validator: (v) => fieldProblem(
+          v,
+          required: required,
+          email: email,
+        ),
       );
 
   Widget _dropdown<T>({
@@ -335,6 +352,8 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
         'registered_office': _blank('registered_office'),
       'business_address': _blank('business_address'),
       'nature_of_business': _blank('nature_of_business'),
+      'correspondence_email': _blank('correspondence_email'),
+      'phone': _blank('phone'),
       'client_ref': _blank('client_ref'),
       'is_audit_exempt': _auditExempt,
       'has_constitution': _hasConstitution,
@@ -447,4 +466,29 @@ class _DateField extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What is wrong with a value on the entity form, or null.
+///
+/// A function so it can be asserted without a widget. The email shape
+/// is the half worth a test: a correspondence address with a typo is a
+/// notice from the Registrar that bounces to nobody, and it fails
+/// SILENTLY — the secretary finds out when the deadline has passed.
+///
+/// Deliberately a shape check and not a claim the address exists. The
+/// only way to know that is to send to it, and refusing an unusual but
+/// valid address is worse than accepting a wrong one: the second is
+/// visible on the file, the first cannot be recorded at all.
+@visibleForTesting
+String? fieldProblem(
+  String? value, {
+  bool required = false,
+  bool email = false,
+}) {
+  final text = (value ?? '').trim();
+  if (text.isEmpty) return required ? 'Required' : null;
+  if (email && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]{2,}$').hasMatch(text)) {
+    return 'That does not look like an email address';
+  }
+  return null;
 }

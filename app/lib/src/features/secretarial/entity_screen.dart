@@ -141,6 +141,12 @@ class _Particulars extends StatelessWidget {
                 _Row('Financial year end', entity.fyeLabel),
                 _Row('Registered office', entity.registeredOffice ?? '—'),
                 _Row('Business address', entity.businessAddress ?? '—'),
+                // On the file where a secretary reads it, which is the
+                // point of recording it: the Registrar queries a form
+                // and somebody has to know who to write to without
+                // opening the engagement letter.
+                _Row('Correspondence', entity.correspondenceEmail ?? '—'),
+                _Row('Phone', entity.phone ?? '—'),
                 _Row('Nature of business', entity.natureOfBusiness ?? '—'),
                 _Row('Constitution',
                     entity.hasConstitution ? 'Adopted' : 'None adopted'),

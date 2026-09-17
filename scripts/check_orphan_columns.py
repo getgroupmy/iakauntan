@@ -51,6 +51,21 @@ and `check_orphan_columns_test.py` carries a named assertion for each
 of the two columns this sweep found so that a revert is caught by
 something.
 
+A COLUMN WHOSE NAME IS AN ORDINARY WORD. `corp_entities.phone` was
+unreachable in exactly the way `corp_entities.correspondence_email`
+was -- declared on the next line of `0061`, asked for by nothing -- and
+this sweep cannot see it, because a name is matched as a word across
+the whole tree and `phone` appears in a hundred places with nothing to
+do with that table. Nor can it see `notes`, `status`, `code` or `name`
+on any table.
+
+Not fixable by matching `table.column` instead: almost nothing in
+either SQL or Dart writes the pair -- a `select *` names no column at
+all, and `_blank('phone')` names the column without the table. So the
+sweep finds the unusually-named half of the problem, and the usual way
+to find the rest is to READ the row beside a column it does report.
+That is how `phone` was found.
+
 So the question this answers is "has anybody thought about this column
 since the day it was typed", and the answer is worth a gate: twenty
 columns had nothing at all, and two of them were features the product
@@ -217,7 +232,17 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
 # beside it, because the reason a gap stays open for months is that
 # nobody remembers what closing it involved.
 #
-# It started at four and is at two. `einvoice_submissions.request_payload`
+# It started at four and is at one.
+#
+# `corp_entities.correspondence_email` is closed: the entity editor asks
+# for it and the company page shows it. Its neighbour
+# `corp_entities.phone` was unreachable in exactly the same way and
+# this sweep COULD NOT SEE IT -- a column name is matched as a word
+# across the tree and `phone` appears in a hundred places with nothing
+# to do with that table. It was found by reading the row beside the one
+# the sweep reported, which is the argument for reading a finding
+# rather than only fixing it. Both are wired up now.
+# `einvoice_submissions.request_payload`
 # is closed: the submit path writes a MANIFEST of the batch on the
 # insert that opens the submission -- code number, hash, format and
 # size per document, and deliberately not the documents themselves,
@@ -234,20 +259,6 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
 # SWEEP at five, never a person; the e-Invoice screen says so where the
 # rejection is shown.
 KNOWN_GAPS: dict[str, str] = {
-    # Where SSM correspondence goes. The corporate secretarial module
-    # tracks an entity's registered office, its business address and
-    # its phone, and each of those is on the entity form -- this one
-    # was declared beside them in `0061` and never asked for. A
-    # secretary keeps it in the engagement letter, where the product
-    # cannot see it.
-    #
-    # To close: a field on the corp entity editor and the column in its
-    # update path. No migration: the column is there and the policy
-    # already lets a secretary write the row.
-    'corp_entities.correspondence_email':
-        'a field on the corp entity editor, and the column in its '
-        'update path',
-
     # An employee's passport scan, permit or certificate. The Documents
     # section of the employee record tracks the TITLE, the type and the
     # expiry of each, and offers no way to attach the document -- so

@@ -43,6 +43,8 @@ class CorpEntity {
     this.fyeMonth,
     this.registeredOffice,
     this.businessAddress,
+    this.correspondenceEmail,
+    this.phone,
     this.natureOfBusiness,
     this.clientRef,
     this.isAuditExempt = false,
@@ -63,6 +65,23 @@ class CorpEntity {
   final int? fyeMonth;
   final String? registeredOffice;
   final String? businessAddress;
+
+  /// Where SSM correspondence goes, and the number they ring.
+  ///
+  /// Columns since `0061`, declared on the two lines after
+  /// `business_address` and never asked for by anything. A secretary
+  /// kept both in the engagement letter, where the product could not
+  /// see them — so a reminder about a lodgement had nowhere to be sent
+  /// from the file it belongs to.
+  ///
+  /// `correspondence_email` was found by the column sweep.
+  /// `phone` was NOT, and could not have been: the sweep matches a
+  /// column name as a word across the tree, and `phone` appears in a
+  /// hundred places that have nothing to do with this table. Found by
+  /// reading the row beside the column the sweep did report, which is
+  /// the argument for reading a finding rather than only fixing it.
+  final String? correspondenceEmail;
+  final String? phone;
   final String? natureOfBusiness;
   final String? clientRef;
   final bool isAuditExempt;
@@ -110,6 +129,8 @@ class CorpEntity {
             : Fmt.toInt(j['financial_year_end_month']),
         registeredOffice: j['registered_office']?.toString(),
         businessAddress: j['business_address']?.toString(),
+        correspondenceEmail: j['correspondence_email']?.toString(),
+        phone: j['phone']?.toString(),
         natureOfBusiness: j['nature_of_business']?.toString(),
         clientRef: j['client_ref']?.toString(),
         isAuditExempt: j['is_audit_exempt'] == true,
