@@ -154,7 +154,7 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                               'Leave this off if the company is not liable',
                         ),
                         DropdownButtonFormField<String?>(
-                          value: _hrdf,
+                          initialValue: _hrdf,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Liability',
@@ -193,7 +193,7 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                           subtitle: 'Which day of the month salaries are paid',
                         ),
                         DropdownButtonFormField<int>(
-                          value: _payDay,
+                          initialValue: _payDay,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Day of month',
@@ -768,7 +768,7 @@ class _EaBoxField extends ConsumerWidget {
     return DropdownButtonFormField<String>(
       key: const ValueKey('setup-ea-category'),
       isExpanded: true,
-      value: current.isEmpty ? '' : current,
+      initialValue: current.isEmpty ? '' : current,
       decoration: InputDecoration(labelText: label, helperText: helper),
       items: [
         const DropdownMenuItem(value: '', child: Text('Gross salary or bonus')),

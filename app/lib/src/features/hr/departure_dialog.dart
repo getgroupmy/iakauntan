@@ -71,7 +71,7 @@ class _DepartureDialogState extends ConsumerState<_DepartureDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: _kind,
+                initialValue: _kind,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'How'),
                 items: [

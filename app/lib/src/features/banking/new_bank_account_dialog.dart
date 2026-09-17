@@ -124,7 +124,7 @@ class _NewBankAccountDialogState
                     flex: 2,
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
-                      value: _type,
+                      initialValue: _type,
                       decoration: const InputDecoration(labelText: 'Kind'),
                       items: [
                         for (final entry in bankAccountTypes.entries)

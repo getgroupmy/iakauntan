@@ -495,7 +495,8 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                   final extra = !codes.contains(_entityType);
                   return DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: offered.isEmpty && !extra ? null : _entityType,
+                    initialValue:
+                        offered.isEmpty && !extra ? null : _entityType,
                     decoration: const InputDecoration(
                       labelText: 'Entity type',
                     ),
@@ -759,7 +760,7 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
               const Divider(height: Space.xl),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: _rounding,
+                initialValue: _rounding,
                 decoration: const InputDecoration(
                   labelText: 'Rounding',
                   helperText: 'Applied to the cash total on a document',

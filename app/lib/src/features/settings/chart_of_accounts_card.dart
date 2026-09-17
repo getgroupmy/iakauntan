@@ -422,7 +422,7 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _type,
+              initialValue: _type,
               decoration: const InputDecoration(labelText: 'Kind'),
               items: [
                 for (final t in _subtypes.keys)
@@ -436,7 +436,8 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: choices.contains(_subtype) ? _subtype : choices.first,
+              initialValue:
+                  choices.contains(_subtype) ? _subtype : choices.first,
               decoration: const InputDecoration(labelText: 'Where it sits'),
               items: [
                 for (final s in choices)

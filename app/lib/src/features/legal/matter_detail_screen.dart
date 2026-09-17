@@ -442,7 +442,7 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _type,
+                  initialValue: _type,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Type'),
                   items: const [
@@ -1014,7 +1014,7 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
               ]),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _activity,
+                initialValue: _activity,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Activity'),
                 items: const [
@@ -1230,7 +1230,7 @@ class _DisbursementDialogState extends ConsumerState<_DisbursementDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _paidFrom,
+                initialValue: _paidFrom,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Paid from',

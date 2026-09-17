@@ -42,9 +42,38 @@ jobs:
       # `value` argument, --fatal-infos turned that into 37 errors, and
       # analyze started failing on code nobody had touched. Bump this
       # deliberately, with the deprecations fixed in the same commit.
+      #
+      # 3.47.4, raised from 3.32.0, and the reason is the `android` job
+      # below rather than anything about Dart. Flutter 3.32.0's OWN
+      # Gradle plugin sets `fileMode` on a Copy task:
+      #
+      #     packages/flutter_tools/gradle/src/main/kotlin/
+      #       FlutterPlugin.kt:715
+      #     // TODO(gmackall): Replace with filePermissions... once
+      #     //   minimum supported Gradle version is 8.3.
+      #     @Suppress("DEPRECATION")
+      #     fileMode = 420
+      #
+      # Gradle 8.3 deprecated that property and Gradle 9 REMOVED it.
+      # `app/android/gradle/wrapper/gradle-wrapper.properties` pins
+      # Gradle 9.3.1, and `settings.gradle.kts` declares AGP 9.1.0
+      # which itself requires Gradle 9 -- so Flutter 3.32.0 cannot
+      # compile its own plugin here, and `assembleDebug` died on
+      # "Unresolved reference 'fileMode'" in `:gradle:compileKotlin`.
+      #
+      # That was not a CI problem. The Android build was broken for
+      # anybody on the pinned SDK, and the job added in the previous
+      # commit is the first thing that ever said so.
+      #
+      # 3.35.0 is the first stable whose plugin drops `fileMode`
+      # (checked against the tags rather than recalled). 3.47.4 is
+      # taken instead because it is the newest stable and because
+      # `record: ^7.1.1` names it -- so the version that unblocks
+      # Android is also the version that ends the other constraint
+      # this repository was working around.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.32.0
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - run: flutter pub get
@@ -175,7 +204,7 @@ jobs:
           # The same pin as the `flutter` job, and for the same reason
           # given there. Two jobs building the same app on two SDKs
           # would make a green tick mean less than it appears to.
-          flutter-version: 3.32.0
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - run: flutter pub get
@@ -302,7 +331,7 @@ jobs:
         with:
           # The same pin as the `flutter` and `ios` jobs, and for the
           # same reason given in the first of them.
-          flutter-version: 3.32.0
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - run: flutter pub get
@@ -2435,7 +2464,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         if: steps.creds.outputs.ready == 'true'
         with:
-          flutter-version: 3.32.0
+          flutter-version: 3.47.4
           channel: stable
           cache: true
 

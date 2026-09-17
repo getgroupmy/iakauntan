@@ -219,7 +219,7 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
                       const SizedBox(height: Space.md),
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: _tenure,
+                        initialValue: _tenure,
                         decoration: const InputDecoration(
                           labelText: 'Tenure',
                           helperText:

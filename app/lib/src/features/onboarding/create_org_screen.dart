@@ -643,7 +643,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                         // narrow column rather than ellipsising, and a
                         // phone is narrow.
                         isExpanded: true,
-                        value: _entityType,
+                        initialValue: _entityType,
                         decoration: const InputDecoration(
                           labelText: 'Entity type',
                         ),
@@ -789,7 +789,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 if (_malaysian)
                   statesAsync.when(
                     data: (states) => DropdownButtonFormField<String>(
-                      value: _stateCode,
+                      initialValue: _stateCode,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'State'),
                       items: [
@@ -855,7 +855,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
                   isExpanded: true,
-                  value: _fiscalYearEndMonth,
+                  initialValue: _fiscalYearEndMonth,
                   decoration: const InputDecoration(
                     labelText: 'Financial year end',
                     helperText: 'Most Malaysian SMEs use December',

@@ -270,7 +270,7 @@ class PaymentMethodDialogState extends ConsumerState<PaymentMethodDialog> {
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String?>(
                 key: const ValueKey('payment-method-mode'),
-                value: _mode,
+                initialValue: _mode,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Reports on an e-Invoice as',

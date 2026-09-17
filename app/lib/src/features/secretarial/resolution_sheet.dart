@@ -414,7 +414,7 @@ class _ResolutionSheetState extends ConsumerState<_ResolutionSheet> {
               ),
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String>(
-                value: _kind,
+                initialValue: _kind,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Passed by'),
                 items: [

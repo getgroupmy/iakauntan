@@ -292,7 +292,7 @@ class _PromotionDialogState extends ConsumerState<_PromotionDialog> {
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 key: const ValueKey('promotion-kind'),
-                value: _kind,
+                initialValue: _kind,
                 decoration: const InputDecoration(labelText: 'What it does'),
                 items: [
                   for (final e in promotionKinds.entries)

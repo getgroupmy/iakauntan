@@ -483,7 +483,7 @@ class _ChargeRow extends StatelessWidget {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: charge.basis,
+                  initialValue: charge.basis,
                   isDense: true,
                   decoration: const InputDecoration(
                     labelText: 'Spread by',

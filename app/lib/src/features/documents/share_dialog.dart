@@ -70,7 +70,7 @@ class _ShareDialogState extends ConsumerState<_ShareDialog> {
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _days,
+                    initialValue: _days,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Expires in'),
                     items: const [

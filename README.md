@@ -1148,11 +1148,24 @@ assertions passed by hand and failed from a clean build. `0071` writes
 that fix down. **A clean build from the migrations is the only thing that
 tests the migrations**, which is the whole reason that job exists.
 
-Both jobs that touch Flutter pin `flutter-version: 3.32.0` rather than
+Every job that touches Flutter pins `flutter-version: 3.47.4` rather than
 tracking `channel: stable`. A newer stable deprecated `DropdownButtonFormField`'s
 `value` argument; with `--fatal-infos` that turned into 37 errors in code
 nobody had touched. Bump the pin deliberately, with the deprecations
-fixed in the same commit.
+fixed in the same commit — which is exactly what the 3.32.0 → 3.47.4 bump
+was: 137 analyzer issues, 109 of them that same `value` → `initialValue`
+rename, ten `Radio.groupValue` uses that now want a `RadioGroup` ancestor,
+and eight `experimental_member_use` warnings on GoTrue's passkey API.
+
+The bump was forced by the `android` job rather than chosen. Flutter 3.32.0's
+own Gradle plugin sets `fileMode` on a `Copy` task; Gradle 8.3 deprecated that
+property and Gradle 9 removed it. `app/android` pins Gradle 9.3.1 and AGP
+9.1.0, so Flutter 3.32.0 could not compile its own plugin and `assembleDebug`
+died on `Unresolved reference 'fileMode'`. That was not a CI problem — the
+Android build was broken for anybody on the pinned SDK, and the Android job
+is the first thing that ever said so. 3.35.0 is the first stable whose plugin
+drops `fileMode`; 3.47.4 is taken because it is the newest stable and because
+`record: ^7.1.1` names it.
 
 Supabase's linter reports no errors. Two warnings remain and are expected:
 `citext` and `pg_trgm` living in `public` (moving them would break the

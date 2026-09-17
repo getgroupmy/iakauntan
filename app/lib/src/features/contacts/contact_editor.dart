@@ -674,7 +674,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         ),
                         right: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: _contactType,
+                          initialValue: _contactType,
                           decoration: const InputDecoration(labelText: 'Type'),
                           items: const [
                             DropdownMenuItem(
@@ -849,7 +849,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       _Pair(
                         left: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: _idType,
+                          initialValue: _idType,
                           decoration: const InputDecoration(
                             labelText: 'ID type',
                           ),
@@ -971,7 +971,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       const SizedBox(height: 14),
                       statesAsync.when(
                         data: (states) => DropdownButtonFormField<String>(
-                          value: _stateCode,
+                          initialValue: _stateCode,
                           isExpanded: true,
                           decoration: const InputDecoration(labelText: 'State'),
                           items: [
@@ -1315,7 +1315,7 @@ class _EntityTypeField extends ConsumerWidget {
     return DropdownButtonFormField<String>(
       key: const ValueKey('contact-entity-type'),
       isExpanded: true,
-      value: value,
+      initialValue: value,
       decoration: const InputDecoration(
         labelText: 'Kind of business *',
         helperText: 'Asked first: it decides what the rest of the form '

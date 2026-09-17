@@ -310,7 +310,8 @@ class _SeriesDialogState extends ConsumerState<_SeriesDialog> {
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       key: const ValueKey('series-reset'),
-                      value: _resets.containsKey(_reset) ? _reset : 'yearly',
+                      initialValue:
+                          _resets.containsKey(_reset) ? _reset : 'yearly',
                       decoration: const InputDecoration(
                         labelText: 'Count starts again',
                       ),

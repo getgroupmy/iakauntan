@@ -107,7 +107,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
 
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _kind,
+              initialValue: _kind,
               decoration: const InputDecoration(labelText: 'Applies to'),
               items: const [
                 DropdownMenuItem(
@@ -136,7 +136,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
             if (_types.isNotEmpty) ...[
               DropdownButtonFormField<String?>(
                 isExpanded: true,
-                value: _docType,
+                initialValue: _docType,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: [
                   const DropdownMenuItem(
@@ -175,7 +175,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
                 Expanded(
                   child: DropdownButtonFormField<int>(
                     isExpanded: true,
-                    value: _step,
+                    initialValue: _step,
                     decoration: const InputDecoration(labelText: 'Step'),
                     items: [
                       for (var i = 1; i <= 5; i++)
@@ -201,7 +201,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
             if (_byRole)
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: _role,
+                initialValue: _role,
                 decoration: const InputDecoration(labelText: 'Approved by'),
                 items: [
                   for (final e in memberRoles.entries)

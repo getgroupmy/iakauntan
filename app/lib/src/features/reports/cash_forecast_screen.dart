@@ -487,7 +487,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
               ),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: _recurrence,
+                initialValue: _recurrence,
                 decoration: const InputDecoration(labelText: 'How often'),
                 items: const [
                   DropdownMenuItem(value: 'once', child: Text('Once')),

@@ -260,7 +260,7 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _frequency,
+                    initialValue: _frequency,
                     decoration: const InputDecoration(labelText: 'Every'),
                     items: const [
                       DropdownMenuItem(value: 'daily', child: Text('Day')),

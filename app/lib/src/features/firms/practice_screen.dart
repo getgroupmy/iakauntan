@@ -591,7 +591,7 @@ class _InviteStaffDialogState extends ConsumerState<_InviteStaffDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _role,
+              initialValue: _role,
               decoration: const InputDecoration(labelText: 'Role here'),
               items: const [
                 DropdownMenuItem(
@@ -695,7 +695,7 @@ class _AppointDialogState extends ConsumerState<_AppointDialog> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: _role,
+                initialValue: _role,
                 decoration: const InputDecoration(
                   labelText: 'What the practice may do here',
                 ),

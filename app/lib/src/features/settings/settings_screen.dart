@@ -478,7 +478,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
             DropdownButtonFormField<String>(
               key: const ValueKey('einvoice-version'),
               isExpanded: true,
-              value: _version ?? storedVersion,
+              initialValue: _version ?? storedVersion,
               decoration: const InputDecoration(
                 labelText: 'e-Invoice version',
                 helperText:
@@ -681,7 +681,7 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                 // table the platform can add to, so it has no fixed
                 // width and cannot be laid out as buttons.
                 DropdownButtonFormField<String>(
-                  value: ocr.providers.any((p) => p.code == ocr.provider)
+                  initialValue: ocr.providers.any((p) => p.code == ocr.provider)
                       ? ocr.provider
                       : null,
                   isExpanded: true,
@@ -2394,22 +2394,42 @@ class CloseAccountDialogState extends State<CloseAccountDialog> {
                         style: TextStyle(fontSize: 13),
                       ),
                       const SizedBox(height: Space.xs),
-                      CheckboxListTile(
-                        key: const ValueKey('close-sole-owned'),
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        dense: true,
-                        value: _closeCompanies,
-                        onChanged: (v) =>
-                            setState(() => _closeCompanies = v ?? false),
-                        title: Text(
-                          'Close ${sole.length == 1 ? 'it' : 'them'} too',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        subtitle: const Text(
-                          'The books stay; nobody but the operator can '
-                          'reach them.',
-                          style: TextStyle(fontSize: 12),
+                      // `Material`, transparent, around the tile. A
+                      // `ListTile` paints its ink on the nearest
+                      // `Material` ANCESTOR, and the nearest one here
+                      // is behind the tinted `Container` above -- so
+                      // the ripple was being drawn underneath the
+                      // warning colour and could not be seen. Ticking
+                      // this box gave no feedback at all.
+                      //
+                      // Flutter 3.47 asserts on the arrangement in as
+                      // many words ("ListTile background color or ink
+                      // splashes may be invisible") and that assertion
+                      // is what found it; on 3.32 it was silent and the
+                      // box had simply always felt dead.
+                      //
+                      // `MaterialType.transparency` adds a surface to
+                      // paint on and no colour of its own, so the
+                      // warning tint is unchanged.
+                      Material(
+                        type: MaterialType.transparency,
+                        child: CheckboxListTile(
+                          key: const ValueKey('close-sole-owned'),
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          dense: true,
+                          value: _closeCompanies,
+                          onChanged: (v) =>
+                              setState(() => _closeCompanies = v ?? false),
+                          title: Text(
+                            'Close ${sole.length == 1 ? 'it' : 'them'} too',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: const Text(
+                            'The books stay; nobody but the operator can '
+                            'reach them.',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ),
                       ),
                     ],

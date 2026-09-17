@@ -182,7 +182,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _taxType,
+                    initialValue: _taxType,
                     decoration: const InputDecoration(
                       labelText: 'LHDN tax type',
                     ),
@@ -224,7 +224,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
                       const <Map<String, dynamic>>[];
                   return DropdownButtonFormField<String?>(
                     key: const ValueKey('tax-exemption-reason'),
-                    value: all.any((r) => r['code'] == _exemptionReason)
+                    initialValue: all.any((r) => r['code'] == _exemptionReason)
                         ? _exemptionReason
                         : null,
                     isExpanded: true,

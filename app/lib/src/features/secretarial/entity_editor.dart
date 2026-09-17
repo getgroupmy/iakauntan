@@ -299,7 +299,7 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
     required ValueChanged<T?> onChanged,
   }) =>
       DropdownButtonFormField<T>(
-        value: items.containsKey(value) ? value : null,
+        initialValue: items.containsKey(value) ? value : null,
         isExpanded: true,
         decoration: InputDecoration(labelText: label),
         items: [

@@ -277,7 +277,7 @@ class _HolidayDialogState extends ConsumerState<_HolidayDialog> {
             // Most Malaysian holidays are state-specific. Leaving this
             // empty means the whole company observes it.
             DropdownButtonFormField<String?>(
-              value: _state,
+              initialValue: _state,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'State',

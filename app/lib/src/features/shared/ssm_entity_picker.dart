@@ -196,7 +196,7 @@ class _SsmEntityPickerState extends ConsumerState<_SsmEntityPicker> {
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<int?>(
                 isExpanded: true,
-                value: _typeId,
+                initialValue: _typeId,
                 decoration: const InputDecoration(labelText: 'Kind of entity'),
                 items: [
                   const DropdownMenuItem<int?>(child: Text('Any kind')),

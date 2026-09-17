@@ -87,7 +87,7 @@ class _ForecastSettingsDialogState
               children: [
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: _bucket,
+                  initialValue: _bucket,
                   decoration: const InputDecoration(
                     labelText: 'Read history in',
                     helperText:
@@ -132,7 +132,7 @@ class _ForecastSettingsDialogState
                 const SizedBox(height: Space.md),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: _method,
+                  initialValue: _method,
                   decoration: const InputDecoration(labelText: 'Default method'),
                   items: const [
                     DropdownMenuItem(

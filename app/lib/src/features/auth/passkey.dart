@@ -1,3 +1,26 @@
+// ignore_for_file: experimental_member_use
+//
+// `auth.passkey` is marked `@experimental` in `gotrue`, and the
+// analyzer started enforcing that across package boundaries on the SDK
+// this repository now pins -- eight warnings, which
+// `--fatal-warnings` makes eight errors.
+//
+// Silenced rather than worked around, because the annotation is
+// telling the truth and the truth is already written down:
+// `docs/passkeys.md` says passkeys are a BETA feature of the project,
+// names the dashboard menu they live under, and warns that the
+// relying party ID cannot be changed later without invalidating every
+// key already enrolled. There is no stable alternative to move to --
+// GoTrue is the only thing that can verify a WebAuthn assertion for
+// this project -- so the choice is this API or no passkeys at all.
+//
+// FILE-level and not line-level on purpose: everything in this file is
+// about passkeys, so a per-line ignore would be the same decision
+// repeated with more places to forget it. If a call to something else
+// experimental ever lands here, it belongs in its own file anyway.
+//
+// What to do when `gotrue` stabilises it: delete this, and the
+// analyzer will say so by having nothing to report.
 /// Signing in with a passkey.
 ///
 /// GoTrue does the hard half. `auth.passkey.startAuthentication()`

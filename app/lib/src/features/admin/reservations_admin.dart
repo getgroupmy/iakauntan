@@ -742,7 +742,7 @@ class ConfinementFields extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String?>(
-          value: modules.contains(module) ? module : null,
+          initialValue: modules.contains(module) ? module : null,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Module',
@@ -767,7 +767,7 @@ class ConfinementFields extends ConsumerWidget {
         if (module != null && features.isNotEmpty) ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(
-            value: features.any((d) => d.path == path) ? path : null,
+            initialValue: features.any((d) => d.path == path) ? path : null,
             isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Feature',

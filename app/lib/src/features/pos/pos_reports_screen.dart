@@ -502,7 +502,7 @@ class _BuilderSheetState extends State<_BuilderSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _period,
+              initialValue: _period,
               decoration: const InputDecoration(labelText: 'Over'),
               items: [
                 for (final e in posReportPeriods.entries)

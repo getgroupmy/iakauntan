@@ -356,7 +356,7 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
                     const SizedBox(width: Space.md),
                     Expanded(
                       child: DropdownButtonFormField<String?>(
-                        value: _gender,
+                        initialValue: _gender,
                         isExpanded: true,
                         decoration:
                             const InputDecoration(labelText: 'Gender'),
@@ -469,7 +469,7 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
                 ]),
                 const SizedBox(height: Space.md),
                 DropdownButtonFormField<String?>(
-                  value: _stateCode,
+                  initialValue: _stateCode,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'State'),
                   items: [

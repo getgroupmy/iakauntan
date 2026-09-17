@@ -102,14 +102,31 @@ class _VoidReasonSheetState extends State<VoidReasonSheet> {
                 ),
               ),
             ),
-            for (final e in _reasons.entries)
-              RadioListTile<String>(
-                dense: true,
-                value: e.key,
-                groupValue: _reason,
-                onChanged: (v) => setState(() => _reason = v),
-                title: Text(e.value),
+            // `RadioGroup` rather than a `groupValue` on each tile.
+            // Flutter deprecated the per-tile form after 3.32: the
+            // group is what holds the selection, and repeating it on
+            // every option was how two radios in one list could
+            // disagree about which was chosen.
+            //
+            // A `Column` inside the group because `RadioGroup` takes a
+            // single child and this is a spread. `mainAxisSize.min`,
+            // so the tiles keep the height they had rather than
+            // claiming the sheet.
+            RadioGroup<String>(
+              groupValue: _reason,
+              onChanged: (v) => setState(() => _reason = v),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final e in _reasons.entries)
+                    RadioListTile<String>(
+                      dense: true,
+                      value: e.key,
+                      title: Text(e.value),
+                    ),
+                ],
               ),
+            ),
             if (_reason == 'other')
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

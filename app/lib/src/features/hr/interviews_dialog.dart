@@ -215,7 +215,7 @@ class _RoundDialogState extends ConsumerState<_RoundDialog> {
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _mode,
+                    initialValue: _mode,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Mode'),
                     items: const [
@@ -261,7 +261,7 @@ class _RoundDialogState extends ConsumerState<_RoundDialog> {
               // an outcome and no feedback is the one nobody can
               // remember the reasons for.
               DropdownButtonFormField<String?>(
-                value: _outcome,
+                initialValue: _outcome,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Outcome',

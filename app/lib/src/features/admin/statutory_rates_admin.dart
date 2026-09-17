@@ -351,7 +351,7 @@ class _PublishDialogState extends ConsumerState<_PublishDialog> {
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _body,
+                    initialValue: _body,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Body'),
                     items: const [
@@ -410,7 +410,7 @@ class _PublishDialogState extends ConsumerState<_PublishDialog> {
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _method,
+                    initialValue: _method,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Method'),
                     items: const [
@@ -425,7 +425,7 @@ class _PublishDialogState extends ConsumerState<_PublishDialog> {
                 const SizedBox(width: Space.md),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _rounding,
+                    initialValue: _rounding,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Rounding'),
                     items: const [
@@ -744,7 +744,7 @@ class _PasteTableDialogState extends State<_PasteTableDialog> {
               DropdownButtonFormField<AmountColumns>(
                 key: const ValueKey('paste-table-order'),
                 isExpanded: true,
-                value: _order,
+                initialValue: _order,
                 decoration: const InputDecoration(
                   labelText: 'Which amount column comes first',
                   helperText:

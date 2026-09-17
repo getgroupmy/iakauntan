@@ -365,7 +365,7 @@ class _EscalateSheetState extends ConsumerState<_EscalateSheet> {
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String>(
                 key: const ValueKey('escalate-kind'),
-                value: _kind,
+                initialValue: _kind,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Which way'),
                 items: [

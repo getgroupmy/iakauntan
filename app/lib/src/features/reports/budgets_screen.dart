@@ -321,7 +321,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
               children: [
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: year,
+                  initialValue: year,
                   decoration: const InputDecoration(labelText: 'From which year'),
                   items: [
                     for (final y in years)
@@ -421,7 +421,7 @@ class _BudgetDialogState extends ConsumerState<_BudgetDialog> {
           ),
           DropdownButtonFormField<String>(
             isExpanded: true,
-            value: _year,
+            initialValue: _year,
             decoration: const InputDecoration(labelText: 'Which year'),
             items: [
               for (final y in years)

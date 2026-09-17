@@ -556,7 +556,7 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _stageId,
+                      initialValue: _stageId,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Stage'),
                       items: [

@@ -373,7 +373,7 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
               ),
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String>(
-                value: _relationship,
+                initialValue: _relationship,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Relationship'),
                 items: const [
@@ -545,7 +545,7 @@ class _DocumentDialogState extends ConsumerState<_DocumentDialog> {
               ),
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String>(
-                value: _type,
+                initialValue: _type,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Kind'),
                 items: const [

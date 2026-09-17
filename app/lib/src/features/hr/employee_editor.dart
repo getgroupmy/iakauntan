@@ -464,7 +464,7 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
     required ValueChanged<T?> onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: items.containsKey(value) ? value : null,
+      initialValue: items.containsKey(value) ? value : null,
       isExpanded: true,
       decoration: InputDecoration(labelText: label),
       items: [

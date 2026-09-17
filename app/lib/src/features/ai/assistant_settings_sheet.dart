@@ -216,28 +216,37 @@ class _AssistantSettingsSheetState
               if (_provider != null) const SizedBox(height: Space.md),
 
               const SectionHeader('Whose key pays'),
-              RadioListTile<String>(
-                contentPadding: EdgeInsets.zero,
-                value: 'platform',
+              // One `RadioGroup` around both, rather than a
+              // `groupValue` and an `onChanged` on each. Flutter
+              // deprecated the per-tile form after 3.32, and the
+              // reason shows here: the selection and the handler were
+              // written out twice, and two copies of "which one is
+              // chosen" is one copy too many.
+              RadioGroup<String>(
                 groupValue: _keySource,
-                onChanged: (v) =>
-                    setState(() => _keySource = v ?? 'platform'),
-                title: const Text('The platform\u2019s'),
-                subtitle: const Text(
-                  'Questions come out of your scanning credit, the same '
-                  'as a scan.',
-                ),
-              ),
-              RadioListTile<String>(
-                contentPadding: EdgeInsets.zero,
-                value: 'own',
-                groupValue: _keySource,
-                onChanged: (v) =>
-                    setState(() => _keySource = v ?? 'platform'),
-                title: const Text('Our own'),
-                subtitle: const Text(
-                  'An account you already hold with the provider. They '
-                  'bill you directly.',
+                onChanged: (v) => setState(() => _keySource = v ?? 'platform'),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      value: 'platform',
+                      title: const Text('The platform\u2019s'),
+                      subtitle: const Text(
+                        'Questions come out of your scanning credit, the '
+                        'same as a scan.',
+                      ),
+                    ),
+                    RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      value: 'own',
+                      title: const Text('Our own'),
+                      subtitle: const Text(
+                        'An account you already hold with the provider. '
+                        'They bill you directly.',
+                      ),
+                    ),
+                  ],
                 ),
               ),
 

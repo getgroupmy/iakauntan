@@ -256,23 +256,43 @@ class _MemberTile extends ConsumerWidget {
       builder: (_) => SimpleDialog(
         title: Text('Access for ${member.displayName}'),
         children: [
-          RadioListTile<String?>(
-            value: null,
-            groupValue: member.accessTypeId,
+          // Rows that CLOSE the dialog, not radios in a group, and the
+          // difference matters here.
+          //
+          // These were `RadioListTile`s, whose per-tile `groupValue`
+          // Flutter deprecated after 3.32 in favour of a `RadioGroup`
+          // ancestor. Converting them would have been wrong:
+          // `RadioGroup` reports a CHANGE --
+          //
+          //     if (radio.radioValue != widget.groupValue) {
+          //       onChanged(radio.radioValue);
+          //     }
+          //
+          // -- so tapping the option already in force reports nothing,
+          // and these tiles pop the dialog from `onChanged`. Somebody
+          // who opened this and tapped the access type the member
+          // already has would find the dialog refusing to close.
+          //
+          // They were never a selection control. Each row is a button
+          // that answers the dialog, and `groupValue` was only being
+          // used to draw a tick beside the current one. So that is
+          // what they are now: the tick is drawn, the tap answers, and
+          // every row answers including the one already chosen.
+          _AccessChoice(
+            selected: member.accessTypeId == null,
             title: const Text('Everything'),
             subtitle: const Text('Every module the company has'),
-            onChanged: (_) => Navigator.of(context).pop((id: null)),
+            onTap: () => Navigator.of(context).pop((id: null)),
           ),
           for (final t in types)
-            RadioListTile<String?>(
-              value: t.id,
-              groupValue: member.accessTypeId,
+            _AccessChoice(
+              selected: member.accessTypeId == t.id,
               title: Text(t.name),
               subtitle: Text(t.grantedCount == 0
                   ? 'No modules — reaches nothing'
                   : '${t.grantedCount} '
                       '${t.grantedCount == 1 ? "module" : "modules"}'),
-              onChanged: (_) => Navigator.of(context).pop((id: t.id)),
+              onTap: () => Navigator.of(context).pop((id: t.id)),
             ),
           if (types.isEmpty)
             const Padding(
@@ -401,7 +421,7 @@ class _InviteDialogState extends ConsumerState<_InviteDialog> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _role,
+                initialValue: _role,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Access type'),
                 items: [
@@ -876,4 +896,42 @@ class _InvitationIssued extends StatelessWidget {
       ],
     );
   }
+}
+
+/// One row of the access-type dialog: a tick, a name, and a tap that
+/// answers.
+///
+/// A `ListTile` with a radio ICON rather than a `Radio`, because the
+/// radio semantics are what was wrong here -- see the note at the call
+/// site. `selected` only decides which icon is drawn; it grants the
+/// row no special behaviour, and in particular does not stop it being
+/// tapped.
+class _AccessChoice extends StatelessWidget {
+  const _AccessChoice({
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  /// Whether this is the access type the member holds now.
+  final bool selected;
+
+  final Widget title;
+  final Widget subtitle;
+
+  /// What to do when the row is tapped. Called for every row,
+  /// including the one already selected.
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: Icon(
+      selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+      color: selected ? Theme.of(context).colorScheme.primary : null,
+    ),
+    title: title,
+    subtitle: subtitle,
+    onTap: onTap,
+  );
 }

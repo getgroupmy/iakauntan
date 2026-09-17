@@ -1775,7 +1775,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                           // a striped bar but a line of text running
                           // off the card. It ellipsises instead.
                           isExpanded: true,
-                          value: offered.containsKey(_entityType)
+                          initialValue: offered.containsKey(_entityType)
                               ? _entityType
                               : offered.keys.first,
                           decoration: const InputDecoration(

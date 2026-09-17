@@ -256,7 +256,7 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
               children: [
                 DropdownButtonFormField<String>(
                   key: const ValueKey('statutory-kind'),
-                  value: _kind,
+                  initialValue: _kind,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Charge'),
                   items: [
@@ -283,7 +283,7 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
                     const SizedBox(width: Space.md),
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: _half,
+                        initialValue: _half,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Half',

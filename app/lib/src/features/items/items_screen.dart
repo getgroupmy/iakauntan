@@ -407,7 +407,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
-                      value: _itemType,
+                      initialValue: _itemType,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: const [
                         DropdownMenuItem(value: 'stock', child: Text('Stock')),
@@ -616,7 +616,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
-                      value: _tracking,
+                      initialValue: _tracking,
                       decoration: const InputDecoration(
                         labelText: 'Identify each unit',
                         // Said here because it is the decision people get

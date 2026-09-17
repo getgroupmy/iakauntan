@@ -63,9 +63,19 @@ CANVASKIT = FLUTTER_ROOT / 'bin' / 'cache' / 'flutter_web_sdk' / 'canvaskit'
 
 # The expression in the generated loader that decides where CanvasKit
 # comes from. Replaced with the local path in the served copy.
+#
+# Every identifier in it is `\w+` rather than the letter it happens to
+# be, because this is MINIFIED output and the minifier renames freely
+# between SDKs. The first version of this pattern spelled them out --
+# `e.engineRevision&&!e.useLocalCanvasKit?_(...)` -- and stopped
+# matching on the very next Flutter bump, where the join function came
+# out as `W` instead of `_`. The check then refused to run at all, on a
+# bundle that was fine, which is the same failure mode as reporting a
+# white screen that is not there.
 REMOTE_CANVASKIT = re.compile(
-    r'e\.engineRevision&&!e\.useLocalCanvasKit\?'
-    r'_\("https://www\.gstatic\.com/flutter-canvaskit",e\.engineRevision\)'
+    r'\w+\.engineRevision&&!\w+\.useLocalCanvasKit\?'
+    r'\w+\("https://www\.gstatic\.com/flutter-canvaskit",'
+    r'\w+\.engineRevision\)'
     r':"canvaskit"')
 
 

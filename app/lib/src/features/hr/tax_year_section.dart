@@ -403,7 +403,7 @@ class _ReliefDialogState extends State<_ReliefDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              value: _code,
+              initialValue: _code,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Relief'),
               items: [

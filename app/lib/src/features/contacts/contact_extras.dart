@@ -486,7 +486,7 @@ class _AddressDialogState extends ConsumerState<_AddressDialog> {
                         ),
                 ),
               DropdownButtonFormField<String?>(
-                value: _state,
+                initialValue: _state,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'State'),
                 items: [

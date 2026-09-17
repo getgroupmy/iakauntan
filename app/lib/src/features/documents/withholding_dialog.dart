@@ -105,7 +105,7 @@ class _WithholdingDialogState extends ConsumerState<_WithholdingDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _code,
+                  initialValue: _code,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Under which section'),
                   items: [

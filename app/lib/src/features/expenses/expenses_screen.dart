@@ -608,7 +608,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _paymentMode,
+                      initialValue: _paymentMode,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Paid by'),
                       items: [

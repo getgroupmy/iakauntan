@@ -351,7 +351,7 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
                   ),
                 ),
               DropdownButtonFormField<String>(
-                value: _status,
+                initialValue: _status,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Status'),
                 items: const [

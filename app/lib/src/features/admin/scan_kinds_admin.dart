@@ -347,7 +347,7 @@ class _ScanKindDialogState extends ConsumerState<_ScanKindDialog> {
               DropdownButtonFormField<String?>(
                 key: const ValueKey('scan-kind-destination'),
                 isExpanded: true,
-                value: _destination,
+                initialValue: _destination,
                 decoration: const InputDecoration(
                   labelText: 'Where it goes',
                   helperText:

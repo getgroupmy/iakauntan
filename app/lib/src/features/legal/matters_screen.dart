@@ -390,7 +390,7 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _matterType,
+                  initialValue: _matterType,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Matter type'),
                   items: [

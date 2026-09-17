@@ -256,7 +256,7 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
               const SizedBox(height: 8),
               DropdownButtonFormField<ScreenModule?>(
                 key: const ValueKey('feedback-module'),
-                value: _module,
+                initialValue: _module,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Module'),
                 items: [
@@ -274,7 +274,7 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<ScreenArea>(
                   key: const ValueKey('feedback-area'),
-                  value: _area,
+                  initialValue: _area,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Part of it'),
                   items: [
@@ -291,7 +291,7 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<AppScreen>(
                   key: const ValueKey('feedback-screen'),
-                  value: _screen,
+                  initialValue: _screen,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Screen'),
                   items: [

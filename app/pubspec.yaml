@@ -79,11 +79,14 @@ dependencies:
   # the platform recorder on Android and iOS, so one call site covers
   # all of them. Both of these need microphone permission on mobile,
   # which the manifests below declare.
-  # 6.x, not 7.x. `record: ^7.1.1` requires Flutter 3.47.4 and this
-  # repository pins 3.32.0 in ci.yml -- deliberately, with the reason
-  # given there. 7.x resolves on a machine running a newer SDK and
-  # fails `pub get` in CI, which is the worst shape for a version
-  # constraint: green where it was typed, red where it is checked.
+  # 6.x, not 7.x, and no longer because it CANNOT be. `record: ^7.1.1`
+  # requires Flutter 3.47.4, which ci.yml now pins -- so 7.x would
+  # resolve. It is not taken because 6.2.1 is the version the iOS build
+  # was actually made to work with: `record_linux` in the 5.x
+  # resolution broke the Dart build on every platform, and 6.2.1 is
+  # where that was settled by hand on a Mac with Xcode in front of it.
+  # Moving it is a change to test on a device, not a constraint to
+  # relax in passing.
   #
   # 5.x is not an option either: it resolves record_linux 0.7.2 against
   # record_platform_interface 1.6.0, where RecordLinux is missing
@@ -131,12 +134,13 @@ dependencies:
   # Flutter -- there is no way to run a WebAuthn ceremony on a phone
   # without a platform plugin, and a webview cannot do it either.
   #
-  # PINNED EXACTLY, and it matters. 2.22.0 and up require Flutter
-  # 3.35.0; ci.yml pins 3.32.0, deliberately, with the reason given
-  # there. A caret here resolves to the newest on a developer's newer
-  # SDK and fails `pub get` in CI -- green where it was typed, red
-  # where it is checked, which is the worst shape a version
-  # constraint can have. 2.21.1 is the last release that names 3.32.0.
+  # `^2.21.1` now that ci.yml pins Flutter 3.47.4. It was 2.21.1
+  # EXACTLY when the pin was 3.32.0: 2.22.0 and up name Flutter
+  # 3.35.0, and a caret would have resolved to the newest on a
+  # developer's newer SDK and failed `pub get` in CI -- green where it
+  # was typed, red where it is checked, which is the worst shape a
+  # version constraint can have. That is no longer the situation, and
+  # an exact pin kept past its reason is a pin nobody can explain.
   #
   # `passkeys_platform_interface` is named beside it because
   # `passkey_native.dart` imports its types directly, and a transitive

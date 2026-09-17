@@ -685,7 +685,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           Expanded(
             child: DropdownButtonFormField<int>(
               isExpanded: true,
-              value: _month,
+              initialValue: _month,
               decoration: const InputDecoration(labelText: 'Month'),
               items: [
                 for (var m = 1; m <= 12; m++)
@@ -698,7 +698,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           Expanded(
             child: DropdownButtonFormField<int>(
               isExpanded: true,
-              value: _year,
+              initialValue: _year,
               decoration: const InputDecoration(labelText: 'Year'),
               items: [
                 for (var y = DateTime.now().year - 1;
