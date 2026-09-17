@@ -79,7 +79,12 @@ dependencies:
   # the platform recorder on Android and iOS, so one call site covers
   # all of them. Both of these need microphone permission on mobile,
   # which the manifests below declare.
-  record: ^5.2.0
+  # Pinned to 6.x because 5.x resolves record_linux 0.7.2 against
+  # record_platform_interface 1.6.0, where RecordLinux is missing
+  # startStream and still has the old hasPermission signature -- a
+  # transitive break that stops the DART build, on every platform,
+  # including the two this app actually ships to.
+  record: ^6.2.1
   # Playing one back. Chosen over just_audio for having a web
   # implementation in the same package rather than a federated one.
   audioplayers: ^6.1.0

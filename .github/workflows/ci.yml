@@ -72,6 +72,138 @@ jobs:
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
 
+  # =====================================================================
+  # The iOS build
+  #
+  # Added after a fresh checkout could not be built on a Mac at all, and
+  # nothing here noticed: every other job in this file is
+  # `ubuntu-latest`, so the iOS target had never been compiled by CI.
+  # What broke was not Dart -- analyze and test were green throughout --
+  # but the native integration underneath it: a deployment target the
+  # pods refused, and a Podfile that was never committed.
+  #
+  # That is the class of failure this job exists for. A Dart mistake is
+  # already caught by `flutter` above, on a runner that costs a tenth as
+  # much; what only a Mac can tell us is whether the plugins, the pods
+  # and the deployment target still agree.
+  # =====================================================================
+  ios-scope:
+    name: Does this push touch iOS
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Two commits, so the diff below has something to compare
+          # against. A shallow clone of one has no parent and every
+          # path reads as changed.
+          fetch-depth: 2
+      - id: decide
+        # A macOS runner bills at ten times an Ubuntu one, so this does
+        # not run on every push. It runs when something that can move
+        # the NATIVE build moves: the iOS project itself, or the
+        # dependency set, since adding a plugin is the ordinary way an
+        # iOS build breaks.
+        #
+        # A pull request and a manual run always build, because those
+        # are the two moments somebody is asking the question directly.
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "not a push — building"
+            exit 0
+          fi
+          changed=$(git diff --name-only "${{ github.event.before }}" \
+                      "${{ github.sha }}" 2>/dev/null || echo ALL)
+          if [ "$changed" = "ALL" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "no usable diff — building rather than guessing"
+            exit 0
+          fi
+          # This workflow file is in the list so that a change to the
+          # iOS job below is tested by the iOS job below. Leaving it
+          # out meant the one push guaranteed to need a Mac was the one
+          # push that skipped it.
+          if echo "$changed" | grep -qE '^(app/(ios/|pubspec\.(yaml|lock)$)|\.github/workflows/ci\.yml$)'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "iOS or dependencies moved — building"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "nothing native changed — skipping the Mac"
+          fi
+
+  ios:
+    name: Build the iOS app
+    runs-on: macos-latest
+    timeout-minutes: 45
+    needs: [ios-scope]
+    if: needs.ios-scope.outputs.build == 'true'
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      # The one file whose absence is not a build error but a missing
+      # commit, checked BEFORE twenty minutes of pod resolution so the
+      # failure names the cause.
+      #
+      # `Podfile` is not generated and is not ignored -- it was simply
+      # never committed, and it is where the deployment target lives.
+      # Without it Flutter writes a default one pinned lower than
+      # Google ML Kit accepts, and the build dies deep inside CocoaPods
+      # on a message about a pod nobody here has heard of.
+      - name: The Podfile has to be in the repository
+        run: |
+          if [ ! -f ios/Podfile ]; then
+            echo "::error file=app/ios/Podfile::ios/Podfile is missing."
+            echo
+            echo "It is not generated and not gitignored — it has never"
+            echo "been committed. It carries the iOS deployment target,"
+            echo "which Google ML Kit requires to be 15.5 or higher."
+            echo
+            echo "Commit ios/Podfile and ios/Podfile.lock from a machine"
+            echo "where 'pod install' has been run."
+            exit 1
+          fi
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # The same pin as the `flutter` job, and for the same reason
+          # given there. Two jobs building the same app on two SDKs
+          # would make a green tick mean less than it appears to.
+          flutter-version: 3.32.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # `--no-codesign` because this job answers "does it compile and
+      # link", which is the question a signing identity does not change.
+      # Signing belongs to a release, needs secrets, and would make
+      # every pull request from a fork fail on something unrelated to
+      # the diff.
+      - name: Build
+        run: flutter build ios --no-codesign --debug
+
+      # Read back rather than trusted. `flutter build` succeeds against
+      # a Podfile pinned too low if no pod happens to object on the day,
+      # and the next plugin added is then the one that breaks -- with
+      # the cause months behind it.
+      - name: The deployment target is what ML Kit needs
+        run: |
+          set -euo pipefail
+          target=$(grep -o "IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*" \
+                     ios/Runner.xcodeproj/project.pbxproj |
+                   sed 's/.*= //' | sort -V | head -1)
+          echo "lowest deployment target in the project: $target"
+          lowest=$(printf '15.5\n%s\n' "$target" | sort -V | head -1)
+          if [ "$lowest" != "15.5" ]; then
+            echo "::error::iOS deployment target is $target; Google ML Kit needs 15.5."
+            exit 1
+          fi
   database:
     name: Statutory engine and ledger rules
     runs-on: ubuntu-latest
