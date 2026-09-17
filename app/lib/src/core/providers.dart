@@ -483,6 +483,27 @@ final customerPortalLinksProvider = FutureProvider.autoDispose
       return repo.customerPortalLinks(contactId);
     });
 
+/// The tax-details links issued to one contact — whether one is live,
+/// whether they have opened it, and whether they have answered.
+/// autoDispose for [customerPortalLinksProvider]'s reason: issuing or
+/// revoking one is exactly when the answer changes.
+final taxDetailLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.taxDetailLinks(contactId);
+    });
+
+/// What customers have said about their own tax details that disagrees
+/// with what is on file. autoDispose: accepting or dismissing one is
+/// exactly when the answer changes.
+final pendingTaxSubmissionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.pendingTaxSubmissions();
+    });
+
 /// The records on file twice, for the screen that offers to link
 /// them. autoDispose so it is asked afresh: a group linked a moment
 /// ago is not a group any more.

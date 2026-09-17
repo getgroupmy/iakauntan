@@ -7317,6 +7317,87 @@ extension RepoHrSetup on Repo {
         .limit(10),
   );
 
+  // ------------------------------------------------------------------
+  // 0626. Asking a customer for their own tax details.
+  //
+  // The same mechanism as the portal above, pointed at a form instead
+  // of at a statement. The important thing about it is not here: the
+  // public submission fills BLANK fields only and never overwrites, and
+  // that rule lives in `app.tax_submission_apply` where a client cannot
+  // reach it.
+  // ------------------------------------------------------------------
+
+  /// Email this contact a link to fill in their own TIN.
+  ///
+  /// Returns the URL and the address it went to, so somebody reading it
+  /// out over the telephone can, and a contact with no address on file
+  /// is not a reason to refuse.
+  Future<Map<String, dynamic>> requestTaxDetails(
+    String contactId, {
+    int validDays = 30,
+    String? email,
+  }) async {
+    final data = await callRpc(
+      'request_tax_details',
+      params: {
+        'p_contact_id': contactId,
+        'p_valid_days': validDays,
+        'p_email': email,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> revokeTaxDetailRequest(String contactId) => callRpc(
+    'revoke_tax_detail_request',
+    params: {'p_contact_id': contactId},
+  );
+
+  /// The tax-details links issued to this contact, newest first.
+  ///
+  /// Off the table for [customerPortalLinks]'s reason: a member of the
+  /// company may select it, and the token itself was never there.
+  /// `submission_count` is the column the status line turns on — a link
+  /// that was opened and not answered is the one worth chasing.
+  Future<List<Map<String, dynamic>>> taxDetailLinks(String contactId) async =>
+      Repo._rows(
+        await client
+            .from('tax_detail_requests')
+            .select('expires_at, revoked_at, last_opened_at, open_count, '
+                'submission_count, sent_to_email, created_at')
+            .eq('contact_id', contactId)
+            .order('created_at', ascending: false)
+            .limit(10),
+      );
+
+  /// What customers have said that disagrees with what is on file.
+  ///
+  /// Both sides of every disagreement come back, because "they say
+  /// C1234567890" is not answerable without "you hold C9999999999".
+  Future<List<Map<String, dynamic>>> pendingTaxSubmissions() async =>
+      Repo._rows(await callRpc(
+        'pending_tax_submissions',
+        params: {'p_org_id': orgId},
+      ));
+
+  /// Accept what a customer said over what the contact already holds.
+  ///
+  /// This is the only path that overwrites; the public form cannot.
+  /// Where the TIN, the ID type or the ID number moves, the verified
+  /// tick goes with it — decided in SQL, not here.
+  Future<Map<String, dynamic>> applyTaxSubmission(String submissionId) async {
+    final data = await callRpc(
+      'apply_tax_submission',
+      params: {'p_submission_id': submissionId},
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> dismissTaxSubmission(String submissionId) => callRpc(
+    'dismiss_tax_submission',
+    params: {'p_submission_id': submissionId},
+  );
+
   Future<String> shareDocument(
     String documentId, {
     int validDays = 30,

@@ -30,6 +30,7 @@ import '../shared/ssm_query_hints.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
 import 'customer_portal_card.dart';
+import 'tax_details_card.dart';
 import 'contact_lookalikes.dart';
 
 /// Whether the form still says what the register said.
@@ -1171,6 +1172,17 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         CustomerPortalCard(
                           contactId: widget.contactId!,
                           contactType: _contactType,
+                          email: _c('email').text.trim(),
+                        ),
+                      // 0626, and on every contact rather than only on
+                      // customers: a SUPPLIER's TIN is needed too, for
+                      // the self-billed e-Invoice, and a link that
+                      // appeared for one kind of contact and not the
+                      // other would be read as a bug rather than as a
+                      // rule.
+                      if (widget.contactId != null)
+                        TaxDetailsCard(
+                          contactId: widget.contactId!,
                           email: _c('email').text.trim(),
                         ),
                       const SizedBox(height: 40),

@@ -14,6 +14,7 @@ import '../features/chat/chat_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/contacts/duplicate_contacts_screen.dart';
+import '../features/contacts/tax_details_page.dart';
 import '../features/crm/leads_screen.dart';
 import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
@@ -253,6 +254,10 @@ String? routeFor({
   // The other page that works with no account: a customer opening a
   // link to their own invoice.
   if (path.startsWith('/share/')) return null;
+  // 0626, and the same again: a customer filling in their own TIN,
+  // because from this year an e-Invoice will not clear MyInvois
+  // without it and only they have it.
+  if (path.startsWith('/tax-details/')) return null;
   // And 0493's widening of it: the same customer opening their whole
   // account rather than one document.
   if (path.startsWith('/account/')) return null;
@@ -583,6 +588,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/account/:token',
         builder: (_, state) =>
             CustomerPortalPage(token: state.pathParameters['token']!),
+      ),
+      // 0626. The same customer, asked for their own TIN. Its own path
+      // rather than `/share/`, because 0493 emailed portal links on the
+      // document route and every one of them opened a page saying the
+      // link was not valid — the whole of 0494.
+      GoRoute(
+        path: '/tax-details/:token',
+        builder: (_, state) =>
+            TaxDetailsPage(token: state.pathParameters['token']!),
       ),
       // And a customer reading — and replying to — their own support
       // ticket. `0192` built the requester's half of the conversation

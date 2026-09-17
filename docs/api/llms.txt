@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0626` (the highest applied migration).
+Schema version `0627` (the highest applied migration).
 708 functions and 343 readable tables, of which
 266 functions only read.
 
@@ -614,7 +614,7 @@ Not gated on any module.
 - `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)* — Opens a vacancy so it can be applied to, from draft or from on hold, and clears any closing date a previous hold left behind.
 - `open_shared_document(p_token text)` *(writes)* — Opens an invoice or quotation shared by link, for a customer who is not a user of this system.
 - `open_shared_ticket(p_token text)` *(writes)* — Opens a support ticket shared by link, for the customer who raised it.
-- `open_tax_detail_request(p_token text)` *(writes)* — What we hold about one contact, for somebody holding their tax-details token and no account.
+- `open_tax_detail_request(p_token text)` *(writes)* — What we hold about one contact, plus the state list its form needs, for somebody holding their tax-details token and no account.
 - `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
 - `org_payment_gateway_status(p_org_id uuid)` — Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what is configured without being shown the credentials.
 - `org_save_login_page(p_org_id uuid, p_title text, p_body text)` *(writes)* — Writes the heading and body shown on this company's own sign-in page, creating the row on first save.

@@ -64,6 +64,14 @@ const dropdownCensus = <String, int>{
   'features/collections/log_attempt_sheet.dart': 2,
   'features/contacts/contact_editor.dart': 4,
   'features/contacts/contact_extras.dart': 1,
+  // 0626. The public tax-details form, and both of its lists are fixed
+  // by somebody other than us: LHDN's four identification types, which
+  // are the check constraint on `contacts.id_type`, and the sixteen
+  // Malaysian state codes -- which this screen does not even hold, it
+  // draws them from `open_tax_detail_request` so there is one copy of
+  // the statutory list and it is in the database. Neither grows without
+  // a migration.
+  'features/contacts/tax_details_page.dart': 2,
   'features/crm/leads_screen.dart': 1,
   'features/crm/pipeline_screen.dart': 1,
   'features/documents/repeat_dialog.dart': 1,

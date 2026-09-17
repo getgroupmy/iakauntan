@@ -291,6 +291,17 @@ begin
   perform pg_temp.check_eq('and shows the customer their own name',
     v_open -> 'contact' ->> 'name', 'Pautan Mati Sdn Bhd');
 
+  -- 0627. The form's state dropdown is built from this rather than from
+  -- a copy in Dart, because a screen holding its own copy of a
+  -- statutory code list goes on offering the old codes after the day
+  -- the standard changes them.
+  perform pg_temp.check_eq('the form is given the state list it needs',
+    jsonb_array_length(v_open -> 'states'),
+    (select count(*)::int from public.ref_states));
+  perform pg_temp.check_eq('with codes and names on it',
+    v_open -> 'states' -> 0 ->> 'code',
+    (select code from public.ref_states order by code limit 1));
+
   -- And nothing about money. The portal is for that; it is a different
   -- token and a different page.
   perform pg_temp.check_eq(
