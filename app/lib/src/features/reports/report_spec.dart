@@ -48,12 +48,27 @@ sealed class ReportBlock {
 /// A named list of accounts with a subtotal: the shape of every section
 /// of a profit and loss or a balance sheet.
 final class ReportSection extends ReportBlock {
-  const ReportSection({required this.title, required this.lines});
+  const ReportSection({
+    required this.title,
+    required this.lines,
+    this.statedTotal,
+  });
 
   final String title;
   final List<ReportLine> lines;
 
-  double get total => lines.fold(0, (sum, l) => sum + l.amount);
+  /// A total the section was GIVEN rather than one derived from the
+  /// lines under it.
+  ///
+  /// `0637`. A layout may say `show_accounts: false` — an accountant's
+  /// one-line "Administrative expenses" with the detail in a note — and
+  /// such a section has a real total and no lines at all. Summing the
+  /// lines there renders a confident zero, which is worse than an error
+  /// because nothing about it looks wrong.
+  final double? statedTotal;
+
+  double get total =>
+      statedTotal ?? lines.fold(0, (sum, l) => sum + l.amount);
 }
 
 class ReportLine {
@@ -937,4 +952,80 @@ String _servicePeriod(Map<String, dynamic> r) {
   final to = Fmt.parseDate(r['service_end']);
   if (from == null || to == null) return '—';
   return '${Fmt.date(from)} – ${Fmt.date(to)}';
+}
+
+/// A report composed by the database, turned into the blocks both
+/// renderers already draw.
+///
+/// `0637`. `report_with_layout` returns rows that are already totalled:
+/// one row per section, formula and account, in order, with `line_no`
+/// 0 for the section's own total and 1, 2, 3 for the accounts under it.
+/// Nothing here adds anything up — the arithmetic on a document
+/// somebody signs lives in the database, and a second implementation in
+/// Dart is a second answer waiting to disagree.
+ReportSpec layoutSpec(
+  List<Map<String, dynamic>> rows, {
+  required String title,
+  required String subtitle,
+  String? note,
+}) {
+  final blocks = <ReportBlock>[];
+
+  for (var i = 0; i < rows.length; i++) {
+    final r = rows[i];
+    if ((r['line_no'] as num?)?.toInt() != 0) continue;
+
+    final label = r['label']?.toString() ?? '';
+    final kind = r['kind']?.toString();
+    final amount = Fmt.toDouble(r['amount']);
+
+    if (kind == 'formula') {
+      blocks.add(
+        ReportHighlight(
+          label: label,
+          value: amount,
+          emphasise: r['emphasise'] == true,
+        ),
+      );
+      continue;
+    }
+
+    // A heading has no amount and nothing under it. Rendered as an
+    // empty section rather than skipped: somebody put it in the layout
+    // on purpose.
+    if (kind == 'heading') {
+      blocks.add(ReportSection(title: label, lines: const []));
+      continue;
+    }
+
+    final key = r['row_key']?.toString();
+    blocks.add(
+      ReportSection(
+        title: label,
+        lines: [
+          for (final a in rows.where(
+            (x) =>
+                x['row_key']?.toString() == key &&
+                ((x['line_no'] as num?)?.toInt() ?? 0) > 0,
+          ))
+            ReportLine(
+              code: a['account_code']?.toString() ?? '',
+              name: a['account_name']?.toString() ?? '',
+              amount: Fmt.toDouble(a['amount']),
+            ),
+        ],
+        // The section's OWN total, not the sum of whatever lines came
+        // back. A section set to show its total only has no lines, and
+        // summing them would render a confident zero.
+        statedTotal: amount,
+      ),
+    );
+  }
+
+  return ReportSpec(
+    title: title,
+    subtitle: subtitle,
+    blocks: blocks,
+    note: note,
+  );
 }

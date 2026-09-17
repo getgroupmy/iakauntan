@@ -3647,3 +3647,150 @@ class PaymentMethod {
     notes: j['notes'] as String?,
   );
 }
+
+/// A company's own layout for a P&L or a Balance Sheet.
+///
+/// `0637`. Which sections a report has, in what order, and what each
+/// one selects — data rather than a hardcoded opinion, because
+/// "Revenue / Cost of Sales / Gross profit / Expenses / Net profit" is
+/// one reasonable view of a P&L and wrong for plenty of real sets of
+/// accounts.
+class ReportLayout {
+  ReportLayout({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.isActive = false,
+    this.isBuiltin = false,
+  });
+
+  final String id;
+
+  /// `profit_loss` or `balance_sheet`.
+  final String kind;
+  final String name;
+
+  /// The one this company's report uses. At most one per kind, which
+  /// the database enforces with a partial unique index rather than
+  /// trusting whoever wrote last.
+  final bool isActive;
+
+  /// Seeded from the standard layout. Editable like any other — the
+  /// flag is so a screen can offer to start again from it.
+  final bool isBuiltin;
+
+  factory ReportLayout.fromJson(Map<String, dynamic> j) => ReportLayout(
+    id: j['id'] as String,
+    kind: j['kind']?.toString() ?? 'profit_loss',
+    name: j['name']?.toString() ?? '',
+    isActive: j['is_active'] == true,
+    isBuiltin: j['is_builtin'] == true,
+  );
+}
+
+/// One row of a layout: a section, a computed figure, or a heading.
+class LayoutRow {
+  LayoutRow({
+    required this.rowKey,
+    required this.kind,
+    required this.label,
+    this.depth = 0,
+    this.emphasise = false,
+    this.showAccounts = true,
+    this.accountTypes = const [],
+    this.accountSubtypes = const [],
+    this.accountIds = const [],
+    this.formula = const [],
+  });
+
+  /// What a formula refers to. Stable across a rename of the label,
+  /// which is the whole reason it is separate from one.
+  final String rowKey;
+
+  /// `section`, `formula` or `heading`.
+  final String kind;
+  final String label;
+  final int depth;
+  final bool emphasise;
+
+  /// False for an accountant's one-line block with the detail in a
+  /// note. The section still has a total; it just does not list what
+  /// is under it.
+  final bool showAccounts;
+
+  final List<String> accountTypes;
+  final List<String> accountSubtypes;
+  final List<String> accountIds;
+
+  /// Signed references to rows ABOVE this one, as
+  /// `[{'row': key, 'sign': 1 or -1}]`.
+  ///
+  /// Not an expression. There is no parser and no precedence, because
+  /// a precedence bug in a figure somebody signs is the worst kind to
+  /// find late — and addition and subtraction of rows already computed
+  /// is what every real layout actually needs.
+  final List<Map<String, dynamic>> formula;
+
+  static List<String> _strings(dynamic v) => [
+    for (final x in (v as List? ?? const [])) x.toString(),
+  ];
+
+  factory LayoutRow.fromJson(Map<String, dynamic> j) => LayoutRow(
+    rowKey: j['row_key']?.toString() ?? '',
+    kind: j['kind']?.toString() ?? 'section',
+    label: j['label']?.toString() ?? '',
+    depth: (j['depth'] as num?)?.toInt() ?? 0,
+    emphasise: j['emphasise'] == true,
+    showAccounts: j['show_accounts'] != false,
+    accountTypes: _strings(j['account_types']),
+    accountSubtypes: _strings(j['account_subtypes']),
+    accountIds: _strings(j['account_ids']),
+    formula: [
+      for (final f in (j['formula'] as List? ?? const []))
+        Map<String, dynamic>.from(f as Map),
+    ],
+  );
+
+  /// What `save_layout_rows` expects.
+  ///
+  /// Empty selectors are omitted rather than sent as `[]`: the
+  /// database's shape constraint reads an empty array as "a section
+  /// that selects nothing", which it refuses, and a builder that sent
+  /// one would be refused for a reason nobody typed.
+  Map<String, dynamic> toJson() => {
+    'row_key': rowKey,
+    'kind': kind,
+    'label': label,
+    'depth': depth,
+    'emphasise': emphasise,
+    'show_accounts': showAccounts,
+    if (accountTypes.isNotEmpty) 'account_types': accountTypes,
+    if (accountSubtypes.isNotEmpty) 'account_subtypes': accountSubtypes,
+    if (accountIds.isNotEmpty) 'account_ids': accountIds,
+    if (kind == 'formula') 'formula': formula,
+  };
+
+  LayoutRow copyWith({
+    String? rowKey,
+    String? kind,
+    String? label,
+    int? depth,
+    bool? emphasise,
+    bool? showAccounts,
+    List<String>? accountTypes,
+    List<String>? accountSubtypes,
+    List<String>? accountIds,
+    List<Map<String, dynamic>>? formula,
+  }) => LayoutRow(
+    rowKey: rowKey ?? this.rowKey,
+    kind: kind ?? this.kind,
+    label: label ?? this.label,
+    depth: depth ?? this.depth,
+    emphasise: emphasise ?? this.emphasise,
+    showAccounts: showAccounts ?? this.showAccounts,
+    accountTypes: accountTypes ?? this.accountTypes,
+    accountSubtypes: accountSubtypes ?? this.accountSubtypes,
+    accountIds: accountIds ?? this.accountIds,
+    formula: formula ?? this.formula,
+  );
+}

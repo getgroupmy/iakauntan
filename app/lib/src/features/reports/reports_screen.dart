@@ -9,6 +9,7 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/repository.dart';
 import 'report_csv.dart';
 import 'report_pdf.dart';
 import 'report_spec.dart';
@@ -19,6 +20,12 @@ class ReportsScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
 }
+
+/// The caveat the balance sheet has always carried. Named because two
+/// call sites now pass it, and two copies of a sentence drift.
+const _balanceSheetNote =
+    'This should be zero once the year-end profit is transferred to '
+    'retained earnings.';
 
 class _ReportsScreenState extends ConsumerState<ReportsScreen>
     with SingleTickerProviderStateMixin {
@@ -161,10 +168,25 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               )),
             )
             .valueOrNull;
-        return rows == null ? null : profitLossSpec(rows, _range);
+        return rows == null
+            ? null
+            : layoutSpec(
+                rows,
+                title: 'Profit & Loss',
+                subtitle:
+                    '${Fmt.longDate(_range.start)} to '
+                    '${Fmt.longDate(_range.end)}',
+              );
       case 1:
         final rows = ref.watch(_balanceSheetProvider(_range.end)).valueOrNull;
-        return rows == null ? null : balanceSheetSpec(rows, _range.end);
+        return rows == null
+            ? null
+            : layoutSpec(
+                rows,
+                title: 'Balance Sheet',
+                subtitle: 'As at ${Fmt.longDate(_range.end)}',
+                note: _balanceSheetNote,
+              );
       case 2:
         final rows = ref.watch(trialBalanceProvider).valueOrNull;
         return rows == null ? null : trialBalanceSpec(rows);
@@ -348,6 +370,19 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         icon: Icons.table_chart_outlined,
         onTap: spec == null ? null : () => _downloadCsv(spec),
       ),
+      // 0637. Only on the two reports that HAVE a layout. Offering it
+      // on the trial balance would promise something that does not
+      // exist, which is worse than not offering it.
+      if (_tabs.index == 0 || _tabs.index == 1)
+        (
+          label: 'Edit layout',
+          icon: Icons.tune,
+          onTap: () async {
+            final kind = _tabs.index == 0 ? 'profit_loss' : 'balance_sheet';
+            final saved = await context.push<bool>('/reports/layout/$kind');
+            if (saved == true && mounted) setState(() {});
+          },
+        ),
     ];
 
     return Scaffold(
@@ -462,7 +497,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               project: _project,
               department: _department,
             )),
-            spec: (rows) => profitLossSpec(rows, _range),
+            spec: (rows) => layoutSpec(
+              rows,
+              title: 'Profit & Loss',
+              subtitle:
+                  '${Fmt.longDate(_range.start)} to '
+                  '${Fmt.longDate(_range.end)}',
+            ),
             empty: const EmptyState(
               icon: Icons.summarize_outlined,
               title: 'Nothing posted in this period',
@@ -471,7 +512,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           ),
           _Report(
             provider: _balanceSheetProvider(_range.end),
-            spec: (rows) => balanceSheetSpec(rows, _range.end),
+            spec: (rows) => layoutSpec(
+              rows,
+              title: 'Balance Sheet',
+              subtitle: 'As at ${Fmt.longDate(_range.end)}',
+              note: _balanceSheetNote,
+            ),
             empty: const EmptyState(
               icon: Icons.balance,
               title: 'Nothing on the balance sheet yet',
@@ -859,7 +905,12 @@ final _profitLossProvider = FutureProvider.autoDispose
       List<Map<String, dynamic>>,
       ({DateTimeRange range, String? project, String? department})
     >((ref, args) {
-      return requireRepo(ref).profitLossByDimension(
+      // `0637`. The rows come back already composed from this
+      // company's layout -- section, formula and account, in order --
+      // rather than as a flat list this side then groups. A company
+      // that has customised nothing gets exactly what it got before.
+      return requireRepo(ref).reportWithLayout(
+        kind: 'profit_loss',
         from: args.range.start,
         to: args.range.end,
         projectCode: args.project,
@@ -874,7 +925,12 @@ final _dimensionsProvider =
 
 final _balanceSheetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
-      return requireRepo(ref).balanceSheet(asAt: asAt);
+      // `0637`, as with the P&L above: composed from this company's
+      // layout rather than grouped on this side.
+      return requireRepo(ref).reportWithLayout(
+        kind: 'balance_sheet',
+        to: asAt,
+      );
     });
 
 /// The ledger, for the chosen range and optionally one account.
