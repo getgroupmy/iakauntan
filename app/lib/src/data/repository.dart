@@ -7317,6 +7317,33 @@ extension RepoHrSetup on Repo {
         .limit(10),
   );
 
+  /// What one contact owes and what they have in hand against it.
+  ///
+  /// 0630. Both sides in one question, because a knock-off screen that
+  /// asked twice would show two moments of the same account.
+  Future<List<Map<String, dynamic>>> openItems(String contactId) async =>
+      Repo._rows(await callRpc(
+        'open_items',
+        params: {'p_contact_id': contactId},
+      ));
+
+  /// Set several credits against several invoices, all or none.
+  ///
+  /// 0629 and 0630. No journal moves: a credit note credited the
+  /// receivable when it was raised and a receipt credited it when it
+  /// was banked, which is exactly why this batch is safe to apply in
+  /// one statement. Returns how many lines landed.
+  Future<int> knockOff(
+    String contactId,
+    List<Map<String, dynamic>> lines,
+  ) async {
+    final n = await callRpc(
+      'knock_off',
+      params: {'p_contact_id': contactId, 'p_lines': lines},
+    );
+    return (n as num?)?.toInt() ?? 0;
+  }
+
   /// Purchase documents already on the books that look like this one.
   ///
   /// 0628. By the supplier's own number, or -- where the paper carries

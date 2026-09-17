@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0629` (the highest applied migration).
-710 functions and 343 readable tables, of which
-267 functions only read.
+Schema version `0630` (the highest applied migration).
+712 functions and 343 readable tables, of which
+268 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**570 of 710 functions carry a `comment on
+**572 of 712 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (499)
+### general (501)
 
 Not gated on any module.
 
@@ -574,6 +574,7 @@ Not gated on any module.
 - `invoice_credit_remaining(p_invoice uuid)` — What is left uncredited on each line of an invoice.
 - `item_price(p_item_id uuid, p_contact_id uuid, p_quantity numeric)`
 - `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)* — Moves a company into a group, or out of one when `p_group_id` is null.
+- `knock_off(p_contact_id uuid, p_lines jsonb)` *(writes)* — Sets several credit notes and on-account receipts against several invoices, all or none.
 - `landing_page()` — The marketing site's own contents, for the signed-out landing page.
 - `ledger_dimensions(p_org_id uuid)`
 - `line_lots(p_line_table text, p_line_id uuid)`
@@ -612,6 +613,7 @@ Not gated on any module.
 - `open_appraisal_cycle(p_cycle uuid)` *(writes)* — Creates an appraisal for everybody the cycle covers and returns how many were made.
 - `open_customer_portal(p_token text)` *(writes)* — What one customer owes, for somebody holding their portal token and no account.
 - `open_documents_across_companies(p_kind text, p_search text)` — What is open across every company the caller may post in — the list a group payment is chosen from.
+- `open_items(p_contact_id uuid)` — What one contact owes and what they have in hand to set against it.
 - `open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` *(writes)* — Opens a legal matter and returns it.
 - `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)* — Opens a vacancy so it can be applied to, from draft or from on hold, and clears any closing date a previous hold left behind.
 - `open_shared_document(p_token text)` *(writes)* — Opens an invoice or quotation shared by link, for a customer who is not a user of this system.

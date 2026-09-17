@@ -25,6 +25,7 @@ import '../features/stock/lots_screen.dart';
 import '../features/stock/stock_take_screen.dart';
 import '../features/documents/cheques_screen.dart';
 import '../features/documents/contra_screen.dart';
+import '../features/documents/knock_off_screen.dart';
 import '../features/documents/deposits_screen.dart';
 import '../features/reports/budgets_screen.dart';
 import '../features/reports/cash_forecast_screen.dart';
@@ -857,6 +858,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/bundles', builder: (_, __) => const BundlesScreen()),
           GoRoute(path: '/contra', builder: (_, __) => const ContraScreen()),
+          // 0630. The other half of the allocation model: what one
+          // customer owes beside what they have in hand, applied in
+          // one action. Its own screen rather than a dialog on the
+          // receipt, because at month end the question starts from
+          // the customer rather than from any one document.
+          GoRoute(
+            path: '/knock-off',
+            builder: (_, __) => const KnockOffScreen(),
+          ),
           GoRoute(
             path: '/deposits',
             builder: (_, __) => const DepositsScreen(),

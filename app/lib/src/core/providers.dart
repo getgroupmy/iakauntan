@@ -483,6 +483,16 @@ final customerPortalLinksProvider = FutureProvider.autoDispose
       return repo.customerPortalLinks(contactId);
     });
 
+/// Both sides of one contact's account — what they owe and what they
+/// have in hand. autoDispose: knocking anything off is exactly when the
+/// answer changes.
+final openItemsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.openItems(contactId);
+    });
+
 /// The tax-details links issued to one contact — whether one is live,
 /// whether they have opened it, and whether they have answered.
 /// autoDispose for [customerPortalLinksProvider]'s reason: issuing or

@@ -27,7 +27,7 @@ finishing work on things that already exist.
 | G4 | OCR | Document Scanner → Sales Invoice / Purchase Invoice / Cash Book Entry; CA Uploader mobile capture | **Present**, and the verdict below is corrected in §3.1 | `ocr_scans`, `scan_document_kinds` with a `destination` per kind (0614), five readers, `org_ocr_credentials`, scanning credit metered; `document_classifier.dart`; capture from camera or file via `captureAndRead`/`CaptureSource`; wired into the expense and purchase screens | **M** | **This was wrong about four of its five parts.** The emit exists (`document_list_screen.dart:_scanInto`), supplier match exists (`supplier_from_scan.dart`), line extraction exists (`pendingScanProvider` + `document_editor.dart:_applyScan`) and the editor IS the review-before-post screen. Only **duplicate detection** was genuinely missing; `0628` adds it. See §3.1 |
 | G5 | Sales | Recurring invoices: frequency, end rule, pause, generation log, scheduled creation | **Present** | `recurring_documents` (`frequency`, `interval_count`, `start_date`, `end_date`, `max_occurrences`, `occurrences`, `next_run_date`, `last_run_date`, `last_document_id`, `auto_post`, `auto_email`, `is_active`, `last_error`, `last_error_at`); `create_recurring_document`, `advance_recurring_document`, `raise_recurring_document`; `recurring_journals` separately; route `/recurring-documents`; generated server-side by `run_daily_jobs` on pg_cron, not on book-open | **—** | Nothing to build. One nicety: the run "log" is three columns on the row rather than a table, so a company cannot see the last twelve runs. Note it, do not build it yet |
 | G6 | Data | Excel import of sales invoices, credit notes; AR/AP opening balances as outstanding invoices | **Partial** | `import_batches`, `import_rows`, `import_accounts`, `import_bank_transactions`; **`0150_import_open_items.sql` imports AR/AP opening balances as open items** — the migration case the handoff singles out is already done; per-row provenance (`import_source`, `import_ref`, `import_batch_id`, `imported_at`) from 0610; `/import` with per-importer column headings | **M** | The hard half is done. What is missing is importing **transactions**: sales invoices, credit notes, purchase invoices and journals, with a validation report before commit and de-dup by document number |
-| G7 | Accounting | Knock Off Entry: many-to-many allocation from a standalone screen, from any side | **Partial** | `payment_allocations` carries `receipt_id`, `payment_id`, **`credit_note_id`**, `invoice_id`, `bill_id`, `amount`, `discount_amount`, `withholding_id`, `contra_id`, `deposit_id`, `pdc_id`, `discount_entry_id` — so credit note → invoice, contra, deposits, post-dated cheques and withholding are all already allocatable; `apply_on_account.dart`, `deposit_apply_sheet.dart`, `allocate_payment_with_discount`, `create_contra`, `/contra` | **M** | Richer than AutoCount's on the data side. Missing: a **standalone screen** — pick a debtor, see both sides, apply many-to-many in one action — plus journal → invoice allocation (no `journal_entry_id` on the table) and a printable knock-off listing |
+| G7 | Accounting | Knock Off Entry: many-to-many allocation from a standalone screen, from any side | **Partial**, and this verdict understated the gap — see §3.2 | `payment_allocations` carries `receipt_id`, `payment_id`, **`credit_note_id`**, `invoice_id`, `bill_id`, `amount`, `discount_amount`, `withholding_id`, `contra_id`, `deposit_id`, `pdc_id`, `discount_entry_id` — so credit note → invoice, contra, deposits, post-dated cheques and withholding are all already allocatable; `apply_on_account.dart`, `deposit_apply_sheet.dart`, `allocate_payment_with_discount`, `create_contra`, `/contra` | **M** | Richer than AutoCount's on the data side. Missing: a **standalone screen** — pick a debtor, see both sides, apply many-to-many in one action — plus journal → invoice allocation (no `journal_entry_id` on the table) and a printable knock-off listing |
 | G8 | Reports | Customisable P&L / Balance Sheet layouts with formula rows | **Missing** | `report_spec.dart` is the internal spec shared by screen and PDF, not a user-facing builder. MBRS taxonomy mapping exists in Financial Statements and is the natural place to hang one | **L** | Real gap, and a Pro-plan feature in AutoCount. Low urgency for an SME, high for an accounting firm |
 | G9 | Platform | Own subscription invoice issued as an LHDN e-Invoice | **Missing** | `platform_invoices` already carries `issuer_name`, `issuer_registration_no`, `issuer_sst_no`, `issuer_address`, `bill_to_name`, `bill_to_registration_no`, `bill_to_tin`, `bill_to_address`, `tax_rate`, `tax_amount` — the data an e-Invoice needs is there. But `einvoice_documents_source_table_check` admits only `sales_documents` and `einvoice_consolidations` (widened by 0616), so a platform invoice cannot be prepared | **M** | Worth doing for what it says: a company selling e-Invoicing that does not e-Invoice its own customers is a question a prospect will ask. Small once the source table is admitted |
 
@@ -88,7 +88,7 @@ move down because their hard halves are done, and G3 splits.
 | 2 | **G2 SST-02 processing** — design pass done, `docs/design/sst-02.md`; BLOCKED on statutory verification | The one item with a statutory deadline behind it. Service tax on a payment basis and the 12-month unpaid rule are not modelled at all, and a company that files on what `sst_returns.tax_declared` holds today is filing on an invoice-basis number. Needs a design pass and dated rate tables with tests before any code | L |
 | 3 | ~~**G3(a) the Get TIN link**~~ — **BUILT**, `0626`/`0627` | Every customer of every user needs a TIN before that user can e-Invoice them, and collecting them by phone is the thing that stalls an onboarding. The tokenised-share pattern and `tin_validations` both already exist; this is a public form and a writer | M |
 | 4 | ~~**G4 OCR emitting purchase documents**~~ — **mostly already built; the verdict was wrong. See §3.1.** Duplicate detection was the one real gap and is now `0628` | The pipeline, the credit metering and the mobile capture are built. Emitting a bill — supplier match, lines, duplicate detection, review before post — is the step that turns a demo into a day's work saved | M |
-| 5 | **G7 the knock-off screen** | The allocation model is already richer than AutoCount's. What is missing is one screen, and it is the screen an accounts clerk lives in at month end | M |
+| 5 | ~~**G7 the knock-off screen**~~ — **BUILT**, `0629`/`0630` and `/knock-off`. The verdict understated it: nothing could write `credit_note_id` at all. **See §3.2** | The allocation model is already richer than AutoCount's. What is missing is one screen, and it is the screen an accounts clerk lives in at month end | M |
 | 6 | **G6 transaction import** | Opening balances already import as open items, which was the migration blocker. Invoice and journal import is a convenience after that, and matters most in the first week of a new customer | M |
 | 7 | **G9 own subscription e-Invoices** | Small, and it answers a question every prospect asks. Mostly a matter of admitting `platform_invoices` to `einvoice_documents_source_table_check` | M |
 | 8 | **G3(b,c) relaxation flag and tariff code** | Both are single fields with a UI. Do them with whatever e-Invoice work comes next rather than alone | S |
@@ -125,6 +125,48 @@ missing unique indexes and deliberately left `supplier_doc_no` alone,
 because "two suppliers may perfectly well send invoices numbered
 `INV-1`". True. The duplicate that matters is a PAIR — the same
 supplier's number twice — and sweeping columns cannot see a pair.
+
+
+### 3.2 A correction to the G7 verdict
+
+This audit called the allocation model "richer than AutoCount's on the
+data side" and said what was missing was "a **standalone screen**". The
+first half is true of the schema and false of the product.
+
+`payment_allocations.credit_note_id` has existed since `0005`. `0272`,
+`0273` and `0275` each restated the check constraint that names it.
+`0096`'s aged listing works out how much of a credit note has been used.
+`app.apply_allocation` looks the credit note up to check whose money it
+is. **Nothing had ever written the column.**
+
+So the feature was not "present but unreachable from one screen". It
+was four hundred migrations of infrastructure around a door with no
+handle, and a customer holding a credit note had no way in the product
+to put it against an invoice — the single most common thing an accounts
+clerk does at month end.
+
+Worse, the column was not safe to write. Every other source on that
+table is guarded — a receipt cannot be spread further than the money
+that arrived — and the credit note had no guard, because it had no
+writer. A credit note for 500 could have been spread over 5,000 of
+invoices.
+
+The audit read the SCHEMA and found a rich one. It did not ask *what
+writes this*. That is the third verdict in two reports to fail on the
+same move, after OCA B5 and G4 above, and the three failures are the
+same shape from two directions:
+
+| | The search found | The truth |
+|---|---|---|
+| OCA B5 | no table, no RPC, no route → **Missing** | three Dart files, working for years |
+| G4 | a pipeline ending in a `jsonb` → **Partial** | four of five pieces built |
+| G7 | a rich set of columns → **Partial, one screen** | one of those columns had no writer and no guard |
+
+**A column is not a feature, and an absent table is not an absent
+feature.** The question that separates them is *what writes this, and
+what reads it* — and it cannot be answered by searching the schema.
+`0629` and `0630` build the writer, the guard, the reader and the
+screen.
 
 ### A separate, small PR
 
