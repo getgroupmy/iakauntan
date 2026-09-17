@@ -124,7 +124,8 @@ soon as it is configured; nothing is lost.
 
 The workflow also needs `SCHEDULER_SECRET` — one random string, set both
 on the function and as a repository secret. It shares that with the
-exchange rate feed, and [schedulers.md](schedulers.md) covers both.
+exchange rate feed and with the one that files consolidated e-Invoices,
+and [schedulers.md](schedulers.md) covers all three.
 
 The 503 reports `scheduler: true|false` alongside the complaint about
 mail, and the workflow fails on `false`. That matters more than it

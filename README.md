@@ -15,7 +15,7 @@ than a bolt-on.
 ```
 app/                  Flutter client (web + mobile)
 supabase/
-  migrations/         Schema, RLS, business logic, reports  (0001 … 0221)
+  migrations/         Schema, RLS, business logic, reports  (numbered, append-only)
   tests/              SQL assertions, run in CI on a throwaway stack
   functions/          Deno edge functions (MyInvois, email, OCR, push, …)
 docs/api/             The HTTP surface, generated from the catalog
@@ -1101,12 +1101,15 @@ purpose and watch the test fail.
 
 Two more jobs publish what those have passed, and wait on them: `deploy`
 builds the web bundle and hands it to Vercel — see the Vercel pipeline
-below for why that gate is there — and `functions` pushes the three edge
-functions to Supabase. `functions` additionally runs on the default
+below for why that gate is there — and `functions` pushes every edge
+function to Supabase. Every one, not a list: the job discovers them by
+walking `supabase/functions` for a directory with an `index.ts` that is
+not `_`-prefixed, which is sixteen today and was three when this
+sentence first said three. `functions` additionally runs on the default
 branch only, since there is one Supabase project and no such thing as a
 preview of it; [docs/edge-functions.md](docs/edge-functions.md) has the
 rest, including the drift it was written to end, and
-[docs/schedulers.md](docs/schedulers.md) covers the two timers and the
+[docs/schedulers.md](docs/schedulers.md) covers the three timers and the
 credential they share.
 
 Two things this pipeline cannot do are the DNS a company's own
@@ -1334,9 +1337,12 @@ uv tool install "graphifyy[sql]"   # the [sql] extra is not optional here
 graphify claude install --project  # your machine's hooks (git-ignored)
 ```
 
-The `[sql]` extra matters: without `tree-sitter-sql` all 74 migrations
-contribute nothing, and in this codebase the migrations *are* the
-business logic — the graph goes from 2,212 nodes to 2,946 with it.
+The `[sql]` extra matters: without `tree-sitter-sql` every one of the
+six hundred-odd migrations contributes nothing, and in this codebase the
+migrations *are* the business logic — the graph goes from 25,212 nodes
+to 30,688 with it. Those two figures are the ones `CLAUDE.md` carries,
+and this paragraph is where they are kept in step; the pair it used to
+quote were measured when there were seventy-four migrations.
 
 ```bash
 graphify explain "public.corp_sign_with_link"  # a symbol and its neighbours
