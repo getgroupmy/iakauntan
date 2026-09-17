@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Refuse an edge function that calls an RPC its client cannot execute.
+"""Refuse a caller that names an RPC it cannot execute.
 
-    python3 scripts/check_edge_rpc_grants.py <database-url>
+    python3 scripts/check_rpc_grants.py <database-url>
+
+Two surfaces, one rule. The edge functions call RPCs as the service role
+or as the signed-in caller depending on which client they build; the
+Flutter app calls them as whoever is using it.
 
 A new function in `public` is executable by **postgres and nobody
 else**. PostgreSQL grants EXECUTE to PUBLIC on creation and `0165`'s
@@ -32,9 +36,22 @@ does, because it reads the CALL rather than the catalog alone.
 
 ## What is checked
 
-Every `<client>.rpc("<name>")` in every edge function. The client's
-identifier says which role the call arrives as, and the function must be
-executable by that role.
+**The edge functions.** Every `<client>.rpc("<name>")` under
+`supabase/functions`. The client's identifier says which role the call
+arrives as, and the function must be executable by that role.
+
+**The app.** Every `callRpc('<name>')` and `.rpc('<name>')` under
+`app/lib`, which is the bigger surface by far -- 639 distinct names
+against 26. The rule there is looser and deliberately so: the call must
+be executable by `authenticated` OR by `anon`, because the app makes
+some of these before anybody has signed in (the landing page, the
+sign-in screen, a shared payment link). Requiring `authenticated` alone
+would fail a legitimately anonymous RPC; requiring only "somebody" would
+pass a service-role-only function the app should never be naming.
+
+That looser rule is why the app half cannot replace
+`function_grants.sql`, which asserts the role exactly for the entry
+points where exactness matters.
 
 ## Unknown client names fail rather than being guessed at
 
@@ -69,12 +86,25 @@ CLIENTS = {
 CALL = re.compile(r'\b(\w+)\.rpc\(\s*["\']([a-z_][a-z0-9_]*)["\']')
 
 
+APP = ROOT / 'app' / 'lib'
+
+# `callRpc('x')` is the repository's wrapper and `.rpc('x')` the raw
+# client; both arrive as whoever is signed in, or as `anon` if nobody
+# is.
+APP_CALL = re.compile(r"""(?:callRpc|\.rpc)\(\s*'([a-z_][a-z0-9_]*)'""")
+
+
 def sources():
     for path in sorted(FUNCTIONS.rglob('*.ts')):
         rel = path.relative_to(ROOT).as_posix()
         if '_test' in path.name or '_local_check' in rel:
             continue
         yield rel, path.read_text()
+
+
+def app_sources():
+    for path in sorted(APP.rglob('*.dart')):
+        yield path.relative_to(ROOT).as_posix(), path.read_text()
 
 
 def grants(url, names):
@@ -144,7 +174,19 @@ def main() -> int:
             print(f'  {where}: {client}.rpc("{name}")')
         return 1
 
-    held = grants(url, {name for name, _, _ in calls})
+    # The app's calls. One per name is enough -- 639 names across
+    # hundreds of files, and the first site is as good as the last for
+    # saying where to look.
+    app_calls = {}
+    for rel, text in app_sources():
+        for m in APP_CALL.finditer(text):
+            name = m.group(1)
+            if name in app_calls:
+                continue
+            line = text[:m.start()].count('\n') + 1
+            app_calls[name] = f'{rel}:{line}'
+
+    held = grants(url, {name for name, _, _ in calls} | set(app_calls))
 
     missing = []
     for name, role, where in sorted(set(calls)):
@@ -158,6 +200,17 @@ def main() -> int:
         elif role not in roles:
             missing.append((name, role, where,
                             'is granted to ' + ', '.join(sorted(roles))))
+
+    for name, where in sorted(app_calls.items()):
+        roles = held.get(name)
+        if roles is None or not roles:
+            missing.append((name, 'the app', where, 'is granted to nobody'
+                            if name in held else 'does not exist in public'))
+        elif not roles & {'authenticated', 'anon'}:
+            # Reachable by the service role alone. The app cannot
+            # present that key and must never be able to.
+            missing.append((name, 'the app', where,
+                            'is granted only to ' + ', '.join(sorted(roles))))
 
     if missing:
         print(f'FAIL: {len(missing)} RPC call(s) cannot execute as the role '
@@ -174,7 +227,8 @@ def main() -> int:
         return 1
 
     print(f'All {len(set((n, r) for n, r, _ in calls))} RPC calls from the '
-          f'edge functions can execute as the role they arrive as.')
+          f'edge functions and {len(app_calls)} from the app can execute '
+          f'as the role they arrive as.')
     return 0
 
 

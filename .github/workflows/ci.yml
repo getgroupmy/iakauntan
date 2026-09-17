@@ -638,10 +638,17 @@ jobs:
       # FAILURE rather than a skip, because guessing would either
       # report somebody's correct code as broken or go quiet exactly
       # where a new pattern is being introduced.
-      - name: Check every RPC an edge function calls can be executed by it
+      #
+      # Both surfaces: 26 calls from the edge functions and 639 from
+      # the app. The app's rule is looser on purpose -- `authenticated`
+      # OR `anon`, because some of those calls happen before anybody
+      # has signed in -- and it is the half that would have caught
+      # `declarable_reliefs` and `set_org_payment_settlement`, two RPCs
+      # the app has called and been refused since 0408 and 0413.
+      - name: Check every RPC a caller names can be executed by it
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
-          python3 scripts/check_edge_rpc_grants.py "$DB"
+          python3 scripts/check_rpc_grants.py "$DB"
 
       # `docs/api/` files a function under ONE module, the first its
       # body names, and twelve check more than one -- where the first
