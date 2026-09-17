@@ -596,6 +596,31 @@ class _ErrorDetails extends StatelessWidget {
                 ),
               ),
           ],
+          // That the submitter has given up, said out loud.
+          //
+          // `retry.ts` stops the bulk sweep after
+          // `einvoiceMaxAttempts`, and until this line a document it
+          // had stopped sending looked exactly like one it was about to
+          // send again. Nothing on the screen changed and nothing ever
+          // would; an e-Invoice LHDN never received would sit here
+          // looking like it was in a queue.
+          //
+          // It names the way out, because there is one: Submit on the
+          // document itself is never refused.
+          if (doc.retriesExhausted) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Not sent again automatically after '
+              '$einvoiceMaxAttempts attempts. Fix what LHDN objected to '
+              'above, then submit it from the document.',
+              key: const ValueKey('einvoice-retries-exhausted'),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.colors.danger,
+              ),
+            ),
+          ],
         ],
       ),
     );

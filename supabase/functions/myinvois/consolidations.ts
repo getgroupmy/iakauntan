@@ -46,6 +46,7 @@ import {
 } from "../_shared/myinvois.ts";
 import { buildUblDocument, EinvoiceLineRow, EinvoiceRow } from "../_shared/ubl.ts";
 import { SIGNED_VERSION, signUblJsonDocument } from "../_shared/xades.ts";
+import { nextAttempt } from "./retry.ts";
 
 /** One row of `einvoice_consolidations_due`. */
 export interface DueRow {
@@ -128,6 +129,9 @@ async function fileOne(
   if (!doc) {
     return { org: row.org_name, period, failed: "the prepared document vanished" };
   }
+  // What this document has already cost. Read off the row this run
+  // already fetched; see `retry.ts` for why it is counted at all.
+  const attempts = (doc as { retry_count?: number }).retry_count ?? 0;
 
   const { data: lines } = await admin
     .from("einvoice_lines")
@@ -229,6 +233,12 @@ async function fileOne(
         status: "invalid",
         submission_id: submission!.id,
         last_attempt_at: new Date().toISOString(),
+        // Counted here too, for the same reason `submit.ts` counts.
+        // The consolidation deliberately stays `generated` so the next
+        // run tries again -- see the comment below -- and without a
+        // count that is a rejection re-sent on every run until the
+        // period closes.
+        retry_count: nextAttempt(attempts),
         error_code: rejected[0]?.error?.code ?? null,
         error_message: why,
         validation_errors: rejected[0]?.error?.details ?? [],
@@ -248,6 +258,7 @@ async function fileOne(
       myinvois_uuid: accepted[0].uuid,
       submitted_at: new Date().toISOString(),
       last_attempt_at: new Date().toISOString(),
+      retry_count: 0,
       ubl_payload: ubl as Record<string, unknown>,
       payload_hash: hash,
       validation_errors: [],

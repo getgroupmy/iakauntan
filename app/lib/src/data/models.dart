@@ -1313,6 +1313,7 @@ class EinvoiceDocument {
     this.validatedAt,
     this.cancelDeadline,
     this.currency = 'MYR',
+    this.retryCount = 0,
   });
 
   final String id;
@@ -1329,6 +1330,21 @@ class EinvoiceDocument {
   final DateTime? validatedAt;
   final DateTime? cancelDeadline;
   final String currency;
+
+  /// How many times the submitter has tried and been refused.
+  ///
+  /// `supabase/functions/myinvois/retry.ts` counts it and stops the
+  /// BULK sweep at [einvoiceMaxAttempts]; pressing Submit on the
+  /// document itself is never refused, because whatever made it fail
+  /// is usually what somebody has just fixed.
+  final int retryCount;
+
+  /// Whether the sweep has stopped sending this one.
+  ///
+  /// Shown rather than implied. A document that quietly stops being
+  /// retried looks exactly like a document that is fine, and the whole
+  /// point of stopping is that somebody has to go and look at it.
+  bool get retriesExhausted => retryCount >= einvoiceMaxAttempts;
 
   /// LHDN allows the supplier to cancel only inside a 72-hour window.
   bool get canCancel =>
@@ -1353,8 +1369,19 @@ class EinvoiceDocument {
     validatedAt: Fmt.parseDate(j['validated_at']),
     cancelDeadline: Fmt.parseDate(j['cancel_deadline']),
     currency: j['currency']?.toString() ?? 'MYR',
+    retryCount: (j['retry_count'] as num?)?.toInt() ?? 0,
   );
 }
+
+/// The ceiling `supabase/functions/myinvois/retry.ts` stops the bulk
+/// sweep at, repeated here because Dart cannot import TypeScript.
+///
+/// Two copies of one number, which is a thing this repository
+/// otherwise refuses -- so `einvoice_retry_test.dart` reads the real
+/// figure out of `retry.ts` and asserts they agree. A screen saying
+/// "stopped after 5 attempts" while the submitter stops at 3 is worse
+/// than a screen saying nothing.
+const int einvoiceMaxAttempts = 5;
 
 class Opportunity {
   Opportunity({

@@ -216,26 +216,17 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
 # another cannot be added quietly. What closing it needs is written
 # beside it, because the reason a gap stays open for months is that
 # nobody remembers what closing it involved.
+#
+# It started at four. `einvoice_documents.retry_count` was the one with
+# teeth and it is closed: `submit.ts` and `consolidations.ts` wrote
+# `last_attempt_at` at every failure site and never touched the count,
+# while the bulk picker selected `invalid` -- the status of a document
+# MyInvois has REJECTED -- so a document that could never succeed was
+# re-rendered, re-signed and re-submitted on every sweep for ever.
+# `supabase/functions/myinvois/retry.ts` counts it now and stops the
+# SWEEP at five, never a person; the e-Invoice screen says so where the
+# rejection is shown.
 KNOWN_GAPS: dict[str, str] = {
-    # A failed e-Invoice is retried for ever, because nothing counts
-    # the attempts.
-    #
-    # `submit.ts` and `consolidations.ts` write `last_attempt_at` at
-    # every failure site and never touch `retry_count`. `0007` indexes
-    # `(org_id, status, last_attempt_at)`, which is the retry picker --
-    # so a document that can never succeed (a malformed buyer TIN, a
-    # rejection that will be rejected again) is re-submitted on every
-    # sweep, with nothing able to give up on it, against an API that
-    # is rate-limited and counts submissions.
-    #
-    # To close: increment it wherever `last_attempt_at` is written, and
-    # have the picker stop at a ceiling -- leaving the document
-    # visibly exhausted rather than silently dropped, because a
-    # document nobody submits is an e-Invoice LHDN never received.
-    'einvoice_documents.retry_count':
-        'increment it where last_attempt_at is written, and stop the '
-        'picker at a ceiling',
-
     # What was SENT to MyInvois. `response_payload` beside it IS
     # written, so a rejected submission records the rejection and not
     # the document that caused it -- the one thing anybody wants when

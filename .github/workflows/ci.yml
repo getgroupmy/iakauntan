@@ -1509,6 +1509,22 @@ jobs:
       - run: deno check supabase/functions/myinvois/consolidations_test.ts
       - run: deno test supabase/functions/myinvois/consolidations_test.ts
 
+      # How many times a document LHDN will not accept is sent again.
+      # `einvoice_documents.retry_count` was a column nothing wrote to,
+      # while the bulk picker selects `invalid` -- the status of a
+      # document MyInvois has REJECTED, which is almost never
+      # transient. So the same document was rendered, signed and
+      # submitted on every sweep for ever, against an API that is
+      # rate-limited and counts submissions per taxpayer.
+      #
+      # The assertion with teeth is that the ceiling and the PICKER
+      # agree: `submit.ts` filters with `.lt("retry_count",
+      # MAX_ATTEMPTS)` and `isExhausted` draws the same line from the
+      # other side, so if one moves the sweep either gives up early or
+      # never gives up.
+      - run: deno check supabase/functions/myinvois/retry_test.ts
+      - run: deno test supabase/functions/myinvois/retry_test.ts
+
       # The forty lines that stand in for a Google SDK. A real RSA key
       # is generated in the test process and the assertion the function
       # builds is VERIFIED against the public half, because every
