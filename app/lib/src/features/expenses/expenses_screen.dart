@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
@@ -85,6 +86,12 @@ class ExpensesScreen extends ConsumerWidget {
       body: AsyncView(
         value: expenses,
         onRetry: () => ref.invalidate(expensesProvider),
+        // Rows in a list, and the shape is decided by the screen
+        // rather than by the payload -- a name and a value, on
+        // every one of them. No avatar: these rows do not carry
+        // one, and a bone where nothing goes reflows the moment
+        // the data lands, which is the flicker a skeleton is for.
+        skeleton: const ListSkeleton(leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(

@@ -153,8 +153,22 @@ dependencies:
   # `runApp`, so every page goes blank. `docs/passkeys.md` has the
   # whole story and `scripts/check_web_plugin_registrant.py` is the
   # tripwire.
-  passkeys: 2.21.1
+  passkeys: ^2.21.1
   passkeys_platform_interface: ^2.8.0
+  # Loading skeletons: a grey outline of the rows on the way, instead
+  # of a spinner on an empty page. It paints any ordinary widget tree
+  # as bones, so what the app writes is the SHAPE and nothing else --
+  # no colours to keep in step with the theme, and no second rendering
+  # of every list to maintain beside the real one.
+  #
+  # `^3.0.0` resolves under the pinned SDK: 3.0.0 names Flutter
+  # >=3.32.0 and ci.yml pins 3.47.4. Checked rather than assumed,
+  # because `record: ^7.1.1` was not and turned a push red.
+  #
+  # See core/skeletons.dart for where a skeleton is honest and where it
+  # is a guess -- the pre-sign-in pages keep their spinner, and so does
+  # every button somebody has just pressed.
+  skeletonizer: ^3.0.0
   # The signalling socket. Already present transitively through
   # supabase_flutter; named here because `call_engine.dart` imports it
   # directly and a transitive dependency is not a promise.

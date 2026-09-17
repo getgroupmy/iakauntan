@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -114,6 +115,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       body: AsyncView(
         value: contacts,
         onRetry: () => ref.invalidate(contactsProvider),
+        // Rows, with an avatar and an amount. The shape is known
+        // before the names are.
+        skeleton: const ListSkeleton(),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(

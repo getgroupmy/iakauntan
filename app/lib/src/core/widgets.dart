@@ -19,12 +19,27 @@ class AsyncView<T> extends StatefulWidget {
     required this.builder,
     this.onRetry,
     this.loading,
+    this.skeleton,
   });
 
   final AsyncValue<T> value;
   final Widget Function(T data) builder;
   final VoidCallback? onRetry;
   final Widget? loading;
+
+  /// An outline of the content on the way, drawn instead of a spinner.
+  ///
+  /// See `core/skeletons.dart` for the ready-made shapes and, more
+  /// importantly, for where a skeleton is honest: it belongs where the
+  /// LAYOUT is already decided and only the values are missing. A
+  /// screen whose shape the payload decides should leave this null and
+  /// keep the circle.
+  ///
+  /// Opt-in rather than the default on purpose. Making every
+  /// `AsyncView` in the app draw bones would change what dozens of
+  /// widget tests are looking at in one commit, and the screens where
+  /// it is the wrong answer would be the ones nobody checked.
+  final Widget? skeleton;
 
   /// How long a screen waits for the company to arrive before giving up
   /// on it.
@@ -86,8 +101,13 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
     super.dispose();
   }
 
+  /// What to draw while waiting. The skeleton wins where a screen has
+  /// given one, because it says more; `loading` is the older override
+  /// and still means what it meant.
   Widget get _loading =>
-      widget.loading ?? const Center(child: CircularProgressIndicator());
+      widget.skeleton ??
+      widget.loading ??
+      const Center(child: CircularProgressIndicator());
 
   @override
   Widget build(BuildContext context) {

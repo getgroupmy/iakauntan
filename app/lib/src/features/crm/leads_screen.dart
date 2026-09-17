@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
@@ -84,6 +85,12 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
       body: AsyncView(
         value: leads,
         onRetry: () => ref.invalidate(leadsProvider(_status)),
+        // Rows in a list, and the shape is decided by the screen
+        // rather than by the payload -- a name and a value, on
+        // every one of them. No avatar: these rows do not carry
+        // one, and a bone where nothing goes reflows the moment
+        // the data lands, which is the flicker a skeleton is for.
+        skeleton: const ListSkeleton(leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.filter_alt_outlined,

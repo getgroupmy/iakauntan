@@ -941,6 +941,87 @@ e-mail with an access type; when the invited person registers, the
 database claims the pending invitation and drops them into the right
 company with the right role.
 
+### The app opens at the form, not the front page
+
+`/` is the landing page on the web, and that is deliberate: somebody who typed
+`iakauntan.com` has not come to sign in, they have come to find out what this
+is. Nobody installs an accounting system from an app store to read about
+accounting systems, so on iOS and Android `/` and `/welcome` resolve to the
+sign-in form instead — in one hop, by asking what `/signin` itself answers,
+because returning `/signin` flat put a signed-in platform operator through
+four screens' worth of router rebuilds and the loop-freedom sweep in
+`router_redirect_test.dart` refused it.
+
+`core/surface.dart` is the one place that decides which surface this is. The
+`kIsWeb` test in it comes first and is load-bearing: Flutter web in Safari on
+an iPhone answers `TargetPlatform.iOS` to `defaultTargetPlatform`, because
+that getter is about which look and feel to adopt rather than how the code was
+compiled — so a check on the platform alone would take the front page away
+from most of the product's visitors.
+
+### Three passkey switches and a mobile register veto
+
+`0638`. Platform console → Site pages → Sign-in now carries five switches
+where it carried two:
+
+* **Offer a passkey** — the website (`signin_show_passkey`, `0579`).
+* **Offer a passkey in the Android app** (`signin_show_passkey_android`).
+* **Offer a passkey in the iOS app** (`signin_show_passkey_ios`).
+* **Offer an account** — the website (`signin_show_register`).
+* **Offer an account in the apps** (`signin_show_register_mobile`).
+
+The three passkey switches are separate because the three surfaces need three
+different things done to them before the button can work: all of them need
+passkeys switched on for the project in the Supabase dashboard, Android
+additionally needs an `assetlinks.json` served from the domain, and iOS
+additionally needs an Associated Domains entitlement and an
+`apple-app-site-association`. Those are finished on different days by
+different people, and two of them can be wrong in a way nothing in the app can
+detect until somebody presses the button. One switch would mean the first
+surface to be ready turning the button on for the two that are not. All three
+ship **off**; `docs/passkeys.md` is the list.
+
+`signin_show_register_mobile` ships **on**, unlike the other two, because it
+takes something away rather than offering something new — a switch that ships
+in the state which changes behaviour is a migration that changes behaviour. It
+is a *veto* over `signin_show_register` rather than a replacement: the app
+draws the link when both are on, so an operator who wants strangers to sign up
+on the website and not in the app turns this one off and leaves the other
+alone.
+
+None of the five is a security control. `signup_enabled` is, and `0563`
+enforces it with a trigger on `auth.users`; these decide only what is drawn.
+
+### Loading skeletons, and where they are the wrong answer
+
+`core/skeletons.dart`, over the `skeletonizer` package. `AsyncView` takes an
+optional `skeleton:`, and where a screen supplies one it draws a grey outline
+of the rows on the way instead of a spinner on an empty page.
+
+**Opt-in, not the default**, and the line is about honesty rather than taste.
+`core/page_waiting.dart` argues the opposite case for the pages a visitor sees
+before signing in, and it is still right: those are operator-edited, so how
+many bullets sit beside the form and whether there is a panel at all are things
+the payload is about to decide. A skeleton there is a *guess* at a shape, and a
+guess that turns out wrong is the same flicker in fainter grey. A list of
+invoices is not that — rows, in a list, each with a name and an amount — so
+drawing the shape says something true. A skeleton belongs where the layout is
+already decided and only the values are missing.
+
+Spinners stay for anything a person has just pressed. A spinner in a button
+means "your press is being dealt with": it is about time passing, not about a
+shape, and a bone in its place would say nothing.
+
+The one thing worth testing hard is the geometry. A skeleton grid that breaks
+at different widths from the real grid reflows the instant the data lands —
+which is exactly the flicker a skeleton exists to remove, and nothing would
+ever report it, because the outline and the content are never on screen at the
+same moment. So `tileColumns` is a single shared function that both the
+dashboard's metric grids and `TilesSkeleton` call, and `skeletons_test.dart`
+samples widths either side of both breakpoints. Sampling only 1200, 800 and
+400 did not catch a hardcoded copy — every one of them falls on the same side
+of almost any plausible pair of breakpoints.
+
 ### Forgetting and changing a password
 
 Two different situations, and they are deliberately not the same screen.

@@ -1,0 +1,260 @@
+/// What a screen draws while its rows are on the way.
+///
+/// A grey outline of the content to come, shimmering, instead of a
+/// spinner on an empty page. `skeletonizer` does the painting: any
+/// ordinary widget tree inside [Skeletonizer] is drawn as bones rather
+/// than as itself, so what is written here is the SHAPE and nothing
+/// else — no colours to keep in step with the theme, and no second
+/// rendering of a list to maintain beside the real one.
+///
+/// ## When a skeleton is honest and when it is not
+///
+/// `core/page_waiting.dart` argues the opposite case and is still
+/// right about it. The pages a visitor sees before signing in are
+/// operator-edited: how many bullets sit beside the form, whether
+/// there is a panel at all, what the headline says. A skeleton there is
+/// a GUESS at a shape the payload is about to decide, and a guess that
+/// turns out wrong is the same flicker in fainter grey. Those pages
+/// keep their circle.
+///
+/// A list of invoices is not that. The shape is known before the data
+/// arrives — rows, in a list, each with a name and an amount — and
+/// drawing it says something true about what is coming. That is the
+/// line: a skeleton belongs where the LAYOUT is already decided and
+/// only the values are missing.
+///
+/// ## And never for an action
+///
+/// A spinner inside a button means "your press is being dealt with".
+/// It is about time passing, not about a shape, and a bone in its place
+/// would say nothing. Saving, submitting, uploading and deleting keep
+/// their spinners; so does anything a person has just pressed.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+
+import 'theme.dart';
+
+/// Rows on the way, in the shape of a list.
+///
+/// [rows] is a count, not a promise. Enough to fill the part of the
+/// screen an eye lands on and no more: a skeleton longer than the
+/// answer looks like content that vanished.
+class ListSkeleton extends StatelessWidget {
+  const ListSkeleton({
+    super.key,
+    this.rows = 6,
+    this.leading = true,
+    this.trailing = true,
+    this.subtitle = true,
+  });
+
+  /// How many rows to outline.
+  final int rows;
+
+  /// Whether each row starts with an avatar or icon.
+  final bool leading;
+
+  /// Whether each row ends with a value — an amount, a date, a chip.
+  final bool trailing;
+
+  /// Whether rows carry a second line.
+  final bool subtitle;
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+    child: ListView.builder(
+      // The skeleton must not scroll. It is not content, and a list
+      // that can be dragged before there is anything in it is a
+      // gesture that does nothing — worse, it steals the drag from a
+      // pull-to-refresh that would have helped.
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: rows,
+      itemBuilder: (_, i) => ListTile(
+        leading: leading ? const Bone.circle(size: 40) : null,
+        // Varied widths, and not for decoration. Every line the same
+        // length reads as a table of one repeated thing; names are
+        // not all the same length and the outline should not claim
+        // they are.
+        title: Bone.text(words: 2 + i % 3),
+        subtitle: subtitle ? Bone.text(words: 3 + i % 2) : null,
+        trailing: trailing ? const Bone.text(words: 1) : null,
+      ),
+    ),
+  );
+}
+
+/// Rows on the way, in the shape of a table.
+///
+/// For the screens that draw a `DataTable` on a wide display. The
+/// column count is what makes this worth having separately: a table
+/// skeleton with the wrong number of columns reflows the moment the
+/// data lands, which is the flicker a skeleton is meant to remove.
+class TableSkeleton extends StatelessWidget {
+  const TableSkeleton({super.key, required this.columns, this.rows = 8});
+
+  /// How many columns the real table has.
+  final int columns;
+
+  /// How many rows to outline.
+  final int rows;
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var r = 0; r < rows; r++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.sm),
+            child: Row(
+              children: [
+                for (var c = 0; c < columns; c++)
+                  Expanded(
+                    // The last column is usually a number or a chip and
+                    // is narrower than a name. Said in the shape rather
+                    // than left to the eye to forgive.
+                    flex: c == columns - 1 ? 1 : 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: Space.sm),
+                      child: Bone.text(words: c == 0 ? 3 : 1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// How many columns a grid of metric tiles draws at this width.
+///
+/// Shared between the real grids and [TilesSkeleton], and shared rather
+/// than repeated for one reason: a skeleton grid with a different
+/// column count from the real one reflows the instant the data lands,
+/// which is precisely the flicker a skeleton exists to remove. Two
+/// copies of `width >= 1100 ? 4 : ...` is two places for that to drift
+/// apart silently, and nothing would report it — the skeleton and the
+/// content are never on screen at the same moment.
+int tileColumns(double width, {double wideAt = 1100, double mediumAt = 700}) =>
+    width >= wideAt ? 4 : (width >= mediumAt ? 2 : 1);
+
+/// Figures on the way, in the shape of the tiles that hold them.
+///
+/// The dashboard's own case. Its tiles are a fixed set decided by the
+/// modules a company holds and the cards its user has chosen, not by
+/// the numbers — so the shape is known before any figure arrives, which
+/// is exactly when a skeleton is the honest thing to draw.
+///
+/// The geometry is passed in rather than guessed, and that is the whole
+/// reason this is a widget and not three lines at the call site. A
+/// skeleton grid with a different column count from the real one
+/// reflows the moment the data lands, which is the flicker a skeleton
+/// exists to remove — so the breakpoints, the spacing and the aspect
+/// ratio have to be the same numbers the real grid uses, read off it
+/// rather than remembered.
+class TilesSkeleton extends StatelessWidget {
+  const TilesSkeleton({
+    super.key,
+    this.count = 4,
+    this.wideAt = 1100,
+    this.mediumAt = 700,
+    this.spacing = 12,
+    this.wideAspect = 1.75,
+    this.narrowAspect = 3.2,
+  });
+
+  /// How many tiles the real row has.
+  final int count;
+
+  /// The width at and above which the real grid draws four columns.
+  final double wideAt;
+
+  /// The width at and above which it draws two.
+  final double mediumAt;
+
+  /// The gap between tiles, in both directions.
+  final double spacing;
+
+  /// The tile aspect ratio at two columns and above.
+  final double wideAspect;
+
+  /// And at one column, where a tile is a wide strip.
+  final double narrowAspect;
+
+  @override
+  Widget build(BuildContext context) {
+    // `MediaQuery.sizeOf`, not a `LayoutBuilder`, because that is what
+    // the real grid reads. The two do not always agree — a grid inside
+    // a padded column is narrower than the window — and disagreeing
+    // here is the reflow this is meant to avoid.
+    final width = MediaQuery.sizeOf(context).width;
+    final columns = tileColumns(width, wideAt: wideAt, mediumAt: mediumAt);
+    return Skeletonizer(
+      child: GridView.count(
+        physics: const NeverScrollableScrollPhysics(),
+        shrinkWrap: true,
+        crossAxisCount: columns,
+        mainAxisSpacing: spacing,
+        crossAxisSpacing: spacing,
+        childAspectRatio: columns == 1 ? narrowAspect : wideAspect,
+        children: [
+          for (var i = 0; i < count; i++)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(Space.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    // The label, the figure, and the line underneath
+                    // that says which way it is going.
+                    Bone.text(words: 2),
+                    Bone.text(words: 1),
+                    Bone.text(words: 2),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fields on the way, in the shape of a form.
+///
+/// For an editor opened on an existing record, where the boxes are
+/// drawn and empty until the record arrives. NOT for a new one: there
+/// is nothing coming, the boxes are already right, and a skeleton over
+/// them would say a value is on its way when none is.
+class FormSkeleton extends StatelessWidget {
+  const FormSkeleton({super.key, this.fields = 5});
+
+  /// How many boxes the real form has.
+  final int fields;
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < fields; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Space.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Bone.text(words: 1),
+                const SizedBox(height: Space.xs),
+                Bone.square(size: 48, borderRadius: BorderRadius.circular(4)),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}

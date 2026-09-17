@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/row_actions.dart';
 import '../../core/searchable_picker.dart';
@@ -97,6 +98,12 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
       body: AsyncView(
         value: items,
         onRetry: () => ref.invalidate(itemsProvider),
+        // Rows in a list, and the shape is decided by the screen
+        // rather than by the payload -- a name and a value, on
+        // every one of them. No avatar: these rows do not carry
+        // one, and a bone where nothing goes reflows the moment
+        // the data lands, which is the flicker a skeleton is for.
+        skeleton: const ListSkeleton(leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(
