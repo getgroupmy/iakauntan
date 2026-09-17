@@ -678,6 +678,8 @@ class Item {
     this.description,
     this.uomCode = 'C62',
     this.classificationCode = '022',
+    this.tariffCode,
+    this.countryOfOrigin,
     this.unitPrice = 0,
     this.costPrice = 0,
     this.quantityOnHand = 0,
@@ -700,6 +702,15 @@ class Item {
   final String? description;
   final String uomCode;
   final String classificationCode;
+
+  /// The customs tariff / HS code, carried onto an e-Invoice line. NOT
+  /// [classificationCode], which is LHDN's list of what a purchase is
+  /// for relief purposes -- the two are constantly confused. 0636.
+  final String? tariffCode;
+
+  /// Where the goods were made. Null is unstated, and the UBL builder
+  /// then sends MYS as it always has.
+  final String? countryOfOrigin;
   final double unitPrice;
   final double costPrice;
   final double quantityOnHand;
@@ -732,6 +743,8 @@ class Item {
     description: j['description'] as String?,
     uomCode: j['uom_code']?.toString() ?? 'C62',
     classificationCode: j['classification_code']?.toString() ?? '022',
+    tariffCode: j['tariff_code'] as String?,
+    countryOfOrigin: j['country_of_origin'] as String?,
     unitPrice: Fmt.toDouble(j['unit_price']),
     costPrice: Fmt.toDouble(j['cost_price']),
     quantityOnHand: Fmt.toDouble(j['quantity_on_hand']),
@@ -756,6 +769,8 @@ class Item {
     'description': description,
     'uom_code': uomCode,
     'classification_code': classificationCode,
+    'tariff_code': tariffCode,
+    'country_of_origin': countryOfOrigin,
     'unit_price': unitPrice,
     'cost_price': costPrice,
     'reorder_level': reorderLevel,

@@ -23,7 +23,7 @@ finishing work on things that already exist.
 |---|---|---|---|---|---|---|
 | G1 | Bank | CSV + PDF statement import, bank rules, match-or-create, reconciliation, direct feeds | **Partial** | `bank_transactions` carries `is_reconciled`, `reconciled_at`, `reconciliation_id`, `matched_table`, `matched_id`, `import_batch_id`, `raw_data`; `bank_reconciliations` + `complete_bank_reconciliation`, `reopen_bank_reconciliation`, `bank_reconciliation_status`; `reconciliation_screen.dart`, `reconciliation_history_dialog.dart`, `book_balance.dart`; `statement_import.dart` parses **CSV by header name** (signed amount or separate debit/credit columns) **and MT940**; `bank_feeds`/`bank_feed_runs` spine from 0567, which says in as many words that it wrote no connector | **M** | Build `bank_rules` (ordered conditions → account/contact/tax code) and auto-match. That is the missing half and the one that saves the time. PDF import after. Feeds need a bank agreement — leave |
 | G2 | Tax | SST Processor: period run, SST-02, payment-collection listing, 12-month unpaid service tax, commit → journal | **Partial** | `sst_returns` (`period_start`, `period_end`, `due_date`, `tax_declared`, `reference`, `filed_at`, `filed_by`), `file_sst_return`, `sst_return_lines`, `sst_taxable_periods`, `sst_period_for`, `sst_output_due`, `report_sst_summary`, `report_sst_due`, `sst_returns_card.dart` | **L** | The biggest true gap. `sst_returns` has no `status` and no `journal_id`, so filing records a figure and posts nothing to an SST control account; `tax_codes` has no payment-basis flag, so service tax on a payment basis and the 12-month rule are not modelled at all; no SST-02 print and none of the three listings. Needs a design pass before code |
-| G3 | e-Invoice | Get TIN link, customer tax import, self-billed, consolidated self-billed, document inquiry, relaxation flag, tariff code | **Partial** | Self-billed: `prepare_self_billed_einvoice`, `set_requires_self_billed`, `suggest_self_billed`, `einvoice_documents.is_self_billed`. Consolidated: `einvoice_consolidations` + `prepare_consolidated_einvoice` (0616). TIN: `tin_validations` (`tin`, `id_type`, `id_value`, `is_valid`, `response`); `contacts.is_tin_verified`, `tin_verified_at`. Inquiry: `einvoice_documents` carries `submission_id`, `myinvois_uuid`, `validation_link`, `qr_code_data`, `status`, `cancel_deadline`, `rejection_reason`, `validation_errors`, `retry_count`, with `/einvoice`. Import of customer tax info: `import_screen.dart` maps `tin` and `sst_registration_no` | **M** | Three genuinely missing pieces, of which (a) is now BUILT (`0626`, `0627`): (a) ~~the **Get TIN** public link~~ — the tokenised-share pattern already existed (`app.issue_share_token`, `open_customer_portal`) and nothing yet wrote a contact's tax fields from a public form. It does now: `request_tax_details`, `open_tax_detail_request`, `submit_tax_details`, and the rule that a public submission fills a blank and never overwrites; (b) the **relaxation-period** flag on the company; (c) **tariff/HS code** — `items.classification_code` is LHDN's classification list, which is a different thing. Consolidated self-billed not evidenced |
+| G3 | e-Invoice | Get TIN link, customer tax import, self-billed, consolidated self-billed, document inquiry, relaxation flag, tariff code | **Partial** | Self-billed: `prepare_self_billed_einvoice`, `set_requires_self_billed`, `suggest_self_billed`, `einvoice_documents.is_self_billed`. Consolidated: `einvoice_consolidations` + `prepare_consolidated_einvoice` (0616). TIN: `tin_validations` (`tin`, `id_type`, `id_value`, `is_valid`, `response`); `contacts.is_tin_verified`, `tin_verified_at`. Inquiry: `einvoice_documents` carries `submission_id`, `myinvois_uuid`, `validation_link`, `qr_code_data`, `status`, `cancel_deadline`, `rejection_reason`, `validation_errors`, `retry_count`, with `/einvoice`. Import of customer tax info: `import_screen.dart` maps `tin` and `sst_registration_no` | **M** | Three genuinely missing pieces, of which (a) is now BUILT (`0626`, `0627`): (a) ~~the **Get TIN** public link~~ — the tokenised-share pattern already existed (`app.issue_share_token`, `open_customer_portal`) and nothing yet wrote a contact's tax fields from a public form. It does now: `request_tax_details`, `open_tax_detail_request`, `submit_tax_details`, and the rule that a public submission fills a blank and never overwrites; (b) the **relaxation-period** flag on the company; ~~(c) **tariff/HS code**~~ — **BUILT (`0636`)**. The matrix was right that `items.classification_code` is a different thing and wrong about where the hole was: see §3.7. Consolidated self-billed not evidenced |
 | G4 | OCR | Document Scanner → Sales Invoice / Purchase Invoice / Cash Book Entry; CA Uploader mobile capture | **Present**, and the verdict below is corrected in §3.1 | `ocr_scans`, `scan_document_kinds` with a `destination` per kind (0614), five readers, `org_ocr_credentials`, scanning credit metered; `document_classifier.dart`; capture from camera or file via `captureAndRead`/`CaptureSource`; wired into the expense and purchase screens | **M** | **This was wrong about four of its five parts.** The emit exists (`document_list_screen.dart:_scanInto`), supplier match exists (`supplier_from_scan.dart`), line extraction exists (`pendingScanProvider` + `document_editor.dart:_applyScan`) and the editor IS the review-before-post screen. Only **duplicate detection** was genuinely missing; `0628` adds it. See §3.1 |
 | G5 | Sales | Recurring invoices: frequency, end rule, pause, generation log, scheduled creation | **Present** | `recurring_documents` (`frequency`, `interval_count`, `start_date`, `end_date`, `max_occurrences`, `occurrences`, `next_run_date`, `last_run_date`, `last_document_id`, `auto_post`, `auto_email`, `is_active`, `last_error`, `last_error_at`); `create_recurring_document`, `advance_recurring_document`, `raise_recurring_document`; `recurring_journals` separately; route `/recurring-documents`; generated server-side by `run_daily_jobs` on pg_cron, not on book-open | **—** | Nothing to build. One nicety: the run "log" is three columns on the row rather than a table, so a company cannot see the last twelve runs. Note it, do not build it yet |
 | G6 | Data | Excel import of sales invoices, credit notes; AR/AP opening balances as outstanding invoices | **Partial** | `import_batches`, `import_rows`, `import_accounts`, `import_bank_transactions`; **`0150_import_open_items.sql` imports AR/AP opening balances as open items** — the migration case the handoff singles out is already done; per-row provenance (`import_source`, `import_ref`, `import_batch_id`, `imported_at`) from 0610; `/import` with per-importer column headings | **M** | The hard half is done. What is missing is importing **transactions**: sales invoices, credit notes, purchase invoices and journals, with a validation report before commit and de-dup by document number |
@@ -342,6 +342,67 @@ schema:
     provenance a question somebody will ask during an audit, and the
     honest answer needs the override recorded on the document rather
     than inferred.
+
+### 3.7 G3(c): the column existed, the emitter existed, nothing filled it
+
+The sixth verdict in this audit to turn on the difference between a
+column existing and a column being written.
+
+`einvoice_lines.product_tariff_code` has been a column since `0007`,
+described there as one of the "optional product traceability fields
+supported by MyInvois". `supabase/functions/_shared/ubl.ts` reads it
+and emits it correctly, with `listID="PTC"`, and `ubl_test.ts` asserts
+that it does — passing, for as long as both have existed.
+
+And no INSERT anywhere named the column. All three writers of
+`einvoice_lines` list their columns explicitly and this was not among
+them, so the value was null on every line ever written and the
+emitter's branch never ran. A test of the emitter passed while the
+feature did not exist. `country_of_origin` was in the same state, and
+`ubl.ts` defaults it to MYS, so nobody noticed.
+
+**What was built.** `items.tariff_code` and `items.country_of_origin`,
+carried into `einvoice_lines` by `prepare_einvoice` and
+`prepare_self_billed_einvoice`. The source is the ITEM because an HS
+code is a fact about a product: the same product must not reach LHDN
+under two codes because two clerks typed it.
+
+**Shape-checked, not validated.** Malaysia's tariff codes live in the
+PDK — thousands of lines on a revision schedule of its own, not
+published as anything this repository can seed and keep current. A
+`references` to a table we could not maintain would refuse codes that
+are correct, which is worse than accepting one that is wrong: the
+first stops an invoice that should go, the second is caught by the
+customs officer who reads it. So the check is `^[0-9]{4}[0-9.]{0,10}$`,
+and it exists to catch one realistic error — a description typed into
+the box under the one labelled "e-Invoice classification", the two
+being adjacent on the screen and constantly confused. This document
+confused them.
+
+**The consolidated writer deliberately gets none.** A consolidated line
+is one whole till receipt, classification `004`, with no single item
+behind it. `0616` is left alone, and the test asserts it stays that way
+by reading `prosrc` out of the catalogue.
+
+**Nothing changes for an item with no code**, which is every item in
+every existing company: `ubl.ts` omits the element when the value is
+null, and already sent MYS for the country.
+
+### 3.8 G3(b): the relaxation flag, and why it is not here
+
+Nothing in the schema or the app mentions a relaxation period. That
+part of the verdict is correct and unqualified.
+
+It is not built here because what the flag should DO is not a settings
+question. LHDN's relaxation period permits consolidated e-Invoicing for
+activities normally barred from it, and the value of a flag is that
+something reads it and behaves differently — which means changing what
+`prepare_consolidated_einvoice` will accept. That is a validation
+change on a statutory filing path, and the dates and the barred-activity
+list are both facts to be looked up rather than inferred.
+
+A `boolean` nobody reads would be the third dead settings column this
+audit has found. Left out on purpose.
 
 ### A separate, small PR
 

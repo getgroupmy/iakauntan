@@ -19,7 +19,9 @@ import 'item_prices_dialog.dart';
 import 'item_packs_dialog.dart';
 import 'item_variants_dialog.dart';
 import 'modifier_groups_dialog.dart';
+import '../../data/places_repository.dart';
 import 'stock_card_dialog.dart';
+import 'tariff_code.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
@@ -252,6 +254,8 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   late String _itemType;
   late String _uom;
   late String _classification;
+  late final TextEditingController _tariff = TextEditingController();
+  String? _countryOfOrigin;
   String? _salesTaxCodeId;
   String? _categoryId;
   Map<String, dynamic> _customFields = const {};
@@ -277,6 +281,8 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     _itemType = i?.itemType ?? 'stock';
     _uom = i?.uomCode ?? 'C62';
     _classification = i?.classificationCode ?? '022';
+    _tariff.text = i?.tariffCode ?? '';
+    _countryOfOrigin = i?.countryOfOrigin;
     _salesTaxCodeId = i?.salesTaxCodeId;
     _categoryId = i?.categoryId;
     _customFields = i?.customFields ?? const {};
@@ -311,7 +317,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
 
   @override
   void dispose() {
-    for (final c in [_code, _name, _price, _cost, _reorder]) {
+    for (final c in [_code, _name, _price, _cost, _reorder, _tariff]) {
       c.dispose();
     }
     super.dispose();
@@ -337,6 +343,10 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
             itemType: _itemType,
             uomCode: _uom,
             classificationCode: _classification,
+            tariffCode: _tariff.text.trim().isEmpty
+                ? null
+                : _tariff.text.trim(),
+            countryOfOrigin: _countryOfOrigin,
             unitPrice: double.tryParse(_price.text) ?? 0,
             costPrice: double.tryParse(_cost.text) ?? 0,
             reorderLevel: double.tryParse(_reorder.text) ?? 0,
@@ -372,6 +382,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     final uoms = ref.watch(_uomProvider).valueOrNull ?? const [];
     final classifications =
         ref.watch(classificationCodesProvider).valueOrNull ?? const [];
+    final countries = ref.watch(countriesProvider).valueOrNull ?? const [];
 
     return AlertDialog(
       title: Text(widget.item == null ? 'New item' : 'Edit item'),
@@ -530,6 +541,53 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   helperText: 'LHDN requires this on every invoice line',
                   onChanged: (v) => setState(() => _classification = v ?? '022'),
                 ),
+                const SizedBox(height: 12),
+                // Right under the classification, because the two are
+                // adjacent in meaning and are constantly taken for each
+                // other -- our own gap analysis conflated them. The
+                // classification says what a purchase IS for relief
+                // purposes; this says what it is to customs. Optional,
+                // and blank is the honest answer for a service.
+                Row(children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      key: const ValueKey('item-tariff-code'),
+                      controller: _tariff,
+                      decoration: const InputDecoration(
+                        labelText: 'Tariff / HS code',
+                        hintText: '4001.10.10',
+                        helperText: 'Customs, not the classification above',
+                      ),
+                      validator: (v) => tariffCodeProblem(v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SearchablePicker<String>(
+                      key: const ValueKey('item-country-of-origin'),
+                      options: [
+                        for (final c in countries)
+                          PickerOption(
+                            value: c['code'] as String,
+                            label: c['name']?.toString() ?? '',
+                            keywords: [
+                              '${c['code']}',
+                              '${c['name']}',
+                            ],
+                          ),
+                      ],
+                      value: _countryOfOrigin,
+                      label: 'Made in',
+                      allowEmpty: true,
+                      // Not "None". An unstated origin is not a claim
+                      // that the goods have none, and ubl.ts sends MYS
+                      // when this is blank.
+                      emptyLabel: 'Not stated',
+                      onChanged: (v) => setState(() => _countryOfOrigin = v),
+                    ),
+                  ),
+                ]),
                 // Only for a company that runs a till. A question a
                 // plate comes with is a POS idea, and an accounting-only
                 // company has nothing to attach.

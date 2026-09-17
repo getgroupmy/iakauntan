@@ -312,6 +312,7 @@ jobs:
                    supabase/tests/import_journals.sql \
                    supabase/tests/audit_trail_filters.sql \
                    supabase/tests/payment_methods.sql \
+                   supabase/tests/tariff_code.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/account_closure.sql \
                    supabase/tests/trigger_reachable_grants.sql \

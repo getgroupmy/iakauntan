@@ -79,10 +79,20 @@ DB = "postgresql://postgres@/postgres?host=/var/tmp&port=5599"
 
 
 def block(src: str, name: str) -> str:
-    """The one `create or replace function` statement, header to `$$;`."""
+    """The one `create or replace function` statement, header to its end.
+
+    The body's dollar-quote tag is whatever the file used, not always
+    `$$`. A function restated from `pg_get_functiondef` comes back
+    quoted `$function$`, which is how 0504, 0538 and 0636 are written --
+    and a harness that only knew `$$` reported those as "no such
+    function in the migration", which reads like the name is wrong.
+
+    `\\s*;` because the same restatements put the statement's semicolon
+    on a line of its own after the closing tag.
+    """
     found = re.search(
         r"create or replace function [a-z_]*\.?" + re.escape(name)
-        + r"\(.*?\$\$;", src, re.S)
+        + r"\(.*?\bas\s+(\$[a-z_]*\$).*?\1\s*;", src, re.S | re.I)
     if not found:
         sys.exit(f"HARNESS ERROR: no `create or replace function {name}` "
                  f"in the migration")
