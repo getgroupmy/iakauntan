@@ -21,11 +21,11 @@ deployment.
 | Tier | Have | Partial | Missing | N/A | Total |
 |---|---:|---:|---:|---:|---:|
 | 1 — Accounting depth | 8 | 7 | 4 | 0 | 19 |
-| 2 — Control and management | 9 | 5 | 5 | 0 | 19 |
+| 2 — Control and management | 9 | 6 | 4 | 0 | 19 |
 | 3 — HR and payroll | 5 | 3 | 1 | 0 | 9 |
 | 4 — Platform | 2 | 5 | 7 | 0 | 14 |
 | 5 — Operations | 4 | 0 | 3 | 0 | 7 |
-| **Total** | **28** | **20** | **20** | **0** | **68** |
+| **Total** | **28** | **21** | **19** | **0** | **68** |
 
 The shape of it: the **accounting and operations** halves are largely
 built, **HR** is built with the edges unfinished, and **platform**
@@ -70,7 +70,7 @@ impersonation).
 | B2 | Dunning | **Partial** | `collection_attempts`, route `/collections`, `log_attempt_sheet.dart` | Attempts are logged by hand. No reminder levels, no automatic sending, no reminder fees |
 | B3 | Customer credit limits | **Have** | `enforce_credit_limit`, `_CreditControlCard`, `contacts.credit_limit`; test `contact_credit_limit_test.dart` | — |
 | B4 | AR/AP aging with comments | **Have** | `report_ar_aging`, `report_ap_aging`; notes via `collection_attempts` | — |
-| B5 | Statement of account | **Missing** | `statement_of_account` exists only as a *scan kind* in `scan_document_kinds` (0614) — a document the product recognises, not one it produces | — |
+| B5 | Statement of account | **Partial** | `app/lib/src/features/contacts/statement.dart` (ageing arithmetic) and `statement_pdf.dart` (both `StatementSide.customer` and `StatementSide.supplier`), downloaded from `contact_editor.dart:360` | Three things. It is an OPEN-ITEM statement only — no opening balance, no receipts as lines, no running balance, so a customer reconciling their own ledger cannot. It is always "as at today"; no period can be chosen. And it downloads: nothing emails it. **Migration 0624 adds the brought-forward form** (`report_statement_of_account`); the app half is not wired yet |
 | B6 | Budgets and budget-vs-actual | **Have** | `budgets`, `budget_lines`, `build_budget*`, `approve_budget`, `archive_budget`; route `/budgets` | — |
 | B7 | Custom management-report builder | **Missing** | `report_spec.dart` is the internal spec shared by screen and PDF, not a user-facing builder. The reports are fixed | — |
 | B8 | Cash flow forecast | **Have** | `cash_forecast_items`, `forecast_runs`, `forecast_lines`, `cash_forecast_detail`, `cash_forecast_movements`; routes `/cash-flow`, `/forecasting` | — |
@@ -141,9 +141,9 @@ first as instructed. Size is rough: **S** days, **M** a week or two,
 
 | # | ID | Build | Size | Why it ranks here |
 |---|---|---|---|---|
-| 1 | B5 | Statement of account, per customer, emailable | **S** | The single most-asked SME feature on this list, and the data is already there — `report_ar_aging` plus the document PDF machinery. Nothing new in the ledger |
-| 2 | A1 | Year-end closing entry | **S** | Every set of books needs one every year and it is done by hand today. `3300 Current Year Earnings` is already seeded and `report_changes_in_equity` is already written around the closing journal existing |
-| 3 | D12 | XLSX export | **S** | Accountants live in Excel. CSV loses number formats, column widths and multiple sheets, and a firm exporting a trial balance re-formats it every time |
+| 1 | A1 | Year-end closing entry | **S** | Every set of books needs one every year and it is done by hand today. `3300 Current Year Earnings` is already seeded and `report_changes_in_equity` is already written around the closing journal existing |
+| 2 | D12 | XLSX export | **S** | Accountants live in Excel. CSV loses number formats, column widths and multiple sheets, and a firm exporting a trial balance re-formats it every time |
+| 3 | B5 | Finish the statement of account | **S** | Not the new build this list first called it — see the correction below. The open-item statement exists; what is missing is the brought-forward form, a period, and emailing it. `0624` has done the database half |
 | 4 | A17 | Inbound e-invoice (UBL 2.1) to draft bill | **M** | MyInvois makes every supplier send one. Receiving is the half this product does not do, and it is the half that removes the most typing |
 | 5 | A10 | Rule-based bank reconciliation | **M** | The biggest recurring time sink in bookkeeping. The reconciliation itself exists; what is missing is the matching |
 | 6 | A13 | IBG / DuitNow bulk payment file | **M** | `payment_batches` already groups the payments. The file format is the whole remaining job, and it turns a payment run from an hour of bank portal typing into an upload |
@@ -159,7 +159,37 @@ built and an approver on leave currently stops the queue).
 
 ---
 
-## 4. Incidental findings
+## 4. A correction to this report
+
+**B5 was first published as Missing and it is Partial.** A statement of
+account already exists — `statement.dart` and `statement_pdf.dart` in
+the contacts feature, for customers and for suppliers, reached from the
+contact editor — and this report missed it because the search was run
+over the schema and the route list, and that feature is three Dart
+files with no table, no RPC and no route of its own. The keyword
+`statement_of_account` matched only the *scan kind*, which read as
+confirmation that nothing produced one.
+
+The method section of this report says the verdict is Missing where no
+evidence is found. That rule is right and it is not a defence: the
+search was too narrow, and a capability that lives entirely in the
+client is exactly the shape it was narrow about. Any other **Missing**
+verdict in Tier 2 or Tier 4 resting on a schema search alone deserves
+the same second look before anything is built on it.
+
+The ranking above is corrected with it. B5 was #1 and is #3, and what
+it names is now finishing a feature rather than starting one.
+
+**A defect found while correcting it.** `Repo.outstandingFor`, which
+feeds the existing statement, filters `doc_type = 'invoice'`. A credit
+note, a debit note, a refund note and an unapplied receipt are
+therefore absent from a document that goes to the customer — so a
+customer holding a credit note is sent a statement that overstates what
+they owe, and it will not agree with `report_ar_aging`, which signs all
+four correctly. Not fixed here; this audit is read-only, and it is
+written up so the fix is a decision rather than a drive-by.
+
+## 5. Incidental findings
 
 **The drift named in the handoff is closed.** Both dashboard fixes are
 in the repository: `ssm_session.upstream_user` is added by

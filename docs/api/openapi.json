@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0623",
+    "version": "0624",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -56467,6 +56467,109 @@
         }
       }
     },
+    "/rpc/report_statement_of_account": {
+      "post": {
+        "operationId": "report_statement_of_account",
+        "summary": "One customer's statement: an opening balance, every posted document and receipt that moved it in date order\u2026",
+        "description": "One customer's statement: an opening balance, every posted document and receipt that moved it in date order, and a running balance in the company's own currency. Row 0 is the brought-forward figure. 0624.\n\n`public.report_statement_of_account(p_contact_id uuid, p_from date, p_to date)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_to": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "p_contact_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "line_no": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "entry_date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "doc_no": {
+                        "type": "string"
+                      },
+                      "due_date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "currency": {
+                        "type": "string"
+                      },
+                      "debit": {
+                        "type": "number"
+                      },
+                      "credit": {
+                        "type": "number"
+                      },
+                      "base_debit": {
+                        "type": "number"
+                      },
+                      "base_credit": {
+                        "type": "number"
+                      },
+                      "balance": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/report_statutory_charges": {
       "post": {
         "operationId": "report_statutory_charges",
@@ -64012,6 +64115,64 @@
                 "schema": {
                   "type": "string",
                   "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/statement_balance": {
+      "post": {
+        "operationId": "statement_balance",
+        "summary": "What one customer owes at a date, from the same movements the statement lists",
+        "description": "What one customer owes at a date, from the same movements the statement lists. 0624.\n\n`public.statement_balance(p_contact_id uuid, p_as_at date)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_as_at": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "p_contact_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "number"
                 }
               }
             }

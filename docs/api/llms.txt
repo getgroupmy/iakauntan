@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0623` (the highest applied migration).
-696 functions and 340 readable tables, of which
-260 functions only read.
+Schema version `0624` (the highest applied migration).
+698 functions and 340 readable tables, of which
+262 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**556 of 696 functions carry a `comment on
+**558 of 698 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -364,7 +364,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (485)
+### general (487)
 
 Not gated on any module.
 
@@ -748,6 +748,7 @@ Not gated on any module.
 - `report_sales_by_person(p_org_id uuid, p_from date, p_to date)`
 - `report_sst_due(p_org_id uuid, p_within_days integer)`
 - `report_sst_summary(p_org_id uuid, p_from date, p_to date)`
+- `report_statement_of_account(p_contact_id uuid, p_from date, p_to date)` — One customer's statement: an opening balance, every posted document and receipt that moved it in date order, and a running balance in the company's own currency.
 - `report_statutory_charges(p_org_id uuid, p_year integer)`
 - `report_statutory_due(p_org_id uuid, p_within_days integer)`
 - `report_statutory_remittances(p_org_id uuid, p_from date, p_to date)` — What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the following month against each, and whether it went.
@@ -816,6 +817,7 @@ Not gated on any module.
 - `sst_taxable_periods(p_org_id uuid, p_from date, p_to date)`
 - `start_import_batch(p_org_id uuid, p_import_source text, p_label text)` *(writes)* — Opens an import run.
 - `start_onboarding(p_employee_id uuid, p_template_id uuid, p_start_date date, p_kind text)` *(writes)* — Raises an onboarding or offboarding checklist from a template and returns it, with each task dated from the start by the template's own offsets.
+- `statement_balance(p_contact_id uuid, p_as_at date)` — What one customer owes at a date, from the same movements the statement lists.
 - `stock_on_hand(p_org_id uuid, p_warehouse_id uuid)`
 - `strata_arrears(p_scheme_id uuid, p_as_at date)`
 - `strata_charge_preview(p_scheme_id uuid, p_period_from date, p_period_to date)`

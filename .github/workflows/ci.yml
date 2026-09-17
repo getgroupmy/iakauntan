@@ -394,6 +394,7 @@ jobs:
                    supabase/tests/email_receipt.sql \
                    supabase/tests/aging_shapes.sql \
                    supabase/tests/aged_balances.sql \
+                   supabase/tests/statement_of_account.sql \
                    supabase/tests/recurring_documents.sql \
                    supabase/tests/recurring_shapes.sql \
                    supabase/tests/withholding_shapes.sql \
