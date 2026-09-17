@@ -1,26 +1,30 @@
 -- =====================================================================
--- iAkauntan :: what a signed-in user can call
+-- iAkauntan :: what a caller can actually call
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/function_grants.sql
 --
 -- `table_grants.sql` asserts what a stranger can READ. This asserts
--- what anybody can CALL, and it exists because until `0617` this
--- machine could not answer the question at all.
+-- what anybody can CALL, and it exists because ten functions with live
+-- callers could not be called by them and nothing noticed for months.
 --
--- `_local_stack.sql` reproduces Supabase's default privileges so a
--- migration that forgets to revoke fails here rather than in CI. It
--- reproduced them for tables and for sequences and not for functions --
--- and `0165` had the hosted behaviour written down all along, verified
--- rather than assumed: a new `public` function arrives granted to
--- `anon`, `authenticated` and `service_role`, and 0165's event trigger
--- strips PUBLIC and `anon` back off.
+-- ---------------------------------------------------------------------
+-- The rule, which `0618` had to establish twice
 --
--- Without that default modelled, a SECURITY DEFINER function that
--- forgot to revoke from `authenticated` was executable by every signed
--- in user in production and by nobody here. No local test could catch
--- it, because the privilege it would test for did not exist.
+-- A new function in `public` is executable by **postgres and nobody
+-- else**. Two different mechanisms produce that: on the real Supabase
+-- stack a default ACL of `{postgres=X/postgres}`, and on the local stub
+-- PostgreSQL's built-in grant to PUBLIC followed by `0165`'s event
+-- trigger revoking it. Same end state, which is why the two agree.
 --
--- So the first thing asserted is the STUB, not the schema.
+-- `0617` believed the opposite -- that Supabase grants new functions to
+-- `authenticated` and `service_role` by default -- and taught the stub
+-- to model it. CI refused it, and `0618` says at length why the
+-- evidence behind that belief was a misreading.
+--
+-- So every caller needs an explicit grant, and a function nobody can
+-- call is a feature that silently never happens: PostgREST answers
+-- 42501, the edge function catches it, and nothing is logged anywhere
+-- anybody looks.
 --
 -- Nothing is kept; the file rolls back.
 -- =====================================================================
@@ -31,38 +35,48 @@ begin;
 \i supabase/tests/_helpers.sql
 
 -- =====================================================================
--- The default privilege itself
+-- A new function is callable by nobody until somebody says otherwise
 --
--- Asserted directly rather than through its effects. Taking the line
--- out of `_local_stack.sql` would make every assertion below pass for
--- the wrong reason -- a function nobody can reach breaks no rule about
--- what people can reach -- which is exactly how this was invisible in
--- the first place.
+-- Asserted on a function created here and now, because this is the
+-- premise every other assertion in the file rests on. Getting it
+-- backwards is what `0617` did.
 -- =====================================================================
 do $$
-declare
-  v_acl text;
 begin
-  select coalesce(string_agg(d.defaclacl::text, ' | '), '(no row)')
-    into v_acl
-    from pg_default_acl d
-    join pg_namespace n on n.oid = d.defaclnamespace
-   where n.nspname = 'public' and d.defaclobjtype = 'f'
-     and pg_get_userbyid(d.defaclrole) = 'postgres';
+  create function public.pg_temp_probe_function() returns integer
+    language sql as 'select 1';
 
   perform pg_temp.check_true(
-    'this machine models the hosted project''s default for FUNCTIONS, '
-    'without which nothing below means anything: ' || v_acl,
-    v_acl ~ 'authenticated=X' and v_acl ~ 'service_role=X');
+    'a function created now is callable by no signed-in user',
+    not has_function_privilege(
+      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
+  perform pg_temp.check_true(
+    'nor by a stranger',
+    not has_function_privilege(
+      'anon', 'public.pg_temp_probe_function()', 'execute'));
+  perform pg_temp.check_true(
+    'nor by the service role, which is the half that keeps being '
+    'forgotten',
+    not has_function_privilege(
+      'service_role', 'public.pg_temp_probe_function()', 'execute'));
+
+  -- And a grant reaches it, so the assertions above are about the
+  -- default rather than about privileges being broken outright.
+  grant execute on function public.pg_temp_probe_function() to service_role;
+  perform pg_temp.check_true(
+    'and an explicit grant is what makes it callable',
+    has_function_privilege(
+      'service_role', 'public.pg_temp_probe_function()', 'execute'));
+
+  drop function public.pg_temp_probe_function();
 end $$;
 
 -- =====================================================================
--- 0165's event trigger still fires
+-- 0165's event trigger still strips PUBLIC
 --
--- The default hands every new function to `anon`; the event trigger
--- takes it away again. Both halves, because either one alone is a
--- different world: without the default there is nothing to revoke, and
--- without the trigger every function in the schema is anonymous.
+-- It is what makes the local stub agree with the hosted stack. Without
+-- it a new function here would be callable by everybody and by nobody
+-- there.
 -- =====================================================================
 do $$
 begin
@@ -70,39 +84,23 @@ begin
     'the trigger that strips PUBLIC and anon from a new function exists',
     exists (select 1 from pg_event_trigger
              where evtname = 'revoke_public_execute' and evtenabled <> 'D'));
-
-  -- And it works, on a function made here and now. A trigger that
-  -- exists and is broken looks exactly like one that works.
-  create function public.pg_temp_probe_function() returns integer
-    language sql as 'select 1';
-
-  perform pg_temp.check_true(
-    'and a function created now is NOT reachable by a stranger',
-    not has_function_privilege(
-      'anon', 'public.pg_temp_probe_function()', 'execute'));
-
-  -- The positive control. The same new function IS reachable by a
-  -- signed-in user, which is the hosted default doing its work and is
-  -- the whole reason a migration has to revoke by hand.
-  perform pg_temp.check_true(
-    'while a signed-in user reaches it without anybody granting anything',
-    has_function_privilege(
-      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
-
-  drop function public.pg_temp_probe_function();
 end $$;
 
 -- =====================================================================
--- Nothing in public is reachable by nobody
+-- Nothing in public is callable by nobody
 --
--- A function in the schema PostgREST exposes that no role can execute
--- is either dead or a feature that has never worked -- an edge function
--- calling it gets 42501 and, because that arrives inside a catch, gets
--- it silently.
+-- The assertion this file is for. A function in the schema PostgREST
+-- exposes that no client role can execute is either dead or a feature
+-- that has never worked once.
 --
--- Extension-owned functions are excluded: `btree_gist` and `pg_trgm`
--- install their own internals and their grants are how an extension
--- installs, not a decision anybody made here.
+-- Three are deliberately unreachable and are named. `chat_expire_calls`
+-- and `prune_device_tokens` are called by `app.run_daily_jobs` inside
+-- the database, where the caller is the job owner and PostgREST is not
+-- involved; `ticket_sla_sweep` is called only by the demo builder.
+-- Granting any of them would widen the client surface for nothing.
+--
+-- Named rather than counted, so that a fourth one is a failure with a
+-- name in it rather than a number that somebody raises.
 -- =====================================================================
 do $$
 declare
@@ -115,50 +113,60 @@ begin
   perform pg_temp.check_true(
     'there are functions in public to look at', v_seen > 500);
 
-  select string_agg(p.proname, ', ' order by p.proname) into v_left
+  select string_agg(p.oid::regprocedure::text, ', ' order by p.proname)
+    into v_left
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prokind = 'f'
      and p.proacl is not null
      and not has_function_privilege('authenticated', p.oid, 'execute')
      and not has_function_privilege('anon', p.oid, 'execute')
      and not has_function_privilege('service_role', p.oid, 'execute')
+     and p.proname not in ('chat_expire_calls', 'prune_device_tokens',
+                           'ticket_sla_sweep')
+     -- `citext`, `btree_gist` and `pg_trgm` install into `public`.
+     -- Their grants are how an extension installs, not a decision
+     -- anybody here made.
      and not exists (
        select 1 from pg_depend d
         where d.objid = p.oid and d.classid = 'pg_proc'::regclass
           and d.deptype = 'e');
 
   perform pg_temp.check_eq(
-    'every function in public is reachable by somebody',
+    'every function in public can be called by somebody',
     coalesce(v_left, ''), '');
 end $$;
 
 -- =====================================================================
--- And the ones meant for the service role alone really are alone
+-- The ten that `0618` fixed, by name
 --
--- These are the entry points an edge function calls holding the service
--- key: a punch from a clock on a wall, a consolidated e-Invoice filed
--- on a deadline, a payment settling. A signed-in user who could call
--- any of them could file attendance for somebody else, submit another
--- company's tax document, or settle a payment that never arrived.
---
--- Named rather than derived. A rule like "everything with `scheduler`
--- in its name" would go quiet the day somebody named one differently.
+-- The list above would go quiet if somebody granted these to
+-- `authenticated` instead -- reachable by somebody, and wrong. So the
+-- role is asserted as well as the reachability.
 -- =====================================================================
 do $$
 declare
-  v_fn   text;
-  v_open text := '';
+  v_fn     text;
+  v_missing text := '';
+  v_open   text := '';
 begin
   foreach v_fn in array array[
+    'public.push_targets(uuid, uuid)',
+    'public.forget_device_token(text)',
+    'public.begin_shared_payment(text, text, text, text)',
+    'public.settle_shared_payment(text, text, boolean, numeric, jsonb)',
     'public.record_terminal_punch(uuid, text, timestamptz, text)',
     'public.terminal_secret_matches(uuid, text)',
     'public.scheduler_prepare_consolidated_einvoice(uuid)',
     'public.einvoice_consolidations_due(integer)',
     'public.ocr_finish(uuid, text, jsonb, text)',
     'public.receive_email(text, text, text, text, text, text, text, text)',
-    'public.settle_gateway_payment(text, text, boolean, numeric, jsonb)',
-    'public.push_targets(uuid, uuid)'
+    'public.settle_gateway_payment(text, text, boolean, numeric, jsonb)'
   ] loop
+    if not has_function_privilege('service_role', v_fn, 'execute') then
+      v_missing := v_missing || v_fn || ' ';
+    end if;
+    -- And still nobody else's. A push target list reachable by a
+    -- signed-in user is every device token in the database.
     if has_function_privilege('authenticated', v_fn, 'execute')
        or has_function_privilege('anon', v_fn, 'execute') then
       v_open := v_open || v_fn || ' ';
@@ -166,16 +174,38 @@ begin
   end loop;
 
   perform pg_temp.check_eq(
-    'the service role''s own entry points are reachable by nobody else',
-    v_open, '');
+    'every edge function entry point is callable by the service role',
+    v_missing, '');
+  perform pg_temp.check_eq(
+    'and by nobody else', v_open, '');
+end $$;
 
-  -- CONTROL. An ordinary RPC the app calls IS reachable by a signed-in
-  -- user, so the assertion above is about those eight functions rather
-  -- than about the privilege system being switched off.
+-- =====================================================================
+-- And the two the app calls
+-- =====================================================================
+do $$
+begin
   perform pg_temp.check_true(
-    'while an ordinary one the app calls is reachable',
+    'the reliefs an employee may declare are readable by a signed-in user',
     has_function_privilege(
       'authenticated', 'public.declarable_reliefs(integer)', 'execute'));
+  perform pg_temp.check_true(
+    'and an administrator can say where the takings land',
+    has_function_privilege(
+      'authenticated',
+      'public.set_org_payment_settlement(uuid, text, text, uuid, text)',
+      'execute'));
+
+  -- Neither is a stranger's. Both were revoked from `anon` by their own
+  -- migrations and the grant above must not have widened that.
+  perform pg_temp.check_true(
+    'and neither is reachable by a stranger',
+    not has_function_privilege(
+      'anon', 'public.declarable_reliefs(integer)', 'execute')
+    and not has_function_privilege(
+      'anon',
+      'public.set_org_payment_settlement(uuid, text, text, uuid, text)',
+      'execute'));
 end $$;
 
 rollback;
