@@ -9,6 +9,39 @@ class Fmt {
   static final _monthYear = DateFormat('MMM yyyy');
   static final _dateTime = DateFormat('dd/MM/yyyy HH:mm');
   static final _plain = NumberFormat('#,##0.00');
+
+  /// One formatter per precision, built on demand.
+  ///
+  /// Built from the NUMBER rather than chosen from a list of cases. The
+  /// first version was a `switch` with an arm for 0, an arm for 3 and a
+  /// default of 2 — and the arm for 3 was unreachable, because no seeded
+  /// currency has three decimals. Deleting it would have been worse than
+  /// leaving it: `check_currency_decimals.py` makes the map follow the
+  /// seed, so the day somebody seeds a dinar the map gains a 3 and a
+  /// formatter that knew only 0 and 2 would have printed it wrongly and
+  /// said nothing.
+  static final _byDecimals = <int, NumberFormat>{};
+
+  /// How many decimals a currency actually has.
+  ///
+  /// Two, except where ISO 4217 says otherwise. Only the exceptions are
+  /// listed, because writing out the other nineteen seeded currencies to
+  /// say "2" is nineteen chances to type 3.
+  ///
+  /// This is a second copy of `ref_currencies.decimal_places`, and it is
+  /// deliberate: `money` is a pure function called from four hundred
+  /// places with no async context and nothing to await a lookup on.
+  /// `scripts/check_currency_decimals.py` compares the two on every
+  /// build, so the copy cannot drift from the seed without the build
+  /// saying so.
+  static const currencyDecimalsBy = <String, int>{
+    'JPY': 0,
+    'KRW': 0,
+    'VND': 0,
+  };
+
+  static int currencyDecimals(String currency) =>
+      currencyDecimalsBy[currency.toUpperCase()] ?? 2;
   static final _compact = NumberFormat.compact(locale: 'en');
   static final _whole = NumberFormat('#,##0');
   static final _fractional = NumberFormat('#,##0.####');
@@ -16,8 +49,31 @@ class Fmt {
 
   /// RM 1,234.56 — the symbol is spaced, which is how it appears on
   /// Malaysian tax invoices.
+  ///
+  /// At the currency's own precision. `Currency.decimalPlaces` has
+  /// carried this since `0002`, with a comment saying exactly why —
+  /// "Yen and won have none" — and nothing read it, so every foreign
+  /// invoice, statement and PDF printed `JPY 1,200.00` for an amount
+  /// that has no sen. The figure was right; the way it was written was
+  /// not, and it goes to the customer.
   static String money(num? value, {String currency = 'MYR'}) =>
-      '${prefix(currency)}${_plain.format(value ?? 0)}';
+      '${prefix(currency)}${amountAt(value, currencyDecimals(currency))}';
+
+  /// An amount at a given precision, with no currency in front of it.
+  ///
+  /// Public because it is the general behaviour and the only way to
+  /// assert it: no seeded currency has three decimals, so a test going
+  /// through [money] can reach 0 and 2 and nothing else. The dinars
+  /// exist whether or not this product has met one.
+  static String amountAt(num? value, int decimals) =>
+      _byDecimals.putIfAbsent(decimals, () {
+        // `#,##0` with no fraction, rather than a pattern with zero
+        // places after the point: a yen figure is whole, and a decimal
+        // pattern prints a separator with nothing behind it.
+        return NumberFormat(
+          decimals == 0 ? '#,##0' : '#,##0.${'0' * decimals}',
+        );
+      }).format(value ?? 0);
 
   /// What an amount field puts in front of the figure being typed.
   /// Shares [money]'s rule so an entered amount and a formatted one read

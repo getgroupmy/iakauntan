@@ -49,7 +49,7 @@ finishing work on things that already exist.
 | P10 | Stock | Periodic inventory mode, Periodic Stock Value | **Missing** | Perpetual only — `stock_movements`, `stock_levels`, `v_stock_valuation`, weighted average in 0009. A decision rather than a gap: say "perpetual only" |
 | P11 | Stock | Stock Opening Balance, Adjustment, Transfer | **Present** | `stock_adjustments`, `stock_transfers`, `/stock-take`, `/transfers`; opening balances through `0150` |
 | P12 | Stock | Product Inquiry with price history by customer/supplier | **Partial** | `/items`, `v_stock_valuation`, forecasting. No price-history-by-contact view |
-| P13 | Settings | Decimal places per field type | **Partial** | `organizations.decimal_places` — one setting for the company, not per field type |
+| P13 | Settings | Decimal places per field type | **Partial, and the one setting is DEAD.** `organizations.decimal_places` has a check constraint, a default of 2, a field on the Dart `Organization` model — and no reader anywhere: no Dart consumer, no SQL function, no settings UI. Setting it changes nothing. `ref_currencies.decimal_places` was the same until `0634`, which made `Fmt.money` read it. See §3.4 |
 | P14 | Settings | 5-sen rounding Disable / Optional / Enforce | **Partial** | `organizations.rounding_method` (`none`, `nearest_5cent`, `nearest_10cent`) and `app.round_amount`; POS applies it (`pos_rounding_adjustment`). Not offered as a per-document choice on invoices and receipts |
 | P15 | Settings | Numbering format: prefix, suffix, year/month tokens, start, width, per document type | **Present** | `number_sequences` (`doc_type`, `prefix`, `suffix`, `padding`, `next_value`, `reset_policy`, `period_key`); `document_numbering`, `set_document_numbering`; `document_numbering_card.dart` |
 | P16 | Settings | Default journal type / description per transaction class | **Missing** | No journal types at all (see P4), and no default-description setting |
@@ -209,6 +209,42 @@ it is enrolled in MyInvois (and in which environment). With those, the
 work above is a day. Without them it cannot start, and a migration that
 put a placeholder TIN into `platform_settings` would be a migration
 somebody later believed.
+
+
+### 3.4 P13: the setting was dead, and so was the one beside it
+
+Verifying P13 turned up something the verdict missed. It is right that
+`organizations.decimal_places` is one company-wide setting rather than
+one per field type. What it does not say is that **the setting does
+nothing at all**:
+
+  * it has a check constraint (`between 0 and 6`) and a default of 2,
+    from `0001`;
+  * it is parsed onto the Dart `Organization` model as `decimalPlaces`;
+  * and nothing reads it. No Dart consumer, no SQL function, no
+    settings screen. Changing it changes nothing anybody can see.
+
+`ref_currencies.decimal_places` was in the same state, and worse,
+because it was right and unused. The `Currency` model even carries the
+reason, written when the field was added: *"Yen and won have none. Kept
+because a rate field that offers cents on a currency without them
+invites a figure that cannot be paid."* `Fmt.money` meanwhile hardcoded
+`#,##0.00`, so every yen, won and dong figure — on screen, on a
+statement, on a PDF that goes to a customer — was printed with two
+decimals it does not have.
+
+**What was built** is the currency half: `Fmt.money` prints at the
+currency's own precision, and `scripts/check_currency_decimals.py`
+keeps the app's copy of the exceptions in step with the seed.
+
+**What is left** is the company setting, and it needs a decision rather
+than code. Money is now answered by the CURRENCY, which is the right
+authority for it — so `organizations.decimal_places` has no job unless
+it is given the one AutoCount gives it: the precision of a UNIT PRICE
+and a QUANTITY, which are not money and where four decimals are
+ordinary. That is a real feature and a small one, but it is a choice
+about what the setting means, and inventing one would be inventing a
+requirement.
 
 ### A separate, small PR
 

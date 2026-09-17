@@ -688,6 +688,13 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_discarded_values.py "$DB"
 
+      # `Fmt.money` carries a copy of the currency decimals because it is
+      # a pure function called from four hundred places with nothing to
+      # await a lookup on. A copy that drifts from the seed is a figure
+      # written wrongly on an invoice that goes to somebody.
+      - name: Check the app's currency decimals match the seed
+        run: python3 scripts/check_currency_decimals.py
+
       # One level below the embeds, and the same string literal. The
       # screen that declares an employee's TP1 reliefs filtered
       # `statutory_schedules` on `schedule_type`, which this schema has
