@@ -2075,6 +2075,16 @@ class _TaxCodesCard extends ConsumerWidget {
                                 padding: EdgeInsets.only(right: 8),
                                 child: StatusChip('default', compact: true),
                               ),
+                            // Which of two codes at the same rate
+                            // quotes tax-inclusive prices. Only where
+                            // there is a rate for it to be inclusive
+                            // of: the trigger's inclusive branch is
+                            // guarded on `tax_rate > 0`.
+                            if (t.isInclusive && t.rate != 0)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: StatusChip('incl.', compact: true),
+                              ),
                             Text(
                               Fmt.percent(t.rate),
                               style: const TextStyle(

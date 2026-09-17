@@ -952,6 +952,7 @@ class Repo {
     required double rate,
     String taxTypeCode = '06',
     bool isExempt = false,
+    bool isInclusive = false,
     String? exemptionReason,
   }) async {
     final row = await client
@@ -963,6 +964,7 @@ class Repo {
           'rate': rate,
           'tax_type_code': taxTypeCode,
           'is_exempt': isExempt,
+          'is_inclusive': isInclusive,
           'exemption_reason': exemptionReason,
         })
         .select('id')
@@ -970,6 +972,10 @@ class Repo {
     return row['id'] as String;
   }
 
+  /// [isInclusive] changes what FUTURE lines do, not what past ones
+  /// did. `app.calc_document_line` resolves it onto a line when the code
+  /// is chosen and leaves it there, so turning it on does not restate
+  /// any document already raised — the same promise the rate makes.
   Future<void> updateTaxCode(
     String id, {
     required String code,
@@ -977,6 +983,7 @@ class Repo {
     required double rate,
     required String taxTypeCode,
     required bool isExempt,
+    required bool isInclusive,
     String? exemptionReason,
   }) => client
       .from('tax_codes')
@@ -986,6 +993,7 @@ class Repo {
         'rate': rate,
         'tax_type_code': taxTypeCode,
         'is_exempt': isExempt,
+        'is_inclusive': isInclusive,
         'exemption_reason': exemptionReason,
       })
       .eq('id', id)

@@ -150,11 +150,35 @@ void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
   final tax =
       taxCodes.where((t) => t.id == item.salesTaxCodeId).firstOrNull ??
       taxCodes.where((t) => t.isDefault).firstOrNull;
-  if (tax != null) {
-    line
-      ..taxCodeId = tax.id
-      ..taxRate = tax.rate;
-  }
+  // Null is not "no tax" here — see the test. An item that names no
+  // code in a company that has no default leaves the line as it was.
+  if (tax != null) applyTaxCodeToLine(line, tax);
+}
+
+/// Everything a line takes from the tax code it is charged at.
+///
+/// One function because there are two places that choose a code — the
+/// item master fills one in above, and the editor's tax picker changes
+/// it — and they are the same choice. This file's other fill function
+/// exists because those two had already drifted once, the narrow card
+/// setting everything except the tax code, so a line added on a phone
+/// silently carried no SST.
+///
+/// [tax] of null is "no tax": the rate goes to zero and the price
+/// becomes the whole of the net, which is what
+/// `app.calc_document_line` computes for a line with no code.
+///
+/// The FLAG matters as much as the rate. `0641` has the trigger resolve
+/// `is_tax_inclusive` from the code the moment the code is chosen, and
+/// [computeLine] below mirrors that trigger so the editor can show a
+/// total before the row exists. A line that took the rate and not the
+/// flag would put an inclusive price on screen at its exclusive total
+/// and then store the other number — RM 108 quoted, RM 116.64 charged.
+void applyTaxCodeToLine(LineDraft line, TaxCode? tax) {
+  line
+    ..taxCodeId = tax?.id
+    ..taxRate = tax?.rate ?? 0
+    ..isTaxInclusive = tax?.isInclusive ?? false;
 }
 
 /// How many of the item's own units one of [uom] is, from the rows

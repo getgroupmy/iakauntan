@@ -864,6 +864,7 @@ class TaxCode {
     required this.taxTypeCode,
     this.isDefault = false,
     this.isExempt = false,
+    this.isInclusive = false,
     this.exemptionReason,
   });
 
@@ -875,10 +876,36 @@ class TaxCode {
   final bool isDefault;
   final bool isExempt;
 
+  /// Whether a price quoted against this code already contains the tax.
+  ///
+  /// A property of the code rather than of the line, for the reason
+  /// `0641` gives: "prices include SST" is how a business quotes, not a
+  /// choice to re-make on every line, and a document that is half
+  /// inclusive is a document nobody can check. `app.calc_document_line`
+  /// reads it the moment the code is chosen and writes the answer onto
+  /// `is_tax_inclusive`, which is then the line's own for good — like
+  /// the rate beside it.
+  final bool isInclusive;
+
   /// Why it is exempt, as a `ref_exemption_reasons` code. LHDN puts it
   /// on the exempt line; `0015_einvoice_prepare` carries it through as
   /// `tax_exemption_reason`.
   final String? exemptionReason;
+
+  /// How this code reads in a picker: the code, its rate, and — when it
+  /// matters — that a price quoted against it already contains the tax.
+  ///
+  /// One place rather than three, because two codes at the same rate
+  /// that differ only in [isInclusive] are the ordinary shape of this
+  /// (a company quoting retail inclusive and trade exclusive), and
+  /// without the marker they are the same row twice in every list.
+  /// Nothing is said at a zero rate, inclusive or not: the trigger's
+  /// inclusive branch is guarded on `tax_rate > 0`, so a zero-rated code
+  /// computes identically either way and the marker would name a
+  /// difference that does not exist.
+  String get pickerLabel => rate == 0
+      ? code
+      : '$code (${Fmt.percent(rate)}${isInclusive ? ' incl.' : ''})';
 
   factory TaxCode.fromJson(Map<String, dynamic> j) => TaxCode(
     id: j['id'] as String,
@@ -888,6 +915,7 @@ class TaxCode {
     taxTypeCode: j['tax_type_code']?.toString() ?? '06',
     isDefault: j['is_default'] == true,
     isExempt: j['is_exempt'] == true,
+    isInclusive: j['is_inclusive'] == true,
     exemptionReason: j['exemption_reason'] as String?,
   );
 }

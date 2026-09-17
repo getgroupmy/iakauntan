@@ -146,6 +146,7 @@ void main() {
       required String id,
       required double rate,
       bool isDefault = false,
+      bool isInclusive = false,
     }) =>
         TaxCode(
           id: id,
@@ -154,6 +155,7 @@ void main() {
           rate: rate,
           taxTypeCode: '01',
           isDefault: isDefault,
+          isInclusive: isInclusive,
         );
 
     test('carries the price, the unit and the classification across', () {
@@ -212,6 +214,66 @@ void main() {
 
       expect(line.taxCodeId, 'kept');
       expect(line.taxRate, 6);
+    });
+
+    test('and whether that code quotes prices inclusive of the tax', () {
+      // The half 0641 added. `app.calc_document_line` resolves
+      // `is_tax_inclusive` from the code when the code is chosen, and
+      // `computeLine` mirrors that trigger to show a total before the
+      // row exists — so a line filled from an item has to carry the
+      // flag as well as the rate, or the screen shows one number and
+      // the ledger stores another.
+      final line = LineDraft();
+      applyItemToLine(line, item(salesTaxCodeId: 't8'), [
+        tax(id: 't8', rate: 8, isInclusive: true),
+      ]);
+
+      expect(line.isTaxInclusive, isTrue);
+      // And the totals follow: RM 21.50 quoted inclusive of 8% is
+      // RM 19.91 net with RM 1.59 of tax, and the line is still worth
+      // the 21.50 it was quoted at.
+      expect(line.totals.net, 19.91);
+      expect(line.totals.tax, 1.59);
+      expect(line.totals.total, 21.50);
+    });
+
+    test('and an exclusive code leaves an inclusive line behind it', () {
+      // The other direction, which a `if (tax.isInclusive)` would get
+      // wrong: swapping an item onto an exclusive code has to CLEAR a
+      // flag the line is already carrying, because the trigger
+      // resolves the same way and would store the exclusive figures.
+      final line = LineDraft(isTaxInclusive: true);
+      applyItemToLine(line, item(salesTaxCodeId: 't8'), [
+        tax(id: 't8', rate: 8),
+      ]);
+
+      expect(line.isTaxInclusive, isFalse);
+    });
+
+    test('and choosing a code by hand is the same choice', () {
+      // `applyTaxCodeToLine` is what the editor's tax picker calls, and
+      // it is the same function this fill calls, deliberately: the two
+      // had drifted before and the narrow card set everything except
+      // the tax code.
+      final line = LineDraft();
+      applyTaxCodeToLine(line, tax(id: 't8', rate: 8, isInclusive: true));
+
+      expect(line.taxCodeId, 't8');
+      expect(line.taxRate, 8);
+      expect(line.isTaxInclusive, isTrue);
+    });
+
+    test('and "No tax" clears the rate and the flag together', () {
+      // A line whose price included tax, moved to no code at all. The
+      // trigger computes the whole price as net for it, so a flag left
+      // behind here would show a total the ledger will not store.
+      final line = LineDraft(taxCodeId: 't8', taxRate: 8)
+        ..isTaxInclusive = true;
+      applyTaxCodeToLine(line, null);
+
+      expect(line.taxCodeId, isNull);
+      expect(line.taxRate, 0);
+      expect(line.isTaxInclusive, isFalse);
     });
 
     test('and the quantity somebody already typed is not touched', () {
