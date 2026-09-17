@@ -147,28 +147,15 @@ DELIBERATE: dict[str, str] = {
 # Not "leave it alone for ever" -- a finding, with what closing it
 # needs, recorded where the next person will look.
 SUPERSEDED: dict[str, str] = {
-    # `import_opening_balances` is the reachable way to open a set of
-    # books, and it does the right thing: a GL entry dated `p_as_at`
-    # with `source = 'opening_balance'`. The DATE of an opening balance
-    # is on that journal.
-    #
-    # The trap, and why this is written down rather than dropped:
-    # `accounts.opening_balance` is still READ -- by
-    # `report_trial_balance`, `report_general_ledger`,
-    # `report_balance_sheet`, `report_cash_flow`,
-    # `report_changes_in_equity` and `report_group_trial_balance` --
-    # and read DATELESS, added into the opening figure of whatever
-    # period was asked for. Nothing in the app writes it; the demo
-    # seeds do. So the trap is latent: the first company to set it gets
-    # its opening balance in every comparative period, including
-    # periods before it converted.
-    #
-    # To close: the demo seeds post a dated opening journal like
-    # everything else, and then those six reports stop reading the
-    # column. A change to six statutory reports, and its own commit.
-    'accounts.opening_balance_date':
-        'superseded by import_opening_balances, which dates its '
-        'journal; see the dateless read this leaves behind',
+    # `accounts.opening_balance_date` was here, and is not any more --
+    # `0643` and `chart_of_accounts.sql` both name it now, so the sweep
+    # counts it as mentioned and this gate refuses an entry for a
+    # column something reaches. The finding is in
+    # `docs/unreachable.md`, where it belongs: six statutory reports
+    # add `accounts.opening_balance` into their opening figure
+    # DATELESS, nothing writes it, and until 0643 anybody who could
+    # post a journal could PATCH a figure into it that no journal
+    # explained and that unbalanced the trial balance.
 
     # `0548` computes this rather than storing it: a promotion carries
     # `trial_days`, and `app.plan_price_on` decides whether a day falls

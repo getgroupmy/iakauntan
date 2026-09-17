@@ -1281,9 +1281,20 @@ rather than the exemption —
   the date of an opening balance is on the journal
   `import_opening_balances` posts, and meanwhile six statutory reports
   still add `accounts.opening_balance` into their opening figure
-  **dateless**, so the first company to set it gets its opening
-  balance in every comparative period, including periods before it
-  converted.
+  **dateless**, whatever period was asked for.
+
+  An earlier version of this section said the demo seeds write that
+  figure. **They do not** — the `opening_balance` they write is on
+  `bank_accounts`, a different table, where it is read correctly.
+  Nothing writes the one on `accounts`. What made it worth `0643`
+  rather than a note is that anybody *could*: `authenticated` held
+  UPDATE on the table and the policy asks only `app.can_post`, so a
+  PATCH straight at PostgREST was accepted from whoever may post a
+  journal — and the amount would sit in the opening figure of every
+  period, in no journal, with the trial balance no longer balancing
+  and no entry to point at. A trigger scoped to the API roles closed
+  it; the six reports are untouched, because the term is provably
+  zero while nothing can write it.
 - `WHOLE_TABLE_UNREACHED` (2) — the column is not the finding, the
   table is. `notes.is_pinned` and `fs_disclosures.value_text`: notes
   attachable to anything, and MBRS disclosures, both tabled and never
