@@ -67,10 +67,14 @@ here, is the correct conclusion.
 
 ## Built in the database, unreachable from the app
 
-Thirteen tables have **zero** references in `app/lib`. Some of those are
+**This table is now entirely closed**, and the paragraph that stood
+here is kept because it says what the sweep was: thirteen tables had
+**zero** references in `app/lib` when it was run. Some of those were
 correct — `stock_movements`, `stock_levels` and `number_sequences` are
-written by SECURITY DEFINER functions and never touched by the client by
-design. The rest are capabilities nobody can reach:
+written by SECURITY DEFINER functions and never touched by the client
+by design — and the rest were capabilities nobody could reach. Every
+one of them is struck through below, and the last two were struck by
+*checking* rather than by building:
 
 | Capability | Tables in the schema | Callable? |
 | --- | --- | --- |
@@ -80,13 +84,36 @@ design. The rest are capabilities nobody can reach:
 | ~~Recurring journals~~ | `recurring_journals` | Done — `0088` |
 | ~~Price levels~~ | `price_levels`, `item_prices` | Done — `0088` |
 | ~~Project / department dimensions~~ | `gl_lines.project_code`, `.department_code` | Done — `0088`: a `projects` table, a picker on the document, and a P&L per job |
-| **Sales agent** | `sales_documents.salesperson_id` | No UI, so no commission or agent report is possible |
-| **Item categories** | `item_categories` | No UI |
+| ~~Sales agent~~ | `sales_documents.salesperson_id` | Done — `salespeople`, reached from the document editor and the shell. The revision below already said so; this row did not, and a table that disagrees with the section under it is worse than either |
+| ~~Item categories~~ | `item_categories` | Done — `item_categories.dart` and `item_categories_dialog.dart`, reached from the items screen |
 
-Five document types are in the `sales_doc_type` / `purchase_doc_type`
-enums with no screen: `proforma`, `refund_note`, `purchase_request`,
-`purchase_debit_note`, and — the one that will be missed —
-`purchase_return`.
+**The five document types were four, and are now one.** `docTypes` in
+`app/lib/src/features/documents/doc_types.dart` carries fourteen
+entries, including `proforma`, `refund_note`, `purchase_request` and
+`purchase_debit_note`; the router builds each address from that table,
+so each has a screen.
+
+The one left is **`purchase_return`**, and the line above calling it
+"the one that will be missed" was wrong. Returning goods to a supplier
+is not missing — it is done by a **purchase credit note**, which has a
+screen, posts, and creates the stock movement whose type is literally
+`purchase_return`. That is the `v_sign = -1` branch of
+`post_purchase_document_internal`, and it is where the name in the
+movement enum comes from.
+
+So `app.purchase_doc_type.purchase_return` is a leftover: a numbering
+prefix (`PRT-`) and nothing else. Nothing can post one —
+`post_purchase_document_internal` refuses any type but `bill`,
+`purchase_credit_note` and `purchase_debit_note`, by name and with a
+sentence — so it cannot mis-post; it simply cannot be used. Building a
+screen for it would be a second way to do what the credit note already
+does, and the two would disagree about which one the supplier's
+statement should match.
+
+Each of these was checked by reading the code, not the claim. This
+document was wrong about four of them, which is the failure mode it
+shares with README's own list — `docs/unreachable.md` has the sweeps
+that catch it.
 
 ## Revision, August 2026 — what has closed and what has not
 
