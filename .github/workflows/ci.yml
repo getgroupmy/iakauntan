@@ -1525,6 +1525,20 @@ jobs:
       - run: deno check supabase/functions/myinvois/retry_test.ts
       - run: deno test supabase/functions/myinvois/retry_test.ts
 
+      # What was in a submission, without what it weighed.
+      # `einvoice_submissions.request_payload` was a column nothing
+      # wrote to, beside a `response_payload` that was written -- so a
+      # rejected submission recorded the rejection and not the request
+      # that caused it.
+      #
+      # The assertion that matters is the one about what is NOT in it:
+      # a submission is up to 100 documents and 5 MB, the documents are
+      # already stored one per row, and a manifest that quietly
+      # included the base64 would make this the largest table in the
+      # database inside a year holding a second copy of them.
+      - run: deno check supabase/functions/myinvois/manifest_test.ts
+      - run: deno test supabase/functions/myinvois/manifest_test.ts
+
       # The forty lines that stand in for a Google SDK. A real RSA key
       # is generated in the test process and the assertion the function
       # builds is VERIFIED against the public half, because every

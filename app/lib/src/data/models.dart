@@ -1314,6 +1314,7 @@ class EinvoiceDocument {
     this.cancelDeadline,
     this.currency = 'MYR',
     this.retryCount = 0,
+    this.ublPayload,
   });
 
   final String id;
@@ -1338,6 +1339,14 @@ class EinvoiceDocument {
   /// document itself is never refused, because whatever made it fail
   /// is usually what somebody has just fixed.
   final int retryCount;
+
+  /// The document as LHDN received it.
+  ///
+  /// Kept on the accepted path since `0007` and, since the submitter
+  /// learned to, on the REJECTED path too — which is the one that
+  /// matters. A rejection names a field on a document, and until the
+  /// submitter kept it the document named was the one thrown away.
+  final Map<String, dynamic>? ublPayload;
 
   /// Whether the sweep has stopped sending this one.
   ///
@@ -1370,6 +1379,9 @@ class EinvoiceDocument {
     cancelDeadline: Fmt.parseDate(j['cancel_deadline']),
     currency: j['currency']?.toString() ?? 'MYR',
     retryCount: (j['retry_count'] as num?)?.toInt() ?? 0,
+    ublPayload: j['ubl_payload'] is Map
+        ? Map<String, dynamic>.from(j['ubl_payload'] as Map)
+        : null,
   );
 }
 

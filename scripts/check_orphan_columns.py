@@ -217,8 +217,15 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
 # beside it, because the reason a gap stays open for months is that
 # nobody remembers what closing it involved.
 #
-# It started at four. `einvoice_documents.retry_count` was the one with
-# teeth and it is closed: `submit.ts` and `consolidations.ts` wrote
+# It started at four and is at two. `einvoice_submissions.request_payload`
+# is closed: the submit path writes a MANIFEST of the batch on the
+# insert that opens the submission -- code number, hash, format and
+# size per document, and deliberately not the documents themselves,
+# which are already stored one per row and would make this the largest
+# table here inside a year. `manifest.ts` says why in full.
+#
+# `einvoice_documents.retry_count` was the one with teeth and it is
+# closed too: `submit.ts` and `consolidations.ts` wrote
 # `last_attempt_at` at every failure site and never touched the count,
 # while the bulk picker selected `invalid` -- the status of a document
 # MyInvois has REJECTED -- so a document that could never succeed was
@@ -227,20 +234,6 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
 # SWEEP at five, never a person; the e-Invoice screen says so where the
 # rejection is shown.
 KNOWN_GAPS: dict[str, str] = {
-    # What was SENT to MyInvois. `response_payload` beside it IS
-    # written, so a rejected submission records the rejection and not
-    # the document that caused it -- the one thing anybody wants when
-    # LHDN refuses a document and the message is a code.
-    #
-    # To close: the submit path writes it on the insert that already
-    # writes `response_payload`, and the e-Invoice log offers it where
-    # somebody can read it. Size is the thing to decide: a submission
-    # carries up to a hundred signed documents, so this may want the
-    # envelope and per-document metadata rather than every base64 body.
-    'einvoice_submissions.request_payload':
-        'the myinvois submit path writes it beside response_payload, '
-        'and the log screen shows it',
-
     # Where SSM correspondence goes. The corporate secretarial module
     # tracks an entity's registered office, its business address and
     # its phone, and each of those is on the entity form -- this one

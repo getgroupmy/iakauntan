@@ -29,7 +29,8 @@ import {
 } from "../_shared/myinvois.ts";
 import { buildUblDocument, EinvoiceLineRow, EinvoiceRow } from "../_shared/ubl.ts";
 import { SIGNED_VERSION, signUblJsonDocument } from "../_shared/xades.ts";
-import { isExhausted, MAX_ATTEMPTS, nextAttempt } from "./retry.ts";
+import { submissionManifest } from "./manifest.ts";
+import { MAX_ATTEMPTS, nextAttempt } from "./retry.ts";
 
 // MyInvois caps a submission at 100 documents / 5 MB.
 const BATCH_LIMIT = 100;
@@ -202,6 +203,16 @@ export async function submit(ctx: Ctx) {
       environment: creds.environment,
       document_count: payloads.length,
       status: "in_progress",
+      // What went in this batch, written BEFORE the call rather than
+      // after it. A request recorded only on the way back is a request
+      // that vanishes exactly when the submitter throws, which is the
+      // case it exists for.
+      //
+      // A manifest and not the documents: see `manifest.ts`. The
+      // documents are already stored one per row, and 5 MB of base64
+      // per submission would make this the largest table here inside a
+      // year holding a second copy of them.
+      request_payload: submissionManifest(payloads),
       submitted_at: new Date().toISOString(),
       submitted_by: ctx.userId,
     })
@@ -288,6 +299,20 @@ export async function submit(ctx: Ctx) {
         submission_id: submission!.id,
         last_attempt_at: new Date().toISOString(),
         retry_count: nextAttempt(byCount.get(id)),
+        // The document LHDN objected to, kept.
+        //
+        // Until this line the accepted path stored `ubl_payload` and
+        // the rejected path stored nothing, so the ONE document
+        // anybody needs to read -- the one that was refused -- was the
+        // one thrown away. The error said which field was wrong about a
+        // document nobody could look at.
+        //
+        // The hash goes with it, because it is what
+        // `request_payload`'s manifest can be checked against: the
+        // same hash on both sides is the only way to say that the copy
+        // kept is the copy submitted.
+        ubl_payload: rendered.get(id)?.ubl ?? null,
+        payload_hash: rendered.get(id)?.hash ?? null,
         error_code: rej.error?.code ?? null,
         error_message: rej.error?.message ?? "Rejected by MyInvois",
         validation_errors: rej.error?.details ?? [],
@@ -311,6 +336,10 @@ export async function submit(ctx: Ctx) {
   // caller it is acting for, and this path already holds every value
   // it needs.
   if (!ok && accepted.length === 0 && rejected.length === 0) {
+    // The rendered document is deliberately NOT stored on this path.
+    // Nothing was validated, so there is nothing to explain, and the
+    // next attempt renders it again from the same rows. Only a
+    // document LHDN formed an opinion about is worth keeping bytes of.
     const byBucket = new Map<number, string[]>();
     for (const id of rendered.keys()) {
       const at = byCount.get(id) ?? 0;

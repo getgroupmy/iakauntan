@@ -239,6 +239,12 @@ async function fileOne(
         // count that is a rejection re-sent on every run until the
         // period closes.
         retry_count: nextAttempt(attempts),
+        // The consolidation LHDN objected to, kept -- same reason as
+        // `submit.ts`: the success path below stored `ubl_payload` and
+        // this one stored nothing, so the one document anybody needs to
+        // read was the one thrown away.
+        ubl_payload: ubl as Record<string, unknown>,
+        payload_hash: hash,
         error_code: rejected[0]?.error?.code ?? null,
         error_message: why,
         validation_errors: rejected[0]?.error?.details ?? [],

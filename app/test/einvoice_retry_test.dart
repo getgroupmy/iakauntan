@@ -74,6 +74,51 @@ void main() {
     });
   });
 
+  group('the document LHDN objected to', () {
+    test('comes off the wire when the submitter kept it', () {
+      final row = EinvoiceDocument.fromJson({
+        'id': 'e1',
+        'issue_date': '2026-03-01',
+        'ubl_payload': {
+          'Invoice': [
+            {'ID': [{'_': 'INV-1'}]},
+          ],
+        },
+      });
+
+      expect(row.ublPayload, isNotNull);
+      expect(row.ublPayload!['Invoice'], isNotNull);
+    });
+
+    test('and a rejection with nothing kept says nothing', () {
+      // Every document rejected before the submitter learned to keep
+      // them. The screen offers "What we sent" only where there is
+      // something to show, rather than opening an empty dialog.
+      final row = EinvoiceDocument.fromJson({
+        'id': 'e1',
+        'issue_date': '2026-03-01',
+      });
+
+      expect(row.ublPayload, isNull);
+    });
+
+    test('and a payload that is not a map does not crash the list', () {
+      // `ubl_payload` is jsonb, so the column can hold a string or an
+      // array as easily as an object. A cast straight to
+      // Map<String, dynamic> would throw while BUILDING THE LIST, which
+      // takes out the whole e-Invoice screen rather than one row.
+      for (final odd in <dynamic>['not an object', 42, <int>[1, 2]]) {
+        final row = EinvoiceDocument.fromJson({
+          'id': 'e1',
+          'issue_date': '2026-03-01',
+          'ubl_payload': odd,
+        });
+
+        expect(row.ublPayload, isNull, reason: 'for $odd');
+      }
+    });
+  });
+
   group('the count comes off the wire', () {
     test('as the number the column holds', () {
       expect(
