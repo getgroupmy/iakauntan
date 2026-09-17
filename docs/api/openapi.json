@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0634",
+    "version": "0635",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -12510,6 +12510,70 @@
         }
       }
     },
+    "/payment_methods": {
+      "get": {
+        "operationId": "select_payment_methods",
+        "summary": "Read payment_methods",
+        "description": "A company's own payment methods -- \"Maybank cheque\", \"Stripe\" -- each pointing at one LHDN mode in ref_payment_modes, and each naming the account its bank charge is posted to. 0635.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/payment_methods"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/payment_terms": {
       "get": {
         "operationId": "select_payment_terms",
@@ -20346,6 +20410,60 @@
               "application/json": {
                 "schema": {
                   "type": "boolean"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/archive_payment_method": {
+      "post": {
+        "operationId": "archive_payment_method",
+        "summary": "Retires a payment method without breaking the documents that name it",
+        "description": "Retires a payment method without breaking the documents that name it. Writes payment_methods. 0635.\n\n`public.archive_payment_method(p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
                 }
               }
             }
@@ -41961,6 +42079,63 @@
         }
       }
     },
+    "/rpc/payment_methods_for": {
+      "post": {
+        "operationId": "payment_methods_for",
+        "summary": "A company's payment methods, live ones first by sort order",
+        "description": "A company's payment methods, live ones first by sort order. 0635.\n\n`public.payment_methods_for(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/payment_methods"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/payroll_payment_instruction": {
       "post": {
         "operationId": "payroll_payment_instruction",
@@ -60771,6 +60946,99 @@
         }
       }
     },
+    "/rpc/save_payment_method": {
+      "post": {
+        "operationId": "save_payment_method",
+        "summary": "Creates or amends one of a company's payment methods",
+        "description": "Creates or amends one of a company's payment methods. Writes payment_methods. 0635.\n\n`public.save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_name": {
+                    "type": "string"
+                  },
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_payment_mode_code": {
+                    "type": "string"
+                  },
+                  "p_bank_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_charge_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_charge_percent": {
+                    "type": "number"
+                  },
+                  "p_charge_fixed": {
+                    "type": "number"
+                  },
+                  "p_is_default": {
+                    "type": "boolean"
+                  },
+                  "p_is_active": {
+                    "type": "boolean"
+                  },
+                  "p_sort_order": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_notes": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/scale_formats_list": {
       "post": {
         "operationId": "scale_formats_list",
@@ -66450,6 +66718,64 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/suggested_charge": {
+      "post": {
+        "operationId": "suggested_charge",
+        "summary": "What a payment method's stated rate comes to on this amount",
+        "description": "What a payment method's stated rate comes to on this amount. Offered on the screen; never applied during posting. 0635.\n\n`public.suggested_charge(p_payment_method_id uuid, p_amount numeric)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_payment_method_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_amount": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "p_payment_method_id",
+                  "p_amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "number"
                 }
               }
             }
@@ -86252,6 +86578,72 @@
           "name"
         ]
       },
+      "payment_methods": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "payment_mode_code": {
+            "type": "string"
+          },
+          "bank_account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "charge_account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "charge_percent": {
+            "type": "number"
+          },
+          "charge_fixed": {
+            "type": "number"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "name"
+        ]
+      },
       "payment_terms": {
         "type": "object",
         "properties": {
@@ -91025,6 +91417,10 @@
           "batch_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "payment_method_id": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [
@@ -91137,6 +91533,10 @@
             "format": "date-time"
           },
           "batch_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payment_method_id": {
             "type": "string",
             "format": "uuid"
           }

@@ -41,7 +41,7 @@ finishing work on things that already exist.
 | P2 | Master data | Area | **Missing** | Nothing. `pos_floor_areas` is a restaurant floor plan |
 | P3 | Master data | Sales Agent | **Present** | `salespeople` with `commission_rate`, `employee_id`, `member_id`; `app.check_salesperson_org`; route `/salespeople`. Note: the rate is stored and nothing computes a commission |
 | P4 | Master data | Journal Type | **Missing** | No table, no column |
-| P5 | Master data | Payment Method with a bank-charge account | **Partial** | `ref_payment_modes` (8 LHDN modes, platform-wide). No per-company payment method and no bank-charge account on one |
+| ~~P5~~ | Master data | Payment Method with a bank-charge account | **Built (0635)** | `payment_methods` per company, pointing at an LHDN mode and naming the account its charge is debited to; `app.bank_charge_account` resolves method → company default → 6300. See §3.5 — the charge was never missing, its account was hardcoded |
 | P6 | Master data | Multiple AR/AP control accounts | **Present** | `contacts.receivable_account_id`, `contacts.payable_account_id`, resolved by `coalesce` against the org default in `app.post_sales_document_internal`; `app.control_account_balance`; asserted in `supabase/tests/control_accounts.sql` |
 | P7 | Master data | Product Posting groups | **Partial** | `items.sales_account_id`, `purchase_account_id`, `inventory_account_id`, `cogs_account_id` — per item, which is finer than AutoCount. No named posting GROUP to apply to many items, and no sales-return/purchase-return account |
 | P8 | Product | Two-level variants, minimum price, separate supply vs purchase tax code | **Present** | `create_item_variants`, `item_variant_matrix`, `app.items_variant_guard`; `items.min_price`; `items.sales_tax_code_id` and `purchase_tax_code_id` |
@@ -50,7 +50,7 @@ finishing work on things that already exist.
 | P11 | Stock | Stock Opening Balance, Adjustment, Transfer | **Present** | `stock_adjustments`, `stock_transfers`, `/stock-take`, `/transfers`; opening balances through `0150` |
 | P12 | Stock | Product Inquiry with price history by customer/supplier | **Partial** | `/items`, `v_stock_valuation`, forecasting. No price-history-by-contact view |
 | P13 | Settings | Decimal places per field type | **Partial, and the one setting is DEAD.** `organizations.decimal_places` has a check constraint, a default of 2, a field on the Dart `Organization` model — and no reader anywhere: no Dart consumer, no SQL function, no settings UI. Setting it changes nothing. `ref_currencies.decimal_places` was the same until `0634`, which made `Fmt.money` read it. See §3.4 |
-| P14 | Settings | 5-sen rounding Disable / Optional / Enforce | **Partial** | `organizations.rounding_method` (`none`, `nearest_5cent`, `nearest_10cent`) and `app.round_amount`; POS applies it (`pos_rounding_adjustment`). Not offered as a per-document choice on invoices and receipts |
+| P14 | Settings | 5-sen rounding Disable / Optional / Enforce | **Present as a company setting; the per-document choice is a decision, not a gap** | `organizations.rounding_method` (`none`, `nearest_5cent`, `nearest_10cent`), `app.round_amount`, read by `app.recalc_sales_totals` and by `document_editor.dart`, editable in `company_card.dart`; POS applies it (`pos_rounding_adjustment`). See §3.6 |
 | P15 | Settings | Numbering format: prefix, suffix, year/month tokens, start, width, per document type | **Present** | `number_sequences` (`doc_type`, `prefix`, `suffix`, `padding`, `next_value`, `reset_policy`, `period_key`); `document_numbering`, `set_document_numbering`; `document_numbering_card.dart` |
 | P16 | Settings | Default journal type / description per transaction class | **Missing** | No journal types at all (see P4), and no default-description setting |
 | P17 | Reports | Debtor and Creditor Statements | **Present** | `statement.dart`, `statement_pdf.dart` (customer and supplier sides), from `contact_editor.dart`; and since `0624` `report_statement_of_account` adds the brought-forward form |
@@ -246,18 +246,116 @@ ordinary. That is a real feature and a small one, but it is a choice
 about what the setting means, and inventing one would be inventing a
 requirement.
 
+### 3.5 P5: the charge was not missing, its account was hardcoded
+
+The verdict read `ref_payment_modes` and concluded there was no
+bank-charge account anywhere. Reading what actually POSTS turns that
+around twice.
+
+`receipts.bank_charges` and `purchase_payments.bank_charges` have been
+columns since `0005` and `0006`, and they post. `post_receipt` debits
+the charge and credits the customer gross; `post_purchase_payment`
+does the mirror; `post_bank_transfer` does it for a transfer fee. So
+the feature existed. What did not exist was any way to say WHERE it
+goes — all three said:
+
+```sql
+(select id from public.accounts where org_id = ... and code = '6300')
+```
+
+6300 is Bank Charges in the bootstrap chart, so a company that took the
+chart as given was fine. A company that did not had no account at all,
+and `gl_lines.account_id` is `not null`, so the subquery returning
+nothing did not fall back to anything. It aborted the posting with
+
+```
+null value in column "account_id" of relation "gl_lines" ...
+```
+
+naming neither the receipt, nor the charge, nor 6300. That is every
+company migrating a chart in from somewhere else, which is the audience
+this document is written for.
+
+`app.fx_account` — three lines below the charge block, in the same
+function, added in `0079` — had already solved this for the exchange
+gain and loss accounts: look the code up, and raise something a person
+can act on if it is not there. The charge block was simply never given
+the same treatment.
+
+**What was built.** `payment_methods` is org-scoped master data that
+points at an LHDN mode rather than replacing it: a company has "Maybank
+cheque", "CIMB FPX", "Stripe", several of which report as the same code
+and which differ in where the money lands and what the provider keeps.
+`app.bank_charge_account` resolves method → company default → 6300 →
+a sentence. The three posting functions are restated with one line
+changed each.
+
+**Nothing moves for a company that configures nothing**, and that is
+asserted rather than argued: `supabase/tests/payment_methods.sql` posts
+a receipt, a payment and a transfer in a company with no payment method
+in existence and checks the charge landed on 6300 and the rest of the
+journal is what it was. The one behaviour that changes is the failure —
+from a constraint violation to a sentence.
+
+**The rate is recorded and not applied.** A method carries
+`charge_percent` and `charge_fixed` because "Stripe keeps 2.9% + RM1"
+is worth storing once, and `suggested_charge` computes it for the
+screen. Posting never calls it: `bank_charges` stays what somebody
+typed. A journal that depended on a master-data row which can be edited
+afterwards would stop reproducing the moment the rate changed, and
+reproducing is what a ledger is for.
+
+### 3.6 P14: the setting is live, and the missing half is not a setting
+
+Unlike `decimal_places` (§3.4), `rounding_method` is wired end to end
+and always was. It is read by `app.recalc_sales_totals` and its POS
+sibling in `0410`, mirrored in `document_editor.dart` so the screen and
+the database agree before a save, edited in `company_card.dart`, and
+shown on the company card. Nothing about the company-wide setting is
+missing.
+
+What AutoCount's "Disable / Optional / Enforce" adds is a different
+axis. It is not *how much* to round — that is the three values the
+column already holds — but *whether a document may disagree with the
+company*. "Optional" means a per-document override.
+
+**That is not a settings item, and it is the one line of this PR that
+would change what a document totals to.** Every invoice raised so far
+totals what the company setting says; introducing an override means
+some documents deliberately total something else, and there is no
+reading of the requirement that leaves existing documents alone while
+also doing anything. There is also no defect underneath it to justify
+the risk the way there was for P5 (§3.5) — nothing crashes, nothing is
+silently wrong, no column is dead.
+
+So this one stops here, as a verdict correction rather than code. It
+needs a decision on two questions that cannot be inferred from the
+schema:
+
+  * **Who may override?** A clerk raising an invoice, or only somebody
+    who can post? An override that anybody can set is a rounding policy
+    that is not a policy.
+  * **What happens to a document already raised** when the company
+    setting later changes? Today the answer is "nothing, the total is
+    stored" — the recalc only fires when a line moves. An override
+    column does not change that, but it makes the stored total's
+    provenance a question somebody will ask during an audit, and the
+    honest answer needs the override recorded on the document rather
+    than inferred.
+
 ### A separate, small PR
 
 The handoff permits settings-level items to go together. These are the
 ones the audit found genuinely missing and genuinely small, and none of
 them changes ledger behaviour:
 
-- **P5** per-company payment methods with a bank-charge account
-- **P13** decimal places per field type, rather than one company-wide
-- **P14** 5-sen rounding offered as Disable / Optional / Enforce on
-  invoices and receipts, reusing `app.round_amount` and the POS
-  rounding account
-- **P22** date and user filters on `audit_trail`
+- ~~**P5** per-company payment methods with a bank-charge account~~ — built in `0635`
+- ~~**P13** decimal places per field type, rather than one company-wide~~ — the currency half built; the company setting needs a decision, see §3.4
+- **P14** is NOT in this PR after verification: the company-wide
+  setting is complete and live, and the only missing half — a
+  per-document override — changes what a document totals to. See
+  §3.6 for the two questions it needs answered first
+- ~~**P22** date and user filters on `audit_trail`~~ — built in `0634`
 
 **P4/P16 journal types are deliberately excluded from that PR.** A
 journal type is not a setting: it decides which journal an entry lands

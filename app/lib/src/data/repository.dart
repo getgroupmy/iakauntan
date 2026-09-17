@@ -3843,6 +3843,11 @@ class Repo {
     allocations,
     String? bankAccountId,
     String? paymentModeCode,
+    /// Which of the company's own payment methods this is. Null on
+    /// every settlement before 0635 and on any company that has
+    /// configured none; the bank charge then resolves to the company
+    /// default and then to account 6300, exactly as it always did.
+    String? paymentMethodId,
     String? reference,
     double bankCharges = 0,
     String currency = 'MYR',
@@ -3872,6 +3877,7 @@ class Repo {
           'bank_charges': bankCharges,
           'bank_account_id': bankAccountId,
           'payment_mode_code': paymentModeCode,
+          'payment_method_id': paymentMethodId,
           'reference': reference,
         })
         .select()
@@ -12506,4 +12512,65 @@ extension RepoMia on Repo {
 
   Future<void> deleteMiaCredential(String id) async =>
       await callRpc('delete_mia_credential', params: {'p_id': id});
+
+}
+
+/// A company's own payment methods. 0635.
+extension RepoPaymentMethods on Repo {
+  /// The company's own payment methods, live ones only.
+  Future<List<PaymentMethod>> paymentMethods() async {
+    final data = await callRpc('payment_methods_for', params: {
+      'p_org_id': orgId,
+    });
+    return Repo._rows(data).map(PaymentMethod.fromJson).toList();
+  }
+
+  /// Create one, or amend the one [id] names.
+  ///
+  /// [chargeAccountId] null is a value, not an omission: it means this
+  /// method has no account of its own and the company's is used. The
+  /// database resolves that at posting time, so a screen does not have
+  /// to know what the fallback is.
+  Future<String> savePaymentMethod({
+    required String name,
+    String? id,
+    String? paymentModeCode,
+    String? bankAccountId,
+    String? chargeAccountId,
+    double chargePercent = 0,
+    double chargeFixed = 0,
+    bool isDefault = false,
+    bool isActive = true,
+    int sortOrder = 0,
+    String? notes,
+  }) async =>
+      (await callRpc('save_payment_method', params: {
+        'p_org_id': orgId,
+        'p_name': name,
+        'p_id': id,
+        'p_payment_mode_code': paymentModeCode,
+        'p_bank_account_id': bankAccountId,
+        'p_charge_account_id': chargeAccountId,
+        'p_charge_percent': chargePercent,
+        'p_charge_fixed': chargeFixed,
+        'p_is_default': isDefault,
+        'p_is_active': isActive,
+        'p_sort_order': sortOrder,
+        'p_notes': notes,
+      })).toString();
+
+  /// Retire one. Soft, because receipts already name it.
+  Future<void> archivePaymentMethod(String id) async =>
+      await callRpc('archive_payment_method', params: {'p_id': id});
+
+  /// What this method's stated rate comes to on [amount].
+  ///
+  /// Asked of the database rather than computed here, so the rule lives
+  /// in one place. It is a suggestion for the screen: posting uses what
+  /// the document says, never this.
+  Future<double> suggestedCharge(String methodId, double amount) async =>
+      Fmt.toDouble(await callRpc('suggested_charge', params: {
+        'p_payment_method_id': methodId,
+        'p_amount': amount,
+      }));
 }

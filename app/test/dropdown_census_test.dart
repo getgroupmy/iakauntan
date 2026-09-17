@@ -75,9 +75,19 @@ const dropdownCensus = <String, int>{
   'features/crm/leads_screen.dart': 1,
   'features/crm/pipeline_screen.dart': 1,
   'features/documents/repeat_dialog.dart': 1,
-  'features/documents/settlement_dialog.dart': 1,
+  // Two, since 0635: LHDN's eight modes for a company with no payment
+  // methods of its own, and the company's own methods where it has
+  // any. Both are fixed sets a person chooses from — a company has a
+  // handful of methods, not a list it searches — and only one of the
+  // two is ever built.
+  'features/documents/settlement_dialog.dart': 2,
   'features/documents/share_dialog.dart': 1,
   'features/documents/withholding_dialog.dart': 1,
+  // The eight MyInvois payment modes, fixed by LHDN. The bank account
+  // and the charge account beside it are SearchablePickers, because a
+  // chart of accounts grows and this one offers every expense account
+  // in it.
+  'features/settings/payment_methods_card.dart': 1,
   'features/expenses/expenses_screen.dart': 1,
   'features/feedback/feedback_screen.dart': 3,
   'features/financials/filing_details.dart': 3,

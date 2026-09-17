@@ -39,6 +39,7 @@ import '../auth/phone_number.dart';
 import '../auth/reset_cooldown.dart' show looksLikeAnAddress;
 import 'bank_feeds_card.dart';
 import 'bank_rules_card.dart';
+import 'payment_methods_card.dart';
 import 'collect_payments_card.dart';
 import 'contact_changes.dart';
 import 'einvoice_credentials.dart';
@@ -919,6 +920,10 @@ class _BillingSection extends StatelessWidget {
         // subscription card, which is drawn for an owner or admin
         // whatever this company does about scanning.
         const _WaysToPay(),
+        const SizedBox(height: Space.lg),
+        // Above the acquirer, because a method is the thing a receipt
+        // names and the acquirer is one way of providing one.
+        const PaymentMethodsCard(),
         const SizedBox(height: Space.lg),
         const CollectPaymentsCard(),
         const SizedBox(height: Space.lg),

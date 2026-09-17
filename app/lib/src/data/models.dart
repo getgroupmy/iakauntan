@@ -3572,3 +3572,63 @@ const quickAddHasCode = <QuickAddList, bool>{
   QuickAddList.outlet: true,
   QuickAddList.pipeline: false,
 };
+
+/// One of a company's own payment methods.
+///
+/// `0635`. Not to be confused with `ref_payment_modes`, which holds
+/// LHDN's eight codes and is platform-wide. This is "Maybank cheque",
+/// "Stripe", "Cash at the counter" — several of which report as the
+/// same LHDN code, and which differ in the two things LHDN does not
+/// ask about and the ledger does: where the money lands, and what the
+/// provider keeps.
+class PaymentMethod {
+  PaymentMethod({
+    required this.id,
+    required this.name,
+    this.paymentModeCode,
+    this.bankAccountId,
+    this.chargeAccountId,
+    this.chargePercent = 0,
+    this.chargeFixed = 0,
+    this.isDefault = false,
+    this.isActive = true,
+    this.sortOrder = 0,
+    this.notes,
+  });
+
+  final String id;
+  final String name;
+
+  /// The `ref_payment_modes` code an e-Invoice reports this as. Null
+  /// for a company not yet on e-Invoice, which has no reason to be
+  /// asked.
+  final String? paymentModeCode;
+
+  final String? bankAccountId;
+
+  /// Where this method's bank charge is debited. Null is not a gap to
+  /// be filled: it means "use the company's", and the database
+  /// resolves it to the default method's account and then to 6300.
+  final String? chargeAccountId;
+
+  final double chargePercent;
+  final double chargeFixed;
+  final bool isDefault;
+  final bool isActive;
+  final int sortOrder;
+  final String? notes;
+
+  factory PaymentMethod.fromJson(Map<String, dynamic> j) => PaymentMethod(
+    id: j['id'] as String,
+    name: j['name']?.toString() ?? '',
+    paymentModeCode: j['payment_mode_code'] as String?,
+    bankAccountId: j['bank_account_id'] as String?,
+    chargeAccountId: j['charge_account_id'] as String?,
+    chargePercent: Fmt.toDouble(j['charge_percent']),
+    chargeFixed: Fmt.toDouble(j['charge_fixed']),
+    isDefault: j['is_default'] == true,
+    isActive: j['is_active'] != false,
+    sortOrder: (j['sort_order'] as num?)?.toInt() ?? 0,
+    notes: j['notes'] as String?,
+  );
+}

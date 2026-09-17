@@ -1970,6 +1970,12 @@ final auditTrailProvider = FutureProvider.autoDispose<List<AuditEntry>>((ref) {
   );
 });
 
+/// A company's own payment methods. 0635.
+final paymentMethodsProvider =
+    FutureProvider.autoDispose<List<PaymentMethod>>((ref) {
+      return requireRepo(ref).paymentMethods();
+    });
+
 /// Who appears in the change history, for the filter's dropdown.
 final auditTrailActorsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {

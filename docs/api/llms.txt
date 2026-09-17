@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0634` (the highest applied migration).
-716 functions and 343 readable tables, of which
-269 functions only read.
+Schema version `0635` (the highest applied migration).
+720 functions and 344 readable tables, of which
+271 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**576 of 716 functions carry a `comment on
+**580 of 720 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (505)
+### general (509)
 
 Not gated on any module.
 
@@ -392,6 +392,7 @@ Not gated on any module.
 - `apply_tax_submission(p_submission_id uuid)` *(writes)* — Accepts a customer's submitted tax details over what the contact already held.
 - `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
 - `approve_budget(p_id uuid)` *(writes)* — Agrees a draft budget, which is the act that makes it the thing variances are measured against.
+- `archive_payment_method(p_id uuid)` *(writes)* — Retires a payment method without breaking the documents that name it.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
 - `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)* — Appoints a practice to keep this company's books, and returns how many access rows that came to.
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
@@ -630,6 +631,7 @@ Not gated on any module.
 - `pay_from_client_account(p_matter uuid, p_amount numeric, p_payee text, p_date date, p_description text, p_reference text, p_payment_mode text, p_refund boolean)` *(writes)* — A disbursement paid out of client money for a matter, or the refund of what is left at the end of one.
 - `payment_batch_lines(p_batch uuid)`
 - `payment_gateways_for(p_country text)` — The gateways this platform has switched on that sell in a given country, named in alpha-2 or alpha-3.
+- `payment_methods_for(p_org_id uuid)` — A company's payment methods, live ones first by sort order.
 - `payroll_payment_instruction(p_run_id uuid)` — The rows a bank needs to pay a posted run, with anything that would be rejected flagged rather than silently omitted.
 - `pending_tax_submissions(p_org_id uuid)` — Customer tax-detail submissions that disagree with what the contact holds, with both sides of each disagreement.
 - `place_public_pos_order(p_token text, p_items jsonb, p_name text, p_phone text, p_note text, p_line1 text, p_line2 text, p_city text, p_state text, p_postcode text)` *(writes)* — Places an order from a published menu.
@@ -791,6 +793,7 @@ Not gated on any module.
 - `run_depreciation(p_org_id uuid, p_as_at date)` *(writes)* — Charges depreciation on every active asset up to a date, posts one journal grouped by expense and accumulated account, and returns the run.
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)* — Raises every recurring document due on or before a date for ONE company, and returns how many.
 - `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)* — The same for recurring journals, one company, returning how many were advanced.
+- `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
 - `security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` *(writes)* — Returns who signed in, from what address, who exported, who read something sensitive and who was refused.
 - `security_summary(p_org_id uuid, p_days integer)`
@@ -847,6 +850,7 @@ Not gated on any module.
 - `suggest_bank_coding(p_transaction_id uuid)` — The first rule that describes this bank line, and what it says to code it as.
 - `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)`
 - `suggest_lots(p_item_id uuid, p_warehouse_id uuid, p_quantity numeric)`
+- `suggested_charge(p_payment_method_id uuid, p_amount numeric)` — What a payment method's stated rate comes to on this amount.
 - `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
 - `trace_lot(p_org_id uuid, p_lot_id uuid)`
 - `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` *(writes)* — Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together.
@@ -1079,6 +1083,7 @@ inconsistent.
 - `payment_allocations`
 - `payment_batches`
 - `payment_gateways`
+- `payment_methods`
 - `payment_terms`
 - `payroll_runs`
 - `payroll_settings`

@@ -60,6 +60,18 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
   String? _contactId;
   String? _bankAccountId;
   String _paymentMode = '03';
+
+  /// Which of the company's own payment methods this is, when it has
+  /// any. Null is the ordinary state for a company that has configured
+  /// none, and the dropdown then offers LHDN's modes exactly as it did
+  /// before `0635`.
+  String? _paymentMethodId;
+
+  /// What the chosen method's rate comes to on the allocated amount,
+  /// asked of the database. Offered under the charges field rather
+  /// than written into it: a suggestion that overwrites a figure
+  /// somebody typed is not a suggestion.
+  double? _suggestedCharge;
   DateTime _date = DateTime.now();
   bool _saving = false;
 
@@ -141,6 +153,28 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
 
   double get _bankCharges => double.tryParse(_charges.text) ?? 0;
 
+  /// Recompute the offer after the method or the amount changes.
+  ///
+  /// `suggested_charge` is a database function so the rate lives in one
+  /// place. It is a suggestion in the strict sense: what posts is
+  /// always `bank_charges` as typed, which is what the ledger can
+  /// reproduce.
+  Future<void> _refreshSuggestion() async {
+    final id = _paymentMethodId;
+    if (id == null || _allocated <= 0) {
+      if (mounted) setState(() => _suggestedCharge = null);
+      return;
+    }
+    try {
+      final v = await ref.read(repoProvider)!.suggestedCharge(id, _allocated);
+      if (mounted) setState(() => _suggestedCharge = v > 0 ? v : null);
+    } catch (_) {
+      // A company that cannot reach the server still has a working
+      // charges field. The suggestion is the part that goes quiet.
+      if (mounted) setState(() => _suggestedCharge = null);
+    }
+  }
+
   /// The documents money is actually being applied to.
   List<BusinessDocument> _allocatedDocs(List<BusinessDocument> open) => [
         for (final d in open)
@@ -210,6 +244,7 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
             date: _date,
             bankAccountId: _bankAccountId,
             paymentModeCode: _paymentMode,
+            paymentMethodId: _paymentMethodId,
             reference: _reference.text.trim().isEmpty
                 ? null
                 : _reference.text.trim(),
@@ -460,6 +495,8 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
         const <Contact>[];
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
+    // A company's own payment methods, where it has any. 0635.
+    final methods = ref.watch(paymentMethodsProvider).valueOrNull ?? const [];
 
     // The currency is not the user's to choose: it is whatever the
     // documents being settled were raised in, and the ledger refuses a
@@ -549,7 +586,14 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 discounts: _discounts,
                 offers: _offers,
                 preselect: widget.preselectDocumentId,
-                onChanged: () => setState(() {}),
+                // The suggested charge is a percentage OF the allocated
+                // amount, so ticking another invoice moves it. Without
+                // this the offer under the charges field would quietly
+                // describe an amount that is no longer on screen.
+                onChanged: () {
+                  setState(() {});
+                  _refreshSuggestion();
+                },
               ),
               if (currency.conflict != null) ...[
                 const SizedBox(height: 14),
@@ -594,21 +638,63 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _paymentMode,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Method'),
-                    items: [
-                      for (final m in modes)
-                        DropdownMenuItem(
-                          value: m['code'] as String,
-                          child: Text(m['description'] as String,
-                              overflow: TextOverflow.ellipsis),
+                  // A company with its own payment methods picks one of
+                  // those; the LHDN mode comes with it, because a
+                  // method names the mode it reports as. A company with
+                  // none sees exactly what it saw before 0635.
+                  child: methods.isEmpty
+                      ? DropdownButtonFormField<String>(
+                          key: const ValueKey('settlement-mode'),
+                          value: _paymentMode,
+                          isExpanded: true,
+                          decoration:
+                              const InputDecoration(labelText: 'Method'),
+                          items: [
+                            for (final m in modes)
+                              DropdownMenuItem(
+                                value: m['code'] as String,
+                                child: Text(m['description'] as String,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _paymentMode = v ?? '03'),
+                        )
+                      : DropdownButtonFormField<String?>(
+                          key: const ValueKey('settlement-method'),
+                          value: _paymentMethodId,
+                          isExpanded: true,
+                          decoration:
+                              const InputDecoration(labelText: 'Method'),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('Not stated'),
+                            ),
+                            for (final m in methods)
+                              DropdownMenuItem(
+                                value: m.id,
+                                child: Text(m.name,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              _paymentMethodId = v;
+                              final picked = methods
+                                  .where((m) => m.id == v)
+                                  .firstOrNull;
+                              // The mode the method reports as. Left
+                              // alone where the method has none, rather
+                              // than reset to 03: an unset mode on a
+                              // method is not a claim that this was a
+                              // bank transfer.
+                              final mode = picked?.paymentModeCode;
+                              if (mode != null) _paymentMode = mode;
+                            });
+                            _refreshSuggestion();
+                          },
                         ),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _paymentMode = v ?? '03'),
-                  ),
                 ),
               ]),
               const SizedBox(height: 12),
@@ -644,6 +730,23 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                   ),
                 ),
               ]),
+              if (_suggestedCharge != null &&
+                  _suggestedCharge != _bankCharges)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    key: const ValueKey('settlement-use-suggested'),
+                    onPressed: () {
+                      _charges.text = _suggestedCharge!.toStringAsFixed(2);
+                      setState(() {});
+                    },
+                    child: Text(
+                      'This method usually charges '
+                      '${Fmt.money(_suggestedCharge!, currency: currency.code)}'
+                      ' — use it',
+                    ),
+                  ),
+                ),
               if (isForeign) ...[
                 const SizedBox(height: 12),
                 TextField(
