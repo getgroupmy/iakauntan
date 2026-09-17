@@ -8,29 +8,47 @@ security argument and the reason it is worth the setup below.
 
 None of it works until somebody with a dashboard password does four things,
 and a button drawn before they have is a button that fails for everybody who
-presses it. That is why `signin_show_passkey` ships **off**.
+presses it. That is why all three switches ship **off**.
+
+**Three switches, one per surface** (`0638`). `signin_show_passkey` is the
+website's; `signin_show_passkey_android` and `signin_show_passkey_ios` are the
+two apps'. They are separate because the three surfaces need three different
+things done to them — the dashboard setting below applies to all of them,
+Android additionally needs `assetlinks.json`, iOS additionally needs an
+entitlement and an `apple-app-site-association` — and those are finished on
+different days by different people. One switch would mean the first surface to
+be ready turning the button on for the two that are not.
 
 ## What is already built
 
-* **The database.** `signin_show_passkey` is a column on the landing page,
-  read into `brand` so the sign-in screen sees it whether or not a marketing
-  site has been published. Migration `0579`.
-* **The console.** Platform console → Site pages → "Offer a passkey".
+* **The database.** Three columns on the landing page — `signin_show_passkey`
+  (`0579`) and `signin_show_passkey_android` / `signin_show_passkey_ios`
+  (`0638`) — read into `brand` so the sign-in screen sees them whether or not
+  a marketing site has been published.
+* **The console.** Platform console → Site pages → Sign-in, three switches.
 * **The web.** `passkey_web.dart` calls the browser's own WebAuthn JSON
   converters. Nothing to install.
 * **Saving one.** Settings → Your account → Passkeys. Lists what is
   saved, with the authenticator's own name and when it was last used,
   and removes one — a passkey on a laptop that has since been sold is a
   key somebody else is holding, so the list IS the revocation.
-* **The phone.** NOT SHIPPED. See the section at the bottom — the obvious
-  plugin cannot be added to this app without taking the web build down
-  with it, and it did.
+* **The phone.** Shipped. `passkey_native.dart` over Corbado's `passkeys`
+  plugin, with the web half kept out of the bundle by a local no-op —
+  see the section at the bottom, which is the second attempt at this
+  and explains what the first one did to production.
 
-The button appears only when all three of these are true: the switch is on,
-the platform can reach an authenticator, and — the one nobody can see from
-the app — passkeys are enabled for the Supabase project. It is *absent*
-rather than disabled when any is missing, because a disabled control invites
-somebody to work out why and there is nothing they can do about any of them.
+The button appears only when all three of these are true: the switch FOR THIS
+SURFACE is on, the platform can reach an authenticator, and — the one nobody
+can see from the app — passkeys are enabled for the Supabase project. It is
+*absent* rather than disabled when any is missing, because a disabled control
+invites somebody to work out why and there is nothing they can do about any of
+them.
+
+On a phone there is a fourth, and it is the one that cannot be checked before
+somebody presses: the domain has to be associated with the build. That is
+sections 3 and 4 below. When it is not, `passkey_native.dart` turns the
+platform's refusal into a sentence rather than letting it be a button that does
+nothing.
 
 ## 1. Supabase dashboard
 
@@ -91,11 +109,19 @@ has done this, the sign-in button is a door with nothing behind it —
 `startAuthentication` offers whichever accounts hold a passkey for this
 site, and that is none of them.
 
-## 2. The console switch
+## 2. The console switches
 
-Platform console → Site pages → Sign-in → **Offer a passkey**. Off until
-step 1 is done. There is no harm in it being on afterwards: a browser with
-no authenticator still draws nothing.
+Platform console → Site pages → Sign-in. Three of them:
+
+* **Offer a passkey** — the website. Off until step 1 is done. There is no
+  harm in it being on afterwards: a browser with no authenticator still draws
+  nothing.
+* **Offer a passkey in the Android app** — off until step 1 AND section 3.
+* **Offer a passkey in the iOS app** — off until step 1 AND section 4.
+
+Turning one on does not turn the others on, which is the point of there being
+three. Turning the website's on when the two association files do not exist
+would draw a button in both apps that does nothing at all.
 
 ## 3. Android
 
@@ -157,10 +183,23 @@ associated domain during development bypasses the cache; it must not ship.
 
 Both live under `/.well-known/` on the same origin as the site. Flutter
 copies anything in `app/web/` into the build, so `app/web/.well-known/` is
-where they go — with `vercel-output-config.json` given a `Content-Type` of
-`application/json` for both, since neither has a `.json` extension in the
-iOS case and a static host will otherwise serve it as `text/plain`, which
-Apple rejects.
+where they go.
+
+**The Content-Type is already arranged.** `deploy/vercel-output-config.json`
+serves both paths as `application/json`. That route is in place ahead of the
+files, because `apple-app-site-association` has no extension and a static host
+serves it as `text/plain` by default, which Apple rejects — a correct file
+served with the wrong type fails in a way that looks identical to a wrong
+file, and Apple's CDN then caches the failure for about a day.
+
+**The files themselves are NOT in this repository, deliberately.** Neither can
+be written from here: `assetlinks.json` needs the SHA-256 of the upload key
+AND of the Play App Signing certificate, and `apple-app-site-association`
+needs the Apple team ID. A placeholder for either is worse than nothing — it
+is a file that says the association is configured while failing every
+ceremony, which is precisely the silent failure the rest of this document is
+about. Write them with the real values, drop them in `app/web/.well-known/`,
+then turn the matching console switch on.
 
 ## When it does not work
 
@@ -174,12 +213,16 @@ A debug build goes further: the `passkeys` plugin's doctor runs only when
 above and prints what it found wrong with them. A release build makes no
 such call.
 
-## Why the phone is still not done
+## How the phone was done, and what the first attempt did
 
-The obvious route is the `passkeys` plugin (Corbado). It was added, it
-worked, and it white-screened production the moment it deployed. The
-reason is worth writing down, because nothing about it is visible from
-the pub page, from `flutter analyze`, or from a successful
+The route is the `passkeys` plugin (Corbado) — there is no other. A WebAuthn
+ceremony on a phone needs a platform plugin: Android's Credential Manager and
+iOS's `ASAuthorization` are native APIs, and a webview cannot stand in for
+them the way `captcha.html` does for Turnstile.
+
+It was added once before. It worked, and it white-screened production the
+moment it deployed. The reason is worth writing down, because nothing about it
+is visible from the pub page, from `flutter analyze`, or from a successful
 `flutter build web`.
 
 `passkeys` declares a **web** implementation, `passkeys_web`. Flutter
@@ -213,21 +256,37 @@ did not open anyway.
 None of the local gates catch this. `flutter build web` compiles it
 happily — the failure is a missing JS global at runtime, in a browser.
 
-### What a second attempt has to do
+### What the second attempt did
 
-Keep `passkeys_web` out of the bundle. The supportable way is a
-`dependency_overrides` entry pointing `passkeys_web` at a local no-op
-package that implements `PasskeysPlatform` and registers without touching
-any JS. The web half of this app has never needed the plugin — it calls
-the browser's own WebAuthn through `passkey_web.dart` — so a no-op there
-loses nothing.
+`dependency_overrides` points `passkeys_web` at
+`app/packages/passkeys_web`, a local package that implements
+`PasskeysPlatform`, registers, and does nothing else. The web half of this app
+has never needed the plugin — it calls the browser's own WebAuthn through
+`passkey_web.dart` — so a no-op there loses nothing.
 
-Whatever the approach, the test that would have caught this is the one to
-write first: build for web and assert that
-`.dart_tool/flutter_build/*/web_plugin_registrant.dart` does not mention
-`passkeys_web`.
+**The override does not remove the name from the generated registrant, and
+the first version of the tripwire was wrong about that.** `passkeys` federates
+by `default_package`, so Flutter emits
+`import 'package:passkeys_web/passkeys_web.dart';` and
+`PasskeysWeb.registerWith(registrar)` whichever package that turns out to be.
+The override changes what the name RESOLVES to, and the generated file is
+identical either way. A check on the name is both wrong answers at once: it
+refuses a bundle that is safe, and it would pass one that is not if the plugin
+were ever reached under a different name.
 
-**That tripwire is laid.** `scripts/check_web_plugin_registrant.py` runs
+What decides is `.dart_tool/package_config.json`, which records where `pub`
+put each package. That is what the tripwire reads now — and it also reads the
+local package's source and refuses it if it has grown any JS, because an
+override pointing at a path is only as good as what is at the path.
+
+The sentence that used to be here — "the test that would have caught this is
+the one to write first: build for web and assert the registrant does not
+mention `passkeys_web`" — is the test that was written, and it gave the wrong
+answer the day the plugin came back.
+
+### The two gates
+
+**The tripwire.** `scripts/check_web_plugin_registrant.py` runs
 in the Flutter job on every commit, and it asks the question one step
 earlier than the sentence above: the generated registrant only exists
 after a web build, which in this repository happens in the deploy job —
@@ -242,7 +301,29 @@ web` has left one, and says which of the two answers it gave — a check
 that reports success for a file it never found is how a gate stops
 meaning anything.
 
-Verified against three pubspecs: the plugin added with no override (the
-commit that broke production), the plugin with a version override (the
-near miss), and the plugin with a local no-op (the supported way). It
-refuses the first two and passes the third.
+Verified against five states: the plugin with no override (the commit that
+broke production), with a version override (the near miss), with a local
+package that is not a no-op, with the registrant resolving to the published
+`passkeys_web`, and the supported arrangement. It refuses the first four and
+passes the fifth.
+
+**And the general answer.** `scripts/check_web_boots.py` opens the built
+bundle in a real browser and asks whether Flutter drew anything:
+
+```
+cd app && flutter build web --release
+python3 scripts/check_web_boots.py
+```
+
+It needs a Chromium (`CHROME=`, default the Playwright one) and
+`websocket-client`. It serves the SDK's own CanvasKit beside a copy of the
+build, because a release bundle otherwise fetches it from `gstatic.com` and a
+network that refuses that gives a blank page for a reason that is not the
+code — the first version of this check reported a white screen on a bundle
+that was fine. Network errors from the app's own back end are ignored; an
+uncaught exception is not.
+
+It is not in CI: it needs a web build, which happens only in the deploy job,
+which is where the white screen already fired. It is the check to run by hand
+before adding any plugin. Verified by injecting a throwing statement into the
+bootstrap and watching it refuse, then removing it and watching it pass.

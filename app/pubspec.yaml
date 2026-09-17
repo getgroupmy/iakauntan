@@ -126,6 +126,31 @@ dependencies:
   # engine code is unchanged apart from the import — and it tracks
   # `flutter_webrtc ^1.5.2`, so nothing else here is held back.
   mediasfu_mediasoup_client: ^0.1.4
+  # Passkeys on Android and iOS. Corbado's plugin, which is the only
+  # maintained route to Credential Manager and ASAuthorization from
+  # Flutter -- there is no way to run a WebAuthn ceremony on a phone
+  # without a platform plugin, and a webview cannot do it either.
+  #
+  # PINNED EXACTLY, and it matters. 2.22.0 and up require Flutter
+  # 3.35.0; ci.yml pins 3.32.0, deliberately, with the reason given
+  # there. A caret here resolves to the newest on a developer's newer
+  # SDK and fails `pub get` in CI -- green where it was typed, red
+  # where it is checked, which is the worst shape a version
+  # constraint can have. 2.21.1 is the last release that names 3.32.0.
+  #
+  # `passkeys_platform_interface` is named beside it because
+  # `passkey_native.dart` imports its types directly, and a transitive
+  # dependency is not a promise.
+  #
+  # AND SEE `dependency_overrides` BELOW. Adding this plugin without
+  # that override white-screened production once: `passkeys` federates
+  # `passkeys_web`, Flutter enrols it into the WEB bundle, and its
+  # registrant calls a JS global this app does not load -- before
+  # `runApp`, so every page goes blank. `docs/passkeys.md` has the
+  # whole story and `scripts/check_web_plugin_registrant.py` is the
+  # tripwire.
+  passkeys: 2.21.1
+  passkeys_platform_interface: ^2.8.0
   # The signalling socket. Already present transitively through
   # supabase_flutter; named here because `call_engine.dart` imports it
   # directly and a transitive dependency is not a promise.
@@ -142,6 +167,34 @@ dev_dependencies:
   # imports it directly. Deliberately a dev dependency: no shipped code
   # decodes a PNG at runtime.
   image: ^4.5.4
+
+# The one override in this file, and it is load-bearing.
+#
+# `passkeys` federates a WEB implementation, `passkeys_web`, and
+# Flutter generates `web_plugin_registrant.dart` from the platform
+# declarations of every package in the tree. So adding the plugin FOR A
+# PHONE silently enrols the web half into the web bundle as well. There
+# is no per-platform dependency in a pubspec and nothing asks whether
+# you wanted it.
+#
+# The real `PasskeysWeb.registerWith` ends in an unconditional call to
+# a JS global from Corbado's `bundle.js`. This app does not load that
+# file and `script-src 'self'` would refuse it if it tried, so the call
+# throws inside `registerPlugins()` -- which runs BEFORE `runApp`. Every
+# page of the app goes blank, the landing page included. It shipped
+# that way once.
+#
+# This points the package at a local no-op that registers and does
+# nothing else. Nothing is lost: the web half of this app has never
+# used the plugin, it calls the browser's own WebAuthn through
+# `passkey_web.dart`, which is also why it survives a strict CSP.
+#
+# `scripts/check_web_plugin_registrant.py` refuses a `passkeys`
+# dependency without this, and refuses a VERSION override in place of a
+# `path:` one -- a version override is still the real implementation.
+dependency_overrides:
+  passkeys_web:
+    path: packages/passkeys_web
 
 flutter:
   uses-material-design: true

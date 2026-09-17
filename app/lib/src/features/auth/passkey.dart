@@ -7,10 +7,15 @@
 /// ending `signInWithPassword` has. Nothing here signs a token and no
 /// secret leaves the Supabase dashboard.
 ///
-/// ## Three things have to be true before the button appears
+/// ## Four things have to be true before the button works
 ///
-///   1. `signin_show_passkey` is on in the platform console. It ships
-///      OFF, because of (2).
+///   1. The console switch FOR THIS SURFACE is on. There are three of
+///      them -- `signin_show_passkey` for the website,
+///      `signin_show_passkey_ios` and `signin_show_passkey_android`
+///      for the apps (`0638`) -- because the three surfaces need
+///      three different things done to them and those are finished on
+///      different days. `core/surface.dart` picks. All three ship
+///      OFF, because of (2), and the apps have a (4) as well.
 ///   2. Passkeys are switched on for the project in the Supabase
 ///      dashboard. Until they are, GoTrue answers `passkey_disabled`
 ///      to every call, so a button drawn before that fails for
@@ -19,11 +24,22 @@
 ///      `passkeysUsable()`, which asks whether there is a
 ///      user-verifying authenticator on the machine.
 ///
-/// The first is a decision, the second is a dashboard switch, and the
-/// third is a fact about the device. All three are needed, and the
-/// button is absent rather than disabled when any is missing: a
-/// disabled control invites somebody to work out why, and there is
-/// nothing they can do about any of these.
+///   4. On a phone only: the domain has to be ASSOCIATED with the
+///      build. `assetlinks.json` on Android naming the package and
+///      both signing certificates; an Associated Domains entitlement
+///      plus `apple-app-site-association` on iOS. Neither of these is
+///      in the app and neither can be checked from it before somebody
+///      presses the button -- which is exactly why
+///      `passkey_native.dart` turns the platform's refusal into a
+///      sentence rather than letting it be a button that does
+///      nothing. `docs/passkeys.md` is the list.
+///
+/// The first is a decision, the second is a dashboard switch, the
+/// third is a fact about the device and the fourth is a file on a web
+/// server. The first three are needed before the button is drawn, and
+/// it is absent rather than disabled when any is missing: a disabled
+/// control invites somebody to work out why, and there is nothing they
+/// can do about any of these.
 ///
 /// ## No identifier is typed
 ///
@@ -37,11 +53,14 @@ library;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'passkey_failure.dart';
-import 'passkey_stub.dart' if (dart.library.js_interop) 'passkey_web.dart';
+import 'passkey_stub.dart'
+    if (dart.library.js_interop) 'passkey_web.dart'
+    if (dart.library.io) 'passkey_native.dart';
 
 export 'passkey_failure.dart' show PasskeyFailure;
 export 'passkey_stub.dart'
     if (dart.library.js_interop) 'passkey_web.dart'
+    if (dart.library.io) 'passkey_native.dart'
     show passkeysAvailable, passkeysUsable;
 
 /// What came of trying to sign in with a passkey.
@@ -87,7 +106,18 @@ Future<PasskeyResult> enrolPasskey(GoTrueClient auth) async {
     );
   }
 
-  final credential = await createPasskeyCredential(options);
+  final Map<String, dynamic>? credential;
+  try {
+    credential = await createPasskeyCredential(options);
+  } on PasskeyFailure catch (e) {
+    // The same refusal [signInWithPasskey] catches, on the enrolment
+    // half. It was not caught here at first, and the mistake would
+    // have been worse on this side than on that one: this is the
+    // screen somebody is sent to in order to MAKE their first passkey,
+    // and an uncaught exception there is a red screen rather than a
+    // sentence about a file on a web server.
+    return (outcome: PasskeyOutcome.failed, message: e.message);
+  }
   if (credential == null) {
     return (outcome: PasskeyOutcome.cancelled, message: null);
   }
