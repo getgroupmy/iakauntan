@@ -35,6 +35,7 @@ class JournalDraft {
     this.debit = 0,
     this.credit = 0,
     this.projectCode,
+    this.departmentCode,
   });
 
   String? accountId;
@@ -47,6 +48,20 @@ class JournalDraft {
   /// field could not express it.
   String? projectCode;
 
+  /// The same, for departments, and for the same reason: the journal
+  /// that moves a cost from Sales to Marketing touches both, on two
+  /// lines.
+  ///
+  /// `gl_lines.department_code` has been there since the dimensions
+  /// went in and `create_gl_entry_internal` has always read
+  /// `department_code` off each line's JSON. Nothing sent it. So the
+  /// P&L's department filter was answering a question about costs
+  /// posted through documents while silently omitting every cost
+  /// hand-written through a journal — a shortfall that looks like a
+  /// department underspending rather than like a missing figure, which
+  /// is the worst way for a report to be wrong.
+  String? departmentCode;
+
   bool get isEmpty => accountId == null && debit == 0 && credit == 0;
 
   Map<String, dynamic> toJson() => {
@@ -55,6 +70,7 @@ class JournalDraft {
         'debit': debit,
         'credit': credit,
         if (projectCode != null) 'project_code': projectCode,
+        if (departmentCode != null) 'department_code': departmentCode,
       };
 }
 
@@ -116,6 +132,8 @@ class _JournalEditorState extends ConsumerState<_JournalEditor> {
   @override
   Widget build(BuildContext context) {
     final accounts = ref.watch(accountsProvider).valueOrNull ?? const <Account>[];
+    final departments = ref.watch(departmentsProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
     final projects = ref.watch(projectsProvider).valueOrNull ??
         const <Map<String, dynamic>>[];
     final problem = journalProblem(_lines);
@@ -177,6 +195,7 @@ class _JournalEditorState extends ConsumerState<_JournalEditor> {
                   line: _lines[i],
                   accounts: accounts,
                   projects: projects,
+                  departments: departments,
                   narrow: narrow,
                   onChanged: () => setState(() {}),
                   onRemove: _lines.length > 2
@@ -272,6 +291,7 @@ class _JournalLineRow extends StatefulWidget {
     required this.line,
     required this.accounts,
     required this.projects,
+    required this.departments,
     required this.narrow,
     required this.onChanged,
     this.onRemove,
@@ -280,6 +300,7 @@ class _JournalLineRow extends StatefulWidget {
   final JournalDraft line;
   final List<Account> accounts;
   final List<Map<String, dynamic>> projects;
+  final List<Map<String, dynamic>> departments;
   final bool narrow;
   final VoidCallback onChanged;
   final VoidCallback? onRemove;
@@ -370,6 +391,30 @@ class _JournalLineRowState extends State<_JournalLineRow> {
             },
           );
 
+    // And the same for departments, on the same condition. A company
+    // that has never created one gets neither control rather than two
+    // empty ones.
+    final department = widget.departments.isEmpty
+        ? null
+        : SearchablePicker<String>(
+            options: [
+              for (final d in widget.departments)
+                PickerOption<String>(
+                  value: d['code'] as String,
+                  label: '${d['name']}',
+                  sublabel: '${d['code']}',
+                  keywords: ['${d['code']}'],
+                ),
+            ],
+            value: widget.line.departmentCode,
+            label: 'Department',
+            allowEmpty: true,
+            onChanged: (v) {
+              widget.line.departmentCode = v;
+              widget.onChanged();
+            },
+          );
+
     final debit = TextField(
       controller: _debit,
       textAlign: TextAlign.right,
@@ -404,6 +449,10 @@ class _JournalLineRowState extends State<_JournalLineRow> {
               const SizedBox(height: 8),
               project,
             ],
+            if (department != null) ...[
+              const SizedBox(height: 8),
+              department,
+            ],
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: debit),
@@ -422,10 +471,19 @@ class _JournalLineRowState extends State<_JournalLineRow> {
         children: [
           Expanded(flex: 3, child: account),
           const SizedBox(width: 8),
-          Expanded(flex: project == null ? 3 : 2, child: description),
+          // The narrative gives up room as dimensions appear. It is the
+          // field that reads fine truncated -- a code does not.
+          Expanded(
+            flex: 3 - [project, department].whereType<Widget>().length,
+            child: description,
+          ),
           if (project != null) ...[
             const SizedBox(width: 8),
             Expanded(flex: 2, child: project),
+          ],
+          if (department != null) ...[
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: department),
           ],
           const SizedBox(width: 8),
           SizedBox(width: 110, child: debit),

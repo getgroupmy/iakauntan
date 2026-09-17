@@ -1920,19 +1920,60 @@ Stated plainly so nothing here is mistaken for finished:
 ### Built, but not reachable from the app
 
 Worse than unbuilt, because the schema suggests otherwise.
-`docs/gaps-against-autocount.md` has the detail; the short version is
-that four capabilities exist in the database with **zero references in
-`app/lib`**:
+`docs/gaps-against-autocount.md` has the detail.
 
-- **Multi-currency.** `ref_currencies`, `exchange_rates` and a `currency`
-  and `exchange_rate` on every document and journal. The editor holds
-  `_currency`, reads it from a saved document and writes it back, but no
-  widget ever changes it — so no foreign-currency document can be raised,
-  and there is no revaluation function to restate balances if one could be
-- ~~**Project and department dimensions.**~~ Both are now written from
-  the document header and read by the P&L's dimension filter. See
-  `docs/departmental-accounting.md`, which also names what is still not
-  covered: expenses and manual journals offer no department, so costs
-  arriving by those two routes are under-reported by department
-- **Price levels.** `price_levels` and `item_prices`, unused by the line
-  editor
+This list was four items and is now one, and three of them were not
+closed by building anything — they were closed by *checking*. Two had
+been built and the list never caught up; the third was half true. That
+is the failure mode this section is itself prone to, so each entry below
+now says what was verified rather than what was believed:
+
+- ~~**Multi-currency.**~~ Stale on both counts, and checked rather than
+  re-read: the document editor's header carries an
+  `onCurrencyChanged: _changeCurrency`, so a foreign-currency document
+  can be raised; and `revalue_foreign_balances` exists, reachable from
+  Settings → "Post revaluation". `_changeCurrency` drops any typed rate
+  when the currency moves, which is the part worth knowing — a rate
+  typed for dollars is not a rate for euros, and carrying it across
+  would be the same silent mis-statement as defaulting to 1
+- ~~**Project and department dimensions.**~~ Both are written from the
+  document header and read by the P&L's dimension filter. See
+  `docs/departmental-accounting.md`.
+
+  **Manual journals** now carry a department too, per line rather than
+  per journal — the entry that moves a cost from Sales to Marketing
+  touches both, and a header field could not say so. That needed no
+  schema change at all: `gl_lines.department_code` has existed as long
+  as the dimensions have and `app.create_gl_entry_internal` has always
+  read `department_code` off each line's JSON. Nothing sent it. Which is
+  why it is asserted in two places — `supabase/tests/pricing_and_dimensions.sql`
+  and `app/test/journal_problem_test.dart` — because nothing in the
+  database changed, so nothing in the database would notice if the app
+  stopped sending it again.
+
+  **Expenses now do too**, `0639`, at both levels — the header's for a
+  whole claim and `expense_lines.department_code` for one line of a
+  split, coalesced the line over the header exactly as `project_code`
+  already was. `expenses.project_code` had existed since the dimensions
+  did with nothing in the app setting it, so the expense editor gained
+  both pickers in the same change.
+
+  Two legs deliberately carry NEITHER dimension: reclaimed input tax
+  and the payment out of the bank account. Neither is a departmental
+  cost, and putting one on them would make every department's figures
+  include the SST it reclaimed and the cash it spent on top of the
+  expense that is the actual cost. Both are asserted separately, and the
+  tax one matters most — it is a DEBIT, so a rule written as "only
+  debits carry a department" passes the bank assertion and still
+  double-counts
+- ~~**Price levels.**~~ Stale, and wired end to end: `item_price()`
+  (`0088`) resolves a named price, then a quantity break, then the
+  level's percentage adjustment, then the list price; `Repo.itemPrice`
+  calls it; the document editor passes it to the line editor as
+  `priceFor` on sales documents where a contact is known; and the line
+  editor applies the list price first and corrects it after, so a line
+  is never briefly priced at nothing. `item_prices_dialog.dart` is where
+  the prices and the levels themselves are maintained.
+
+  Purchase documents deliberately get no `priceFor`: a price level is
+  what we charge a customer, not what a supplier charges us

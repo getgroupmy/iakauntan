@@ -60,13 +60,63 @@ editor for it sits behind the HR navigation gate. A company without HR can
 have departments created for it, and can then use them everywhere here —
 it just cannot add more from the app.
 
+## The two routes that used to miss it
+
+Both are closed now, and they were closed differently, which is the
+part worth remembering.
+
+### Manual journals: no schema change at all
+
+`gl_lines.department_code` has existed as long as the dimensions have,
+and `app.create_gl_entry_internal` has always read `department_code`
+off each line's JSON. Nothing sent it. The journal editor offered a
+project per line and no department, so every cost a bookkeeper moved by
+hand arrived with a null.
+
+The fix was a picker and one key in a map. Per LINE and not per
+journal, for the reason the project is: the entry that moves a cost
+from Sales to Marketing touches both, and a header field could not say
+so.
+
+Because nothing in the database changed, nothing in the database would
+notice if the app stopped sending it again — so it is asserted on both
+sides, in `supabase/tests/pricing_and_dimensions.sql` and in
+`app/test/journal_problem_test.dart`.
+
+### Expenses: `0639`
+
+`expenses` had a `project_code` and no department column at all, so
+this one needed the schema. Both levels, mirroring `project_code`
+exactly: the header's for a whole claim, `expense_lines.department_code`
+for one line of a split, and `post_expense` coalesces the line over the
+header.
+
+`expenses.project_code` had also never been set by anything in the app,
+so the expense editor gained both pickers in the same change.
+
+**Two legs deliberately carry neither dimension**: the reclaimed input
+tax and the payment out of the bank account. Neither is a departmental
+cost, and giving them one would make every department's figures include
+the SST it reclaimed and the cash it spent *on top of* the expense line
+that is the actual cost — double counting, in a report whose whole
+purpose is to attribute cost once.
+
+Both are asserted, separately, and the tax one is the one that matters:
+it is a DEBIT, so a rule written as "only debits carry a department"
+passes the bank-leg assertion and still double-counts. A mutation sweep
+over `0639` confirms it — six mutants, all killed, including one that
+adds a department to the tax leg and one that adds it to the bank leg.
+
+### Why this shape of gap is the worst shape
+
+A department whose spending arrived through expenses or journals read as
+a department that had **underspent**. An error that reads as an error
+gets found; a missing figure that reads as a small figure reads as good
+news, and nobody reports good news. That is why both halves are
+asserted rather than simply written.
+
 ## Not done
 
-- **Expenses and manual journals still do not offer a department.**
-  `expenses` has a `project_code` column and no department one at all;
-  `gl_lines` written by hand through the journal editor could carry a
-  department but the editor does not ask. The P&L will therefore
-  under-report costs that arrive by those two routes.
 - **No department on the balance sheet.** Splitting a balance sheet by
   department is a different report, not this one with a filter, and
   nothing here attempts it.

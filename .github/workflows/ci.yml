@@ -1738,6 +1738,15 @@ jobs:
       # invisible. Both are pinned.
       - name: The call graph's own assertions
         run: python3 scripts/sql_call_graph_test.py
+      # The mutation harness's own, and specifically which SDK it
+      # reaches for. It prepended a hardcoded `/opt/flutter-sdk/bin`,
+      # and when the Flutter pin moved that path still existed and
+      # still held a working `flutter` -- just the wrong one. Every
+      # mutant then ran against a compiler this repository no longer
+      # uses, and the run reported the control killed along with
+      # everything else. A harness that lies is worse than no harness.
+      - name: The mutation harness's own assertions
+        run: python3 scripts/mutate_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py

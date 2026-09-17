@@ -210,4 +210,170 @@ begin
       'public.run_recurring_journals_for(uuid, date)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A hand-written journal can name a department
+--
+-- `gl_lines.department_code` has existed as long as the dimensions
+-- have, and `app.create_gl_entry_internal` has always read
+-- `department_code` off each line's JSON. Nothing ever sent it: the
+-- journal editor offered a project per line and no department, so
+-- every cost a bookkeeper moved by hand arrived with a null.
+--
+-- That is the worst shape for a reporting gap. The P&L's department
+-- filter answered confidently, summing only the costs that came in
+-- through documents, and a department whose spending was journalled
+-- looked like a department that had underspent. A missing figure that
+-- reads as a small figure is not reported by anybody.
+--
+-- The fix was a picker and a key in a map -- no schema change at all --
+-- which is exactly why it is worth asserting here: nothing in the
+-- database changed, so nothing in the database would notice if the app
+-- stopped sending it again.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.pl_org('Departments Sdn Bhd');
+  v_admin uuid; v_sales uuid; v_entry uuid;
+  v_dept text;
+begin
+  select id into v_admin from public.accounts
+   where org_id = v_org and code = '6100';
+  select id into v_sales from public.accounts
+   where org_id = v_org and code = '4100';
+
+  insert into public.departments (org_id, code, name)
+  values (v_org, 'OPS', 'Operations'), (v_org, 'MKT', 'Marketing');
+
+  -- What the journal editor now sends: `department_code` beside
+  -- `project_code`, per line.
+  v_entry := public.create_gl_entry(
+    v_org, date '2026-04-01', 'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_admin, 'debit', 300, 'credit', 0,
+                         'department_code', 'OPS'),
+      jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 300,
+                         'department_code', 'MKT')),
+    'a cost moved by hand');
+
+  select department_code into v_dept from public.gl_lines
+   where entry_id = v_entry and account_id = v_admin;
+  perform pg_temp.check_eq('the debit keeps its department', v_dept, 'OPS');
+
+  select department_code into v_dept from public.gl_lines
+   where entry_id = v_entry and account_id = v_sales;
+  perform pg_temp.check_eq('and the credit keeps its own', v_dept, 'MKT');
+
+  -- PER LINE and not per journal, which is the whole reason it is on
+  -- the line: the journal that moves a cost from one department to
+  -- another touches both, and a header field could not say so.
+  perform pg_temp.check_eq('so one journal names two departments',
+    (select count(distinct department_code)::int from public.gl_lines
+      where entry_id = v_entry), 2);
+
+  -- A line with no department is still a line. Most journals have no
+  -- departmental meaning at all, and a required dimension would be a
+  -- dimension people type anything into.
+  v_entry := public.create_gl_entry(
+    v_org, date '2026-04-02', 'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_admin, 'debit', 50, 'credit', 0),
+      jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 50)),
+    'no department');
+  perform pg_temp.check_eq('and a journal may name none',
+    (select count(*)::int from public.gl_lines
+      where entry_id = v_entry and department_code is null), 2);
+
+  -- Both dimensions at once, because they are independent: a job run
+  -- by one department is a normal thing to post.
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-9', 'Job nine');
+  v_entry := public.create_gl_entry(
+    v_org, date '2026-04-03', 'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_admin, 'debit', 80, 'credit', 0,
+                         'project_code', 'JOB-9',
+                         'department_code', 'OPS'),
+      jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 80)),
+    'a job run by a department');
+  perform pg_temp.check_eq('a line carries both dimensions',
+    (select project_code || '/' || department_code from public.gl_lines
+      where entry_id = v_entry and account_id = v_admin),
+    'JOB-9/OPS');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0640: an empty dimension is no dimension
+--
+-- `app.create_gl_entry_internal` read `contact_id`, `item_id` and
+-- `tax_code_id` through `nullif(..., '')` and the two dimension codes
+-- without it. The three with a `::uuid` cast NEEDED it -- `''::uuid` is
+-- an error, so the mistake announced itself -- and the two text ones
+-- did not.
+--
+-- An empty string is not null, so it becomes a DIMENSION: a P&L
+-- grouped by department reports a nameless one beside the real ones.
+-- Filtering for "no department" misses those costs because they have
+-- one; filtering for any named department misses them too. They are
+-- attributed to a department that does not exist and cannot be picked.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.pl_org('Blank Dimensions Sdn Bhd');
+  v_ar uuid; v_rev uuid; v_entry uuid;
+begin
+  select id into v_ar  from public.accounts where org_id = v_org and code = '1210';
+  select id into v_rev from public.accounts where org_id = v_org and code = '4100';
+
+  -- What a spreadsheet cell that is present and empty looks like by the
+  -- time it reaches here. `0610`'s importer is the reachable caller.
+  v_entry := public.create_gl_entry(
+    v_org, date '2026-05-01', 'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_ar, 'debit', 10, 'credit', 0,
+                         'project_code', '', 'department_code', ''),
+      jsonb_build_object('account_id', v_rev, 'debit', 0, 'credit', 10)),
+    'blank dimensions');
+
+  perform pg_temp.check_eq('a blank project code stores as no project',
+    (select count(*)::int from public.gl_lines
+      where entry_id = v_entry and project_code is not null), 0);
+  perform pg_temp.check_eq('and a blank department as no department',
+    (select count(*)::int from public.gl_lines
+      where entry_id = v_entry and department_code is not null), 0);
+
+  -- The assertion with teeth, and the one a `coalesce` would pass while
+  -- a `nullif` is what is wanted: NO line groups under the empty
+  -- string. Counting nulls alone would hold if the value were stored
+  -- as `''` and the count happened to be taken on a different column.
+  perform pg_temp.check_eq('so nothing groups under a nameless one',
+    (select count(*)::int from public.gl_lines
+      where entry_id = v_entry
+        and (project_code = '' or department_code = '')), 0);
+
+  -- A real code is untouched by any of this. The fix must not turn a
+  -- dimension somebody chose into no dimension.
+  v_entry := public.create_gl_entry(
+    v_org, date '2026-05-02', 'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_ar, 'debit', 20, 'credit', 0,
+                         'project_code', 'JOB-X',
+                         'department_code', 'DEPT-X'),
+      jsonb_build_object('account_id', v_rev, 'debit', 0, 'credit', 20)),
+    'real dimensions');
+  perform pg_temp.check_eq('a chosen code still arrives',
+    (select project_code || '/' || department_code from public.gl_lines
+      where entry_id = v_entry and debit = 20),
+    'JOB-X/DEPT-X');
+
+  -- And a code that names nothing is STILL accepted, which is the
+  -- decision 0640's header explains rather than an oversight: an
+  -- import writes the codes the old system used, and the masters can
+  -- legitimately arrive in a later batch or never. 'JOB-X' above is
+  -- not a row in `projects` and the posting went through.
+  perform pg_temp.check_true(
+    'and an unknown code is accepted, deliberately',
+    not exists (select 1 from public.projects
+                 where org_id = v_org and code = 'JOB-X'));
+end $$;
+
 rollback;

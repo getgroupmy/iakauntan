@@ -225,6 +225,21 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   /// null: an expense with no payee is still an expense.
   String? _contactId;
   String? _taxCodeId;
+
+  /// Which job and which department this cost belongs to, or null for
+  /// both, which is the ordinary case.
+  ///
+  /// `expenses.project_code` has existed since the dimensions did and
+  /// nothing in this app ever set it; `department_code` did not exist
+  /// at all until `0639`. So a cost claimed here reached the ledger
+  /// with both dimensions null however carefully it was coded, and the
+  /// P&L's filters answered confidently while omitting every one of
+  /// them — a department whose spending arrived this way read as a
+  /// department that had UNDERSPENT, which is the one shape of
+  /// reporting error nobody reports.
+  String? _projectCode;
+  String? _departmentCode;
+
   String _paymentMode = '03';
   DateTime _date = DateTime.now();
   bool _saving = false;
@@ -411,6 +426,8 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
           paymentModeCode: _paymentMode,
           taxCodeId: _taxCodeId,
           taxAmount: _tax,
+          projectCode: _projectCode,
+          departmentCode: _departmentCode,
           reference: _reference.text.trim().isEmpty
               ? null
               : _reference.text.trim(),
@@ -448,6 +465,9 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
         .toList();
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
+    final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    final departments =
+        ref.watch(departmentsProvider).valueOrNull ?? const [];
     // Suppliers, because that is what a payee is: the same list the
     // purchase side picks from, so a bill and the cash paid for it end
     // up against one contact rather than two spellings of one.
@@ -681,6 +701,57 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                       createBankAccountFromPicker(context, typed: typed),
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
+                // Only once there is something to choose. A company
+                // that has created neither gets neither control rather
+                // than two empty ones, which is the rule the journal
+                // editor's project picker already follows: a dropdown
+                // with nothing in it teaches people to ignore
+                // dropdowns.
+                if (projects.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SearchablePicker<String>(
+                    key: const ValueKey('expense-project'),
+                    options: [
+                      for (final p in projects)
+                        PickerOption<String>(
+                          value: p['code'] as String,
+                          label: '${p['name']}',
+                          sublabel: '${p['code']}',
+                          keywords: ['${p['code']}'],
+                        ),
+                    ],
+                    value: _projectCode,
+                    allowEmpty: true,
+                    emptyLabel: 'No job',
+                    label: 'Job',
+                    helperText: 'Which job this cost is against',
+                    onChanged: (v) => setState(() => _projectCode = v),
+                  ),
+                ],
+                if (departments.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SearchablePicker<String>(
+                    key: const ValueKey('expense-department'),
+                    options: [
+                      for (final d in departments)
+                        PickerOption<String>(
+                          value: d['code'] as String,
+                          label: '${d['name']}',
+                          sublabel: '${d['code']}',
+                          keywords: ['${d['code']}'],
+                        ),
+                    ],
+                    value: _departmentCode,
+                    allowEmpty: true,
+                    emptyLabel: 'No department',
+                    label: 'Department',
+                    helperText:
+                        'Whose budget this comes out of. Leave blank and '
+                        'the cost is in the company total and in no '
+                        'department.',
+                    onChanged: (v) => setState(() => _departmentCode = v),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _reference,

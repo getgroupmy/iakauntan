@@ -65,15 +65,99 @@ asserting nothing, every one of which this harness found.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import re
 import subprocess
 import sys
 import tempfile
 
-APP = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "app"
+ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 )
+APP = os.path.join(ROOT, "app")
+
+
+def pinned_version() -> str | None:
+    """The `flutter-version` the workflow pins, or None."""
+    ci = os.path.join(ROOT, ".github", "workflows", "ci.yml")
+    try:
+        with open(ci) as handle:
+            found = re.findall(r"^\s*flutter-version:\s*([0-9][0-9.]*)\s*$",
+                               handle.read(), re.M)
+    except OSError:
+        return None
+    return found[0] if found else None
+
+
+def _flutter_bin(opt: str = "/opt") -> str:
+    """Where to find the `flutter` this project is pinned to.
+
+    This used to be the literal string `/opt/flutter-sdk/bin`, and the
+    day the pin moved from 3.32.0 to 3.47.4 that became the WRONG SDK
+    while still existing -- so every mutant ran against a compiler the
+    repository no longer uses, the baseline failed, and the run reported
+    six mutants killed and the control killed with them.
+
+    The control is what caught it, which is the whole argument for
+    insisting on one. But a harness that needs its own control to notice
+    it is pointed at the wrong toolchain should be told where to look.
+
+    [opt] is where SDKs live, a parameter only so this can be tested
+    against a throwaway tree -- the default is the real one, and no
+    caller passes anything else.
+
+    Order: an SDK whose DIRECTORY NAME is the pinned version, because
+    the name is the evidence and needs no file read; then
+    `/opt/flutter-sdk`, but only if it reports that version, because its
+    name says nothing about which SDK is inside it; then whatever
+    `flutter` is on PATH. Nothing is prepended when none is found, so
+    the ordinary `flutter` resolves and fails on its own terms rather
+    than this guessing.
+    """
+    version = pinned_version()
+
+    if version:
+        named = os.path.join(opt, "flutter-%s" % version, "bin")
+        if os.path.exists(os.path.join(named, "flutter")):
+            return named
+
+    generic = os.path.join(opt, "flutter-sdk", "bin")
+    if os.path.exists(os.path.join(generic, "flutter")):
+        if version is None or _version_of(generic) == version:
+            return generic
+
+    on_path = shutil.which("flutter")
+    return os.path.dirname(on_path) if on_path else ""
+
+
+def _version_of(bin_dir: str) -> str | None:
+    """The version an SDK reports, from whichever file it keeps it in.
+
+    Two places, because Flutter moved it: up to 3.32 a plain `version`
+    file at the SDK root, and after that `bin/cache/flutter.version.json`.
+    Reading only the first made a 3.47 SDK look like an SDK of unknown
+    version, which is the same answer as the wrong version and led here
+    by a different route.
+    """
+    root = os.path.dirname(bin_dir)
+
+    plain = os.path.join(root, "version")
+    try:
+        with open(plain) as handle:
+            text = handle.read().strip()
+            if text:
+                return text
+    except OSError:
+        pass
+
+    try:
+        with open(os.path.join(root, "bin", "cache",
+                               "flutter.version.json")) as handle:
+            return json.load(handle).get("flutterVersion")
+    except (OSError, ValueError):
+        return None
 
 
 def main(argv: list[str]) -> int:
@@ -101,7 +185,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     env = dict(os.environ)
-    env["PATH"] = "/opt/flutter-sdk/bin:" + env.get("PATH", "")
+    env["PATH"] = _flutter_bin() + os.pathsep + env.get("PATH", "")
 
     def run() -> str:
         done = subprocess.run(
