@@ -615,6 +615,34 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_undocumented_writes.py "$DB"
 
+      # The seam `0618` came in through. A new function in `public` is
+      # executable by postgres and nobody else -- PostgreSQL grants
+      # PUBLIC on creation and 0165's event trigger revokes it -- so
+      # every caller needs an explicit grant in the migration, and
+      # forgetting one is invisible: PostgREST answers 42501, the edge
+      # function catches it with everything else, and the feature simply
+      # never happens.
+      #
+      # It cost months. 0618 found ten functions whose callers could not
+      # reach them, including both RPCs `send-push` needs, which means
+      # no push notification had ever been delivered, and both halves of
+      # a customer paying an invoice they were sent. Then the pattern
+      # spread by being copied: 0612 and 0616 repeated it.
+      #
+      # `function_grants.sql` asserts the other direction -- nothing in
+      # `public` callable by nobody -- and cannot see the more specific
+      # fault, a function granted to `authenticated` and called by the
+      # service role or the reverse. This reads the CALL, so it can.
+      #
+      # A client identifier the script does not know the role of is a
+      # FAILURE rather than a skip, because guessing would either
+      # report somebody's correct code as broken or go quiet exactly
+      # where a new pattern is being introduced.
+      - name: Check every RPC an edge function calls can be executed by it
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_edge_rpc_grants.py "$DB"
+
       # `docs/api/` files a function under ONE module, the first its
       # body names, and twelve check more than one -- where the first
       # name is at best half the answer. `create_contra` needs `sales`
