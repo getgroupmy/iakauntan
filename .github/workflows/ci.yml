@@ -302,6 +302,7 @@ jobs:
                    supabase/tests/asset_disposal_shapes.sql \
                    supabase/tests/account_revival.sql \
                    supabase/tests/bank_reconciliation.sql \
+                   supabase/tests/bank_rules.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/account_closure.sql \
                    supabase/tests/trigger_reachable_grants.sql \

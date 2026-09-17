@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0624",
+    "version": "0625",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -1619,6 +1619,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/bank_reconciliations"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/bank_rules": {
+      "get": {
+        "operationId": "select_bank_rules",
+        "summary": "Read bank_rules",
+        "description": "What a bank line means, matched on its words and its amount. Reads only: 0625 suggests a coding and posts nothing. 0625.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/bank_rules"
                   }
                 }
               }
@@ -20687,6 +20751,65 @@
         }
       }
     },
+    "/rpc/bank_lines_unexplained": {
+      "post": {
+        "operationId": "bank_lines_unexplained",
+        "summary": "Unreconciled bank lines that no rule describes and nothing is matched to -- the ones still to be typed",
+        "description": "Unreconciled bank lines that no rule describes and nothing is matched to -- the ones still to be typed. 0625.\n\n`public.bank_lines_unexplained(p_org_id uuid, p_bank_account_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_bank_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/bank_reconciliation_status": {
       "post": {
         "operationId": "bank_reconciliation_status",
@@ -20732,6 +20855,87 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/bank_rule_coverage": {
+      "post": {
+        "operationId": "bank_rule_coverage",
+        "summary": "How many unreconciled lines each rule would claim, counting only the ones no earlier rule takes first",
+        "description": "How many unreconciled lines each rule would claim, counting only the ones no earlier rule takes first. What makes a rule safe to write. 0625.\n\n`public.bank_rule_coverage(p_org_id uuid, p_bank_account_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_bank_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "rule_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "rule_name": {
+                        "type": "string"
+                      },
+                      "sort_order": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "is_active": {
+                        "type": "boolean"
+                      },
+                      "matches": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -65024,6 +65228,96 @@
         }
       }
     },
+    "/rpc/suggest_bank_coding": {
+      "post": {
+        "operationId": "suggest_bank_coding",
+        "summary": "The first rule that describes this bank line, and what it says to code it as",
+        "description": "The first rule that describes this bank line, and what it says to code it as. Suggests; writes nothing. 0625.\n\n`public.suggest_bank_coding(p_transaction_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_transaction_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_transaction_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "rule_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "rule_name": {
+                        "type": "string"
+                      },
+                      "account_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "account_code": {
+                        "type": "string"
+                      },
+                      "account_name": {
+                        "type": "string"
+                      },
+                      "contact_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "contact_name": {
+                        "type": "string"
+                      },
+                      "tax_code_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "memo": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/suggest_bank_matches": {
       "post": {
         "operationId": "suggest_bank_matches",
@@ -74148,6 +74442,79 @@
           "bank_account_id",
           "statement_date",
           "statement_balance"
+        ]
+      },
+      "bank_rules": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "bank_account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "description_contains": {
+            "type": "string"
+          },
+          "reference_contains": {
+            "type": "string"
+          },
+          "amount_min": {
+            "type": "number"
+          },
+          "amount_max": {
+            "type": "number"
+          },
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tax_code_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "name"
         ]
       },
       "bank_transactions": {
