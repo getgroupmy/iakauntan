@@ -90,7 +90,7 @@ move down because their hard halves are done, and G3 splits.
 | 4 | ~~**G4 OCR emitting purchase documents**~~ — **mostly already built; the verdict was wrong. See §3.1.** Duplicate detection was the one real gap and is now `0628` | The pipeline, the credit metering and the mobile capture are built. Emitting a bill — supplier match, lines, duplicate detection, review before post — is the step that turns a demo into a day's work saved | M |
 | 5 | ~~**G7 the knock-off screen**~~ — **BUILT**, `0629`/`0630` and `/knock-off`. The verdict understated it: nothing could write `credit_note_id` at all. **See §3.2** | The allocation model is already richer than AutoCount's. What is missing is one screen, and it is the screen an accounts clerk lives in at month end | M |
 | 6 | ~~**G6 transaction import**~~ — **BUILT**: sales `0631`, purchase `0632`, journals `0633` (which posts; see its header and `docs/unreachable.md`) | Opening balances already import as open items, which was the migration blocker. Invoice and journal import is a convenience after that, and matters most in the first week of a new customer | M |
-| 7 | **G9 own subscription e-Invoices** | Small, and it answers a question every prospect asks. Mostly a matter of admitting `platform_invoices` to `einvoice_documents_source_table_check` | M |
+| 7 | **G9 own subscription e-Invoices** — **BLOCKED, and not for the reason given. See §3.3** | Small, and it answers a question every prospect asks. Mostly a matter of admitting `platform_invoices` to `einvoice_documents_source_table_check` | M |
 | 8 | **G3(b,c) relaxation flag and tariff code** | Both are single fields with a UI. Do them with whatever e-Invoice work comes next rather than alone | S |
 | 9 | **G8 statement layouts** | Real, and an accounting-firm feature rather than an SME one. Hang it off the MBRS taxonomy mapping | L |
 
@@ -167,6 +167,48 @@ feature.** The question that separates them is *what writes this, and
 what reads it* — and it cannot be answered by searching the schema.
 `0629` and `0630` build the writer, the guard, the reader and the
 screen.
+
+
+### 3.3 A correction to the G9 verdict, and why it stops there
+
+This audit called G9 "small ... mostly a matter of admitting
+`platform_invoices` to `einvoice_documents_source_table_check`". The
+constraint is the least of it. The whole e-Invoice stack is built on a
+TENANT identity, and the platform billing its own customers is not a
+tenant.
+
+| What a submission needs | Where a tenant gets it | Where the platform would |
+|---|---|---|
+| a TIN | `organizations.tin` | **nowhere.** `platform_settings.platform_issuer` holds name, registration number, old registration number, SST number and address — and no TIN, no id type, no id value |
+| MyInvois credentials | `einvoice_credentials`, keyed `org_id` | **nowhere.** There is no platform row, because there is no platform org |
+| an `org_id` on the document | its own | `einvoice_documents.org_id` is NOT NULL, and the only candidate is the tenant being billed — who is the BUYER. Submitting a document under the buyer's credentials, with the buyer's client id, reporting the seller's TIN, is not a smaller version of the right thing |
+
+So the shape of the work is a platform-level e-Invoice identity:
+`platform_issuer` gains a TIN and an identification pair, the
+credentials table gains a row that belongs to no organization (and the
+usual rule applies — the secret stays where `einvoice_credentials`
+already keeps one, service-role only), and the preparer maps
+`platform_invoices` with the platform as supplier and the tenant as
+buyer.
+
+**And then it stops, for the reason `docs/design/sst-02.md` stops.**
+
+The platform's TIN is a real number issued to a real company, and its
+MyInvois enrolment is a real registration. Neither can be invented
+here, and a payload built on a guessed TIN is worse than no payload:
+it would be submitted, rejected, and rejected again every month, with
+the operator's own billing the thing that breaks.
+
+This is the same wall as the gazetted KWSP figures, the CP39 layout and
+the RMCD rules — the third item on this branch to reach it — and it is
+recorded rather than worked around.
+
+**What is needed from outside this machine:** the issuing company's
+TIN, its identification type and number as LHDN holds them, and whether
+it is enrolled in MyInvois (and in which environment). With those, the
+work above is a day. Without them it cannot start, and a migration that
+put a placeholder TIN into `platform_settings` would be a migration
+somebody later believed.
 
 ### A separate, small PR
 
