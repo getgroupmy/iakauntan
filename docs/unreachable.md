@@ -1288,14 +1288,33 @@ rather than the exemption —
   table is. `notes.is_pinned` and `fs_disclosures.value_text`: notes
   attachable to anything, and MBRS disclosures, both tabled and never
   built.
-- `KNOWN_GAPS` (4) — a ratchet, in the shape `check_unreachable.py`
-  uses for the providers nobody had drawn. **The number goes down.**
-  The one with teeth is `einvoice_documents.retry_count`: `submit.ts`
-  and `consolidations.ts` write `last_attempt_at` at every failure
-  site and never touch the count, and `0007` indexes
+- `KNOWN_GAPS` — a ratchet, in the shape `check_unreachable.py` uses
+  for the providers nobody had drawn. **The number goes down.** It
+  started at four and is **empty**; all four were closed rather than
+  kept, and the gate's own source records each one. The one with teeth
+  was `einvoice_documents.retry_count`: `submit.ts` and
+  `consolidations.ts` wrote `last_attempt_at` at every failure site and
+  never touched the count, while `0007` indexes
   `(org_id, status, last_attempt_at)` as the retry picker — so a
-  document that can never succeed is re-submitted on every sweep,
+  document that could never succeed was re-submitted on every sweep,
   against an API that is rate-limited and counts submissions.
+  `myinvois/retry.ts` stops the sweep at five now, never a person.
+
+Two things closing those four turned up that the sweep could not have
+reported, and both were worse than the column that led to them:
+
+- **A rejected e-Invoice's UBL was discarded.** `submit.ts` stored
+  `ubl_payload` on the accepted path and nothing on the rejected one,
+  so of every document LHDN ever formed an opinion about, the only one
+  whose bytes were thrown away was the one that was refused. The
+  rejection named a field on a document nobody could look at.
+- **`corp_entities.phone`**, unreachable exactly as
+  `correspondence_email` was and invisible to the sweep. See the
+  limitation below.
+
+The lesson both times: **read the row beside a column the sweep
+reports.** Two of the four closures found a second fault that way, and
+neither would have been found by fixing the reported column alone.
 
 Some decisions this file records are not in those lists, because the
 gate does not report the column at all: a mention in ANOTHER

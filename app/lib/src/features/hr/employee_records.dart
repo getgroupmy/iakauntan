@@ -7,6 +7,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import '../shared/attachments_card.dart';
 import 'expiring_documents.dart';
 
 /// The three lists that hang off an employee and had nowhere to live:
@@ -583,6 +584,32 @@ class _DocumentDialogState extends ConsumerState<_DocumentDialog> {
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'Notes'),
               ),
+              // The document itself, which this section tracked the
+              // expiry of and had no way to hold. `employee_documents`
+              // carries a `file_path` column from `0025` that nothing
+              // ever wrote to; the attachments module is how every
+              // other file in this product reaches a row, and the
+              // database already knew about this one —
+              // `app.can_read_attachment` names `employee_documents`
+              // explicitly, keeps the ledger audience out ("an
+              // accounts clerk does not get to read a passport") and
+              // lets the employee it is about read their own. All of
+              // that existed and no screen had placed the card.
+              //
+              // Only on a SAVED row. An attachment hangs off a record
+              // id, and there is no id until Save — offering the box
+              // first would be offering somewhere to put a file that
+              // has nowhere to go.
+              if (widget.row != null) ...[
+                const SizedBox(height: Space.lg),
+                AttachmentsCard(
+                  key: const ValueKey('employee-document-files'),
+                  table: 'employee_documents',
+                  recordId: widget.row!['id'] as String,
+                  title: 'The document',
+                  subtitle: 'The scan or photograph of it',
+                ),
+              ],
             ],
           ),
         ),

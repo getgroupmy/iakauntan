@@ -198,6 +198,25 @@ SUPERSEDED: dict[str, str] = {
         'the attachments module carries a claim\'s files',
     'expenses.receipt_url':
         'the attachments module carries an expense\'s files',
+
+    # The third of the same kind, and the one that took a screen to
+    # settle: the Documents section of the employee record tracked a
+    # document's title, type and expiry and offered no way to hold the
+    # document, so what expires was recorded and what expires was not.
+    #
+    # The database already knew about it. `app.can_read_attachment`
+    # names `employee_documents`, keeps the ledger audience out ("an
+    # accounts clerk does not get to read a passport"), lets whoever
+    # runs payroll IN because a work permit decides whether somebody
+    # may be paid, and lets the employee it is about read their own.
+    # All of it existed, no screen had placed the card, and so none of
+    # it had ever been asserted. `employee_documents.sql` asserts all
+    # four now.
+    #
+    # Not listed as a key: a comment in `employee_records.dart` names
+    # the column while explaining what replaced it, and this sweep
+    # counts that as a mention -- correctly, since the question it asks
+    # is whether anybody has thought about the column.
 }
 
 # The column is not the finding -- the TABLE is. Reporting the column
@@ -225,53 +244,45 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
 
 # GAPS. Not exemptions -- a ratchet, in the shape `check_unreachable.py`
 # uses for the providers nobody had drawn: "the number should go DOWN
-# rather than up", and each of those four was closed rather than kept.
+# rather than up", and each of those was closed rather than kept.
 #
-# Every entry is a capability the product cannot reach, named so that
-# another cannot be added quietly. What closing it needs is written
-# beside it, because the reason a gap stays open for months is that
-# nobody remembers what closing it involved.
+# EMPTY, and it started at four. Every entry was a capability the
+# product could not reach, with what closing it needed written beside
+# it, and all four were closed -- which is the only outcome this list
+# exists for. A name added back here is an argument somebody has to
+# make in writing, next to these:
 #
-# It started at four and is at one.
+#   * `einvoice_documents.retry_count` -- the one with teeth.
+#     `submit.ts` and `consolidations.ts` wrote `last_attempt_at` at
+#     every failure site and never touched the count, while the bulk
+#     picker selected `invalid`, the status of a document MyInvois has
+#     REJECTED. So a document that could never succeed was re-rendered,
+#     re-signed and re-submitted on every sweep for ever, against an
+#     API that is rate-limited and counts submissions.
+#     `myinvois/retry.ts` counts it and stops the SWEEP at five, never
+#     a person; the e-Invoice screen says so where the rejection is.
 #
-# `corp_entities.correspondence_email` is closed: the entity editor asks
-# for it and the company page shows it. Its neighbour
-# `corp_entities.phone` was unreachable in exactly the same way and
-# this sweep COULD NOT SEE IT -- a column name is matched as a word
-# across the tree and `phone` appears in a hundred places with nothing
-# to do with that table. It was found by reading the row beside the one
-# the sweep reported, which is the argument for reading a finding
-# rather than only fixing it. Both are wired up now.
-# `einvoice_submissions.request_payload`
-# is closed: the submit path writes a MANIFEST of the batch on the
-# insert that opens the submission -- code number, hash, format and
-# size per document, and deliberately not the documents themselves,
-# which are already stored one per row and would make this the largest
-# table here inside a year. `manifest.ts` says why in full.
+#   * `einvoice_submissions.request_payload` -- the submit path writes
+#     a MANIFEST of the batch on the insert that opens the submission:
+#     code number, hash, format and size per document, and deliberately
+#     not the documents, which are already stored one per row and would
+#     make this the largest table here inside a year. `manifest.ts`
+#     says why in full. Found while closing it: the rejected path
+#     stored no `ubl_payload` at all, so the one document anybody
+#     needed to read was the one thrown away.
 #
-# `einvoice_documents.retry_count` was the one with teeth and it is
-# closed too: `submit.ts` and `consolidations.ts` wrote
-# `last_attempt_at` at every failure site and never touched the count,
-# while the bulk picker selected `invalid` -- the status of a document
-# MyInvois has REJECTED -- so a document that could never succeed was
-# re-rendered, re-signed and re-submitted on every sweep for ever.
-# `supabase/functions/myinvois/retry.ts` counts it now and stops the
-# SWEEP at five, never a person; the e-Invoice screen says so where the
-# rejection is shown.
-KNOWN_GAPS: dict[str, str] = {
-    # An employee's passport scan, permit or certificate. The Documents
-    # section of the employee record tracks the TITLE, the type and the
-    # expiry of each, and offers no way to attach the document -- so
-    # what expires is recorded and what expires is not held.
-    #
-    # To close: that section attaches through the attachments module
-    # like everything else in this product
-    # (`entity_table = 'employee_documents'`), which makes this column
-    # superseded rather than missing; or it is used directly.
-    'employee_documents.file_path':
-        'the Documents section of the employee record holds no '
-        'document; attach through the attachments module',
-}
+#   * `corp_entities.correspondence_email` -- the entity editor asks
+#     for it and the company page shows it. Its neighbour
+#     `corp_entities.phone` was unreachable in exactly the same way and
+#     THIS SWEEP CANNOT SEE IT: see the limitation in the header. It
+#     was found by reading the row beside the column the sweep did
+#     report, and both are wired up.
+#
+#   * `employee_documents.file_path` -- moved to SUPERSEDED rather than
+#     wired up. The attachments module is how every other file in this
+#     product reaches a row, the database already guarded this one, and
+#     no screen had placed the card.
+KNOWN_GAPS: dict[str, str] = {}
 
 EXEMPT = {**DELIBERATE, **SUPERSEDED, **WHOLE_TABLE_UNREACHED, **KNOWN_GAPS}
 

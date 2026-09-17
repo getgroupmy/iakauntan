@@ -354,4 +354,218 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The scan itself, and who may look at it
+--
+-- `employee_documents.file_path` has been a column since `0025` that
+-- nothing ever wrote to, and the Documents section of the employee
+-- record tracked a document's title, type and expiry while offering no
+-- way to hold the document. So what expires was recorded and what
+-- expires was not.
+--
+-- The attachments module is how every other file in this product
+-- reaches a row, and the database already knew about this one:
+-- `app.can_read_attachment` names `employee_documents` explicitly,
+-- keeps the ledger audience out -- "an accounts clerk does not get to
+-- read a passport" -- and lets the employee it is about read their
+-- own. All of that existed and NO SCREEN HAD PLACED THE CARD, so none
+-- of it had ever been asserted either.
+--
+-- It is asserted here rather than left to the screen because it is the
+-- rule that makes the feature safe to have at all. A passport scan
+-- readable by whoever reconciles the bank is worse than a passport
+-- scan nobody can file.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner  uuid := pg_temp.test_user();
+  v_org    uuid := pg_temp.test_org('Pasport Sdn Bhd');
+  v_clerk  uuid;
+  v_acct   uuid;
+  v_hr     uuid;
+  v_them   uuid;
+  v_person uuid;
+  v_doc    uuid;
+  v_att    uuid;
+  v_refused boolean;
+  v_allowed boolean;
+  v_why    text;
+begin
+  -- An accounts clerk: writes the ledger, and has no business in the
+  -- personnel file. The role that reads a bill attachment.
+  v_clerk := pg_temp.another_user('akaun@pasport.test');
+  -- And an accountant, who is NOT the same case and is the reason the
+  -- carve-out is written as three names rather than one. See below.
+  v_acct := pg_temp.another_user('penyimpan@pasport.test');
+  -- Somebody who manages people.
+  v_hr := pg_temp.another_user('hr@pasport.test');
+  -- And the employee the document is about.
+  v_them := pg_temp.another_user('pekerja@pasport.test');
+
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_clerk, 'accounts_clerk'),
+         (v_org, v_acct, 'accountant'),
+         (v_org, v_hr, 'hr_manager'),
+         (v_org, v_them, 'employee')
+  on conflict do nothing;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date)
+  values (v_org, 'E-001', 'Pekerja', v_them, current_date)
+  returning id into v_person;
+
+  insert into public.employee_documents
+    (org_id, employee_id, title, doc_type, issued_date, expires_date)
+  values (v_org, v_person, 'Passport', 'identity',
+          current_date - 100, current_date + 500)
+  returning id into v_doc;
+
+  -- The scan, filed by HR. Path in the shape the column's check
+  -- requires -- `<org>/<table>/<record>/<file>` -- because
+  -- `claim_attachments.sql` records what a placeholder path did there:
+  -- a constraint violation caught by a broad handler reads exactly
+  -- like a refusal, and would have "passed" whichever way the policy
+  -- went.
+  insert into public.attachments
+    (org_id, entity_table, entity_id, file_name, storage_path)
+  values (v_org, 'employee_documents', v_doc, 'passport.jpg',
+          v_org || '/employee_documents/' || v_doc || '/passport.jpg')
+  returning id into v_att;
+
+  -- ------------------------------------------------------------------
+  -- The clerk
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_clerk);
+
+  -- The premise. Without this the refusal below could be a clerk with
+  -- no permissions at all, which proves nothing about the carve-out.
+  perform pg_temp.check_true('a clerk can write the ledger',
+    app.can_write(v_org) or app.can_read_ledger(v_org));
+  perform pg_temp.check_true('and is not HR',
+    not app.can_manage_hr(v_org));
+  -- Both of the other doors the carve-out leaves open, named. An
+  -- `accountant` passes this test for the WRONG REASON: the carve-out
+  -- admits `can_run_payroll`, and an accountant may run payroll, so
+  -- the first version of this block asserted the opposite of what it
+  -- claimed and failed. `accounts_clerk` is the role the rule was
+  -- written about -- "an accounts clerk does not get to read a
+  -- passport" -- and these two lines are why it cannot drift back.
+  perform pg_temp.check_true('nor an administrator',
+    not app.can_admin(v_org));
+  perform pg_temp.check_true('nor somebody who runs payroll',
+    not app.can_run_payroll(v_org));
+
+  perform pg_temp.check_true(
+    'so the ledger audience cannot read a passport scan',
+    not app.can_read_attachment(v_org, 'employee_documents', v_doc));
+
+  -- And the row policy agrees with the function, which is the half
+  -- that stops anything. `set local role authenticated` because CI
+  -- connects as a superuser and a superuser bypasses RLS entirely --
+  -- a policy test on the default connection asserts nothing.
+  begin
+    set local role authenticated;
+    perform 1 from public.attachments where id = v_att;
+    v_refused := not found;
+  exception when insufficient_privilege then
+    v_refused := true;
+  end;
+  reset role;
+  perform pg_temp.check_true('the policy hides the row from them too',
+    v_refused);
+
+  -- The control: a clerk reads a BILL's attachment perfectly well. A
+  -- refusal for any reason at all would otherwise read as the
+  -- carve-out working.
+  perform pg_temp.check_true('while a bill''s attachment is theirs to read',
+    app.can_read_attachment(v_org, 'purchase_documents', gen_random_uuid()));
+
+  -- ------------------------------------------------------------------
+  -- The accountant, who is let IN, and deliberately
+  -- ------------------------------------------------------------------
+  -- The carve-out reads `can_manage_hr or can_admin or can_run_payroll`,
+  -- and an accountant may run payroll -- so whoever computes the wages
+  -- sees the personnel file, which they must, because a work permit
+  -- decides whether somebody may be paid at all.
+  --
+  -- This is the assertion for that OR, and the block had none: a
+  -- mutant that replaced the whole carve-out with `return false`
+  -- survived, because HR reaches the same answer by a different branch
+  -- further down and the clerk is refused either way. Nothing in the
+  -- file exercised the line itself.
+  --
+  -- It is also how the first version of this block went wrong: it made
+  -- the clerk an `accountant` and asserted they could NOT read a
+  -- passport, which is the opposite of the rule.
+  perform pg_temp.sign_in_as(v_acct);
+  perform pg_temp.check_true('an accountant runs payroll',
+    app.can_run_payroll(v_org));
+  perform pg_temp.check_true('and reads the ledger',
+    app.can_write(v_org) or app.can_read_ledger(v_org));
+  perform pg_temp.check_true(
+    'so the carve-out lets them read the passport, which it must',
+    app.can_read_attachment(v_org, 'employee_documents', v_doc));
+
+  -- ------------------------------------------------------------------
+  -- HR, and the person it is about
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_hr);
+  perform pg_temp.check_true('HR may read it',
+    app.can_read_attachment(v_org, 'employee_documents', v_doc));
+  perform pg_temp.check_true('and may file one',
+    app.can_attach_to(v_org, 'employee_documents', v_doc));
+
+  perform pg_temp.sign_in_as(v_them);
+  perform pg_temp.check_true('so may the employee it is about',
+    app.can_read_attachment(v_org, 'employee_documents', v_doc));
+
+  -- The one that would be a disaster: a colleague's. Same company,
+  -- same table, somebody else's passport.
+  declare
+    v_other_person uuid;
+    v_other_doc uuid;
+  begin
+    perform pg_temp.sign_in_as(v_owner);
+    insert into public.employees
+      (org_id, employee_no, full_name, hire_date)
+    values (v_org, 'E-002', 'Rakan', current_date)
+    returning id into v_other_person;
+    insert into public.employee_documents
+      (org_id, employee_id, title, doc_type)
+    values (v_org, v_other_person, 'Passport', 'identity')
+    returning id into v_other_doc;
+
+    perform pg_temp.sign_in_as(v_them);
+    perform pg_temp.check_true(
+      'and not a colleague''s, which is the one that matters',
+      not app.can_read_attachment(v_org, 'employee_documents', v_other_doc));
+  end;
+
+  -- An employee may not file one either: the register a labour
+  -- inspection reads is HR's, and a document somebody put on their own
+  -- file is a document nobody checked.
+  begin
+    set local role authenticated;
+    insert into public.attachments
+      (org_id, entity_table, entity_id, file_name, storage_path)
+    values (v_org, 'employee_documents', v_doc, 'mine.jpg',
+            v_org || '/employee_documents/' || v_doc || '/mine.jpg');
+    v_allowed := true;
+  exception when insufficient_privilege then
+    v_allowed := false;
+  when others then
+    v_allowed := false;
+    v_why := sqlstate || ' ' || sqlerrm;
+  end;
+  reset role;
+  perform pg_temp.check_true(
+    'an employee does not file documents onto their own record',
+    not v_allowed);
+  perform pg_temp.check_true(
+    'and the refusal is the policy, not a constraint',
+    v_why is null);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
