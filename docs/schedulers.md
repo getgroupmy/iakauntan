@@ -149,6 +149,45 @@ invoice the customer says never arrived.
   shape change at the publisher means a currency silently stops being
   priced, which is the failure the whole feed exists to prevent.
 
+## What the cron says and what GitHub does
+
+Measured, because the tables above are what was asked for and not what
+arrives. `send-email` asks for every thirty minutes between 09:00 and
+19:30 MYT on weekdays plus one daily pass, which is about twenty-three
+runs a day. Its five most recent scheduled runs, on 16 September 2026:
+
+    20:06, 15:22, 10:56, 05:40 UTC, and 20:14 the day before
+
+Five runs in twenty-four hours, at times matching **none** of its cron
+expressions, and a six-and-a-half-hour gap after the last of them. The
+workflow is not broken, the cron is not wrong, and nothing failed: on a
+private repository GitHub treats a `schedule` trigger as best-effort,
+delays it under load and drops runs entirely. Its own documentation says
+so; what is not obvious until you count is how much it drops.
+
+**So read every cadence in this document as an upper bound.** The
+consequences differ per job and are worth stating separately:
+
+- **`file-consolidations`** asks for daily and is fine with this. The
+  deadline it serves is seven days after month end, and a job that runs
+  once every few hours somewhere in that week discharges it. This is
+  also why it looks at every overdue consolidation and not only the ones
+  due today.
+- **`exchange-rates`** asks for once a weekday. A missed day leaves
+  yesterday's rate in force, which `docs/exchange-rate-feed.md` already
+  treats as the ordinary case.
+- **`send-email` is the one this hurts.** The section below says
+  somebody who presses **Email** "may wait half an hour". On the
+  evidence above they may wait five. The outbox screen's **Send now**
+  button is therefore not a convenience for the impatient; it is how
+  mail actually goes out promptly, and it is worth saying so to whoever
+  is trained on the screen.
+
+Nothing here was known when the cadences were chosen, and the argument
+in the next section changes with it: the billing floor is a reason to
+prefer thirty minutes over five, and GitHub delivering neither is a
+reason to prefer `pg_cron`.
+
 ## Why GitHub Actions and not `pg_cron`
 
 `pg_cron` with `pg_net` would work — both extensions are available and
@@ -168,3 +207,10 @@ If the latency ever matters more than that, `pg_cron` firing `pg_net`
 every minute is the answer — and it can now hold `SCHEDULER_SECRET`
 rather than the service role key, which makes it a considerably better
 trade than it was.
+
+On the measurements above it matters already, for `send-email` at least.
+`pg_cron` runs inside the database on the database's own clock, so it
+fires when it says it will; the asynchrony of `pg_net` is a real cost
+and the one to weigh, not the billing floor. The other two jobs are
+daily and best-effort suits them, so this is one workflow's decision
+rather than a rewrite of the arrangement.

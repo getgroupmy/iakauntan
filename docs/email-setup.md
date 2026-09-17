@@ -155,11 +155,22 @@ GitHub bills every job run at a minimum of one minute, so a five-minute
 cron would consume a private repository's whole monthly allowance and
 then some. Half-hourly is about 510 runs a month.
 
-The cost is latency: pressing **Email** on an invoice can mean a wait of
-up to half an hour. The Send now button covers the impatient case. If
-that is not good enough, the answer is not a tighter cron — it is
-`pg_cron` firing `pg_net` every minute from inside the database, which
-costs nothing per run and needs the service role key pasted into Vault.
+The cost is latency, and it is worse than the cron says. Half-hourly is
+what is ASKED for; on a private repository GitHub treats a `schedule`
+trigger as best-effort and drops most of it. Measured on 16 September
+2026, this workflow ran five times in twenty-four hours against the
+twenty-three its crons ask for, at times matching none of them. So
+pressing **Email** can mean a wait of hours, not half an hour —
+[schedulers.md](schedulers.md) has the figures.
+
+Which makes the **Send now** button the way mail actually goes out
+promptly rather than a convenience for the impatient, and worth saying
+to whoever is trained on the screen. If that is not good enough, the
+answer is not a tighter cron — GitHub is not delivering the present one
+— it is `pg_cron` firing `pg_net` from inside the database, which runs
+on the database's own clock, costs nothing per run, and since
+`SCHEDULER_SECRET` exists no longer needs the service role key in
+Vault.
 
 ## 1. A Resend account and a verified domain
 
@@ -286,7 +297,8 @@ Done — `.github/workflows/send-email.yml`, on the cadence above, holding
 
 The Outbox screen's **Send queued** button still works and drains only
 the signed-in user's own organization, which is the right answer for
-somebody who does not want to wait half an hour.
+somebody who does not want to wait on the scheduler — and, on the
+measured cadence above, for anybody who wants their mail to go today.
 
 ## 5. Switch it on per company
 
