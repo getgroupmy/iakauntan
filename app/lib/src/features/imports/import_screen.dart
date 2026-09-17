@@ -156,6 +156,23 @@ const purchaseTransactionColumns = <String, List<String>>{
   'tax_code': ['tax', 'sst code'],
 };
 
+/// 0633. One row per LINE, grouped by `entry_no`, with the debit and
+/// the credit in their own columns — which is how a general ledger
+/// prints and how every package exports one.
+///
+/// `debit` and `credit` have no aliases beyond the obvious: a column
+/// called "amount" in a journal export is unsigned as often as not, and
+/// reading it as a debit would put half a file on the wrong side.
+const journalColumns = <String, List<String>>{
+  'entry_no': ['journal no', 'jv no', 'voucher no', 'entry'],
+  'entry_date': ['journal date', 'date'],
+  'account_code': ['account', 'account no', 'gl code', 'ledger code'],
+  'description': ['particulars', 'narration', 'remarks', 'details'],
+  'debit': ['dr'],
+  'credit': ['cr'],
+  'contact_code': ['customer code', 'supplier code'],
+};
+
 const openBillColumns = <String, List<String>>{
   'doc_no': ['bill no', 'our ref', 'document no', 'no'],
   'supplier_doc_no': ['supplier invoice no', 'their ref', 'invoice no'],
@@ -211,6 +228,7 @@ enum ImportKind {
   // are imported after everything they refer to.
   salesTransactions,
   purchaseTransactions,
+  journals,
 }
 
 /// What each importer is called on the button that selects it.
@@ -270,6 +288,10 @@ List<String> requiredColumnsFor(ImportKind kind) => switch (kind) {
     'doc_date',
     'unit_price',
   ],
+  // No `debit` or `credit` among them: a line carries ONE of the two,
+  // so requiring either would refuse every file. Which one is present
+  // is the importer's question, not the screen's.
+  ImportKind.journals => const ['entry_no', 'entry_date', 'account_code'],
 };
 
 String importKindLabel(ImportKind kind) => switch (kind) {
@@ -282,6 +304,7 @@ String importKindLabel(ImportKind kind) => switch (kind) {
   ImportKind.openingStock => 'Opening stock',
   ImportKind.salesTransactions => 'Sales transactions',
   ImportKind.purchaseTransactions => 'Purchase transactions',
+  ImportKind.journals => 'Journals',
 };
 
 /// Whether this kind writes to the ledger.
@@ -450,6 +473,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             rows: table.rows,
             commit: commit,
           ),
+        ImportKind.journals => await repo.importJournals(
+          rows: table.rows,
+          commit: commit,
+        ),
       };
       setState(() => _verdict = rows);
       if (commit) {
@@ -539,6 +566,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.openingStock => 'opening stock lines',
     ImportKind.salesTransactions => 'transaction lines',
     ImportKind.purchaseTransactions => 'purchase transaction lines',
+    ImportKind.journals => 'journal lines',
   };
 
   @override
@@ -621,6 +649,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             'Invoices and credit notes, in full',
                           ImportKind.purchaseTransactions =>
                             'Bills and supplier credit notes, in full',
+                          // Said here rather than only in the migration:
+                          // this is the one importer that posts, and
+                          // somebody about to run it over a year of
+                          // journals is entitled to know before they
+                          // press it.
+                          ImportKind.journals =>
+                            'Journals — these post to the ledger',
                         },
                         subtitle:
                             'Upload the file, or paste it with its header '
@@ -782,6 +817,16 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                                   'unit_price\n'
                                   'BILL-77,ST-2026-4411,S-001,2026-05-02,'
                                   'Paper,10,4.50',
+                            // Both sides of one entry, because a journal
+                            // that does not balance is the mistake this
+                            // importer exists to catch.
+                            ImportKind.journals =>
+                              'entry_no,entry_date,account_code,'
+                                  'description,debit,credit\n'
+                                  'JV-0088,2026-02-01,6900,Depreciation,'
+                                  '400.00,\n'
+                                  'JV-0088,2026-02-01,1800,Depreciation,'
+                                  ',400.00',
                           },
                         ),
                       ),

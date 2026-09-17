@@ -148,6 +148,60 @@ void main() {
     });
   });
 
+  group('journals, and the two columns nothing else has', () {
+    const journalFile = [
+      'entry_no',
+      'entry_date',
+      'account_code',
+      'description',
+      'debit',
+      'credit',
+    ];
+
+    test('a journal file under the opening-balance importer is caught', () {
+      // They share `account_code`, `debit` and `credit`; what tells them
+      // apart is that a journal has an entry number and a date.
+      expect(
+        under(ImportKind.openingBalances, journalFile).looksLike,
+        ImportKind.journals,
+      );
+    });
+
+    test('and under its own importer it passes', () {
+      expect(
+        fileShapeWarning(under(ImportKind.journals, journalFile)),
+        isNull,
+      );
+    });
+
+    // Neither is required, and that is not an oversight: a line carries
+    // ONE of the two, so requiring either would refuse every file.
+    // Which one is present is the importer's question, not the
+    // screen's.
+    test('neither debit nor credit is required', () {
+      final required = requiredColumnsFor(ImportKind.journals);
+      expect(required, isNot(contains('debit')));
+      expect(required, isNot(contains('credit')));
+      expect(required, const ['entry_no', 'entry_date', 'account_code']);
+    });
+
+    test('but both are read', () {
+      final vocabulary = importColumnsFor(ImportKind.journals).keys;
+      expect(vocabulary, contains('debit'));
+      expect(vocabulary, contains('credit'));
+    });
+
+    // "amount" in a journal export is unsigned as often as not, and
+    // reading it as a debit would put half a file on the wrong side.
+    test('and "amount" is not read as either of them', () {
+      expect(
+        under(ImportKind.journals, const ['amount'])
+            .recognised[ImportKind.journals],
+        isEmpty,
+      );
+    });
+  });
+
   group('the importer knows its own file', () {
     test('every column of the template is one it reads', () {
       final columns = importTemplateColumns(ImportKind.salesTransactions);

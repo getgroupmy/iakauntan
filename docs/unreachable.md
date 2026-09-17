@@ -7857,3 +7857,60 @@ made them cheap enough to do in one pass.
 The list stays empty. A name added back here is an argument somebody
 has to make in writing, in `scripts/check_unreachable.py`, beside four
 entries that were each closed rather than kept.
+
+## A status nothing writes, and a trigger that would not respect it
+
+Found while writing `0633`, which needed to answer a simple question:
+can a general journal be imported as a DRAFT, the way `0631` and `0632`
+import documents?
+
+`gl_entries.status` says yes. Its check constraint permits
+`'draft'`, `'posted'` and `'void'`, and `report_trial_balance` filters
+`e.status = 'posted'`, so a draft entry would rightly stay off the
+trial balance.
+
+It is not yes, and the reason is one layer down.
+
+**`app.apply_account_balance` fires on every `gl_lines` row and moves
+`accounts.current_balance` whatever the entry's status is.** It reads
+`new.account_id`, `new.debit` and `new.credit` and nothing else. So a
+draft journal would be:
+
+  * absent from the trial balance, which filters on status, and
+  * fully present in `accounts.current_balance`, which the chart of
+    accounts screen shows.
+
+Two numbers disagreeing about the same money — which is exactly the
+failure `0629` was written to remove from credit notes.
+
+### Why it has never mattered
+
+Nothing has ever made one. `app.create_gl_entry_internal` writes
+`'posted'` outright; there is no other writer of `gl_entries` outside
+the demo seeds; and `app.refuse_unapproved_posting` treats every manual
+entry as a posting at INSERT rather than on a transition into
+`'posted'`, which is only correct because the transition does not
+exist.
+
+So `'draft'` is an unreachable state. The constraint has permitted it
+since `0002` and it has never been written.
+
+### What was done about it
+
+Nothing, deliberately, and this entry is the record of that decision.
+
+`0633` imports journals POSTED rather than inventing the state, and
+says so in its header. The alternatives were both worse:
+
+  * teaching `apply_account_balance` about status means changing the
+    trigger every journal in the product runs through, and reconciling
+    every existing `current_balance` in the same migration — a large
+    change to fix a state nobody uses;
+  * importing as draft without that change puts the defect above into
+    the product on purpose.
+
+What is worth knowing is that the trap is armed. The next person who
+sees `'draft'` in that constraint and reaches for it — a journal
+approval queue is the obvious reason — will get silently wrong balances
+unless they do the first bullet first. That is what this entry is here
+to stop.

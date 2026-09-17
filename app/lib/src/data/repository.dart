@@ -1474,6 +1474,26 @@ class Repo {
     return _rows(map['rows']);
   }
 
+  /// A file of general journals from the old system.
+  ///
+  /// 0633, and the one importer that POSTS. A journal has no draft
+  /// state the rest of the database understands — the reports filter on
+  /// `posted` but `app.apply_account_balance` moves the account balance
+  /// whatever the status is — so a draft journal would be absent from
+  /// the trial balance and present on the chart of accounts. The dry
+  /// run is what replaces the draft.
+  Future<List<Map<String, dynamic>>> importJournals({
+    required List<Map<String, String>> rows,
+    required bool commit,
+  }) async {
+    final data = await callRpc(
+      'import_journals',
+      params: {'p_org_id': orgId, 'p_rows': rows, 'p_commit': commit},
+    );
+    final map = Map<String, dynamic>.from(data as Map);
+    return _rows(map['rows']);
+  }
+
   /// The opening trial balance from the old system.
   ///
   /// The control accounts are compared against the open items already
