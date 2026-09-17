@@ -43,6 +43,35 @@
 -- both by name AND checks the excuse: a name that appears anywhere
 -- outside a quoted literal is not excused, so the day one of these is
 -- really called the exception stops applying.
+--
+-- ---------------------------------------------------------------------
+-- An assertion this file used to carry, and why it is gone
+--
+-- It also asserted the other half: that `set_sst_registration` is still
+-- NOT reachable by `service_role`, so a later reader would not have to
+-- take the paragraph above on trust. On the machine this was written on
+-- that is true. **On the hosted project it is false**, and the
+-- assertion failed the apply four times before anybody could see why.
+--
+-- `0145` grants that function to `authenticated` and to nobody else,
+-- and `0181` replaces it and grants nothing. No migration in this
+-- repository gives it to `service_role`. The hosted project has it
+-- anyway, which means a `public` function there arrives with a grant
+-- these migrations did not write -- Supabase's own default privileges,
+-- of which `0165` revokes PUBLIC and anon and leaves whatever else is
+-- there.
+--
+-- That drift is worth knowing and is NOT fixed here, because `c2d2d15`
+-- is the record of fixing exactly this on a guess: a function default
+-- privilege added to `_local_stack.sql` on the strength of 0165's
+-- comment made this machine more generous than the real one and was
+-- reverted. Measuring it needs a look at the hosted project, which this
+-- machine cannot reach.
+--
+-- What the failure actually taught is smaller and applies to every
+-- migration: **a migration must not assert what it cannot check.** The
+-- four grants below are checked, because this file makes them. The
+-- absence of a fifth was a claim about somebody else's database.
 -- =====================================================================
 
 grant execute on function app.uom_qty(uuid, numeric, text) to service_role;
@@ -65,15 +94,9 @@ begin
       'its behalf.';
   end if;
 
-  -- And the two this deliberately did not grant are deliberately still
-  -- not granted, which is the half a later reader would otherwise have
-  -- to take on trust.
-  if has_function_privilege('service_role',
-       'public.set_sst_registration(uuid, boolean, date, text, text)',
-       'execute') then
-    raise exception
-      'set_sst_registration is reachable by the edge role. 0621 says it '
-      'is a false positive of the sweep, not a call.';
-  end if;
+  -- What this file does NOT assert, and the header says why: that
+  -- `set_sst_registration` is still out of the edge role's reach. It is
+  -- here, it is not on the hosted project, and no migration in this
+  -- repository put it there.
 end
 $do$;

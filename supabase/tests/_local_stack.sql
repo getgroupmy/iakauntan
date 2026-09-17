@@ -83,6 +83,33 @@ alter default privileges for role postgres in schema public
   grant all on tables to service_role;
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
+-- ---------------------------------------------------------------------
+-- An open question about FUNCTIONS, left open on purpose
+--
+-- There is no default privilege for functions here, and `c2d2d15` is
+-- the record of why: one was added on the strength of `0165`'s comment,
+-- it made this machine more generous than the hosted project, and it
+-- was reverted.
+--
+-- `0621` found evidence pointing the other way and could not settle it
+-- either. Its apply-time check asserted that `public.set_sst_registration`
+-- is NOT executable by `service_role` -- true here, and it failed four
+-- times against the hosted project, where it is. `0145` grants that
+-- function to `authenticated` alone and `0181` replaces it granting
+-- nothing, so no migration in this repository put it there.
+--
+-- So a `public` function on the hosted project carries at least a
+-- `service_role` grant these migrations did not write, and this file
+-- does not reproduce it. The difference is in the safe direction --
+-- this machine is stricter, so a missing grant fails here first -- and
+-- it is written down rather than guessed at, because guessing is what
+-- c2d2d15 was.
+--
+-- Settling it needs `\df+` on the hosted project against a function
+-- created after 0165 and granted to nobody. Until then, do not add a
+-- line here on the strength of this note either.
+-- ---------------------------------------------------------------------
+
 -- The second entry, which governs only what `supabase_admin` creates
 -- and therefore governs nothing in this schema. Here so that a check
 -- which forgets to say whose default it is asking about fails on this
