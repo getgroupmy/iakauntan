@@ -89,7 +89,9 @@ FROM_RE = re.compile(r"\.from\(\s*'([a-z_]+)'")
 # `.from(` with anything that is not a quoted literal: a variable, a
 # getter, an interpolation. The table cannot be known here.
 DYNAMIC_FROM_RE = re.compile(r"\.from\(\s*(?!')\S", re.S)
-SELECT_RE = re.compile(r"\.select\(\s*'([^']*)'", re.S)
+SELECT_RE = re.compile(r"\.select\(", re.S)
+# One string literal, so a run of them can be walked.
+STRING_RE = re.compile(r"'([^']*)'")
 # An embedded resource: an optional `alias:`, the name, an optional
 # `!constraint` disambiguator, then the opening bracket of its column list.
 EMBED_RE = re.compile(r"(?:^|,)\s*(?:\w+:)?([a-z_]+)\s*((?:!\w+)*)\s*\(")
@@ -135,6 +137,54 @@ def constraints(db_url: str) -> dict[str, set[tuple[str, str]]]:
     return out
 
 
+def select_literal(text: str, at: int) -> str | None:
+    """Join the string literals making up one .select() argument.
+
+    Dart concatenates adjacent literals, and every long select in this
+    app is written over several lines that way:
+
+        .select(
+          '*, items!bills_of_materials_item_id_fkey(code, name), '
+          'bom_lines(*, items!bom_lines_item_id_fkey(code, name)), '
+          'bom_operations(*, work_centres(code, name, cost_per_hour))',
+        )
+
+    Reading only the first literal -- which is what this script did
+    until the whole of `bom_lines`, `mo_components`, `mo_operations`,
+    `appraisal_cycles`, `onboarding_tasks`, `warehouses`, `contacts` and
+    `pos_memberships` went past it -- checks the first line of a
+    three-line select and reports the app clean. Nine ambiguous embeds
+    were live behind that, and the docstring above already tells the
+    story of the same hole one level up: the `.select(` spanning lines
+    was fixed, the STRING spanning lines was not.
+
+    `scripts/check_query_columns.py` has had this since it was written.
+    That is where the shape is from.
+
+    Stops at the first top-level comma, which is where the column list
+    ends and `.select()`'s second argument begins -- adjacent literals
+    are never separated by one.
+    """
+    depth, i, parts = 1, at, []
+    while i < len(text) and depth > 0:
+        ch = text[i]
+        if ch == "'":
+            m = STRING_RE.match(text, i)
+            if not m:
+                return None
+            parts.append(m.group(1))
+            i = m.end()
+            continue
+        if ch == "," and depth == 1:
+            break
+        if ch in "({[":
+            depth += 1
+        elif ch in ")}]":
+            depth -= 1
+        i += 1
+    return "".join(parts) if parts else None
+
+
 def strip_schema(name: str) -> str:
     """`public.contacts` and `contacts` are the same table; `auth.users`
     is not `users`, and keeping its schema is what makes the difference
@@ -176,9 +226,11 @@ def scan(
             return table
 
         for select in SELECT_RE.finditer(text):
+            columns = select_literal(text, select.end())
+            if columns is None:
+                continue
             number = text.count("\n", 0, select.start()) + 1
             table = table_before(select.start())
-            columns = select.group(1)
 
             # An interpolated embed name, which no regex can resolve to
             # a table. Held to the naming convention instead: an

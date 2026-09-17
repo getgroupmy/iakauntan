@@ -2916,8 +2916,8 @@ class Repo {
             .from('bills_of_materials')
             .select(
               '*, items!bills_of_materials_item_id_fkey(code, name), '
-              'bom_lines(*, items!bom_lines_item_id_fkey(code, name)), '
-              'bom_operations(*, work_centres(code, name, cost_per_hour))',
+              'bom_lines!bom_lines_bom_id_fkey(*, items!bom_lines_item_id_fkey(code, name)), '
+              'bom_operations!bom_operations_bom_id_fkey(*, work_centres(code, name, cost_per_hour))',
             )
             .eq('id', id)
             .eq('org_id', orgId)
@@ -3074,9 +3074,9 @@ class Repo {
               '*, items!manufacturing_orders_item_id_fkey(code, name), '
               'bills_of_materials!manufacturing_orders_bom_id_fkey'
               '(code, name), '
-              'warehouses(code, name), '
-              'mo_components(*, items!mo_components_item_id_fkey(code, name)), '
-              'mo_operations(*, work_centres(code, name, cost_per_hour))',
+              'warehouses!manufacturing_orders_warehouse_id_fkey(code, name), '
+              'mo_components!mo_components_mo_id_fkey(*, items!mo_components_item_id_fkey(code, name)), '
+              'mo_operations!mo_operations_mo_id_fkey(*, work_centres(code, name, cost_per_hour))',
             )
             .eq('id', id)
             .eq('org_id', orgId)
@@ -6429,7 +6429,7 @@ extension RepoHr on Repo {
         .select(
           '*, employees!appraisals_employee_id_fkey(full_name), '
           'reviewer:employees!appraisals_reviewer_id_fkey(full_name), '
-          'appraisal_cycles(name, rating_scale_max, self_review_due, '
+          'appraisal_cycles!appraisals_cycle_id_fkey(name, rating_scale_max, self_review_due, '
           'manager_review_due)',
         )
         .eq('org_id', orgId)
@@ -7050,7 +7050,7 @@ extension RepoHrSetup on Repo {
         .select(
           '*, employees!onboarding_checklists_employee_id_fkey'
           '(full_name, employee_no), '
-          'onboarding_tasks(id, is_done, is_mandatory)',
+          'onboarding_tasks!onboarding_tasks_checklist_id_fkey(id, is_done, is_mandatory)',
         )
         .eq('org_id', orgId);
     if (openOnly) q = q.isFilter('completed_at', null);
@@ -9958,9 +9958,15 @@ extension RepoMemberships on Repo {
   /// The member's name and the offer's name come back in the same read
   /// rather than as two more round trips per row, which on a list of
   /// two hundred subscriptions is the difference between a screen and
-  /// a wait. Neither embed is ambiguous — there is exactly one foreign
-  /// key between these tables in each direction, which `check_embeds`
-  /// re-establishes against the real schema on every CI run.
+  /// a wait.
+  ///
+  /// Both embeds name their constraint. The comment that used to sit
+  /// here said neither was ambiguous and that `check_embeds` proved it
+  /// on every CI run; both halves were wrong. `0513` gave each of these
+  /// tables a same-org composite key alongside the plain one, so there
+  /// are two ways to join in each direction — and `check_embeds` was
+  /// reading only the first string literal of a `.select()`, so it
+  /// never saw this line at all.
   Future<List<Map<String, dynamic>>> membershipSubscriptions({
     String? status,
   }) async {
@@ -9968,7 +9974,9 @@ extension RepoMemberships on Repo {
         .from('pos_membership_subscriptions')
         .select(
           'id, started_on, ends_on, status, note, recurring_document_id, '
-          'contacts(name), pos_memberships(name, period, sessions_included)',
+          'contacts!pos_membership_subscriptions_contact_id_fkey(name), '
+          'pos_memberships!pos_membership_subscriptions_membership_id_fkey'
+          '(name, period, sessions_included)',
         )
         .eq('org_id', orgId);
 
