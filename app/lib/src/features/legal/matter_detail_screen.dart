@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -280,6 +281,7 @@ class _ClientLedgerTab extends ConsumerWidget {
       body: AsyncView(
         value: txns,
         onRetry: () => ref.invalidate(clientTransactionsProvider(matterId)),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -805,6 +807,7 @@ class _TimeTab extends ConsumerWidget {
       body: AsyncView(
         value: entries,
         onRetry: () => ref.invalidate(timeEntriesProvider(matterId)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -1106,6 +1109,7 @@ class _DisbursementsTab extends ConsumerWidget {
       body: AsyncView(
         value: items,
         onRetry: () => ref.invalidate(disbursementsProvider(matterId)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

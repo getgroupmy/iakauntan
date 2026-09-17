@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -70,6 +71,7 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
     return AsyncView<Map<String, SitePage>>(
       value: pages,
       onRetry: () => ref.invalidate(sitePageDraftsProvider),
+      skeleton: const FormSkeleton(fields: 4),
       builder: (rows) {
         final page = rows[widget.slug];
         if (_loadedFor != widget.slug) {

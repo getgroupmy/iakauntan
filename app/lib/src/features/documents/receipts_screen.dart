@@ -8,6 +8,7 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -105,6 +106,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
             child: AsyncView(
               value: rows,
               onRetry: () => ref.invalidate(settlementsProvider(_isSales)),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (list) => list.isEmpty
                   ? EmptyState(
                       icon: Icons.payments_outlined,

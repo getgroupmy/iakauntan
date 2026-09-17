@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // The forecasting methods live in an extension on Repo, and a Dart
@@ -289,6 +290,7 @@ class _Suggestions extends ConsumerWidget {
     return AsyncView<List<Map<String, dynamic>>>(
       value: suggestions,
       onRetry: () => ref.invalidate(forecastSuggestionsProvider(warehouseId)),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(
@@ -525,6 +527,7 @@ class _AllLines extends ConsumerWidget {
     return AsyncView<List<Map<String, dynamic>>>(
       value: lines,
       onRetry: () => ref.invalidate(forecastLinesProvider(runId)),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (list) {
         final shown = skippedOnly
             ? list.where((l) => l['skipped_reason'] != null).toList()

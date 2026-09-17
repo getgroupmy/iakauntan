@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -161,6 +162,7 @@ class _CashFlowScreenState extends ConsumerState<CashFlowScreen> {
               onRetry: () => ref.invalidate(
                 cashForecastProvider((weeks: _weeks, useHistory: _useHistory)),
               ),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (rows) => ListView.separated(
                 itemCount: rows.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
@@ -337,6 +339,7 @@ class _ItemsSheet extends ConsumerWidget {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: items,
                 onRetry: () => ref.invalidate(cashForecastItemsProvider),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return const Padding(
@@ -596,6 +599,7 @@ class _LagsSheet extends ConsumerWidget {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: lags,
           onRetry: () => ref.invalidate(customerPaymentLagsProvider),
+          skeleton: const ListSkeleton(rows: 6, leading: false),
           builder: (all) {
             final rows = lagsWorthArguingAbout(all);
             if (rows.isEmpty) {

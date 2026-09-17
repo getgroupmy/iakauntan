@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -37,6 +38,7 @@ class _HolidaysTabState extends ConsumerState<HolidaysTab> {
       body: AsyncView(
         value: holidays,
         onRetry: () => ref.invalidate(publicHolidaysProvider(_year)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => ListView(
           padding: const EdgeInsets.only(bottom: 96),
           children: [

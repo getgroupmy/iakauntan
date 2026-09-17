@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -77,6 +78,7 @@ class _LedgerDialog extends ConsumerWidget {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: ledger,
           onRetry: () => ref.invalidate(creditLedgerProvider),
+          skeleton: const ListSkeleton(rows: 4, leading: false),
           builder: (rows) {
             if (rows.isEmpty) {
               return const EmptyState(

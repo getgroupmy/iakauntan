@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'log_attempt_sheet.dart';
@@ -26,6 +27,7 @@ class CollectionsScreen extends ConsumerWidget {
       body: AsyncView(
         value: worklist,
         onRetry: () => ref.invalidate(collectionsWorklistProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

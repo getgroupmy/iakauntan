@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/row_actions.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -91,6 +92,7 @@ class _ClaimsScreenState extends ConsumerState<ClaimsScreen> {
         onRetry: () => _mine
             ? ref.invalidate(claimsAwaitingMeProvider)
             : ref.invalidate(claimsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: _mine

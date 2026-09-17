@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -59,6 +60,7 @@ class _InboxTab extends ConsumerWidget {
     return AsyncView(
       value: inbox,
       onRetry: () => ref.invalidate(myApprovalsProvider),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(
@@ -270,6 +272,7 @@ class _RulesTab extends ConsumerWidget {
       body: AsyncView(
         value: rules,
         onRetry: () => ref.invalidate(approvalRulesProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

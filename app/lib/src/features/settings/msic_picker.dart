@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -134,6 +135,7 @@ class _MsicPickerState extends ConsumerState<_MsicPicker> {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: codes,
                 onRetry: () => ref.invalidate(msicCodesProvider),
+                skeleton: const ListSkeleton(rows: 4, leading: false),
                 builder: (all) {
                   final rows = msicMatches(all, typed);
                   if (rows.isEmpty) {

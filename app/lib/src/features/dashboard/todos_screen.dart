@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -61,6 +62,7 @@ class _TodoList extends ConsumerWidget {
     return AsyncView(
       value: todos,
       onRetry: () => ref.invalidate(todosProvider),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (items) {
         if (items.isEmpty) {
           return EmptyState(

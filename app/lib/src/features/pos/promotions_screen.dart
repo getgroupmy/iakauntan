@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -57,6 +58,7 @@ class PromotionsScreen extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: promos,
         onRetry: () => ref.invalidate(posPromotionsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(

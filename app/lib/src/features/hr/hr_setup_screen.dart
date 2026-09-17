@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ea_form_repository.dart';
@@ -509,6 +510,7 @@ class _SetupList extends ConsumerWidget {
       body: AsyncView(
         value: rows,
         onRetry: () => ref.invalidate(setupRowsProvider(arg)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.tune,

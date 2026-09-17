@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // The POS methods live in an extension on Repo, and a Dart extension is
@@ -1952,6 +1953,7 @@ class _Basket extends ConsumerWidget {
           : ref.watch(posOpenOrdersProvider(outletId!));
       final list = AsyncView<List<Map<String, dynamic>>>(
         value: open,
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) => rows.isEmpty
             ? (compact
                   // On a phone this branch is one line under a full

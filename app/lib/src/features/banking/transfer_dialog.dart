@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -95,6 +96,7 @@ class _TransferDialogState extends ConsumerState<_TransferDialog> {
         child: AsyncView(
           value: accounts,
           onRetry: () => ref.invalidate(bankAccountsProvider),
+          skeleton: const FormSkeleton(fields: 4),
           builder: (list) {
             if (list.length < 2) {
               return const EmptyState(

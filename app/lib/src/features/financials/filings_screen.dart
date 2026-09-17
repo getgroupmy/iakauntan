@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -33,6 +34,7 @@ class FilingsScreen extends ConsumerWidget {
       body: AsyncView(
         value: filings,
         onRetry: () => ref.invalidate(fsFilingsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -24,6 +25,7 @@ class WithholdingScreen extends ConsumerWidget {
       body: AsyncView(
         value: rows,
         onRetry: () => ref.invalidate(withholdingReportProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

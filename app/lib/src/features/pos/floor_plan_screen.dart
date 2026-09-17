@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 // `RepoPos` is an extension, and a Dart extension is only in scope
 // where its declaring library is imported.
@@ -340,6 +341,7 @@ class _Room extends ConsumerWidget {
     final plan = ref.watch(posFloorPlanProvider(outletId));
     return AsyncView<List<Map<String, dynamic>>>(
       value: plan,
+      skeleton: const ListSkeleton(rows: 6, subtitle: false),
       builder: (tables) {
         if (tables.isEmpty) {
           return const EmptyState(

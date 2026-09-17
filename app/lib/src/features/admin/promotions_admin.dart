@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/platform_live.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
@@ -40,6 +41,7 @@ class PromotionsAdminTab extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: promotions,
         onRetry: () => ref.invalidate(platformPromotionsAdminProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) => rows.isEmpty
             ? const EmptyState(
                 icon: Icons.local_offer_outlined,

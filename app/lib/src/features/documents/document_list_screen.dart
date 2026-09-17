@@ -299,6 +299,7 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
                   contactsProvider((type: 'supplier', search: _query)),
                 ),
                 loading: const LinearProgressIndicator(),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (list) => list.isEmpty
                     ? const EmptyState(
                         icon: Icons.person_search_outlined,

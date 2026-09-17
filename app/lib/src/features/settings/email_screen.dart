@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -71,6 +72,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
     return AsyncView(
       value: settings,
       onRetry: () => ref.invalidate(emailSettingsProvider),
+      skeleton: const FormSkeleton(fields: 5),
       builder: (row) {
         if (!_loaded) {
           _loaded = true;
@@ -293,6 +295,7 @@ class _OutboxTabState extends ConsumerState<_OutboxTab> {
             child: AsyncView(
               value: rows,
               onRetry: () => ref.invalidate(emailOutboxProvider(_status)),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (list) => list.isEmpty
                   ? const EmptyState(
                       icon: Icons.outbox_outlined,

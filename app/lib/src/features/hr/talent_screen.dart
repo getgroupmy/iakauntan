@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/row_actions.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -109,6 +110,7 @@ class _RequisitionsTab extends ConsumerWidget {
     return AsyncView(
       value: reqs,
       onRetry: () => ref.invalidate(requisitionsProvider),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) => list.isEmpty
           ? EmptyState(
               icon: Icons.work_outline,
@@ -232,6 +234,7 @@ class _CandidatesTab extends ConsumerWidget {
       body: AsyncView(
       value: applicants,
       onRetry: () => ref.invalidate(applicantsProvider),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(
@@ -375,6 +378,7 @@ class _AppraisalsTab extends ConsumerWidget {
           ref.invalidate(appraisalsProvider);
           ref.invalidate(myAppraisalPartsProvider);
         },
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.assessment_outlined,

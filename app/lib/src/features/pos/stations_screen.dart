@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
@@ -287,6 +288,7 @@ class _Body extends ConsumerWidget {
 
     return AsyncView<List<Map<String, dynamic>>>(
       value: stations,
+      skeleton: const ListSkeleton(rows: 6),
       builder: (sts) => ListView(
         padding: const EdgeInsets.only(bottom: 88),
         children: [

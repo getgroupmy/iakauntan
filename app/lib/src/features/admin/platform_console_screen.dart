@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/platform_live.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -479,6 +480,7 @@ class _OrganizationsTab extends ConsumerWidget {
     return AsyncView(
       value: orgs,
       onRetry: () => ref.invalidate(platformOrgsProvider),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -233,6 +234,11 @@ class _PacksDialogState extends ConsumerState<_PacksDialog> {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: options,
           onRetry: _refresh,
+          skeleton: const ListSkeleton(
+            rows: 4,
+            leading: false,
+            subtitle: false,
+          ),
           builder: (list) {
             final packs = declaredPacks(list);
             final choices =

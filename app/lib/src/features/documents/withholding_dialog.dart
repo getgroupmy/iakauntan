@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
@@ -99,6 +100,7 @@ class _WithholdingDialogState extends ConsumerState<_WithholdingDialog> {
         child: AsyncView(
           value: types,
           onRetry: () => ref.invalidate(withholdingTypesProvider),
+          skeleton: const FormSkeleton(fields: 3),
           builder: (list) => SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,

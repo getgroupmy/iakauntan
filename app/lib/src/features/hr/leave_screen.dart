@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/row_actions.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -70,6 +71,7 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
       body: AsyncView(
         value: requests,
         onRetry: () => ref.invalidate(leaveRequestsProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.event_available_outlined,

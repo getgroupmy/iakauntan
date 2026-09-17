@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -107,6 +108,7 @@ class _TemplateDialogState extends ConsumerState<_TemplateDialog> {
         child: AsyncView<List<BusinessDocument>>(
           value: docs,
           onRetry: () => ref.invalidate(documentsProvider),
+          skeleton: const ListSkeleton(rows: 4),
           builder: (list) {
             final candidates = templateCandidates(list);
             if (candidates.isEmpty) {

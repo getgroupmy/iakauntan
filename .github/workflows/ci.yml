@@ -336,6 +336,23 @@ jobs:
           cache: true
       - run: flutter pub get
 
+      # BEFORE the build, for the reason the iOS job's deployment-target
+      # check is before its build: Gradle refuses the FIRST plugin whose
+      # compileSdk is too low and then stops, so its message names one
+      # of five and costs six minutes to get. This reads all of them off
+      # the pub cache in a second, and says which ones the floor in
+      # `app/android/build.gradle.kts` is carrying.
+      #
+      # It is not a gate the build depends on -- the floor is what makes
+      # the build work. It is how the floor stops being invisible, and
+      # how it eventually becomes unnecessary: each plugin drops off the
+      # list when its own release compiles against 36, and when the list
+      # empties the floor can go. It DOES fail on a plugin pinned above
+      # the floor, which is the one case the floor cannot fix.
+      - name: Every plugin compiles against the API the app needs
+        working-directory: .
+        run: python3 scripts/check_android_compile_sdk.py
+
       # `--debug`, and not `appbundle` or `--release`. A release build
       # needs a signing configuration, which needs the upload keystore,
       # which is a secret this repository does not hold and must not --

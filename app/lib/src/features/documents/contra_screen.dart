@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -89,6 +90,7 @@ class ContraScreen extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: notes,
         onRetry: () => ref.invalidate(contraNotesProvider(null)),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -389,6 +391,7 @@ class _ContraSheet extends ConsumerWidget {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: lines,
                 onRetry: () => ref.invalidate(contraLinesProvider(id)),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (rows) => ListView.separated(
                   shrinkWrap: true,
                   itemCount: rows.length,

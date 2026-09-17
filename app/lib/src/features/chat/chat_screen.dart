@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -162,6 +163,7 @@ class _ConversationListState extends ConsumerState<_ConversationList> {
           child: AsyncView(
             value: conversations,
             onRetry: () => ref.invalidate(chatConversationsProvider),
+            skeleton: const ListSkeleton(rows: 6, subtitle: false),
             builder: (list) => list.isEmpty
                 ? const EmptyState(
                     icon: Icons.forum_outlined,
@@ -499,6 +501,11 @@ class _ThreadState extends ConsumerState<_Thread> {
             value: thread,
             onRetry: () =>
                 ref.invalidate(chatThreadProvider(widget.conversationId)),
+            skeleton: const ListSkeleton(
+              rows: 6,
+              leading: false,
+              subtitle: false,
+            ),
             builder: (rows) => rows.isEmpty
                 ? const EmptyState(
                     icon: Icons.waving_hand_outlined,
@@ -868,6 +875,7 @@ class _DirectoryDialogState extends ConsumerState<_DirectoryDialog> {
               child: AsyncView(
                 value: directory,
                 onRetry: () => ref.invalidate(chatDirectoryProvider),
+                skeleton: const ListSkeleton(rows: 6),
                 builder: (all) {
                   final rows = q.isEmpty
                       ? all

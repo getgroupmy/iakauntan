@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -111,6 +112,7 @@ class _TakingsScreenState extends ConsumerState<TakingsScreen> {
             child: AsyncView(
               value: board,
               onRetry: () => ref.invalidate(posDayBoardProvider(_day)),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (rows) {
                 if (rows.isEmpty) {
                   return const EmptyState(

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -70,6 +71,7 @@ class PayrollScreen extends ConsumerWidget {
       body: AsyncView(
         value: runs,
         onRetry: () => ref.invalidate(payrollRunsProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.payments_outlined,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../core/safe_link.dart';
@@ -203,6 +204,7 @@ class _Arrived extends ConsumerWidget {
     return AsyncView(
       value: ref.watch(inboxProvider),
       onRetry: () => ref.invalidate(inboxProvider),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (rows) {
         if (rows.isEmpty) {
           return const EmptyState(
@@ -236,6 +238,7 @@ class _Conversation extends ConsumerWidget {
     return AsyncView(
       value: thread,
       onRetry: () => ref.invalidate(mailboxThreadProvider(mailboxId)),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (rows) {
         if (rows.isEmpty) {
           return const EmptyState(
@@ -276,6 +279,7 @@ class _Found extends ConsumerWidget {
     return AsyncView(
       value: ref.watch(mailSearchProvider(search)),
       onRetry: () => ref.invalidate(mailSearchProvider(search)),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (rows) {
         if (rows.isEmpty) {
           return EmptyState(

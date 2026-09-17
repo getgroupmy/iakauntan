@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'charge_run_sheet.dart';
@@ -113,6 +114,7 @@ class _UnitList extends ConsumerWidget {
     return AsyncView(
       value: units,
       onRetry: () => ref.invalidate(propertyUnitsProvider(siteId)),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) {
         if (list.isEmpty) {
           return EmptyState(
@@ -205,6 +207,7 @@ class _StrataCharges extends ConsumerWidget {
     return AsyncView(
       value: scheme,
       onRetry: () => ref.invalidate(strataSchemeProvider(siteId)),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (s) {
         if (s == null) {
           return EmptyState(
@@ -383,6 +386,7 @@ class _Arrears extends ConsumerWidget {
           value: arrears,
           onRetry: () =>
               ref.invalidate(strataArrearsProvider(s['id'] as String)),
+          skeleton: const ListSkeleton(rows: 6, leading: false),
           builder: (list) {
             if (list.isEmpty) {
               return const EmptyState(
@@ -478,6 +482,7 @@ class _TenancyList extends ConsumerWidget {
       body: AsyncView(
         value: tenancies,
         onRetry: () => ref.invalidate(tenanciesProvider(siteId)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -568,6 +573,7 @@ class _StatutoryList extends ConsumerWidget {
     return AsyncView(
       value: charges,
       onRetry: () => ref.invalidate(propertyStatutoryChargesProvider(siteId)),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(

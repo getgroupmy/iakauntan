@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -86,6 +87,7 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
       body: AsyncView(
         value: people,
         onRetry: () => ref.invalidate(directoryProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (all) {
           final list = _search.isEmpty
               ? all

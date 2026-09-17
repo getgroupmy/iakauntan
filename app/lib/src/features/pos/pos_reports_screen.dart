@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'offline_problems_dialog.dart';
@@ -206,6 +207,7 @@ class _PosReportsScreenState extends ConsumerState<PosReportsScreen> {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: reports,
         onRetry: () => ref.invalidate(posReportsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -302,6 +304,17 @@ class _Result extends ConsumerWidget {
         return AsyncView<List<Map<String, dynamic>>>(
           value: rows,
           onRetry: () => ref.invalidate(posReportRunProvider(reportId)),
+          // The one table in the app that can outline itself honestly.
+          // `headings` came from the OUTER fetch, so by the time this
+          // one is waiting the column count is already known -- and a
+          // table skeleton with the wrong number of columns reflows the
+          // instant the data lands, which is the flicker it exists to
+          // remove.
+          //
+          // The outer `AsyncView` above has no skeleton for the same
+          // reason: it is the fetch that DECIDES how many columns there
+          // are, so anything drawn there would be a guess.
+          skeleton: TableSkeleton(columns: headings.length),
           builder: (data) {
             if (data.isEmpty) {
               return const Padding(
