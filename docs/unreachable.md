@@ -1319,6 +1319,29 @@ rather than the exemption —
   question both ways: `activities` already carries a CRM timeline and
   many tables carry their own `notes` text column, so pinning a note
   is not a feature until there are notes.
+
+  `public.fs_disclosures` is the one left, and it turned out not to be
+  a missing screen either. **There are no disclosure codes to key it
+  on.** `mbrs_elements` seeds `sofp` (16 elements) and `soploci` (9)
+  and nothing else, so of the five members of `app.fs_statement`
+  three — `socie`, `socf` and `disclosure` — have no element at all;
+  the word `'disclosure'` appears exactly once in `0171`, in the enum
+  that declares it. Its policies are properly module-gated, so unlike
+  `notes` there was no hole to close. Closing it needs the taxonomy
+  elements for those statements, which `0171` already says must come
+  from "the mTool taxonomy in use before the first live lodgement" —
+  the same blocker as `mbrs_elements.taxonomy_version`.
+
+  What *did* close was the silence. `fs_prepare` iterates
+  `mbrs_elements`, `fs_freeze` stores what it returns, and the filing
+  screen drew a section per statement **present** — so a preparer read
+  two sections, exported them and was three statements short at the
+  counter, with a `'Disclosures'` heading sitting ready in the code
+  that would never appear. `missingStatementsNote` names what is not
+  in the export and says a lodgement carries all five. It deliberately
+  does not claim WHICH of the two reasons applies — no element loaded,
+  or no figures for this company — because the export cannot tell
+  those apart, and it names both ways out instead.
 - `KNOWN_GAPS` — a ratchet, in the shape `check_unreachable.py` uses
   for the providers nobody had drawn. **The number goes down.** It
   started at four and is **empty**; all four were closed rather than

@@ -224,10 +224,30 @@ WHOLE_TABLE_UNREACHED: dict[str, str] = {
     # `public.fs_disclosures`: one row per MBRS disclosure code on a
     # financial-statements filing. No function reads or writes the
     # table and no Dart mentions it, while `fs_filings` beside it IS
-    # reached -- so this is the part of MBRS that was tabled and never
-    # built.
+    # reached.
+    #
+    # Checked rather than assumed, and the reason is not a missing
+    # screen. There are NO DISCLOSURE CODES to key it on:
+    # `mbrs_elements` seeds `sofp` (16 elements) and `soploci` (9) and
+    # nothing else, so of the five members of `app.fs_statement` three
+    # -- `socie`, `socf` and `disclosure` -- have no element at all.
+    # The word `'disclosure'` appears exactly once in `0171`, in the
+    # enum that declares it.
+    #
+    # Its policies are properly module-gated, unlike `notes` before
+    # `0644`, so there is no hole to close either.
+    #
+    # To close: the taxonomy elements for those three statements,
+    # which `0171` says must come from "the mTool taxonomy in use
+    # before the first live lodgement" -- the same blocker as
+    # `mbrs_elements.taxonomy_version` above. What DID close here is
+    # the silence: the filing screen drew a section per statement
+    # present and said nothing about the three that never are, so a
+    # preparer exported two and was three short at the counter.
+    # `missingStatementsNote` says so now.
     'fs_disclosures.value_text':
-        'nothing reaches public.fs_disclosures at all',
+        'no disclosure codes exist to key it on; needs the real MBRS '
+        'taxonomy, like mbrs_elements.taxonomy_version',
 }
 
 # GAPS. Not exemptions -- a ratchet, in the shape `check_unreachable.py`

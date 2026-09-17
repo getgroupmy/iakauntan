@@ -59,3 +59,62 @@ String mtoolFilename(List<Map<String, dynamic>> rows) {
   final frozen = rows.isNotEmpty && rows.first['is_frozen'] == true;
   return frozen ? 'mbrs-figures.csv' : 'mbrs-figures-DRAFT.csv';
 }
+
+/// The five statements MBRS asks a lodgement for, in the order they are
+/// presented.
+///
+/// A list rather than the screen's map, so "which are missing" can be
+/// asked without a widget.
+const fsStatements = <String, String>{
+  'sofp': 'Statement of financial position',
+  'soploci': 'Profit or loss and other comprehensive income',
+  'socie': 'Changes in equity',
+  'socf': 'Cash flows',
+  'disclosure': 'Disclosures',
+};
+
+/// Which of those a set of exported rows does not contain, in order.
+///
+/// The screen groups `fs_export` by statement and draws a section per
+/// group, so a statement with no rows simply does not appear — and a
+/// preparer reads two sections, exports them, and is three statements
+/// short at the counter without anything having said so.
+///
+/// `mbrs_elements` seeds `sofp` and `soploci` only, sixteen and nine
+/// elements, so on today's taxonomy THREE are always absent: changes in
+/// equity, cash flows and the disclosures. `0171` says why the table is
+/// a table — "the MBRS taxonomy is versioned and changes between
+/// releases" — and says the seeded codes "must be reconciled against
+/// the mTool taxonomy in use before the first live lodgement". The
+/// elements for the other three come from that reconciliation.
+List<String> missingStatements(Iterable<String> present) {
+  final seen = present.toSet();
+  return [
+    for (final code in fsStatements.keys)
+      if (!seen.contains(code)) fsStatements[code]!,
+  ];
+}
+
+/// What to say about them.
+///
+/// Named rather than counted, because "three statements are missing" is
+/// something a preparer has to go and work out, and the point of saying
+/// it at all is that they should not have to.
+///
+/// Deliberately does NOT claim which of the two reasons applies. A
+/// statement is absent either because no taxonomy element for it is
+/// loaded or because this company has no figures for it, and the export
+/// cannot tell those apart — what the preparer needs either way is to
+/// know it is not in the file.
+String? missingStatementsNote(Iterable<String> present) {
+  final missing = missingStatements(present);
+  if (missing.isEmpty) return null;
+  final names = missing.length == 1
+      ? missing.single
+      : '${missing.sublist(0, missing.length - 1).join(', ')} and '
+            '${missing.last}';
+  return 'Not in this export: $names. A full MBRS lodgement carries all '
+      'five, so these have to come from elsewhere — load the taxonomy '
+      'elements for them into mbrs_elements, or enter them in mTool '
+      'directly.';
+}
