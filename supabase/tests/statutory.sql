@@ -604,7 +604,7 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Seventeen functions are deliberately open to an unauthenticated
+  -- Nineteen functions are deliberately open to an unauthenticated
   -- caller, and each earned its place by someone who has no account
   -- needing to
   -- do exactly one thing: a director signing one resolution, a customer
@@ -861,7 +861,37 @@ begin
            -- `supabase/tests/site_pages.sql` asserts the gate, that
            -- the table behind it is shut to anon, and that only a
            -- platform administrator can change what it says.
-           'site_pages')));
+           'site_pages',
+           -- 0626, and the pair of them are the third token-shaped
+           -- door: a customer filling in their own TIN, because from
+           -- this year an e-Invoice will not clear MyInvois without it
+           -- and the only person who has it is them.
+           --
+           -- `open_tax_detail_request` answers with what the company
+           -- already holds about that one contact -- name, address,
+           -- identifiers -- so the customer corrects rather than
+           -- retypes. There is deliberately nothing about money on it:
+           -- no invoice, no balance, no total, which
+           -- `supabase/tests/tax_details.sql` asserts by name. It is a
+           -- disclosure of the contact's OWN details to somebody
+           -- holding a link the company emailed them, which is the same
+           -- bargain `open_customer_portal` strikes one step narrower.
+           'open_tax_detail_request',
+           -- The writer, and the one to read carefully, because it is
+           -- the only function on this list that writes into master
+           -- data an e-Invoice is built from.
+           --
+           -- What bounds it is a rule rather than a filter: a
+           -- submission FILLS A BLANK and never overwrites. A stranger
+           -- holding the link cannot change a TIN, an address or an SST
+           -- number the company already holds -- that takes
+           -- `apply_tax_submission`, which is `can_write` and is
+           -- deliberately not on this list. Every submission is
+           -- recorded in full either way, so the answer to "where did
+           -- this number come from" is a row. And a form submitted
+           -- empty is refused by a check constraint rather than queued
+           -- as an answer.
+           'submit_tax_details')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -876,7 +906,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the fifteen that need anon still have it',
+  perform pg_temp.check_eq('and the nineteen that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -927,8 +957,16 @@ begin
                           -- saying it is closed is found by somebody
                           -- whose password appears to have stopped
                           -- working.
-                          'maintenance_notice')),
-    17);
+                          'maintenance_notice',
+                          -- 0626. A tax-details link that has silently
+                          -- stopped working is found by a customer who
+                          -- was asked for their TIN, went to give it,
+                          -- and could not -- and then by the company,
+                          -- months later, as an e-Invoice MyInvois will
+                          -- not take.
+                          'open_tax_detail_request',
+                          'submit_tax_details')),
+    19);
 
   -- And every one of them says what it hands to a stranger.
   --

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0625",
+    "version": "0626",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -20041,6 +20041,58 @@
         }
       }
     },
+    "/rpc/apply_tax_submission": {
+      "post": {
+        "operationId": "apply_tax_submission",
+        "summary": "Accepts a customer's submitted tax details over what the contact already held",
+        "description": "Accepts a customer's submitted tax details over what the contact already held. Requires can_write. See 0626.\n\n`public.apply_tax_submission(p_submission_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_submission_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_submission_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/approval_state": {
       "post": {
         "operationId": "approval_state",
@@ -31798,6 +31850,60 @@
         }
       }
     },
+    "/rpc/dismiss_tax_submission": {
+      "post": {
+        "operationId": "dismiss_tax_submission",
+        "summary": "Records that somebody in the company looked at a customer's submission and is keeping what the contact\u2026",
+        "description": "Records that somebody in the company looked at a customer's submission and is keeping what the contact already holds. Writes nothing to the contact. Requires can_write. See 0626.\n\n`public.dismiss_tax_submission(p_submission_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_submission_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_submission_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/dispose_fixed_asset": {
       "post": {
         "operationId": "dispose_fixed_asset",
@@ -40650,6 +40756,58 @@
         }
       }
     },
+    "/rpc/open_tax_detail_request": {
+      "post": {
+        "operationId": "open_tax_detail_request",
+        "summary": "What we hold about one contact, for somebody holding their tax-details token and no account",
+        "description": "What we hold about one contact, for somebody holding their tax-details token and no account. Money is not in it. See 0626.\n\n`public.open_tax_detail_request(p_token text)` Writes. Reachable without signing in.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "anon",
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/org_module_surface": {
       "post": {
         "operationId": "org_module_surface",
@@ -41502,6 +41660,93 @@
                       "overdue": {
                         "type": "boolean"
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/pending_tax_submissions": {
+      "post": {
+        "operationId": "pending_tax_submissions",
+        "summary": "Customer tax-detail submissions that disagree with what the contact holds, with both sides of each\u2026",
+        "description": "Customer tax-detail submissions that disagree with what the contact holds, with both sides of each disagreement. See 0626.\n\n`public.pending_tax_submissions(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "submission_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "contact_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "contact_name": {
+                        "type": "string"
+                      },
+                      "submitted_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "submitted_by_name": {
+                        "type": "string"
+                      },
+                      "submitted_by_email": {
+                        "type": "string"
+                      },
+                      "applied_fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "conflicts": {}
                     }
                   }
                 }
@@ -58087,6 +58332,65 @@
         }
       }
     },
+    "/rpc/request_tax_details": {
+      "post": {
+        "operationId": "request_tax_details",
+        "summary": "Issues one contact a link to fill in their own TIN and tax details, and emails it",
+        "description": "Issues one contact a link to fill in their own TIN and tax details, and emails it. See 0626.\n\n`public.request_tax_details(p_contact_id uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_valid_days": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_contact_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/resume_pos_item": {
       "post": {
         "operationId": "resume_pos_item",
@@ -59184,6 +59488,60 @@
                 },
                 "required": [
                   "p_request_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/revoke_tax_detail_request": {
+      "post": {
+        "operationId": "revoke_tax_detail_request",
+        "summary": "Closes any live tax-details link for one contact",
+        "description": "Closes any live tax-details link for one contact. Requires can_write. See 0626.\n\n`public.revoke_tax_detail_request(p_contact_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_contact_id"
                 ]
               }
             }
@@ -65213,6 +65571,60 @@
                 "schema": {
                   "type": "null"
                 }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/submit_tax_details": {
+      "post": {
+        "operationId": "submit_tax_details",
+        "summary": "Records what a customer filled in on their own tax-details form, and fills the contact's BLANK fields from it",
+        "description": "Records what a customer filled in on their own tax-details form, and fills the contact's BLANK fields from it. Never overwrites. 0626.\n\n`public.submit_tax_details(p_token text, p_details jsonb)` Writes. Reachable without signing in.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "anon",
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_token": {
+                    "type": "string"
+                  },
+                  "p_details": {}
+                },
+                "required": [
+                  "p_token",
+                  "p_details"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -71591,6 +72003,134 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_codes"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_detail_requests": {
+      "get": {
+        "operationId": "select_tax_detail_requests",
+        "summary": "Read tax_detail_requests",
+        "description": "A scoped token letting one customer fill in their own tax details without an account. document_share_links, pointed at a form. 0626.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_detail_requests"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_detail_submissions": {
+      "get": {
+        "operationId": "select_tax_detail_submissions",
+        "summary": "Read tax_detail_submissions",
+        "description": "What a customer filled in on their own tax-details form, recorded in full whether or not it reached the contact. 0626.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_detail_submissions"
                   }
                 }
               }
@@ -92679,6 +93219,186 @@
           "org_id",
           "code",
           "name"
+        ]
+      },
+      "tax_detail_requests": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token_hash": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sent_to_email": {
+            "type": "string"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "open_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "submission_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ip_address": {
+            "type": "string",
+            "format": "ipv4"
+          },
+          "user_agent": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "contact_id",
+          "token_hash",
+          "expires_at"
+        ]
+      },
+      "tax_detail_submissions": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "submitted_by_name": {
+            "type": "string"
+          },
+          "submitted_by_email": {
+            "type": "string"
+          },
+          "ip_address": {
+            "type": "string",
+            "format": "ipv4"
+          },
+          "user_agent": {
+            "type": "string"
+          },
+          "tin": {
+            "type": "string"
+          },
+          "id_type": {
+            "type": "string"
+          },
+          "id_value": {
+            "type": "string"
+          },
+          "sst_registration_no": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "address_line1": {
+            "type": "string"
+          },
+          "address_line2": {
+            "type": "string"
+          },
+          "address_line3": {
+            "type": "string"
+          },
+          "postcode": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "state_code": {
+            "type": "string"
+          },
+          "country_code": {
+            "type": "string"
+          },
+          "applied_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applied_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "applied_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dismissed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dismissed_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "superseded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "contact_id",
+          "request_id"
         ]
       },
       "tax_reliefs": {

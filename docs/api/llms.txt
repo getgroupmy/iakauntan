@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0625` (the highest applied migration).
-701 functions and 341 readable tables, of which
-265 functions only read.
+Schema version `0626` (the highest applied migration).
+708 functions and 343 readable tables, of which
+266 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**561 of 701 functions carry a `comment on
+**568 of 708 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -58,7 +58,7 @@ resolve to the unprotected original and return a plausible id.
 
 ## Reachable without signing in
 
-19 functions are granted to `anon`. Everything else
+21 functions are granted to `anon`. Everything else
 needs a user token.
 
 - `corp_decline_with_link`
@@ -70,6 +70,7 @@ needs a user token.
 - `open_customer_portal`
 - `open_shared_document`
 - `open_shared_ticket`
+- `open_tax_detail_request`
 - `place_public_pos_order`
 - `portal_document_token`
 - `public_pos_menu`
@@ -79,6 +80,7 @@ needs a user token.
 - `shared_payment_options`
 - `signup_reference`
 - `site_pages`
+- `submit_tax_details`
 - `workspace_by_host`
 
 ## The functions, by module
@@ -364,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (490)
+### general (497)
 
 Not gated on any module.
 
@@ -386,6 +388,7 @@ Not gated on any module.
 - `apply_business_type(p_org_id uuid, p_business_type text, p_modules text[])` *(writes)* — Records what the company said it does and switches on the modules it was shown.
 - `apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` *(writes)* — Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation.
 - `apply_statutory_leave_bands(p_leave_type_id uuid, p_preset text)` *(writes)* — Writes the Employment Act service bands onto a leave type — 8/12/16 days for annual, 14/18/22 for sick, by years of service — and switches the type to scale with service.
+- `apply_tax_submission(p_submission_id uuid)` *(writes)* — Accepts a customer's submitted tax details over what the contact already held.
 - `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
 - `approve_budget(p_id uuid)` *(writes)* — Agrees a draft budget, which is the act that makes it the thing variances are measured against.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
@@ -521,6 +524,7 @@ Not gated on any module.
 - `discount_pos_sale(p_sale uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces a whole bill, by a percentage or by an amount.
 - `discount_pos_sale_line(p_line uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces one line, by a percentage or by an amount, with a reason and a name against it.
 - `dismiss_notification(p_id uuid)` *(writes)* — Takes a notification off the list for good, and marks it read on the way past if it was not -- dismissed but unread is a state nothing needs.
+- `dismiss_tax_submission(p_submission_id uuid)` *(writes)* — Records that somebody in the company looked at a customer's submission and is keeping what the contact already holds.
 - `dispose_fixed_asset(p_asset_id uuid, p_date date, p_proceeds numeric, p_bank_account_id uuid)` *(writes)* — Takes a fixed asset off the books on `p_date` and returns the id of the journal entry it posted.
 - `document_activity(p_document_id uuid)` — One document's whole timeline: what was sent, what changed, what was paid, and what LHDN said.
 - `document_lot_problems(p_document_id uuid, p_kind text)`
@@ -610,6 +614,7 @@ Not gated on any module.
 - `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)* — Opens a vacancy so it can be applied to, from draft or from on hold, and clears any closing date a previous hold left behind.
 - `open_shared_document(p_token text)` *(writes)* — Opens an invoice or quotation shared by link, for a customer who is not a user of this system.
 - `open_shared_ticket(p_token text)` *(writes)* — Opens a support ticket shared by link, for the customer who raised it.
+- `open_tax_detail_request(p_token text)` *(writes)* — What we hold about one contact, for somebody holding their tax-details token and no account.
 - `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
 - `org_payment_gateway_status(p_org_id uuid)` — Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what is configured without being shown the credentials.
 - `org_save_login_page(p_org_id uuid, p_title text, p_body text)` *(writes)* — Writes the heading and body shown on this company's own sign-in page, creating the row on first save.
@@ -618,6 +623,7 @@ Not gated on any module.
 - `payment_batch_lines(p_batch uuid)`
 - `payment_gateways_for(p_country text)` — The gateways this platform has switched on that sell in a given country, named in alpha-2 or alpha-3.
 - `payroll_payment_instruction(p_run_id uuid)` — The rows a bank needs to pay a posted run, with anything that would be rejected flagged rather than silently omitted.
+- `pending_tax_submissions(p_org_id uuid)` — Customer tax-detail submissions that disagree with what the contact holds, with both sides of each disagreement.
 - `place_public_pos_order(p_token text, p_items jsonb, p_name text, p_phone text, p_note text, p_line1 text, p_line2 text, p_city text, p_state text, p_postcode text)` *(writes)* — Places an order from a published menu.
 - `platform_adjust_credit(p_org_id uuid, p_amount numeric, p_reason text)` *(writes)* — Moves a company's credit balance by hand, up or down, and returns the new balance.
 - `platform_ai_providers()` — The provider list for the platform console, with whether a key is on file and when it was set.
@@ -763,6 +769,7 @@ Not gated on any module.
 - `request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` *(writes)* — Asks the platform for an address on our mail domain, personal to somebody when `p_owner_id` is given.
 - `request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` *(writes)* — Asks a company admin for temporary sight of payslips, and returns the request.
 - `request_subdomain(p_org_id uuid, p_subdomain text)` *(writes)* — Asks the platform for a name on our domain.
+- `request_tax_details(p_contact_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues one contact a link to fill in their own TIN and tax details, and emails it.
 - `resync_bank_balance(p_bank_account_id uuid)` *(writes)* — Rebuilds bank_accounts.current_balance from posted ledger lines.
 - `retire_account(p_id uuid)` *(writes)* — Closes a ledger account: switched off, hidden from the chart, and kept.
 - `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)* — Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss.
@@ -771,6 +778,7 @@ Not gated on any module.
 - `revoke_customer_portal(p_contact_id uuid)` *(writes)* — Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a single document.
 - `revoke_document_share(p_document_id uuid)` *(writes)* — Turns off every share link for one sales document at once, and returns how many it turned off.
 - `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)* — Withdraws an employee's approved access to their own payslips, with a note saying why.
+- `revoke_tax_detail_request(p_contact_id uuid)` *(writes)* — Closes any live tax-details link for one contact.
 - `rollback_import_batch(p_batch_id uuid)` *(writes)* — Removes what an import wrote, backwards through app.import_target_tables().
 - `run_depreciation(p_org_id uuid, p_as_at date)` *(writes)* — Charges depreciation on every active asset up to a date, posts one journal grouped by expense and accumulated account, and returns the run.
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)* — Raises every recurring document due on or before a date for ONE company, and returns how many.
@@ -827,6 +835,7 @@ Not gated on any module.
 - `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)* — Files a leave request and HOLDS THE DAYS against the balance while it waits — which is what stops two requests each passing a check the pair of them would fail.
 - `submit_manager_appraisal(p_appraisal uuid, p_rating numeric, p_comments text, p_increment numeric, p_bonus numeric, p_promotion boolean, p_development_plan text)` *(writes)* — The reviewer's half.
 - `submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` *(writes)* — Writes the employee's own half and moves the appraisal to the manager.
+- `submit_tax_details(p_token text, p_details jsonb)` *(writes)* — Records what a customer filled in on their own tax-details form, and fills the contact's BLANK fields from it.
 - `suggest_bank_coding(p_transaction_id uuid)` — The first rule that describes this bank line, and what it says to code it as.
 - `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)`
 - `suggest_lots(p_item_id uuid, p_warehouse_id uuid, p_quantity numeric)`
@@ -1188,6 +1197,8 @@ inconsistent.
 - `strata_schemes`
 - `tax_brackets`
 - `tax_codes`
+- `tax_detail_requests`
+- `tax_detail_submissions`
 - `tax_reliefs`
 - `tenancies`
 - `terminal_enrolments`
