@@ -134,6 +134,28 @@ const salesTransactionColumns = <String, List<String>>{
   'tax_code': ['tax', 'sst code'],
 };
 
+/// 0632. The purchase side of [salesTransactionColumns], and the one
+/// column that makes it different: `supplier_doc_no`, what is printed
+/// on the paper. `0628` reads it to decide whether the same bill has
+/// arrived twice, so a file that loses it loses the duplicate check.
+const purchaseTransactionColumns = <String, List<String>>{
+  'doc_no': ['bill no', 'our ref', 'document no', 'no'],
+  'supplier_doc_no': ['supplier invoice no', 'their ref', 'invoice no'],
+  'doc_type': ['document type'],
+  'contact_code': ['supplier code', 'supplier', 'account code'],
+  'doc_date': ['bill date', 'invoice date', 'date'],
+  'due_date': ['due', 'payment due'],
+  'currency': ['ccy'],
+  'exchange_rate': ['rate', 'fx rate'],
+  'reference': ['your ref', 'po no', 'order no'],
+  'item_code': ['item', 'product code', 'stock code'],
+  'description': ['particulars', 'remarks', 'details'],
+  'quantity': ['qty', 'units'],
+  'unit_price': ['price', 'rate per unit', 'unit rate'],
+  'discount_percent': ['discount', 'disc %'],
+  'tax_code': ['tax', 'sst code'],
+};
+
 const openBillColumns = <String, List<String>>{
   'doc_no': ['bill no', 'our ref', 'document no', 'no'],
   'supplier_doc_no': ['supplier invoice no', 'their ref', 'invoice no'],
@@ -184,10 +206,11 @@ enum ImportKind {
   openBills,
   openingBalances,
   openingStock,
-  // 0631, and last in the order for the reason the comment below gives:
-  // the transactions name contacts, items and tax codes, so they are
-  // imported after everything they refer to.
+  // 0631 and 0632, last in the order for the reason the comment below
+  // gives: the transactions name contacts, items and tax codes, so they
+  // are imported after everything they refer to.
   salesTransactions,
+  purchaseTransactions,
 }
 
 /// What each importer is called on the button that selects it.
@@ -237,6 +260,16 @@ List<String> requiredColumnsFor(ImportKind kind) => switch (kind) {
     'doc_date',
     'unit_price',
   ],
+  // The same four. `supplier_doc_no` is deliberately NOT required: a
+  // subscription receipt or a toll carries no number of the supplier's,
+  // and refusing the file over it would refuse the ordinary case to
+  // protect the duplicate check.
+  ImportKind.purchaseTransactions => const [
+    'doc_no',
+    'contact_code',
+    'doc_date',
+    'unit_price',
+  ],
 };
 
 String importKindLabel(ImportKind kind) => switch (kind) {
@@ -248,6 +281,7 @@ String importKindLabel(ImportKind kind) => switch (kind) {
   ImportKind.openingBalances => 'Opening balances',
   ImportKind.openingStock => 'Opening stock',
   ImportKind.salesTransactions => 'Sales transactions',
+  ImportKind.purchaseTransactions => 'Purchase transactions',
 };
 
 /// Whether this kind writes to the ledger.
@@ -411,6 +445,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           rows: table.rows,
           commit: commit,
         ),
+        ImportKind.purchaseTransactions =>
+          await repo.importPurchaseTransactions(
+            rows: table.rows,
+            commit: commit,
+          ),
       };
       setState(() => _verdict = rows);
       if (commit) {
@@ -499,6 +538,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.openingBalances => 'opening balances',
     ImportKind.openingStock => 'opening stock lines',
     ImportKind.salesTransactions => 'transaction lines',
+    ImportKind.purchaseTransactions => 'purchase transaction lines',
   };
 
   @override
@@ -579,6 +619,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           ImportKind.openingStock => 'Stock on hand',
                           ImportKind.salesTransactions =>
                             'Invoices and credit notes, in full',
+                          ImportKind.purchaseTransactions =>
+                            'Bills and supplier credit notes, in full',
                         },
                         subtitle:
                             'Upload the file, or paste it with its header '
@@ -730,6 +772,16 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                                   'Consulting,2,500.00\n'
                                   'INV-2025-0912,C-001,2025-11-03,'
                                   'Travel,1,250.00',
+                            // The supplier's number is on every line
+                            // because it belongs to the document, and a
+                            // file where it changes halfway is two bills
+                            // run together.
+                            ImportKind.purchaseTransactions =>
+                              'doc_no,supplier_doc_no,contact_code,'
+                                  'doc_date,description,quantity,'
+                                  'unit_price\n'
+                                  'BILL-77,ST-2026-4411,S-001,2026-05-02,'
+                                  'Paper,10,4.50',
                           },
                         ),
                       ),

@@ -45,6 +45,7 @@ Map<String, List<String>> importColumnsFor(ImportKind kind) => switch (kind) {
   ImportKind.openingBalances => openingBalanceColumns,
   ImportKind.openingStock => openingStockColumns,
   ImportKind.salesTransactions => salesTransactionColumns,
+  ImportKind.purchaseTransactions => purchaseTransactionColumns,
 };
 
 /// Which of [headers] an importer understands.

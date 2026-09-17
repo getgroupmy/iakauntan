@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0631` (the highest applied migration).
-713 functions and 343 readable tables, of which
+Schema version `0632` (the highest applied migration).
+714 functions and 343 readable tables, of which
 268 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**573 of 713 functions carry a `comment on
+**574 of 714 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (502)
+### general (503)
 
 Not gated on any module.
 
@@ -567,6 +567,7 @@ Not gated on any module.
 - `import_open_invoices(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — Brings a customer's unpaid history over as posted invoices against opening equity.
 - `import_opening_balances(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — The opening trial balance from a previous system.
 - `import_opening_stock(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — Opening stock quantities and costs.
+- `import_purchase_transactions(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)* — Imports bills, purchase credit notes and purchase debit notes from one row per line, grouped by document number.
 - `import_sales_transactions(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)* — Imports sales invoices, credit notes and debit notes from one row per line, grouped by document number.
 - `inbound_attachments(p_email_id uuid)` — What came attached to one message.
 - `intercompany_inbox(p_org_id uuid)`

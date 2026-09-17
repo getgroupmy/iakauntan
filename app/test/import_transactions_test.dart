@@ -91,6 +91,63 @@ void main() {
     });
   });
 
+  group('the purchase side, and the column that makes it different', () {
+    /// `supplier_doc_no` is what is printed on the paper, and `0628`
+    /// reads it to decide whether the same bill has arrived twice.
+    const purchaseFile = [
+      'doc_no',
+      'supplier_doc_no',
+      'contact_code',
+      'doc_date',
+      'description',
+      'quantity',
+      'unit_price',
+    ];
+
+    test('a purchase file under the sales importer is caught', () {
+      expect(
+        under(ImportKind.salesTransactions, purchaseFile).looksLike,
+        ImportKind.purchaseTransactions,
+      );
+      expect(
+        under(ImportKind.salesTransactions, purchaseFile).evidence,
+        contains('supplier_doc_no'),
+      );
+    });
+
+    test('and under its own importer it passes', () {
+      expect(
+        fileShapeWarning(
+          under(ImportKind.purchaseTransactions, purchaseFile),
+        ),
+        isNull,
+      );
+    });
+
+    // Not required, deliberately: a subscription receipt or a toll
+    // carries no number of the supplier's, and refusing the file over
+    // it would refuse the ordinary case to protect the duplicate check.
+    test('the supplier’s number is read but not required', () {
+      expect(
+        importColumnsFor(ImportKind.purchaseTransactions).keys,
+        contains('supplier_doc_no'),
+      );
+      expect(
+        requiredColumnsFor(ImportKind.purchaseTransactions),
+        isNot(contains('supplier_doc_no')),
+      );
+    });
+
+    test('and a bill file under Open bills is still caught', () {
+      // They share `doc_no`, `supplier_doc_no`, `contact_code` and
+      // `doc_date`; what tells them apart is that one carries lines.
+      expect(
+        under(ImportKind.openBills, purchaseFile).looksLike,
+        ImportKind.purchaseTransactions,
+      );
+    });
+  });
+
   group('the importer knows its own file', () {
     test('every column of the template is one it reads', () {
       final columns = importTemplateColumns(ImportKind.salesTransactions);

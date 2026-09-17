@@ -1455,6 +1455,25 @@ class Repo {
     return _rows(map['rows']);
   }
 
+  /// The purchase side of [importSalesTransactions].
+  ///
+  /// 0632. The difference is `supplier_doc_no` — what is printed on the
+  /// paper — and that a bill this supplier has already sent is REFUSED
+  /// rather than warned about: `0628` warns on a screen where somebody
+  /// can judge the match, and a file of four hundred rows has nobody
+  /// looking at any one of them.
+  Future<List<Map<String, dynamic>>> importPurchaseTransactions({
+    required List<Map<String, String>> rows,
+    required bool commit,
+  }) async {
+    final data = await callRpc(
+      'import_purchase_transactions',
+      params: {'p_org_id': orgId, 'p_rows': rows, 'p_commit': commit},
+    );
+    final map = Map<String, dynamic>.from(data as Map);
+    return _rows(map['rows']);
+  }
+
   /// The opening trial balance from the old system.
   ///
   /// The control accounts are compared against the open items already
