@@ -115,6 +115,17 @@ document was wrong about four of them, which is the failure mode it
 shares with README's own list — `docs/unreachable.md` has the sweeps
 that catch it.
 
+**And this particular failure now has a gate.**
+`scripts/check_document_types.py` runs on every push: every member of
+`app.sales_doc_type` and `app.purchase_doc_type` has a `DocTypeMeta`
+entry, or is named in the script with the reason it has none. It
+refuses the other direction too — a screen for a document type the
+database has no value for, which would be an insert refused by a check
+constraint's message rather than a sentence — and it refuses an
+exemption that has rotted either way: one for a type that no longer
+exists, or one for a type that has a screen now and was left behind.
+`purchase_return` is its single entry, and the number should go down.
+
 ## Revision, August 2026 — what has closed and what has not
 
 The AutoCount side of this document still could not be read. Every

@@ -878,6 +878,18 @@ jobs:
       - name: Check every column is written and read by something
         run: python3 scripts/check_orphan_columns.py
 
+      # And the same question of the DOCUMENT TYPES, which is where a
+      # stale claim survived longest: `docs/gaps-against-autocount.md`
+      # named five types as having no screen while four of them had
+      # one, and called the fifth "the one that will be missed" when
+      # returning goods to a supplier is done by a purchase credit
+      # note. The gate refuses a type with no screen, a screen for a
+      # type the database has not -- which would be an insert refused
+      # by a check constraint rather than a sentence -- and an
+      # exemption that has rotted either way.
+      - name: Check every document type has a screen
+        run: python3 scripts/check_document_types.py
+
       # `0531`. STABLE is a promise that a function does not write, and
       # PostgREST believes it: such a function runs in a READ ONLY
       # transaction, so a write inside one fails with 25006 and takes
@@ -1797,6 +1809,9 @@ jobs:
 
       - name: The orphan-column sweep's own assertions
         run: python3 scripts/check_orphan_columns_test.py
+
+      - name: The document-type gate's own assertions
+        run: python3 scripts/check_document_types_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py
