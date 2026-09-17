@@ -18,12 +18,6 @@
 /// round refuses every sign-in on the project, including yours.
 /// Whether a captcha is being asked for at all.
 /// Whether this build can draw one.
-///
-/// The web can. Android and iOS cannot yet: Turnstile has no native
-/// SDK and needs a webview, which this app does not carry. Said out
-/// loud rather than left as a silent false, because the dashboard
-/// switch protects the whole PROJECT — turning it on while a platform
-/// cannot produce a token locks that platform out of signing in.
 /// What the form says when it cannot draw one but one is expected.
 /// What it says when somebody has not passed it yet.
 /// The widget itself, or nothing at all when no key is configured.
@@ -38,21 +32,40 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'captcha_controller.dart';
 export 'captcha_controller.dart' show CaptchaController;
-import 'captcha_stub.dart' if (dart.library.js_interop) 'captcha_web.dart';
+import 'captcha_stub.dart'
+    if (dart.library.js_interop) 'captcha_web.dart'
+    if (dart.library.io) 'captcha_native.dart';
 
 /// Whether a captcha is being asked for at all.
 bool captchaOn(String? siteKey) => (siteKey ?? '').trim().isNotEmpty;
 
 /// Whether this build can draw one.
 ///
-/// The web can. Android and iOS cannot yet: Turnstile has no native
-/// SDK and needs a webview, which this app does not carry. Said out
-/// loud rather than left as a silent false, because the dashboard
-/// switch protects the whole PROJECT — turning it on while a platform
-/// cannot produce a token locks that platform out of signing in.
-bool get captchaAvailable => kIsWeb;
+/// The web draws it directly. Android and iOS draw `web/captcha.html`
+/// in a webview and read the token back — Turnstile has no native SDK,
+/// so hosting the real page is the only way a phone can produce a
+/// token at all. See `captcha_native.dart`.
+///
+/// Desktop still cannot: `webview_flutter` endorses Android and iOS
+/// only. Written as those two rather than as "not web", so a Linux
+/// build says so on the screen instead of failing at runtime on a
+/// plugin that is not there.
+///
+/// This matters more than it looks. The dashboard switch protects the
+/// whole PROJECT: with it on, GoTrue wants a token from every platform,
+/// and a platform that cannot produce one is locked out of signing in
+/// entirely. That was the state of iOS and Android until this existed.
+bool get captchaAvailable =>
+    kIsWeb ||
+    defaultTargetPlatform == TargetPlatform.android ||
+    defaultTargetPlatform == TargetPlatform.iOS;
 
 /// What the form says when it cannot draw one but one is expected.
+///
+/// Desktop only, now. Android and iOS draw the challenge in a webview
+/// and no longer reach this; it is kept because a Linux or Windows
+/// build still has nowhere to draw one, and saying so beats a form
+/// that silently cannot be submitted.
 const captchaUnavailable =
     'This app cannot complete the security check on this device. Use '
     'the web app to sign in.';

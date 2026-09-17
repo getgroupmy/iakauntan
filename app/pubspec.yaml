@@ -93,6 +93,15 @@ dependencies:
   # Playing one back. Chosen over just_audio for having a web
   # implementation in the same package rather than a federated one.
   audioplayers: ^6.1.0
+  # Somewhere to draw a Turnstile challenge on a phone. Cloudflare
+  # publishes no native SDK -- the widget is a browser widget -- so the
+  # only way iOS and Android can produce a captcha token is to host the
+  # real page in a webview. See features/auth/captcha_native.dart.
+  #
+  # Android and iOS only: webview_flutter endorses no web or desktop
+  # implementation, so nothing is enrolled into the web bundle by
+  # adding it, and `captchaAvailable` still says no on desktop.
+  webview_flutter: ^4.10.0
   # Real PDFs for the documents a secretary has to print, sign
   # and lodge. Markdown is fine for a diff; it is not fine for
   # something that goes in a minute book.
