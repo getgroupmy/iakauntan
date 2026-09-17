@@ -93,11 +93,18 @@ end $$;
 -- exposes that no client role can execute is either dead or a feature
 -- that has never worked once.
 --
--- Three are deliberately unreachable and are named. `chat_expire_calls`
--- and `prune_device_tokens` are called by `app.run_daily_jobs` inside
--- the database, where the caller is the job owner and PostgREST is not
--- involved; `ticket_sla_sweep` is called only by the demo builder.
+-- Three are deliberately unreachable and are named, and all three run
+-- INSIDE the database where PostgREST is not involved and the caller is
+-- the job owner: `chat_expire_calls` and `prune_device_tokens` from
+-- `app.run_daily_jobs`, and `ticket_sla_sweep` from the `pg_cron` job
+-- `iakauntan-sla-sweep` that `0356` schedules every five minutes.
 -- Granting any of them would widen the client surface for nothing.
+--
+-- `0618` said of the third that only the demo builder calls it. That is
+-- what a grep of the migrations shows and it is misleading: `0356` is
+-- titled "the SLA clock nobody wound" and exists precisely because the
+-- sweep was not being run, so a note implying it still is not would
+-- send the next reader to fix something that was fixed.
 --
 -- Named rather than counted, so that a fourth one is a failure with a
 -- name in it rather than a number that somebody raises.
