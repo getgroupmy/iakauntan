@@ -58,7 +58,7 @@ finishing work on things that already exist.
 | P19 | Reports | Monthly Sales Analysis, P&L by Document | **Partial** | `revenue_trend`, `/dashboard`, `/pos-reports`. No per-document margin report |
 | P20 | Sales | Void / unvoid, status board, copy from quotation | **Present** | `void_sales_document`, `sales_documents.status`, `/sales` with Draft/Outstanding filters, quotation → order → invoice conversion |
 | P21 | e-Invoice | Approval stage before submission | **Present** | `approval_rules`, `approval_steps`, `approval_requests`, `app.approval_entity`, `app.refuse_unapproved_posting`, `/approvals`. Draft expiry and a draft-only role were not evidenced |
-| P22 | Tools | Audit Trail with filters | **Present** | `audit_trail(uuid, text, uuid, integer)` — org, record type, record id, limit; `audit_logs` with `old_data`/`new_data`; `/admin/trail`, `/security`. Filtering by **user** and by **date** is not in that signature |
+| P22 | Tools | Audit Trail with filters | **Present**, and the two missing filters are now built (`0634`) | `audit_trail(uuid, text, uuid, integer)` — org, record type, record id, limit; `audit_logs` with `old_data`/`new_data`; `/admin/trail`, `/security`. Filtering by **user** and by **date** is not in that signature |
 | P23 | Tools | File attachments | **Present** | `attachments`, `attachments_card.dart`, storage policies from 0068 |
 
 ---

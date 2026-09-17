@@ -1914,9 +1914,67 @@ final securitySummaryProvider =
       return requireRepo(ref).securitySummary();
     });
 
+/// What the change history is being narrowed to.
+///
+/// Held as a value rather than as three providers so that changing two
+/// filters at once is one read rather than two — which matters here more
+/// than usual, because reading the trail WRITES a `sensitive_read` and
+/// a screen that re-reads per filter buries the events somebody is
+/// looking for.
+@immutable
+class AuditFilter {
+  const AuditFilter({this.actorId, this.from, this.to});
+
+  final String? actorId;
+  final DateTime? from;
+  final DateTime? to;
+
+  bool get isEmpty => actorId == null && from == null && to == null;
+
+  AuditFilter copyWith({
+    Object? actorId = _same,
+    Object? from = _same,
+    Object? to = _same,
+  }) => AuditFilter(
+    actorId: actorId == _same ? this.actorId : actorId as String?,
+    from: from == _same ? this.from : from as DateTime?,
+    to: to == _same ? this.to : to as DateTime?,
+  );
+
+  // A sentinel, because `null` is a value each of these can take and
+  // `copyWith(actorId: null)` has to mean "clear it" rather than "leave
+  // it".
+  static const _same = Object();
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuditFilter &&
+      other.actorId == actorId &&
+      other.from == from &&
+      other.to == to;
+
+  @override
+  int get hashCode => Object.hash(actorId, from, to);
+}
+
+final auditFilterProvider = StateProvider.autoDispose<AuditFilter>(
+  (ref) => const AuditFilter(),
+);
+
 final auditTrailProvider = FutureProvider.autoDispose<List<AuditEntry>>((ref) {
-  return requireRepo(ref).auditTrail();
+  final filter = ref.watch(auditFilterProvider);
+  return requireRepo(ref).auditTrail(
+    actorId: filter.actorId,
+    from: filter.from,
+    to: filter.to,
+  );
 });
+
+/// Who appears in the change history, for the filter's dropdown.
+final auditTrailActorsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).auditTrailActors();
+    });
 
 final departmentsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).departments();

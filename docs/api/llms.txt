@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0633` (the highest applied migration).
-715 functions and 343 readable tables, of which
-268 functions only read.
+Schema version `0634` (the highest applied migration).
+716 functions and 343 readable tables, of which
+269 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**575 of 715 functions carry a `comment on
+**576 of 716 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (504)
+### general (505)
 
 Not gated on any module.
 
@@ -395,7 +395,8 @@ Not gated on any module.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
 - `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)* — Appoints a practice to keep this company's books, and returns how many access rows that came to.
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
-- `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` *(writes)* — Returns what changed, most recent first, with the before and after of each row.
+- `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer, p_actor_id uuid, p_from date, p_to date)` *(writes)* — Returns what changed, most recent first, with the before and after of each row.
+- `audit_trail_actors(p_org_id uuid)` — Who appears in this company's change history, and how often, for the filter on the trail.
 - `audit_view_payslip(p_payslip_id uuid)` *(writes)* — One payslip in full for a granted reader, logged against the grant that permitted it.
 - `bank_feed_status(p_bank_account_id uuid)` — What a screen may know about a feed: everything except the secret.
 - `bank_lines_unexplained(p_org_id uuid, p_bank_account_id uuid)` — Unreconciled bank lines that no rule describes and nothing is matched to -- the ones still to be typed.

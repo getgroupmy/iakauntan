@@ -310,6 +310,7 @@ jobs:
                    supabase/tests/import_transactions.sql \
                    supabase/tests/import_purchase_transactions.sql \
                    supabase/tests/import_journals.sql \
+                   supabase/tests/audit_trail_filters.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/account_closure.sql \
                    supabase/tests/trigger_reachable_grants.sql \

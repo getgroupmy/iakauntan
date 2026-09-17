@@ -6861,10 +6861,18 @@ extension RepoPayslipAccess on Repo {
 
   /// Who changed what. The function refuses anyone who is not an owner
   /// or admin, because the diffs carry salaries and bank details.
+  ///
+  /// 0634 added the two filters somebody actually arrives with — a
+  /// person and a range of days. Do not re-read on every keystroke of a
+  /// date field: this is a read that WRITES a `sensitive_read`, and one
+  /// event per keystroke buries the ones somebody is looking for.
   Future<List<AuditEntry>> auditTrail({
     String? table,
     String? recordId,
     int limit = 100,
+    String? actorId,
+    DateTime? from,
+    DateTime? to,
   }) async {
     final rows = await callRpc(
       'audit_trail',
@@ -6873,10 +6881,24 @@ extension RepoPayslipAccess on Repo {
         'p_table': table,
         'p_record_id': recordId,
         'p_limit': limit,
+        'p_actor_id': actorId,
+        'p_from': from == null ? null : Fmt.iso(from),
+        'p_to': to == null ? null : Fmt.iso(to),
       },
     );
     return Repo._rows(rows).map(AuditEntry.fromJson).toList();
   }
+
+  /// Who appears in the change history, busiest first, for the filter.
+  ///
+  /// Deliberately not a sensitive read on the server: it is a list of
+  /// names for a dropdown, and recording one for drawing a dropdown
+  /// fills the security log with events nobody caused.
+  Future<List<Map<String, dynamic>>> auditTrailActors() async =>
+      Repo._rows(await callRpc(
+        'audit_trail_actors',
+        params: {'p_org_id': orgId},
+      ));
 
   /// Who got in, what they took out, what they looked at and what they
   /// were refused. Owners and admins only -- the rows carry everybody's
