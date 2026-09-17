@@ -1,9 +1,15 @@
 gradle-wrapper.jar
-/.gradle
+# Unanchored, not `/.gradle` and `/local.properties`. The rooted form
+# only matches this directory, and Android Studio writes the same files
+# one level down in `app/` -- which is how a local.properties carrying
+# an absolute `sdk.dir` from one Mac, and a config.properties naming a
+# java.home inside Android Studio.app, reached the repository. Both
+# files say in their own first lines that they are machine-specific.
+**/.gradle
+**/local.properties
 /captures/
 /gradlew
 /gradlew.bat
-/local.properties
 GeneratedPluginRegistrant.java
 .cxx/
 
@@ -12,3 +18,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Gradle build output, including the problems report. Anchored nowhere
+# for the same reason as above.
+**/build/

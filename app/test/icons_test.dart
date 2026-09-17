@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -39,11 +41,41 @@ void main() {
       icons.firstWhere((i) => i.path == path);
 
   group('generateIcons', () {
-    test('writes exactly the files the manifest names', () {
+    test('writes exactly the files it planned to', () {
       final icons = generateIcons(source());
       expect(
         icons.map((i) => i.path).toList(),
         iconPlan.map((s) => s.path).toList(),
+      );
+    });
+
+    // The plan compared against ITSELF, above, holds however wrong
+    // both are. `web/manifest.json` is the one thing outside this file
+    // that names these paths and is fetched by a browser at runtime,
+    // so a web icon renamed in one place and not the other is a 404 on
+    // an installed app -- which is exactly what the test above reads as
+    // if it were checking, and is not.
+    //
+    // Android and iOS are deliberately not here: their icon names are
+    // fixed by the platforms and carry no manifest of their own to
+    // disagree with.
+    test('and the web ones are the paths the manifest asks for', () {
+      final manifest = jsonDecode(
+        File('web/manifest.json').readAsStringSync(),
+      ) as Map<String, dynamic>;
+      final asked = [
+        for (final i in (manifest['icons'] as List))
+          'web/${(i as Map)['src']}',
+      ]..sort();
+      final planned = [
+        for (final s in iconPlan)
+          if (s.path.startsWith('web/icons/')) s.path,
+      ]..sort();
+
+      expect(
+        planned,
+        asked,
+        reason: 'web/manifest.json and iconPlan name different files',
       );
     });
 
@@ -61,7 +93,7 @@ void main() {
     // carries nothing but background.
     test('a maskable icon keeps its mark inside the safe zone', () {
       final icons = generateIcons(source());
-      final maskable = decode(named(icons, 'icons/Icon-maskable-512.png'));
+      final maskable = decode(named(icons, 'web/icons/Icon-maskable-512.png'));
 
       // The centre is still the mark.
       final centre = maskable.getPixel(256, 256);
@@ -85,7 +117,7 @@ void main() {
 
     test('and a plain one fills the square', () {
       final icons = generateIcons(source());
-      final plain = decode(named(icons, 'icons/Icon-512.png'));
+      final plain = decode(named(icons, 'web/icons/Icon-512.png'));
       // The source is solid to its own edges, so a plain icon is too —
       // no padding was introduced where none was asked for.
       final corner = plain.getPixel(1, 1);
@@ -99,7 +131,7 @@ void main() {
     // depending on the phone.
     test('a transparent source still comes out opaque', () {
       final icons = generateIcons(source(cornerAlpha: 0));
-      final maskable = decode(named(icons, 'icons/Icon-maskable-192.png'));
+      final maskable = decode(named(icons, 'web/icons/Icon-maskable-192.png'));
       for (var x = 0; x < 192; x += 24) {
         expect(maskable.getPixel(x, 4).a, 255);
       }
@@ -107,7 +139,7 @@ void main() {
 
     test('a source that is not square is cropped, not squashed', () {
       final icons = generateIcons(source(width: 1400, height: 1024));
-      final plain = decode(named(icons, 'icons/Icon-512.png'));
+      final plain = decode(named(icons, 'web/icons/Icon-512.png'));
       expect(plain.width, plain.height);
 
       // Centre-cropped, so the mark is still in the middle.

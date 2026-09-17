@@ -44,7 +44,7 @@ Future<void> main(List<String> args) async {
   }
 
   for (final icon in icons) {
-    final file = File('web/${icon.path}');
+    final file = File(icon.path);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(icon.bytes);
   }

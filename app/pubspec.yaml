@@ -79,11 +79,16 @@ dependencies:
   # the platform recorder on Android and iOS, so one call site covers
   # all of them. Both of these need microphone permission on mobile,
   # which the manifests below declare.
-  # Pinned to 6.x because 5.x resolves record_linux 0.7.2 against
+  # 6.x, not 7.x. `record: ^7.1.1` requires Flutter 3.47.4 and this
+  # repository pins 3.32.0 in ci.yml -- deliberately, with the reason
+  # given there. 7.x resolves on a machine running a newer SDK and
+  # fails `pub get` in CI, which is the worst shape for a version
+  # constraint: green where it was typed, red where it is checked.
+  #
+  # 5.x is not an option either: it resolves record_linux 0.7.2 against
   # record_platform_interface 1.6.0, where RecordLinux is missing
-  # startStream and still has the old hasPermission signature -- a
-  # transitive break that stops the DART build, on every platform,
-  # including the two this app actually ships to.
+  # startStream and carries the old hasPermission signature, and that
+  # stops the DART build on every platform.
   record: ^6.2.1
   # Playing one back. Chosen over just_audio for having a web
   # implementation in the same package rather than a federated one.
