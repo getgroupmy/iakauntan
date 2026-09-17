@@ -18,22 +18,69 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description"
-        content="Accounting, CRM, payroll and LHDN e-Invoice for Malaysian business.">
-  <meta name="theme-color" content="#0B7A6B">
+
+  <!--
+    WITHOUT THIS LINE THE WHOLE APP IS A DESKTOP ON A PHONE.
+
+    A mobile browser given no viewport lays the page out at about 980
+    CSS pixels and then scales it, so Flutter is told the window is 980
+    wide on a screen that is 390. Every `MediaQuery.sizeOf(context)`
+    check in the product — the ones that turn a row of buttons into a
+    menu, a table into cards, a sidebar into a drawer — reads a desktop
+    and renders a desktop, which is then squeezed and clipped. It was
+    reported as an item list with its subtitle running one letter per
+    line and its buttons cut off at the edge; it was every screen.
+
+    Flutter's own `index.html` template ships this tag. This file was
+    hand-written around the branding markers below and it was lost.
+  -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!--
+    No brand in this file.
+
+    A theme colour, a description and a name used to be written here as
+    literals, which meant every deployment of this software told the
+    browser it was iAkauntan: the tint on an Android address bar, the
+    name on a tab and on an iOS home screen, and the sentence a link
+    preview reads.
+
+    They come from `landing_page()` now, twice over:
+
+      * `scripts/ci/brand_chrome.sh` stamps this file and manifest.json
+        before `flutter build web`. That is the only moment a file
+        inside the bundle can change, and it is what a browser sees
+        before any Dart has run.
+      * `lib/src/core/brand_chrome.dart` sets the same tags again once
+        the payload arrives, so a colour changed in the console reaches
+        a visitor on the next load rather than the next deploy.
+
+    A build made without database credentials stamps nothing and ships
+    this file as it stands — no colour, no description, and the tab
+    named by the line below until the app boots and renames it. That is
+    the intended fallback: a browser with no theme colour uses its own,
+    which is a truthful "this platform has not said" rather than
+    somebody else's green.
+
+    The three markers below are what the stamper looks for. Leave them.
+  -->
+  <!-- brand:description -->
+  <!-- brand:theme-color -->
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="iAkauntan">
+  <!-- brand:apple-title -->
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <!-- The app overwrites document.title once it boots; this is what shows
-       while the bundle is still downloading. -->
-  <title>iAkauntan</title>
+  <!-- The app overwrites document.title once it boots; this is what
+       shows while the bundle is still downloading, and what the stamper
+       replaces when the console has a name to put here. -->
+  <title>Loading…</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -65,41 +112,20 @@
     it would silently cancel the browser's push subscription, which is
     the sort of bug that looks like "notifications just stopped working
     on Chrome" and has no visible cause anywhere.
+
+    It is a FILE rather than an inline script, and that is the whole
+    point of this note. Inline, the Content-Security-Policy in
+    deploy/vercel-output-config.json refused it on every load — no
+    'unsafe-inline', no hash — so the rescue never ran once in
+    production and the stale workers it exists to clear were never
+    cleared. Not a hash either: a hash is of the exact bytes, so the
+    next person to fix a typo in the script ships a policy that blocks
+    it again.
+
+    NOT deferred, and before flutter_bootstrap.js: the point is to
+    unregister the worker before anything else asks it for an asset.
   -->
-  <script>
-    (function () {
-      if (!('serviceWorker' in navigator)) return;
-
-      function dropCaches() {
-        if (!window.caches) return Promise.resolve();
-        return caches.keys().then(function (keys) {
-          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-        });
-      }
-
-      function isPushWorker(reg) {
-        return reg.scope.indexOf('/push/') === reg.scope.length - 6;
-      }
-
-      navigator.serviceWorker.getRegistrations().then(function (all) {
-        var regs = all.filter(function (r) { return !isPushWorker(r); });
-        var had = regs.length > 0;
-        return Promise.all(regs.map(function (r) { return r.unregister(); }))
-          // Unconditional, because the pass that unregisters cannot also
-          // finish the cleanup: it reloads, and after the reload there is
-          // no registration left to notice by. A cache with no worker to
-          // read it is inert rather than harmful, but leaving one behind
-          // for good is the kind of debris that misleads whoever debugs
-          // this next.
-          .then(dropCaches)
-          .then(function () {
-            if (!had || sessionStorage.getItem('sw-evicted')) return;
-            sessionStorage.setItem('sw-evicted', '1');
-            window.location.reload();
-          });
-      }).catch(function () { /* Nothing useful to do; the app still loads. */ });
-    })();
-  </script>
+  <script src="sw_rescue.js"></script>
   <!-- The free reader, served from here rather than from a CDN.
 
        `tesseract.js` defaults to fetching its worker, its WebAssembly

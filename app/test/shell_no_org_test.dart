@@ -9,9 +9,17 @@ import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/shell/app_shell.dart';
 
 /// A platform operator belongs to no organization, so the shell has to
-/// survive having almost nothing to show. Every destination but the
-/// console reads from a company; with none, the rail is down to one
-/// entry, and Material's navigation widgets require two.
+/// survive having almost nothing tenant-shaped to show. Every
+/// destination but the console's sections reads from a company; with
+/// none, the menu is the console and nothing else.
+///
+/// It used to be one entry — the console was a single destination that
+/// opened a screen with a second menu inside it — and Material's
+/// navigation widgets require two, which is the crash this file was
+/// written for. The console's sections are destinations in their own
+/// right now, so the menu is full again; what still has to hold is that
+/// the first frame, before the platform-admin answer arrives, has none
+/// at all and must not throw.
 void main() {
   Widget harness({
     required bool platformAdmin,
@@ -57,11 +65,16 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'first frame');
       expect(find.text('console'), findsOneWidget);
 
-      // And once it resolves: exactly one destination, still under the
-      // two that Material's navigation widgets demand.
+      // And once it resolves: the console's own sections, in the app's
+      // one side menu rather than in a second one drawn beside it.
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'after the admin check');
       expect(find.text('console'), findsOneWidget);
+      expect(
+        find.text('Overview'),
+        findsWidgets,
+        reason: 'the console is in the menu, not behind one door in it',
+      );
     });
   }
 

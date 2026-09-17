@@ -13,7 +13,7 @@ extension RepoCorp on Repo {
   Future<List<CorpEntity>> corpEntities({bool includeClosed = false}) async {
     var q = client.from('corp_entities').select().eq('org_id', orgId);
     if (!includeClosed) q = q.isFilter('disengaged_on', null);
-    return Repo.rows(await q.order('name')).map(CorpEntity.fromJson).toList();
+    return Repo.rows(await q.order('name', ascending: true)).map(CorpEntity.fromJson).toList();
   }
 
   Future<CorpEntity?> corpEntity(String id) async {
@@ -23,6 +23,66 @@ extension RepoCorp on Repo {
         ? null
         : CorpEntity.fromJson(Map<String, dynamic>.from(row));
   }
+
+  /// Renaming a company, which is an event rather than an edit.
+  ///
+  /// `0377` refuses a bare rename: s.28 is lodged within fourteen days
+  /// and s.28(4) puts the former name on the company's documents for
+  /// twelve months, so both the old name and the date have to be kept.
+  /// Returns the id of the filing it opened.
+  Future<String> changeCompanyName(
+    String entityId,
+    String newName, {
+    DateTime? resolvedOn,
+  }) async => (await callRpc(
+    'change_company_name',
+    params: {
+      'p_entity': entityId,
+      'p_new_name': newName,
+      'p_resolved_on': resolvedOn == null ? null : Fmt.iso(resolvedOn),
+    },
+  )).toString();
+
+  /// The other door: the record catching up with what was always true.
+  /// No former name, no filing, no clock.
+  Future<void> correctCompanyName(String entityId, String name) => callRpc(
+    'correct_company_name',
+    params: {'p_entity': entityId, 'p_name': name},
+  );
+
+  /// Moving the registered office. Lodged under s.46(3) within fourteen
+  /// days. Returns the filing it opened.
+  Future<String> changeRegisteredOffice(
+    String entityId,
+    String address, {
+    DateTime? effectiveOn,
+  }) async => (await callRpc(
+    'change_registered_office',
+    params: {
+      'p_entity': entityId,
+      'p_address': address,
+      'p_effective_on': effectiveOn == null ? null : Fmt.iso(effectiveOn),
+    },
+  )).toString();
+
+  Future<void> correctRegisteredOffice(String entityId, String address) =>
+      callRpc(
+        'correct_registered_office',
+        params: {'p_entity': entityId, 'p_address': address},
+      );
+
+  /// Adopting a constitution by special resolution under s.32(1); the
+  /// copy is lodged within thirty days under s.32(3).
+  Future<String> adoptConstitution(
+    String entityId, {
+    DateTime? adoptedOn,
+  }) async => (await callRpc(
+    'adopt_constitution',
+    params: {
+      'p_entity': entityId,
+      'p_adopted_on': adoptedOn == null ? null : Fmt.iso(adoptedOn),
+    },
+  )).toString();
 
   Future<String> saveCorpEntity(Map<String, dynamic> values,
       {String? id}) async {
@@ -45,13 +105,54 @@ extension RepoCorp on Repo {
       {bool includeResigned = true}) async {
     var q = client
         .from('corp_officers')
-        .select('*, corp_persons(full_name, nric, passport_no, registration_no)')
+        // corp_persons is named because 0519 added a same-org
+        // composite key alongside the plain one, so it can be joined
+        // two ways and PostgREST refuses an unqualified embed.
+        .select('*, corp_persons!corp_officers_person_id_fkey(full_name, nric, passport_no, '
+            'registration_no), '
+            // Whose place an alternate acts in, by name, because "acting
+            // as an alternate" without one is what `0380` is about.
+            'principal:corp_officers!corp_officers_alternate_for_fkey('
+            'corp_persons(full_name))')
         .eq('entity_id', entityId);
     if (!includeResigned) q = q.isFilter('resigned_on', null);
     return Repo.rows(await q.order('appointed_on', ascending: false))
         .map(CorpOfficer.fromJson)
         .toList();
   }
+
+  /// Who at this company can be stood in for: sitting officers who are
+  /// not themselves standing in for somebody. From the database rather
+  /// than filtered here, because the same list is what
+  /// `app.corp_officer_alternate_guard` will accept.
+  Future<List<Map<String, dynamic>>> corpPrincipalsForAlternate(
+    String entityId, {
+    String? exclude,
+  }) async =>
+      Repo.rows(await callRpc('corp_principals_for_alternate', params: {
+        'p_entity': entityId,
+        'p_exclude': exclude,
+      }));
+
+  /// Records a CDD check as what it is: this document, seen by this
+  /// individual, on this day. `id_verified_by` is stamped from the
+  /// session, which is why the date cannot be typed into the person
+  /// editor any more.
+  Future<void> verifyPersonIdentity(
+    String personId, {
+    required String documentType,
+    DateTime? verifiedOn,
+    String? notes,
+  }) =>
+      callRpc('verify_person_identity', params: {
+        'p_person': personId,
+        'p_document_type': documentType,
+        'p_verified_on': verifiedOn == null ? null : Fmt.iso(verifiedOn),
+        'p_notes': notes,
+      });
+
+  Future<void> unverifyPersonIdentity(String personId) =>
+      callRpc('unverify_person_identity', params: {'p_person': personId});
 
   Future<void> saveCorpOfficer(Map<String, dynamic> values, {String? id}) =>
       id == null
@@ -62,7 +163,7 @@ extension RepoCorp on Repo {
           .from('corp_persons')
           .select()
           .eq('org_id', orgId)
-          .order('full_name'))
+          .order('full_name', ascending: true))
       .map(CorpPerson.fromJson)
       .toList();
 
@@ -93,7 +194,10 @@ extension RepoCorp on Repo {
   Future<List<CorpShareEvent>> corpShareEvents(String entityId) async {
     final rows = await client
         .from('corp_share_events')
-        .select('*, corp_share_classes(name), '
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'corp_share_classes' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, corp_share_classes!corp_share_events_share_class_id_fkey(name), '
             'from_person:corp_persons!corp_share_events_from_person_id_fkey(full_name), '
             'to_person:corp_persons!corp_share_events_to_person_id_fkey(full_name)')
         .eq('entity_id', entityId)
@@ -106,8 +210,25 @@ extension RepoCorp on Repo {
           .from('corp_share_classes')
           .select()
           .eq('entity_id', entityId)
-          .order('code'));
+          .order('code', ascending: true));
 
+  /// A class of shares. Every movement points at one, so a company
+  /// with none cannot allot anything -- which is why this is here and
+  /// not only in a settings screen somebody has to find first.
+  Future<void> saveCorpShareClass(Map<String, dynamic> values, {String? id}) =>
+      id == null
+          ? client
+              .from('corp_share_classes')
+              .insert({...values, 'org_id': orgId})
+          : client.from('corp_share_classes').update(values).eq('id', id);
+
+  /// Events are inserted and never amended.
+  ///
+  /// The register is computed from them the way the ledger computes
+  /// balances from journals, and `0061` says why: a register that can
+  /// be edited directly is one that will drift from the returns already
+  /// lodged. A movement entered wrongly is corrected by a movement the
+  /// other way, which is also what the paperwork does.
   Future<void> addCorpShareEvent(Map<String, dynamic> values) =>
       client.from('corp_share_events').insert({...values, 'org_id': orgId});
 
@@ -118,7 +239,11 @@ extension RepoCorp on Repo {
           String entityId) async =>
       Repo.rows(await client
               .from('corp_beneficial_owners')
-              .select('*, corp_persons(full_name, nric, registration_no)')
+              // corp_persons is named because 0519 added a same-org
+              // composite key alongside the plain one, so it can be
+              // joined two ways and PostgREST refuses an unqualified
+              // embed.
+              .select('*, corp_persons!corp_beneficial_owners_person_id_fkey(full_name, nric, registration_no)')
               .eq('entity_id', entityId)
               .order('entered_on', ascending: false))
           .map(CorpBeneficialOwner.fromJson)
@@ -131,6 +256,31 @@ extension RepoCorp on Repo {
               .from('corp_beneficial_owners')
               .insert({...values, 'org_id': orgId})
           : client.from('corp_beneficial_owners').update(values).eq('id', id);
+
+  /// The resolutions a company has passed.
+  ///
+  /// `corp_resolutions` has been in 0062 since the corporate
+  /// secretarial module was built, with three other tables pointing at
+  /// it -- a filing, a share event and a generated document each carry
+  /// a `resolution_id` -- and nothing in the app could read or write
+  /// one. So an allotment could never name the board resolution that
+  /// authorised it.
+  Future<List<Map<String, dynamic>>> corpResolutions(String entityId) async =>
+      Repo.rows(await client
+          .from('corp_resolutions')
+          .select()
+          .eq('entity_id', entityId)
+          .order('passed_on', ascending: false));
+
+  Future<void> saveCorpResolution(
+    Map<String, dynamic> values, {
+    String? id,
+  }) => id == null
+      ? client.from('corp_resolutions').insert({...values, 'org_id': orgId})
+      : client.from('corp_resolutions').update(values).eq('id', id);
+
+  Future<void> deleteCorpResolution(String id) =>
+      client.from('corp_resolutions').delete().eq('id', id);
 
   Future<List<CorpCharge>> corpCharges(String entityId) async =>
       Repo.rows(await client
@@ -166,13 +316,24 @@ extension RepoCorp on Repo {
         'p_trigger_date': Fmt.iso(triggerDate),
       }) as String;
 
-  Future<void> corpMarkLodged(String filingId,
-          {required DateTime lodgedOn, String? reference}) =>
-      client.from('corp_filings').update({
-        'status': 'lodged',
-        'lodged_on': Fmt.iso(lodgedOn),
-        'ssm_reference': reference,
-      }).eq('id', filingId);
+  /// Records a lodgement.
+  ///
+  /// A function rather than a table update since `0378`: the only check
+  /// this ever had — that the date is not in the future — lived here in
+  /// Dart, and it now records who lodged it and what SSM charged, which
+  /// nothing did.
+  Future<void> corpMarkLodged(
+    String filingId, {
+    required DateTime lodgedOn,
+    String? reference,
+    num? feePaid,
+  }) =>
+      callRpc('corp_mark_lodged', params: {
+        'p_filing': filingId,
+        'p_lodged_on': Fmt.iso(lodgedOn),
+        'p_reference': reference,
+        'p_fee_paid': feePaid,
+      });
 
   // ------------------------------------------------------------------
   // Documents
@@ -181,7 +342,7 @@ extension RepoCorp on Repo {
           .from('corp_templates')
           .select('code, name, category, org_id')
           .eq('is_active', true)
-          .order('category'))
+          .order('category', ascending: true))
       .map(CorpTemplate.fromJson)
       .toList();
 
@@ -254,6 +415,18 @@ extension RepoCorpSignatures on Repo {
   /// The database records the time, the hash and the caller. Nothing
   /// about the evidence comes from here, because a signature record the
   /// signer can write is not evidence of anything.
+  /// Refusing to sign, with the reason.
+  ///
+  /// `declined` has been in `app.signature_status` since `0069` and
+  /// nothing could produce it, so a director who would not sign looked
+  /// exactly like one who had not opened the email — and the difference
+  /// is whether to chase or to redo the resolution.
+  Future<void> corpDeclineSignature(String signatureId, String reason) =>
+      callRpc(
+        'corp_decline_signature',
+        params: {'p_signature_id': signatureId, 'p_reason': reason},
+      );
+
   Future<void> corpSignDocument(String signatureId, String signedName) =>
       client.rpc('corp_sign_document',
           params: {'p_signature_id': signatureId, 'p_signed_name': signedName});

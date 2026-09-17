@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
 
 /// Moving money between the company's own accounts.
@@ -113,36 +114,40 @@ class _TransferDialogState extends ConsumerState<_TransferDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  DropdownButtonFormField<String>(
-                    value: _from,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Out of'),
-                    items: [
+                  SearchablePicker<String>(
+                    options: [
                       for (final a in list)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: a['id'] as String,
-                          child: Text('${a['name']} · ${a['currency']}',
-                              overflow: TextOverflow.ellipsis),
+                          label: '${a['name']}',
+                          // The CURRENCY, because a transfer between
+                          // two currencies is a different piece of
+                          // arithmetic and the person choosing needs to
+                          // see which they picked.
+                          sublabel: '${a['currency']}',
+                          keywords: ['${a['currency']}'],
                         ),
                     ],
+                    value: _from,
+                    label: 'Out of',
                     onChanged: (v) => setState(() => _from = v),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _to,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Into'),
-                    items: [
+                  SearchablePicker<String>(
+                    options: [
                       for (final a in list)
                         // An account cannot pay itself, so it is not
                         // offered rather than refused after the fact.
                         if (a['id'] != _from)
-                          DropdownMenuItem(
+                          PickerOption<String>(
                             value: a['id'] as String,
-                            child: Text('${a['name']} · ${a['currency']}',
-                                overflow: TextOverflow.ellipsis),
+                            label: '${a['name']}',
+                            sublabel: '${a['currency']}',
+                            keywords: ['${a['currency']}'],
                           ),
                     ],
+                    value: _to,
+                    label: 'Into',
                     onChanged: (v) => setState(() => _to = v),
                   ),
                   const SizedBox(height: 16),

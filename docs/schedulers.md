@@ -1,16 +1,27 @@
-# The two scheduled jobs, and the one secret they share
+# The scheduled jobs, and the one secret they share
 
-Two things in this system happen on a timer rather than because somebody
-pressed a button:
+Three things in this system happen on a timer rather than because
+somebody pressed a button:
 
 | Workflow | What it does | When |
 | --- | --- | --- |
 | `.github/workflows/exchange-rates.yml` | calls `fetch-rates`, which brings Bank Negara's published rates into `exchange_rates` | weekdays, 09:30 UTC (17:30 MYT) |
 | `.github/workflows/send-email.yml` | calls `send-email`, which drains `email_outbox` through Resend | every 30 min on weekdays 09:00–19:30 MYT, plus 17:15 UTC daily |
+| `.github/workflows/file-consolidations.yml` | calls `myinvois` with `action: file-consolidations`, which files the month's consolidated B2C e-Invoices | daily, 02:00 UTC (10:00 MYT) |
 
-Both act for **every organization at once** — rates price everybody's
-ledger, the outbox holds everybody's mail — so both need a credential no
-signed-in user has.
+All three act for **every organization at once** — rates price
+everybody's ledger, the outbox holds everybody's mail, and a
+consolidation deadline falls on every shop in the same week — so all
+three need a credential no signed-in user has.
+
+The third one is the only one with a **statutory** deadline behind it.
+Under the LHDN guideline a seller aggregates the month's sales to buyers
+who did not ask for an invoice into one submission, due within seven
+days of month end; `app.run_daily_jobs` rolls them up on the first and
+this files them. It runs every day rather than only in the first week,
+because `einvoice_consolidations_due` returns overdue consolidations
+however late they are, and a company that could not file on the eighth
+should file on the ninth rather than next month.
 
 ## Setting it up
 
@@ -37,8 +48,8 @@ looks set and is invisible to the code. It is the same screen where
 **3. Give it to GitHub.** **Settings → Secrets and variables → Actions**
 → new repository secret named `SCHEDULER_SECRET`, same value.
 
-That is the whole setup. The next scheduled run picks it up, or run
-either workflow by hand from the Actions tab to check now.
+That is the whole setup. The next scheduled run picks it up, or run any
+of the three by hand from the Actions tab to check now.
 
 The 403 from `fetch-rates` distinguishes the two ways this goes wrong,
 so a failed run says which half to fix: *"No SCHEDULER_SECRET is set on
@@ -123,9 +134,59 @@ invoice the customer says never arrived.
   run, because messages are piling up behind it.
 - **`404` from `fetch-rates`** — Bank Negara published nothing. Public
   holidays have no rates; this is the honest answer, not a failure.
+- **`403` from `file-consolidations`** — the secret does not match.
+  Fails red, and unlike `send-email` it cannot be mistaken for a quiet
+  month: the `file-consolidations` action is answered before the
+  function resolves a caller at all, so an unrecognised one is refused
+  by name rather than reading nothing and reporting `considered: 0`.
+- **A company skipped by `file-consolidations`** — warns, names the
+  company and what it is missing, and stays green. A skip is somebody's
+  unfinished setup — no MyInvois credentials, or version 1.1 with no
+  signing certificate — and going red every day for one misconfigured
+  company is how a real failure stops being noticed. A *rejected*
+  filing warns separately, because the two need different people.
 - **Any refused rate** — fails red and lists the currency by name. A
   shape change at the publisher means a currency silently stops being
   priced, which is the failure the whole feed exists to prevent.
+
+## What the cron says and what GitHub does
+
+Measured, because the tables above are what was asked for and not what
+arrives. `send-email` asks for every thirty minutes between 09:00 and
+19:30 MYT on weekdays plus one daily pass, which is about twenty-three
+runs a day. Its five most recent scheduled runs, on 16 September 2026:
+
+    20:06, 15:22, 10:56, 05:40 UTC, and 20:14 the day before
+
+Five runs in twenty-four hours, at times matching **none** of its cron
+expressions, and a six-and-a-half-hour gap after the last of them. The
+workflow is not broken, the cron is not wrong, and nothing failed: on a
+private repository GitHub treats a `schedule` trigger as best-effort,
+delays it under load and drops runs entirely. Its own documentation says
+so; what is not obvious until you count is how much it drops.
+
+**So read every cadence in this document as an upper bound.** The
+consequences differ per job and are worth stating separately:
+
+- **`file-consolidations`** asks for daily and is fine with this. The
+  deadline it serves is seven days after month end, and a job that runs
+  once every few hours somewhere in that week discharges it. This is
+  also why it looks at every overdue consolidation and not only the ones
+  due today.
+- **`exchange-rates`** asks for once a weekday. A missed day leaves
+  yesterday's rate in force, which `docs/exchange-rate-feed.md` already
+  treats as the ordinary case.
+- **`send-email` is the one this hurts.** The section below says
+  somebody who presses **Email** "may wait half an hour". On the
+  evidence above they may wait five. The outbox screen's **Send now**
+  button is therefore not a convenience for the impatient; it is how
+  mail actually goes out promptly, and it is worth saying so to whoever
+  is trained on the screen.
+
+Nothing here was known when the cadences were chosen, and the argument
+in the next section changes with it: the billing floor is a reason to
+prefer thirty minutes over five, and GitHub delivering neither is a
+reason to prefer `pg_cron`.
 
 ## Why GitHub Actions and not `pg_cron`
 
@@ -146,3 +207,10 @@ If the latency ever matters more than that, `pg_cron` firing `pg_net`
 every minute is the answer — and it can now hold `SCHEDULER_SECRET`
 rather than the service role key, which makes it a considerably better
 trade than it was.
+
+On the measurements above it matters already, for `send-email` at least.
+`pg_cron` runs inside the database on the database's own clock, so it
+fires when it says it will; the asynchrony of `pg_net` is a real cost
+and the one to weigh, not the billing floor. The other two jobs are
+daily and best-effort suits them, so this is one workflow's decision
+rather than a rewrite of the arrangement.

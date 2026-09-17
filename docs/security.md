@@ -22,7 +22,7 @@ it saw more than it did is worse than one that says where it stops.
 |---|---|---|
 | Sign-in | trigger on `auth.sessions` insert | **No.** GoTrue writes the row; the trigger is on the table. |
 | Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". An account *being deleted* is the exception — see below. |
-| Data change | `audit_changes` on 41 tables | **No.** A trigger, and the API cannot turn it off. |
+| Data change | `audit_changes` on 52 tables | **No.** A trigger, and the API cannot turn it off. |
 | Export | `record_export`, called by `exportTextFile`/`exportBytesFile` | Only by not using the app. Every download path goes through those two. |
 | Sensitive read | `app.note_read`, inside `security_log` and `audit_trail` | **No.** Reading either log records the read. |
 | Refusal | `report_denied`, called by `Repo.callRpc` on a 42501 | **Yes** — see below. |
@@ -124,6 +124,194 @@ redaction lived inside `audit_diff`, which only runs on UPDATE, so
 *changing* a secret hid it and *creating* one stored it in full. The
 test now puts a known string in through all three routes and searches
 the whole trail for it.
+
+## The rate everybody is paid by
+
+The count in that row was 41 for a long time and was never wrong. The
+question it does not answer is whether anything that *should* be audited
+sits outside the 41, and once asked, one thing did — the widest-reaching
+row in the product.
+
+`statutory_schedules` and `statutory_rates` hold the EPF, SOCSO, EIS and
+PCB schedules that `calculate_payroll_run` reads for every employee of
+every tenant. Publishing one changed what every company in the country
+pays, and measured before **0442** it wrote nothing to `audit_logs`,
+nothing to `security_events`, and there is no `published_by` column —
+while `payroll_settings` and `salary_components`, which move one
+company's payroll, were both audited. 0442 puts `audit_changes` on both,
+which is what takes the count to 43.
+
+Those two tables are platform-wide: their rows have no `org_id`. That
+exposed a second thing. `audit_logs_select` read
+`app.can_admin(org_id)`, and `can_admin(null)` is not true, so the rows
+0442 started writing were readable by nobody at all — an audit trail
+that exists and cannot be produced is not one. The policy now also
+admits a platform administrator to the rows whose `org_id` is null, and
+`audit_redaction.sql` asserts both halves: that a platform administrator
+sees the statutory trail, and that they see **not one row** of any
+company's own.
+
+### The tenant-scoped half of the same question, and what it cost
+
+0442 answered "what should be audited and is not" for the platform-wide
+tables and left the tenant-scoped ones unasked. **0443** is that half.
+
+`leave_types` and `leave_entitlement_bands` decide how many days of
+annual and sick leave every employee of a company is entitled to, are
+edited from the HR setup screens by anybody who passes
+`app.can_manage_hr`, and were audited by nothing — measured, inserting a
+band wrote 0 rows and editing it from 8 days to 99 wrote 0 more, while
+every neighbouring HR table that decides money was audited. Leave is
+money: s.60E(3) of the Employment Act requires payment for untaken
+annual leave on termination, and the band says how much. That takes the
+count to 45.
+
+The second thing 0443 found is a cost of 0442. `leave_entitlement_bands`
+has no `org_id`; it names its tenant through `leave_type_id`.
+`access_type_modules` has had exactly that shape since 0236, and on a
+cascade — delete the parent, the children follow — the lookup finds no
+parent and resolves to null. Measured: one audit row, `org_id` null,
+`table_name` `access_type_modules`. Before 0442 that row was readable by
+nobody and the mistake was invisible; after 0442 it is a company's
+deleted permission set sitting in the trail every platform administrator
+reads. **0442 did not create the null. It gave it a reader.**
+
+So the rule is now explicit and enforced in `write_audit_log`: a null
+`org_id` means the platform, and only `statutory_schedules` and
+`statutory_rates` may write one. Anything else that cannot name its
+tenant writes nothing — which loses no event, because those rows only
+arise on a cascade and the parent's own deletion is audited against the
+right company.
+
+### Where the sweep stopped, and the rule it left behind
+
+**0445** closed it, on the four promotion tables — `pos_promotions` and
+the three that hold its scope. A discount applied at the till was
+already attributable; the decision to offer it was not.
+
+The trigger was the smaller half. Those three scope tables were
+rewritten wholesale on every save, so auditing them as they stood would
+have made correcting a promotion's *name* write a delete and an insert
+for every item in its scope. A trail that reports a change nobody made
+fails the same way as one that misses a change somebody did, and it is
+the first failure that stops people reading it. So the write path was
+made differential first — only the rows that actually joined or left —
+and the trigger added after. That is the rule to carry forward: before
+auditing a table, look at how it is written, not only at what it holds.
+
+Which takes the count to 49.
+
+### A trigger that files nothing
+
+**0450** added a practice — `firms`, `firm_members`, and the companies a
+firm keeps the books for — and put an `audit_changes` trigger on
+`firms`, on the reasonable belief that a table worth having is a table
+worth auditing. The trigger fired and wrote nothing.
+
+`app.write_audit_log` derives a tenant from `org_id`, and since 0443
+drops any row it cannot place: a row with no tenant is almost always a
+child cascading away behind a deleted company, and filing it under the
+platform puts one tenant's data where other tenants' staff can reach it.
+`firms` has no `org_id` and never will — **a practice is not owned by
+any of the companies whose books it keeps** — so every firm row met the
+guard and was discarded. Measured, with a control in the same
+transaction because a zero from a query nobody has seen return anything
+proves nothing:
+
+| table | rows written |
+|---|---|
+| `organizations` (control) | 1 |
+| `company_transfers` | 1 |
+| `firms` | **0** |
+| `firm_members` | **0** |
+
+A trigger that files nothing is worse than no trigger, because it reads
+as coverage: the count above said 51 on the strength of the trigger
+existing.
+
+`firm_members` had no trigger at all, and it is the one that matters
+more. Adding somebody to a practice with forty clients grants them forty
+companies' ledgers in a single insert.
+
+**0452** widens the null-tenant allowance from the two statutory tables
+to four, the firm tables being above every company rather than below
+them, files a staff change under the *practice* the way 0445 files a
+scope row under its promotion, and adds the trigger `firm_members` never
+had. It also adds the reader — `firm_audit_trail`, guarded by
+`app.can_manage_firm`, because widening a policy is not the same as
+adding a reader and a member of staff should not read the record of
+their own appointment being questioned.
+
+Which takes the count to 52, and leaves a second rule beside 0445's:
+a trigger is not coverage until a row has been seen in the table it
+writes to.
+
+### Access that outlived the job
+
+The same layer had a second gap, and this one was reachable by anybody
+who ever worked at a practice. 0450 grants a firm's staff access to its
+clients by writing ordinary `org_members` rows carrying `via_firm_id`.
+`app.sync_firm_access` only ever *inserts*. Nothing took the access
+back. Measured on a company whose books one practice keeps and one
+member of staff works on:
+
+| after | rows in `org_members` |
+|---|---|
+| while employed | 1 |
+| removed from the practice | **1** |
+| suspended at the practice | **1** |
+
+Somebody who leaves an accounting firm kept every client's ledger,
+payroll and bank detail — and kept it silently, because their
+membership of the client company is a perfectly ordinary row that
+nothing marks as borrowed except the `via_firm_id` nobody was reading
+on the way out. For a practice with forty clients, one resignation was
+forty companies.
+
+**0453 closed it with a trigger, not a function.** A
+`remove_firm_member(...)` doing both halves would not have been enough:
+0450 grants `delete` on `public.firm_members` to `authenticated` and
+gates it with a policy, so a partner can remove somebody with one
+PostgREST call and never touch the function. A rule that only holds
+when you go through the front door is not a rule. `app.revoke_firm_access`
+fires on delete and on any change to `user_id`, `firm_id` or `status`,
+and removes only the rows borrowed from *that* firm — a person the
+client invited itself, or who is at a second practice that also keeps
+these books, keeps what they hold in their own right.
+
+Suspension is treated as leaving. Somebody stood down pending a
+question is exactly who should not be reading the books meanwhile.
+
+### The export, and what it deliberately does not carry
+
+**0454** is the answer to "can we leave?" — `company_export_manifest`
+and `company_export_page`, driven from `pg_class` rather than a list
+somebody typed, so a table added next year is exported without anybody
+remembering. It is the largest read this schema offers, so it is the
+one worth stating the rules of:
+
+- **Owners and administrators only.** A bookkeeper may post every
+  journal in the company and may not take a copy of it away.
+- **Every call writes a `record_export` event.** A copy leaving with no
+  record would be the single gap in a trail that notes the reading of
+  one payslip.
+- **Three kinds of thing are held back**: credentials the company lent
+  us to act on its behalf (`einvoice_credentials`,
+  `org_ocr_credentials`); the platform's own side of the relationship
+  (`org_modules`, `org_credits`), which means nothing in another
+  system; and machinery (`idempotency_keys`). Views are excluded
+  structurally — shipping a derived answer beside its inputs invites
+  somebody to reconcile the two.
+- **Every row goes through `app.audit_redact`** on the way out, the
+  same rule the audit trail uses. That matters most for tables that are
+  *not* excluded: `org_members` belongs in the export and carries a
+  working `invite_token` in it.
+- **The table name is matched against the allowed list**, never quoted
+  and hoped for, because it reaches dynamic SQL.
+
+Seven mutants, seven kills. The one to remember: dropping the `org_id`
+filter from a page returned **420 rows where 84 were expected** — five
+companies' charts of accounts in one file.
 
 ## The ledger is not append-only
 
@@ -291,8 +479,66 @@ them. `app.purge_audit_history(7)` runs weekly under `pg_cron` as its
 own job rather than a line in `run_daily_jobs`, so a purge that fails
 cannot take the recurring invoices with it.
 
+Both halves of that are now asserted, and one of them was not.
+`security_audit.sql` has always proved the *function* keeps six years
+and eleven months and drops eight — but it calls it with a literal `7`,
+and `scheduled_work.sql` only proved the function was reachable from
+some scheduled job. Neither read the number in the command the scheduler
+actually runs, so `purge_audit_history(1)` in that string would have
+passed every assertion in this repository while destroying a company's
+statutory records six years early, with no sign but an audit trail that
+began last year. `scheduled_work.sql` now parses the number out of
+`cron.job.command` and asserts it is seven, that the purge has a job of
+its own, and that the daily run does not purge anything itself.
+
 Before 0235 neither log had any retention at all: `audit_logs` had been
 growing without bound since 0055.
+
+## What we depend on, and who has published a vulnerability in it
+
+Nothing in CI looked at either dependency tree until the `dependencies`
+job. That gap survived a security plugin installed specifically to
+close it: its CVE step runs `npm audit`, and this repository has no
+`package.json`, so it reported a clean tree by auditing nothing
+(`docs/ruflo.md` has the whole triage).
+
+There are two trees and they are in different ecosystems. Dart is
+`app/pubspec.lock` — `pubspec.yaml` holds carets, the lock holds the
+number that ships. Deno has neither a lockfile nor a manifest: what the
+edge functions depend on is written inline in every `import`, which is
+why `scripts/dependency_audit.py` carries a census of them.
+
+`scripts/dependency_audit.py` runs in two halves, and only one needs
+the network:
+
+- **Pins.** Every edge-function import is on the census, carries a
+  version, and uses `jsr:`, `npm:` or `node:`. `https:` is refused:
+  code fetched from an arbitrary host at deploy time is neither
+  reviewable nor pinnable, and refusing it is cheaper than detecting
+  it. On the Dart side, every direct dependency is resolved in the
+  committed lockfile.
+- **Advisories.** OSV is asked about every resolved version. **When OSV
+  cannot be reached, the job fails.** "The advisory database was
+  unreachable" and "there are no advisories" are different sentences,
+  and a check whose green means the first while reading as the second
+  is worse than no check.
+
+Two things it says out loud rather than counting as clean: a Dart
+package that does not come from pub.dev, and `jsr:@std/*`, which is
+published to JSR only and which no OSV ecosystem covers.
+
+What it does **not** yet do is force a pin. Both edge-function imports
+are major ranges — `jsr:@supabase/supabase-js@2` resolves to whatever
+2.x jsr serves on the day a function is deployed, so a minor release
+changes what runs in production with no commit here, and
+`_local_check` stubs that package precisely because it cannot see it.
+The census freezes the set so it cannot grow or float further; tightening
+those two to exact versions is a change to sixteen files that has to be
+type-checked against the real package, and it is its own commit.
+
+`scripts/dependency_audit.py --offline` runs the pins half alone, and
+says in as many words that it checked nothing about published
+vulnerabilities.
 
 ## What is deliberately not recorded
 
@@ -429,3 +675,97 @@ accident and thirty "never came out" is a conversation, while these are
 few, each is a whole order, and the question is which one and whose.
 It reports the cooked count beside the line count, because food lost
 and an order that never existed are different facts.
+
+## What was found after 0248 (0399–0407)
+
+The document above stops at `0248`, and a reader reaching the end of it
+would take away two things that are no longer true. Both were narrated
+correctly when written; the schema moved.
+
+### The ledger holds `SELECT` and nothing else now (0399)
+
+`0239` "leaves a client role with `INSERT, SELECT` and nothing else",
+and that sentence stood for a hundred and sixty migrations. The insert
+grant was kept as `0239`'s "positive control" — the reasoning being that
+revoking everything would satisfy a no-excess-privilege check by leaving
+nothing at all.
+
+The belief underneath it was false. `app.create_gl_entry_internal`,
+`public.create_gl_entry` and `public.post_manual_journal` are all
+SECURITY DEFINER and owned by the role that owns `gl_entries`, so
+posting runs as the owner and never consults the grant. Measured rather
+than argued: with `insert` revoked and both policies dropped,
+`post_manual_journal` called as `authenticated` still posts both lines.
+
+What the grant did buy was a second door. Measured as an `accountant`
+with a period closed, under `set local role authenticated` — the role
+change matters, and the first measurement of this was made without it
+and proved nothing:
+
+- an entry dated inside a **closed period**, inserted straight into
+  `gl_entries` — accepted;
+- a single line of 1,000,000 debit and no credit, straight into
+  `gl_lines` — accepted;
+- so the header said debit 100 credit 100 while its own lines summed to
+  1,000,000;
+- and `post_manual_journal`, given the same closed period, refused it.
+
+The guard was never wrong. It was avoidable. `0399` revokes `insert`,
+`update` and `delete` from both client roles on both tables and drops
+the two insert policies: the ledger is written by SECURITY DEFINER
+functions and read by whoever may read it, and there is no third thing.
+
+### `anon` could write 251 tables (0401)
+
+`0240`'s table counts three privileges — TRUNCATE, REFERENCES, TRIGGER —
+and says "`SELECT`, `INSERT`, `UPDATE` and `DELETE` are untouched". True,
+and the omission mattered: on the hosted project `anon` held INSERT,
+UPDATE or DELETE on **251 relations** in `public`, because `0238`
+revoked update and delete from `authenticated` and never named `anon`,
+and a freshly started local stack does not have them. Every CI run was
+green and every local suite passed while the real project carried them.
+
+Excess privilege rather than an open door — RLS was enabled on 250 of
+the 251 and not one policy admits `anon` to write anything, checked
+against the project rather than assumed. But it put the whole of
+`anon`'s inability to write this database on every policy being right,
+forever, across 250 tables. `0401` takes all three from `anon` on every
+relation and narrows the default privileges so the next `create table`
+does not hand them back.
+
+### And the rest, briefly
+
+- **`0402`, `0403`** — a posted sales or purchase document was fully
+  editable: a line repriced from RM100 to RM1 with the header recomputed
+  to match, the document deleted with its journal left standing, and
+  `gl_entry_id` cleared so the same invoice posted a second time. Eleven
+  posting routines guard against a double posting by reading that one
+  column, so `0403` makes it immutable on all twenty tables that carry
+  it.
+- **`0400`** — the same for a posted payslip, which is what the EPF,
+  SOCSO and LHDN submissions and the bank file are built from.
+- **`0405`** — four storage policies cast a path segment to `uuid`
+  instead of using `app.uuid_or_null`. A policy predicate that raises
+  does not deny a row, it fails the statement, so one badly named object
+  made a whole bucket unreadable for every user of it.
+- **`0407`** — `0095` asserted that no SECURITY DEFINER function outside
+  a three-name allowlist is executable by **`anon`**. Nobody had asked it
+  of **`authenticated`**. Four functions in `app` wrote and were
+  executable by any signed-in user with no guard: rolling another
+  company's leave year, posting every tenant's recurring journals,
+  seeding a chart of accounts, and writing the module entitlements that
+  decide what a company has paid for. Excess privilege again — PostgREST
+  does not publish `app` — but the grant was explicit, not a default.
+
+### Two sweeps that found nothing, and are now tests
+
+- **Can a member of one company read another's rows?** Asked by reading
+  rows as `authenticated` with the JWT of somebody in one company and
+  not the other, across every table the other company actually has rows
+  in. No leak. `no_tenant_sees_another.sql`.
+- **Does every edge function holding the service role establish the
+  caller first?** Seven do, by four different routes. All correct.
+  `scripts/check_edge_authorization.py` keeps it that way.
+
+`docs/unreachable.md` carries the full reasoning for each, including the
+measurements that turned out to be wrong the first time.

@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
+import '../items/new_item_dialog.dart';
 import 'line_draft.dart';
 import '../stock/lot_dialog.dart';
 
@@ -20,6 +23,7 @@ class LineEditorCard extends ConsumerWidget {
     required this.onChanged,
     required this.onAdd,
     required this.onRemove,
+    required this.sales,
     this.receiving = false,
     this.defers = false,
     this.priceFor,
@@ -28,6 +32,11 @@ class LineEditorCard extends ConsumerWidget {
   final List<LineDraft> lines;
   final bool editable;
   final String currency;
+
+  /// Which side of the trade this document is on. Only used to pick
+  /// which set of a company's own line fields to draw: a field defined
+  /// on a sales line is not a field on a bill.
+  final bool sales;
 
   /// The price this customer pays for this item at this quantity, or
   /// null to keep the item's list price. Null on purchase documents,
@@ -111,6 +120,21 @@ class LineEditorCard extends ConsumerWidget {
                   receiving: receiving,
                   onChanged: onChanged,
                 ),
+              // A field this company added to a LINE rather than to the
+              // document. It draws nothing where none are defined, and
+              // most companies will define none — a line-level field is
+              // filled in once per line, which is a real thing to ask
+              // of somebody and is why the setup screen says so.
+              CustomFieldsSection(
+                entity: sales ? 'sales_document_line' : 'purchase_document_line',
+                heading: 'Your own fields on this line',
+                values: lines[i].customFields,
+                enabled: editable,
+                onChanged: (v) {
+                  lines[i].customFields = v;
+                  onChanged();
+                },
+              ),
               // Offered where it could plausibly be wanted — a line
               // whose item is not stock, which is what a service is —
               // and always where one is already set, so a period stays
@@ -168,7 +192,9 @@ class LineEditorCard extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 8, top: 4),
       child: Row(
         children: [
-          Expanded(flex: 4, child: Text('Item / description', style: style)),
+          Expanded(flex: 2, child: Text('Item no.', style: style)),
+          const SizedBox(width: 8),
+          Expanded(flex: 4, child: Text('Description', style: style)),
           Expanded(flex: 2, child: Text('Qty', style: style)),
           Expanded(flex: 2, child: Text('Unit price', style: style)),
           Expanded(flex: 2, child: Text('Disc %', style: style)),
@@ -211,7 +237,10 @@ class _WideLine extends StatefulWidget {
 }
 
 class _WideLineState extends State<_WideLine> {
+  late final TextEditingController _code;
+  late final FocusNode _codeFocus;
   late final TextEditingController _description;
+  late final FocusNode _descriptionFocus;
   late final TextEditingController _quantity;
   late final TextEditingController _price;
   late final TextEditingController _discount;
@@ -219,7 +248,10 @@ class _WideLineState extends State<_WideLine> {
   @override
   void initState() {
     super.initState();
+    _code = TextEditingController(text: _codeOf(widget.line.itemId));
+    _codeFocus = FocusNode();
     _description = TextEditingController(text: widget.line.description);
+    _descriptionFocus = FocusNode();
     _quantity = TextEditingController(text: Fmt.qty(widget.line.quantity));
     _price = TextEditingController(
         text: widget.line.unitPrice == 0 ? '' : widget.line.unitPrice.toString());
@@ -229,9 +261,26 @@ class _WideLineState extends State<_WideLine> {
             : Fmt.qty(widget.line.discountPercent));
   }
 
+  /// The item list is fetched, so it is empty on the first frame and
+  /// arrives on a later one. A line reopened on an item therefore has no
+  /// code to show when this state is created, and would sit blank until
+  /// somebody typed over it. Filled in as soon as the list can answer,
+  /// and never over the top of anything already in the box.
+  @override
+  void didUpdateWidget(covariant _WideLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_code.text.isEmpty) {
+      final code = _codeOf(widget.line.itemId);
+      if (code.isNotEmpty) _code.text = code;
+    }
+  }
+
   @override
   void dispose() {
+    _code.dispose();
+    _codeFocus.dispose();
     _description.dispose();
+    _descriptionFocus.dispose();
     _quantity.dispose();
     _price.dispose();
     _discount.dispose();
@@ -245,8 +294,24 @@ class _WideLineState extends State<_WideLine> {
   /// waiting: the round trip is short but not instant, and a line that
   /// sits blank while it resolves reads as broken.
   Future<void> _applyItem(Item item) async {
+    // The offer rather than an item: ask for the details, and bind the
+    // line to what comes back. Declining leaves the line exactly as it
+    // was, which for the description box means the free text somebody
+    // typed is still there.
+    if (item.id == kCreateItemId) {
+      final created = await showDialog<Item>(
+        context: context,
+        builder: (_) => NewItemDialog(
+          seedCode: item.code.isEmpty ? null : item.code,
+          seedName: item.name.isEmpty ? null : item.name,
+        ),
+      );
+      if (created == null || !mounted) return;
+      return _applyItem(created);
+    }
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
+      _code.text = item.code;
       _description.text = item.name;
       _price.text = item.unitPrice.toString();
     });
@@ -264,6 +329,19 @@ class _WideLineState extends State<_WideLine> {
     widget.onChanged();
   }
 
+
+  /// The number of the item this line is already bound to, for a
+  /// document being reopened rather than typed. Lines carry `item_id`,
+  /// not the code, so the code is looked up in the list the editor was
+  /// given; a line with no item, or one whose item has since been
+  /// deleted, simply shows nothing.
+  String _codeOf(String? itemId) {
+    if (itemId == null) return '';
+    for (final item in widget.items) {
+      if (item.id == itemId) return item.code;
+    }
+    return '';
+  }
 
   /// The item's own unit — what the shelf is counted in, and what the
   /// picker converts to.
@@ -297,9 +375,21 @@ class _WideLineState extends State<_WideLine> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
+            flex: 2,
+            child: _ItemCodeField(
+              controller: _code,
+              focusNode: _codeFocus,
+              items: widget.items,
+              editable: widget.editable,
+              onItemSelected: _applyItem,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
             flex: 4,
             child: _ItemField(
               controller: _description,
+              focusNode: _descriptionFocus,
               items: widget.items,
               editable: widget.editable,
               onItemSelected: _applyItem,
@@ -430,7 +520,10 @@ class _NarrowLine extends StatefulWidget {
 }
 
 class _NarrowLineState extends State<_NarrowLine> {
+  late final TextEditingController _code;
+  late final FocusNode _codeFocus;
   late final TextEditingController _description;
+  late final FocusNode _descriptionFocus;
   late final TextEditingController _quantity;
   late final TextEditingController _price;
   late final TextEditingController _discount;
@@ -438,7 +531,10 @@ class _NarrowLineState extends State<_NarrowLine> {
   @override
   void initState() {
     super.initState();
+    _code = TextEditingController(text: _codeOf(widget.line.itemId));
+    _codeFocus = FocusNode();
     _description = TextEditingController(text: widget.line.description);
+    _descriptionFocus = FocusNode();
     _quantity = TextEditingController(text: Fmt.qty(widget.line.quantity));
     _price = TextEditingController(
         text: widget.line.unitPrice == 0 ? '' : widget.line.unitPrice.toString());
@@ -448,9 +544,26 @@ class _NarrowLineState extends State<_NarrowLine> {
             : Fmt.qty(widget.line.discountPercent));
   }
 
+  /// The item list is fetched, so it is empty on the first frame and
+  /// arrives on a later one. A line reopened on an item therefore has no
+  /// code to show when this state is created, and would sit blank until
+  /// somebody typed over it. Filled in as soon as the list can answer,
+  /// and never over the top of anything already in the box.
+  @override
+  void didUpdateWidget(covariant _NarrowLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_code.text.isEmpty) {
+      final code = _codeOf(widget.line.itemId);
+      if (code.isNotEmpty) _code.text = code;
+    }
+  }
+
   @override
   void dispose() {
+    _code.dispose();
+    _codeFocus.dispose();
     _description.dispose();
+    _descriptionFocus.dispose();
     _quantity.dispose();
     _price.dispose();
     _discount.dispose();
@@ -460,8 +573,24 @@ class _NarrowLineState extends State<_NarrowLine> {
   /// The same as the wide row: item defaults first, then what this
   /// customer actually pays.
   Future<void> _applyItem(Item item) async {
+    // The offer rather than an item: ask for the details, and bind the
+    // line to what comes back. Declining leaves the line exactly as it
+    // was, which for the description box means the free text somebody
+    // typed is still there.
+    if (item.id == kCreateItemId) {
+      final created = await showDialog<Item>(
+        context: context,
+        builder: (_) => NewItemDialog(
+          seedCode: item.code.isEmpty ? null : item.code,
+          seedName: item.name.isEmpty ? null : item.name,
+        ),
+      );
+      if (created == null || !mounted) return;
+      return _applyItem(created);
+    }
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
+      _code.text = item.code;
       _description.text = item.name;
       _price.text = item.unitPrice.toString();
     });
@@ -479,6 +608,19 @@ class _NarrowLineState extends State<_NarrowLine> {
     widget.onChanged();
   }
 
+
+  /// The number of the item this line is already bound to, for a
+  /// document being reopened rather than typed. Lines carry `item_id`,
+  /// not the code, so the code is looked up in the list the editor was
+  /// given; a line with no item, or one whose item has since been
+  /// deleted, simply shows nothing.
+  String _codeOf(String? itemId) {
+    if (itemId == null) return '';
+    for (final item in widget.items) {
+      if (item.id == itemId) return item.code;
+    }
+    return '';
+  }
 
   /// The item's own unit — what the shelf is counted in, and what the
   /// picker converts to.
@@ -531,8 +673,17 @@ class _NarrowLineState extends State<_NarrowLine> {
             ],
           ),
           const SizedBox(height: 8),
+          _ItemCodeField(
+            controller: _code,
+            focusNode: _codeFocus,
+            items: widget.items,
+            editable: widget.editable,
+            onItemSelected: _applyItem,
+          ),
+          const SizedBox(height: 8),
           _ItemField(
             controller: _description,
+            focusNode: _descriptionFocus,
             items: widget.items,
             editable: widget.editable,
             onItemSelected: _applyItem,
@@ -609,10 +760,237 @@ class _NarrowLineState extends State<_NarrowLine> {
   }
 }
 
-/// Free-text description that also offers the item master as suggestions.
+/// The list an item box drops down.
+///
+/// It is the width of the FIELD, and that is a constraint rather than a
+/// choice: `RawAutocomplete` puts its options in an overlay whose
+/// constraints come from the box they hang under. Widening it with an
+/// `OverflowBox` does work visually — and makes the rows UNTAPPABLE,
+/// because the part that hangs outside the parent's bounds is never hit
+/// tested. A list you can read and cannot click is worse than a narrow
+/// one, so the name wraps to two lines instead of being cut off, which
+/// is what "Structured Ca…" needed.
+///
+/// The wide search is the DESCRIPTION box, which is twice the width and
+/// runs the same query. Somebody hunting by name has a box the size of
+/// the question.
+Widget itemOptionsView(
+  BuildContext context,
+  AutocompleteOnSelected<Item> onSelected,
+  Iterable<Item> options,
+) {
+  return Align(
+    alignment: Alignment.topLeft,
+    child: Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 280),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: options.length,
+          itemBuilder: (context, index) {
+            final item = options.elementAt(index);
+            if (item.id == kCreateItemId) {
+              final typed = item.code.isNotEmpty ? item.code : item.name;
+              return InkWell(
+                onTap: () => onSelected(item),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Create "$typed"',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return InkWell(
+              onTap: () => onSelected(item),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.code,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      Fmt.money(item.unitPrice),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+
+/// The id of the row that means "this is not on the list — make it".
+///
+/// A sentinel rather than a separate widget because `RawAutocomplete`
+/// HIDES its overlay entirely when `optionsBuilder` returns nothing.
+/// The one moment somebody needs the offer is the moment nothing
+/// matches, so an offer that can only be drawn alongside matches is an
+/// offer that never appears. It rides in as an option instead, and the
+/// row builder and `onSelected` both check for it.
+const kCreateItemId = '__create__';
+
+/// The offer, carrying what was typed and which box it was typed in.
+Item createItemOption(String typed, {required bool asCode}) => Item(
+  id: kCreateItemId,
+  code: asCode ? typed.trim() : '',
+  name: asCode ? '' : typed.trim(),
+  itemType: 'stock',
+);
+
+/// What the boxes offer for what has been typed: the matches, and then
+/// the offer to create one.
+///
+/// The offer is LAST when there are matches and alone when there are
+/// none — it is a way out, not a suggestion, and putting it first would
+/// have somebody creating a second ITM-100 by pressing enter too
+/// quickly.
+Iterable<Item> itemOptionsFor(
+  List<Item> items,
+  String typed, {
+  required bool asCode,
+}) {
+  final query = typed.trim();
+  if (query.isEmpty) return const Iterable<Item>.empty();
+  final matches = itemsMatching(items, query).toList();
+  // An EXACT hit needs no offer: somebody who typed a whole part number
+  // that exists is not about to create it again.
+  final exact = matches.any(
+    (i) => asCode
+        ? i.code.toLowerCase() == query.toLowerCase()
+        : i.name.toLowerCase() == query.toLowerCase(),
+  );
+  return [
+    ...matches,
+    if (!exact) createItemOption(query, asCode: asCode),
+  ];
+}
+
+/// Which items match what has been typed, code first.
+///
+/// Shared by both boxes on the line, because somebody typing in either
+/// one is doing the same thing: looking for an item. Code matches come
+/// before name matches so an exact part number is not buried under
+/// everything whose name happens to contain it.
+Iterable<Item> itemsMatching(List<Item> items, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return const Iterable<Item>.empty();
+  final byCode = <Item>[];
+  final byName = <Item>[];
+  for (final item in items) {
+    if (item.code.toLowerCase().contains(q)) {
+      byCode.add(item);
+    } else if (item.name.toLowerCase().contains(q)) {
+      byName.add(item);
+    }
+  }
+  return [...byCode, ...byName].take(30);
+}
+
+/// The item's own number, with the item list behind it.
+///
+/// Typing here searches the item master on BOTH the code and the
+/// description, because the two are how people actually look an item up:
+/// a storeman knows the number and whoever wrote the order knows what
+/// the thing is called. Matching only the code would make the box
+/// useless to half the people who reach for it.
+///
+/// Selecting fills the line the same way the picker beside the
+/// description does. Typing alone changes nothing but the text: a code
+/// half-entered is not a choice, and a line is only bound to an item
+/// when somebody picks one.
+class _ItemCodeField extends StatelessWidget {
+  const _ItemCodeField({
+    required this.controller,
+    required this.focusNode,
+    required this.items,
+    required this.editable,
+    required this.onItemSelected,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final List<Item> items;
+  final bool editable;
+  final ValueChanged<Item> onItemSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Item>(
+      textEditingController: controller,
+      focusNode: focusNode,
+      displayStringForOption: (item) => item.code,
+      optionsBuilder: (value) => editable
+          ? itemOptionsFor(items, value.text, asCode: true)
+          : const Iterable<Item>.empty(),
+      onSelected: onItemSelected,
+      fieldViewBuilder: (context, textController, node, onFieldSubmitted) {
+        return TextFormField(
+          controller: textController,
+          focusNode: node,
+          enabled: editable,
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+          decoration: const InputDecoration(
+            hintText: 'Item no.',
+            isDense: true,
+          ),
+        );
+      },
+      optionsViewBuilder: itemOptionsView,
+    );
+  }
+}
+
+/// The description, which is also a way to find an item.
+///
+/// It stays FREE TEXT: a charge is often something that is not on the
+/// item list at all, and a box that refused what was typed unless it
+/// matched a row would make half the invoices in this system
+/// un-typeable. What it adds is a search — the same one the item-number
+/// box runs, on the code and the name together — so somebody who starts
+/// typing "cabling" is offered the item rather than having to know it
+/// exists and open the picker.
+///
+/// The picker beside it stays too. It answers a different question:
+/// "what is on the list" rather than "is this thing on the list", and
+/// somebody who does not know what to type has nothing to type.
 class _ItemField extends StatelessWidget {
   const _ItemField({
     required this.controller,
+    required this.focusNode,
     required this.items,
     required this.editable,
     required this.onItemSelected,
@@ -620,6 +998,7 @@ class _ItemField extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final List<Item> items;
   final bool editable;
   final ValueChanged<Item> onItemSelected;
@@ -630,14 +1009,42 @@ class _ItemField extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: TextFormField(
-            controller: controller,
+          child: RawAutocomplete<Item>(
+            textEditingController: controller,
+            focusNode: focusNode,
+            // The description, not the code: picking an item here fills
+            // the box with what the thing is called, which is what this
+            // box is for and what will print on the invoice.
+            displayStringForOption: (item) => item.name,
+            optionsBuilder: (value) => editable
+                ? itemOptionsFor(items, value.text, asCode: false)
+                : const Iterable<Item>.empty(),
+            onSelected: onItemSelected,
+            optionsViewBuilder: itemOptionsView,
+            fieldViewBuilder:
+                (context, textController, node, onFieldSubmitted) =>
+                    TextFormField(
+            controller: textController,
+            focusNode: node,
             enabled: editable,
             onChanged: onTextChanged,
+            // A charge often needs more than one line to describe: a
+            // part number, a period covered, a site address. The field
+            // was single-line, which meant a description carrying a
+            // newline could be neither read nor typed — a scanned bill
+            // whose item ran to two printed lines showed one run-on
+            // line and there was no way to put the break back.
+            //
+            // Grows to three and then scrolls, so an ordinary one-line
+            // description costs the same height it always did.
+            minLines: 1,
+            maxLines: 3,
+            keyboardType: TextInputType.multiline,
             decoration: const InputDecoration(
               hintText: 'Description',
               isDense: true,
             ),
+          ),
           ),
         ),
         if (editable && items.isNotEmpty)
@@ -717,31 +1124,27 @@ class _UomField extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        DropdownButtonFormField<String>(
+        SearchablePicker<String>(
+          options: [
+            for (final o in options)
+              PickerOption<String>(
+                value: '${o['uom_code']}',
+                label: '${o['uom_name']}',
+                keywords: ['${o['uom_code']}'],
+              ),
+          ],
           value: options.any((o) => '${o['uom_code']}' == current)
               ? current
               : null,
-          isDense: true,
-          decoration: const InputDecoration(isDense: true),
-          style: Theme.of(context).textTheme.bodySmall,
-          items: [
-            for (final o in options)
-              DropdownMenuItem(
-                value: '${o['uom_code']}',
-                child: Text(
-                  '${o['uom_name']}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: !editable
-              ? null
-              : (v) {
-                  if (v == null || v == current) return;
-                  final to = uomFactor(options, v);
-                  line.uomCode = v;
-                  onUnitChanged(factor, to);
-                },
+          label: 'Unit',
+          dense: true,
+          enabled: editable,
+          onChanged: (v) {
+            if (v == null || v == current) return;
+            final to = uomFactor(options, v);
+            line.uomCode = v;
+            onUnitChanged(factor, to);
+          },
         ),
         if (hint != null)
           Padding(
@@ -798,30 +1201,34 @@ class _TaxField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      value:
-          taxCodes.any((t) => t.id == line.taxCodeId) ? line.taxCodeId : null,
-      isExpanded: true,
-      decoration: const InputDecoration(isDense: true, hintText: 'Tax'),
-      items: [
+    // The busiest tax code box in the product, and the narrowest. A
+    // company that has added a rate for every service line it bills
+    // has more codes than the cell is tall, so it is typed into like
+    // every other one — dense, so the row keeps its height.
+    return SearchablePicker<String>(
+      options: [
         for (final t in taxCodes)
-          DropdownMenuItem(
+          PickerOption<String>(
             value: t.id,
-            child: Text(
-              t.rate == 0 ? t.code : '${t.code} (${Fmt.percent(t.rate)})',
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: t.rate == 0 ? t.code : '${t.code} (${Fmt.percent(t.rate)})',
+            sublabel: t.name,
+            keywords: [t.name],
           ),
       ],
-      onChanged: editable
-          ? (v) {
-              final tax = taxCodes.where((t) => t.id == v).firstOrNull;
-              line
-                ..taxCodeId = v
-                ..taxRate = tax?.rate ?? 0;
-              onChanged();
-            }
-          : null,
+      value:
+          taxCodes.any((t) => t.id == line.taxCodeId) ? line.taxCodeId : null,
+      label: 'Tax',
+      dense: true,
+      enabled: editable,
+      allowEmpty: true,
+      emptyLabel: 'No tax',
+      onChanged: (v) {
+        final tax = taxCodes.where((t) => t.id == v).firstOrNull;
+        line
+          ..taxCodeId = v
+          ..taxRate = tax?.rate ?? 0;
+        onChanged();
+      },
     );
   }
 }

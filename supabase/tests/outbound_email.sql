@@ -237,15 +237,21 @@ begin
 
   v_doc := pg_temp.invoice_due(v_org, v_contact, 'INV-7', 400, date '2026-03-31');
 
-  perform pg_temp.check_eq('a document nobody has touched has no history',
-    (select count(*) from public.document_activity(v_doc)), 0);
+  -- 0495 put the document's own changes, its payments and what LHDN
+  -- said on this timeline, so a freshly raised invoice is no longer
+  -- empty -- being raised is itself on it. What this block is about is
+  -- the sending, so it counts the three kinds that leave the building.
+  perform pg_temp.check_eq('nothing has been sent about it yet',
+    (select count(*) from public.document_activity(v_doc)
+      where kind in ('email', 'share link', 'pdf')), 0);
 
   perform public.email_document(v_doc, null, 'document_new', 30, 'immediate');
   perform app.issue_share_token(v_doc, 30, 'ap@buyer.example');
   perform public.log_document_download(v_doc);
 
-  perform pg_temp.check_eq('all three kinds appear',
-    (select count(distinct kind) from public.document_activity(v_doc)), 3);
+  perform pg_temp.check_eq('all three ways of sending appear',
+    (select count(distinct kind) from public.document_activity(v_doc)
+      where kind in ('email', 'share link', 'pdf')), 3);
 
   -- Two links, not one: emailing issues a token of its own, and the
   -- explicit share above then issues a second. `issue_share_token`

@@ -154,6 +154,14 @@ class _ConsolidationDue extends ConsumerStatefulWidget {
 class _ConsolidationDueState extends ConsumerState<_ConsolidationDue> {
   String? _busy;
 
+  /// Rolls the month up, then prepares the document it becomes.
+  ///
+  /// Two calls, because they were two missing halves. The rollup has
+  /// always worked; `0616` added the second, and until it existed
+  /// "Consolidated, and queued for MyInvois" was a sentence describing
+  /// something that had not happened — nothing wrote
+  /// `einvoice_consolidations.einvoice_id`, so the seven-day clock
+  /// this screen counts down started and ran out against nothing.
   Future<void> _consolidate(Map<String, dynamic> period) async {
     final start = period['period_start']?.toString();
     if (start == null) return;
@@ -162,7 +170,17 @@ class _ConsolidationDueState extends ConsumerState<_ConsolidationDue> {
       context,
       pendingMessage: 'Rolling the period up…',
       successMessage: 'Consolidated, and queued for MyInvois',
-      action: () => ref.read(repoProvider)!.consolidatePosEinvoices(start),
+      action: () async {
+        final repo = ref.read(repoProvider)!;
+        final rolled = await repo.consolidatePosEinvoices(start);
+        final id = rolled?['consolidation_id']?.toString();
+        // Nothing rolled up is not a failure — the button can be
+        // pressed on a month somebody already filed — and preparing a
+        // consolidation with no items is refused by name, so the
+        // second call is skipped rather than made and caught.
+        if (id == null || Fmt.toInt(rolled?['document_count']) == 0) return;
+        await repo.prepareConsolidatedEinvoice(id);
+      },
     );
     if (!mounted) return;
     setState(() => _busy = null);

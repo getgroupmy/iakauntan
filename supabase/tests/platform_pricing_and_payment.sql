@@ -591,6 +591,166 @@ end $$;
 
 
 -- ---------------------------------------------------------------------
+-- And a writer for the three columns 0295 added
+--
+-- The block above asserts the constraints, by writing the table
+-- directly. Nothing an operator does goes that way: they go through
+-- `platform_save_payment_gateway`, which until `0352` had ten arguments
+-- and none of them was `countries`, `methods` or `docs_url`. So a
+-- gateway added by hand got no coverage list, a seeded row could not be
+-- corrected, and the constraints above had never once refused a real
+-- caller.
+--
+-- What is asserted here is the difference: the columns are writable,
+-- what arrives is normalised before it is stored, and a wrong value
+-- comes back named. A check constraint failing says
+-- `payment_gateways_countries_iso`; an operator who typed `Malaysia`
+-- needs to be told which value was wrong.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.as_platform_admin();
+  v_row   record;
+  v_said  text;
+begin
+  -- Mixed case, a stray space, and the same country twice. All three
+  -- are what a form produces and none of them is what the column may
+  -- hold.
+  perform public.platform_save_payment_gateway(
+    'ipay88', p_name => 'iPay88',
+    p_countries => array['my', ' MY ', 'sg'],
+    p_methods   => array['FPX', 'card', 'card'],
+    p_docs_url  => 'https://ipay88.com/docs');
+
+  select * into v_row from public.payment_gateways where code = 'ipay88';
+  perform pg_temp.check_eq('a country list is upper cased, trimmed and deduped',
+    array_to_string(v_row.countries, ','), 'MY,SG');
+  perform pg_temp.check_eq('and a method list lower cased and deduped',
+    array_to_string(v_row.methods, ','), 'card,fpx');
+  perform pg_temp.check_eq('and the documentation link is kept',
+    v_row.docs_url, 'https://ipay88.com/docs');
+
+  -- Null is not an empty list. Most callers pass one field and nothing
+  -- else, and a save that blanked the coverage list every time somebody
+  -- flicked the switch would empty the catalogue one gateway at a time.
+  perform public.platform_save_payment_gateway('ipay88', p_is_active => true);
+  select * into v_row from public.payment_gateways where code = 'ipay88';
+  perform pg_temp.check_eq('saving something else leaves the lists alone',
+    array_to_string(v_row.countries, ','), 'MY,SG');
+
+  -- An empty array is a statement, and a different one: it is what a
+  -- gateway that sells everywhere holds, and `payment_gateways_for`
+  -- reads it that way.
+  perform public.platform_save_payment_gateway(
+    'ipay88', p_countries => array[]::text[]);
+  select * into v_row from public.payment_gateways where code = 'ipay88';
+  perform pg_temp.check_eq('but an empty one means sells everywhere',
+    cardinality(v_row.countries), 0);
+
+  begin
+    perform public.platform_save_payment_gateway(
+      'ipay88', p_countries => array['Malaysia']);
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('a country that is not two letters is refused',
+    v_said is not null);
+  perform pg_temp.check_true('and the refusal names the value, not a constraint',
+    v_said like '%Malaysia%');
+
+  begin
+    perform public.platform_save_payment_gateway(
+      'ipay88', p_methods => array['telepathy']);
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('a rail nobody has heard of is refused here too',
+    v_said is not null);
+  perform pg_temp.check_true('and the refusal says which rails there are',
+    v_said like '%telepathy%' and v_said like '%duitnow%');
+
+  begin
+    perform public.platform_save_payment_gateway(
+      'ipay88', p_docs_url => 'ipay88.com/docs');
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('a documentation link over http is refused',
+    v_said is not null);
+
+  -- None of the three refusals wrote anything.
+  select * into v_row from public.payment_gateways where code = 'ipay88';
+  perform pg_temp.check_eq('and a refused save changed nothing',
+    array_to_string(v_row.methods, ','), 'card,fpx');
+  perform pg_temp.check_eq('nor the link it already had',
+    v_row.docs_url, 'https://ipay88.com/docs');
+
+  perform public.platform_save_payment_gateway('ipay88', p_is_active => false);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Alpha-2 or alpha-3, and the direction a typo may move the answer
+--
+-- The mismatch that kept `payment_gateways_for` from ever being called:
+-- `organizations.country_code` is alpha-3 and has been since `0003`,
+-- and `payment_gateways.countries` is alpha-2 because that is what a
+-- provider prints on its own page. A caller holding 'MYS' got an empty
+-- list rather than an error -- a company told it has no way to pay --
+-- so the resolution moved into the function.
+--
+-- The second claim is the one worth having. A code nobody recognises
+-- must *narrow* the answer to the gateways that sell everywhere, never
+-- widen it to the whole catalogue: showing a company a payment method
+-- that is not sold where it is, is the failure that costs somebody a
+-- phone call to a provider that will not take them.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.as_platform_admin();
+  v_user  uuid := pg_temp.test_user();
+  v_a2 integer; v_a3 integer; v_lower integer; v_junk integer; v_all integer;
+  v_role text;
+begin
+  perform public.platform_save_payment_gateway(
+    'billplz', p_is_active => true, p_countries => array['MY']);
+  perform public.platform_save_payment_gateway(
+    'everywhere', p_name => 'Sells Everywhere', p_is_active => true,
+    p_countries => array[]::text[]);
+
+  perform pg_temp.sign_in_as(v_user);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_a2    from public.payment_gateways_for('MY');
+    select count(*) into v_a3    from public.payment_gateways_for('MYS');
+    select count(*) into v_lower from public.payment_gateways_for('mys');
+    select count(*) into v_junk  from public.payment_gateways_for('ZZZ');
+    select count(*) into v_all   from public.payment_gateways_for(null);
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the reader ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_true('alpha-2 finds the Malaysian gateway', v_a2 >= 2);
+  perform pg_temp.check_eq('and alpha-3 finds exactly the same', v_a3, v_a2);
+  perform pg_temp.check_eq('lower case alpha-3 too', v_lower, v_a2);
+
+  -- Not "returns nothing": the gateways with an empty coverage list are
+  -- true for every country including one nobody could resolve.
+  perform pg_temp.check_true('a country nobody recognises still sees the '
+    'ones that sell everywhere', v_junk >= 1);
+  perform pg_temp.check_true('and it narrows rather than widens',
+    v_junk < v_a2);
+  perform pg_temp.check_true('while no country at all sees everything',
+    v_all >= v_a2);
+
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_payment_gateway('everywhere', p_is_active => false);
+  perform public.platform_save_payment_gateway('billplz', p_is_active => false);
+end $$;
+
+
+-- ---------------------------------------------------------------------
 -- The setting a user's own menu depends on
 --
 -- 0293 stored the grouping choice in `platform_settings`, whose read

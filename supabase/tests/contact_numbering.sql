@@ -181,4 +181,98 @@ begin
   perform pg_temp.check_eq('the re-sync is idempotent', v_twice, v_once);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And every other number this application issues is defended the same way
+-- ---------------------------------------------------------------------
+-- `0406`. The collision above reached `contacts` and was refused by
+-- `contacts_org_id_code_key` -- a constraint, not the counter. Three
+-- generated numbers had no such index and rested entirely on every
+-- writer remembering to call the counter: `stock_movements.movement_no`
+-- and the two charge-run numbers.
+--
+-- Named rather than swept, because the sweep that found them showed
+-- that "every `_no` column should be unique" is false. Most should not
+-- be: `registration_no`, `supplier_doc_no` and the rest are somebody
+-- else's numbers and two suppliers may both send an `INV-1`; line
+-- numbers are unique within a parent; and `pos_sales.order_no` restarts
+-- daily per outlet on purpose, so an index there would be wrong rather
+-- than missing.
+--
+-- This is the list of numbers this application *issues*. It is here
+-- rather than only in `0406` because a migration asserts what was true
+-- when it ran, and an index dropped by `0450` should fail something.
+do $$
+declare
+  v_missing text := null;
+  c_issued constant text[][] := array[
+    ['contacts',                    'code'],
+    ['accounts',                    'code'],
+    ['gl_entries',                  'entry_no'],
+    ['receipts',                    'receipt_no'],
+    ['bank_transfers',              'transfer_no'],
+    ['contra_notes',                'contra_no'],
+    ['deposit_notes',               'deposit_no'],
+    ['client_account_transactions', 'transaction_no'],
+    ['employees',                   'employee_no'],
+    ['stock_movements',             'movement_no'],
+    ['rent_runs',                   'run_no'],
+    ['strata_charge_runs',          'run_no']];
+  i int;
+begin
+  for i in 1 .. array_length(c_issued, 1) loop
+    if not exists (
+      select 1
+        from pg_index x
+        join pg_class c on c.oid = x.indrelid
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relname = c_issued[i][1]
+         and x.indisunique
+         and c_issued[i][2] = any (
+           select a.attname from pg_attribute a
+            where a.attrelid = c.oid and a.attnum = any (x.indkey))
+         and 'org_id' = any (
+           select a.attname from pg_attribute a
+            where a.attrelid = c.oid and a.attnum = any (x.indkey)))
+    then
+      v_missing := coalesce(v_missing || ', ', '')
+                || c_issued[i][1] || '.' || c_issued[i][2];
+    end if;
+  end loop;
+
+  if v_missing is not null then
+    raise exception
+      'FAIL: % is a number this application issues, and nothing but the '
+      'counter stops two of them being the same. The counter counts; it '
+      'does not check -- which is the whole subject of this file.',
+      v_missing;
+  end if;
+  raise notice
+    'ok   every number this application issues is unique per company in '
+    'the database, not only in the function that hands it out';
+end $$;
+
+-- And the ones that must *not* be unique still are not, so the rule
+-- above cannot be satisfied by making everything unique.
+do $$
+begin
+  perform pg_temp.check_true(
+    'a supplier''s own document number is not made unique',
+    not exists (
+      select 1 from pg_index x
+        join pg_class c on c.oid = x.indrelid
+       where c.relname = 'purchase_documents' and x.indisunique
+         and 'supplier_doc_no' = any (
+           select a.attname from pg_attribute a
+            where a.attrelid = c.oid and a.attnum = any (x.indkey))));
+  perform pg_temp.check_true(
+    'nor the number a kiosk calls across the room, which restarts daily',
+    not exists (
+      select 1 from pg_index x
+        join pg_class c on c.oid = x.indrelid
+       where c.relname = 'pos_sales' and x.indisunique
+         and 'order_no' = any (
+           select a.attname from pg_attribute a
+            where a.attrelid = c.oid and a.attnum = any (x.indkey))));
+end $$;
+
 rollback;

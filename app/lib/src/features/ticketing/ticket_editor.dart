@@ -4,8 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../custom_fields/custom_fields_section.dart';
 
 /// Raising one.
 ///
@@ -28,6 +32,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
   String? _category;
   String? _priority;
   bool _busy = false;
+  Map<String, dynamic> _customFields = const {};
 
   @override
   void dispose() {
@@ -47,6 +52,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
         description: _description.text.trim(),
         categoryCode: _category,
         priority: _priority,
+        customFields: _customFields,
       );
       ref.invalidate(ticketsProvider);
       router.go('/tickets/$id');
@@ -93,27 +99,50 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
               ),
               const SizedBox(height: 12),
               categories.maybeWhen(
-                data: (list) => DropdownButtonFormField<String>(
-                  value: _category,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
-                    helperText:
-                        'Decides the team, the priority and the deadline',
-                  ),
-                  items: [
+                data: (list) => SearchablePicker<String>(
+                  options: [
                     for (final c in list)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: c['code'] as String,
-                        child: Text((c['name'] ?? '') as String),
+                        label: (c['name'] ?? '') as String,
+                        keywords: ['${c['code']}'],
                       ),
                   ],
+                  value: _category,
+                  label: 'Category',
+                  helperText:
+                      'Decides the team, the priority and the deadline',
+                  createLabel: 'Add category',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New ticket category',
+                    // What the helper text above promises is exactly
+                    // what a category made here does NOT yet have, so
+                    // it is said rather than discovered.
+                    blurb: 'Not on the list yet. Its team, priority and '
+                        'deadline are set on the Categories screen; '
+                        'until then it uses the defaults.',
+                    nameHint: 'Hardware fault',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.ticketCategory,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(ticketCategoriesProvider);
+                      // This picker is keyed on the CODE, not the id.
+                      return code!;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _category = v),
                 ),
                 orElse: () => const SizedBox.shrink(),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _priority,
                 decoration: const InputDecoration(
                   labelText: 'Priority',
@@ -127,6 +156,16 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
                   DropdownMenuItem(value: 'p4', child: Text('P4 — low')),
                 ],
                 onChanged: (v) => setState(() => _priority = v),
+              ),
+              // What this desk asks of every ticket that the category
+              // and priority above do not cover — an asset tag, a site,
+              // a contract number. Draws nothing until one is defined,
+              // which is what keeps the short form short.
+              CustomFieldsSection(
+                entity: 'ticket',
+                values: _customFields,
+                enabled: !_busy,
+                onChanged: (v) => setState(() => _customFields = v),
               ),
               const SizedBox(height: 24),
               FilledButton(

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'channels.dart';
 import 'menu_links_screen.dart';
@@ -227,19 +230,38 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
               if (shops.length > 1)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DropdownButtonFormField<String>(
-                    value: outlet,
-                    decoration: const InputDecoration(
-                      labelText: 'Outlet',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final o in shops)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: o['id'] as String,
-                          child: Text('${o['name']}'),
+                          label: '${o['name']}',
                         ),
                     ],
+                    value: outlet,
+                    label: 'Outlet',
+                    createLabel: 'Add outlet',
+                    onCreate: (typed) => quickAdd(
+                      context,
+                      title: 'New outlet',
+                      blurb: 'Not on the list yet. Its address, its '
+                          'registers and its receipt are set on the '
+                          'Outlets screen.',
+                      nameHint: 'Bangsar branch',
+                      codeLabel: 'Code',
+                      seed: typed,
+                      save: ({required name, code}) async {
+                        final id = await ref
+                            .read(repoProvider)!
+                            .createQuickRow(
+                              QuickAddList.outlet,
+                              name: name,
+                              code: code,
+                            );
+                        ref.invalidate(posOutletsProvider);
+                        return id;
+                      },
+                    ),
                     onChanged: (v) => setState(() => _outletId = v),
                   ),
                 ),
@@ -320,6 +342,18 @@ class _Body extends ConsumerWidget {
             ),
           ),
           OutletChannels(outletId: outletId),
+          const SectionHeader('And what each till assumes'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'A kiosk in the corner is takeaway and the waiter\u2019s tablet '
+              'is dine-in, so nobody has to say so on every sale \u2014 and a '
+              'control set on every sale is a control that gets set wrong. '
+              'A till left as the shop\u2019s default follows it.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          RegisterChannels(outletId: outletId),
           const SectionHeader('The last thirty days'),
           const ChannelMix(),
           const SectionHeader('What goes where'),

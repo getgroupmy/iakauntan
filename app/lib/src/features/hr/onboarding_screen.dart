@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -186,18 +188,11 @@ class _StartDialogState extends ConsumerState<_StartDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: employeePickerOptions(employees),
                 value: _employeeId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Who *'),
-                items: [
-                  for (final e in employees)
-                    DropdownMenuItem(
-                      value: e.id,
-                      child: Text('${e.employeeNo} · ${e.fullName}',
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+                label: 'Who *',
+                hint: 'Type a name or a staff number',
                 onChanged: (v) => setState(() => _employeeId = v),
               ),
               const SizedBox(height: Space.md),
@@ -211,22 +206,18 @@ class _StartDialogState extends ConsumerState<_StartDialog> {
                 onSelectionChanged: (s) => setState(() => _kind = s.first),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String?>(
-                value: _templateId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Template',
-                  helperText: 'Without one the checklist starts empty',
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('None')),
+              SearchablePicker<String>(
+                options: [
                   for (final t in templates)
-                    DropdownMenuItem(
+                    PickerOption<String>(
                       value: t['id'] as String,
-                      child: Text(t['name']?.toString() ?? '',
-                          overflow: TextOverflow.ellipsis),
+                      label: t['name']?.toString() ?? '',
                     ),
                 ],
+                value: _templateId,
+                label: 'Template',
+                helperText: 'Without one the checklist starts empty',
+                allowEmpty: true,
                 onChanged: (v) => setState(() => _templateId = v),
               ),
               const SizedBox(height: Space.md),

@@ -49,6 +49,7 @@ declare
   v_zara  uuid := pg_temp.another_user('zara@ic.test');
   v_group uuid; v_a uuid; v_b uuid; v_c uuid;
   v_cust uuid; v_sup uuid; v_inv uuid; v_bill uuid; v_other uuid;
+  v_terms uuid;
   v_n int; v_refused boolean; v_msg text; v_status text; v_lines int;
   v_taxcode text; v_supdoc text; v_total numeric;
 begin
@@ -73,9 +74,19 @@ begin
   values (v_b, 'S-HOLD', 'IC Holdings', 'supplier', v_a) returning id into v_sup;
 
   -- A management fee from the holding company to the subsidiary.
+  -- With a due date, which is the normal case and the one `0439` found
+  -- was not being copied. Thirty days: the terms two companies in a
+  -- group settle on with each other.
+  insert into public.payment_terms (org_id, code, name, days, term_type)
+  values (v_a, 'NET30', '30 Days', 30, 'net')
+  on conflict (org_id, code) do update set days = 30
+  returning id into v_terms;
+
   insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
-    doc_date, subtotal, tax_amount, total_amount, base_total_amount, status)
+    doc_date, due_date, payment_term_id,
+    subtotal, tax_amount, total_amount, base_total_amount, status)
   values (v_a, 'invoice', 'INV-IC-1', v_cust, current_date,
+          current_date + 30, v_terms,
           10000, 800, 10800, 10800, 'posted')
   returning id into v_inv;
 
@@ -131,6 +142,32 @@ begin
     v_supdoc = 'INV-IC-1');
   perform pg_temp.check_eq('and the same money', v_total, 10800);
   perform pg_temp.check_eq('with both lines', v_lines, 2);
+
+  -- `0439`. The date it falls due was the one figure on the invoice
+  -- that was not copied. `report_ap_aging` buckets on
+  -- `coalesce(due_date, doc_date)`, so a null aged the bill from the
+  -- day it was raised and the group showed itself thirty days in
+  -- arrears for the whole of the credit period it had agreed -- on both
+  -- sides of the same transaction, since the seller's ledger has the
+  -- real date and the buyer's did not.
+  perform pg_temp.check_eq(
+    'and the date it falls due, which the ageing buckets on',
+    (select due_date::text from public.purchase_documents where id = v_bill),
+    (current_date + 30)::text);
+  perform pg_temp.check_eq(
+    'and the terms it was raised on, not only the date they produce',
+    (select payment_term_id from public.purchase_documents where id = v_bill),
+    v_terms);
+
+  -- The control: the two sides agree. A bill that took the invoice's
+  -- date but from the wrong column -- `doc_date`, say -- would pass the
+  -- first assertion if the fixture happened to have them equal.
+  perform pg_temp.check_true(
+    'and the two sides of the transaction fall due on the same day',
+    (select b.due_date from public.purchase_documents b where b.id = v_bill)
+      = (select d.due_date from public.sales_documents d where d.id = v_inv)
+    and (select b.due_date <> b.doc_date from public.purchase_documents b
+          where b.id = v_bill));
 
   select t.code into v_taxcode
     from public.purchase_document_lines l

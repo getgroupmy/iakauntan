@@ -2,9 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/ai_repository.dart';
 import '../data/corp_models.dart';
 import '../data/corp_repository.dart';
+import '../data/firms_repository.dart';
 import '../data/models.dart';
+import '../data/custom_fields_repository.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
 import 'env.dart';
@@ -13,6 +16,23 @@ import 'push.dart';
 final supabaseProvider = Provider<SupabaseClient>(
   (_) => Supabase.instance.client,
 );
+
+/// Whether `Supabase.initialize` has run in this process.
+///
+/// There is no public predicate for it — `Supabase.instance` throws
+/// when it has not — so this asks by trying. For anything that wants to
+/// open a socket before it knows whether there is a session: a widget
+/// test renders real screens against overridden providers and never
+/// initialises Supabase, and a screen that reached for the client
+/// anyway would fail in the test and nowhere else.
+final supabaseReadyProvider = Provider<bool>((ref) {
+  try {
+    Supabase.instance;
+    return true;
+  } catch (_) {
+    return false;
+  }
+});
 
 /// Emits on sign-in, sign-out and token refresh; the router listens to it.
 final authStateProvider = StreamProvider<AuthState>(
@@ -156,7 +176,7 @@ final currentOrgProvider = FutureProvider<Organization?>((ref) async {
 
 /// Repository bound to the active org. Null until an org is resolved.
 final repoProvider = Provider<Repo?>((ref) {
-  final org = ref.watch(currentOrgProvider).value;
+  final org = ref.watch(currentOrgProvider).valueOrNull;
   if (org == null) return null;
   return Repo(ref.watch(supabaseProvider), org.id);
 });
@@ -206,16 +226,24 @@ final memberRoleProvider = FutureProvider<String>((ref) async {
 // These mirror app.can_post / can_write / can_read_ledger in the
 // database. They only decide what the UI offers; RLS is what actually
 // enforces it, so a stale copy here cannot become a security hole.
+//
+// `valueOrNull`, not `.value`. `?? 'viewer'` is least privilege and is
+// the right answer while the role is loading AND if the load failed --
+// but `AsyncError.value` THROWS, so on a failure the fallback never ran
+// and the exception came out of whatever was watching. What watches
+// these is everything: `canAdminProvider` is read by the navigation
+// rail, so a role that failed to load took the whole shell down rather
+// than showing somebody a viewer's menu for a second.
 
 /// Whether the current member may post to the ledger. An accounts clerk
 /// deliberately sits outside this: they prepare, someone else posts.
 final canPostProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin', 'accountant'].contains(role);
 });
 
 final canWriteProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const [
     'owner',
     'admin',
@@ -227,14 +255,23 @@ final canWriteProvider = Provider<bool>((ref) {
 });
 
 final canAdminProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin'].contains(role);
+});
+
+/// Owner and nobody else. Separate from [canAdminProvider] because two
+/// things in this product are an owner's alone and an admin's not:
+/// handing the company over, and closing it. `close_organization`
+/// refuses an admin in the database; this is so the button is absent
+/// rather than present and refusing.
+final isOwnerProvider = Provider<bool>((ref) {
+  return (ref.watch(memberRoleProvider).valueOrNull ?? 'viewer') == 'owner';
 });
 
 /// Who may see the journals and audit trail. Auditors get read access to
 /// everything; sales and purchasing staff do not.
 final canReadLedgerProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const [
     'owner',
     'admin',
@@ -249,6 +286,27 @@ final canReadLedgerProvider = Provider<bool>((ref) {
 // ---------------------------------------------------------------------
 final dashboardProvider = FutureProvider.autoDispose<DashboardSummary>((ref) {
   return requireRepo(ref).dashboard();
+});
+
+/// The list you keep beside the books. `autoDispose` so it is re-read
+/// whenever the dashboard or the list screen is opened, which is the
+/// only way an item ticked on one of them shows as ticked on the other.
+final todosProvider = FutureProvider.autoDispose.family<List<Todo>, bool>((
+  ref,
+  done,
+) {
+  return requireRepo(ref).todos(done: done);
+});
+
+/// Where this person lands and what they want on the dashboard.
+///
+/// NOT autoDispose: the router reads it on every redirect, and a
+/// provider that disposed between them would refetch on each navigation
+/// and land somebody on the default while it did.
+final userPreferencesProvider = FutureProvider<UserPreferences>((ref) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return const UserPreferences();
+  return repo.userPreferences();
 });
 
 final revenueTrendProvider =
@@ -328,8 +386,33 @@ final outstandingProvider = FutureProvider.autoDispose
       ).outstandingFor(kind: args.kind, contactId: args.contactId);
     });
 
+/// Which acquirers this company has set up to collect from its own
+/// customers. Never the keys — see `Repo.orgPaymentGateways`.
+final orgPaymentGatewaysProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) {
+  return requireRepo(ref).orgPaymentGateways();
+});
+
 final bankAccountsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).bankAccounts();
+});
+
+/// The feed on one bank account, or null where there is none.
+///
+/// `0567`. Never the credential: `bank_feed_status` answers with
+/// `has_api_key` and never the key, for the reason the acquirer status
+/// does — a screen that could redisplay a secret is a screen that could
+/// leak it.
+final bankFeedProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, bankAccountId) {
+  return requireRepo(ref).bankFeedStatus(bankAccountId);
+});
+
+/// Every pull against this company's feeds, newest first.
+final bankFeedRunsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, bankAccountId) {
+  return requireRepo(ref).bankFeedRuns(bankAccountId);
 });
 
 final bankTransfersProvider =
@@ -353,6 +436,105 @@ final currenciesProvider = FutureProvider<List<Currency>>((ref) {
 final customerCreditProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, contactId) {
       return requireRepo(ref).customerCreditStatus(contactId);
+    });
+
+/// The other records of the same company, and which roles are open.
+///
+/// Family-keyed and autoDispose so the sheet asks afresh each time it
+/// opens: a record created from another screen changes the answer.
+final contactRecordsProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, contactId) {
+      return requireRepo(ref).contactRecords(contactId);
+    });
+
+/// Whether this account may add another company.
+///
+/// Multi-Company is a module (0486): the first company is free and the
+/// rest are bought. Watched rather than assumed, so a screen offers
+/// the door only when it opens.
+final canAddCompanyProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return false;
+  return repo.canAddCompany();
+});
+
+/// What this company's paid add-ons have cost it so far this month.
+///
+/// autoDispose, and invalidated whenever a module is switched on or
+/// off: the figure is the running total, and a stale one shown beside
+/// a module somebody just added is worse than no figure at all. The
+/// server refuses anybody but an owner or admin, so the card that
+/// draws this is drawn only for them.
+final moduleChargesProvider =
+    FutureProvider.autoDispose<SubscriptionMonth>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const SubscriptionMonth(month: null, lines: [], subtotal: 0);
+      return SubscriptionMonth.fromMap(await repo.moduleCharges());
+    });
+
+
+/// The portal links issued to one customer — whether one is live, and
+/// whether they have opened it. autoDispose: issuing or revoking one is
+/// exactly when the answer changes.
+final customerPortalLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.customerPortalLinks(contactId);
+    });
+
+/// Both sides of one contact's account — what they owe and what they
+/// have in hand. autoDispose: knocking anything off is exactly when the
+/// answer changes.
+final openItemsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.openItems(contactId);
+    });
+
+/// The tax-details links issued to one contact — whether one is live,
+/// whether they have opened it, and whether they have answered.
+/// autoDispose for [customerPortalLinksProvider]'s reason: issuing or
+/// revoking one is exactly when the answer changes.
+final taxDetailLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.taxDetailLinks(contactId);
+    });
+
+/// What customers have said about their own tax details that disagrees
+/// with what is on file. autoDispose: accepting or dismissing one is
+/// exactly when the answer changes.
+final pendingTaxSubmissionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.pendingTaxSubmissions();
+    });
+
+/// The records on file twice, for the screen that offers to link
+/// them. autoDispose so it is asked afresh: a group linked a moment
+/// ago is not a group any more.
+final contactDuplicatesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).contactDuplicates();
+    });
+
+/// What the assistant is able to read for this company.
+///
+/// Read from the server rather than listed in the app: a screen that
+/// promises a report the assistant cannot reach is worse than one that
+/// promises nothing.
+final aiToolsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).aiTools();
+    });
+
+final aiConversationsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).aiConversations();
     });
 
 final recurringJournalsProvider =
@@ -380,6 +562,48 @@ final priceLevelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).priceLevels();
 });
 
+/// Where a custom field may be attached, and what a lookup may point
+/// at. A platform catalogue that changes only by migration, so it is
+/// read once and kept.
+final customFieldEntitiesProvider =
+    FutureProvider<List<CustomFieldEntity>>((ref) {
+  return requireRepo(ref).customFieldEntities();
+});
+
+/// This company's custom fields for one kind of record, archived ones
+/// included — the setup screen shows both and a form filters.
+final customFieldsProvider = FutureProvider.autoDispose
+    .family<List<CustomFieldDef>, String>((ref, entity) {
+  return requireRepo(ref).customFields(entity);
+});
+
+/// What a lookup field may be filled in with. Read through the same
+/// function the guard's rule is written beside, so the picker cannot
+/// offer a record the database will refuse.
+final customFieldLookupProvider = FutureProvider.autoDispose
+    .family<List<LookupOption>, ({String target, String search})>((ref, args) {
+  return requireRepo(ref).customFieldLookupOptions(
+    args.target,
+    search: args.search.isEmpty ? null : args.search,
+  );
+});
+
+/// Every project with its budget and what has been spent against it.
+/// Links issued for one ticket, newest first.
+///
+/// "Did they ever open it?" is the question somebody asks a week later,
+/// and the open count is the only evidence the link reached anybody.
+final ticketShareLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, ticketId) => requireRepo(ref).ticketShareLinks(ticketId),
+    );
+
+final projectBudgetProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>(
+      (ref, includeClosed) =>
+          requireRepo(ref).projectBudgets(includeClosed: includeClosed),
+    );
+
 final projectsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).projects();
 });
@@ -401,6 +625,14 @@ final salespeopleProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 final warehousesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).warehouses();
 });
+
+/// What the next invoice, bill, journal and so on will be called: every
+/// series of the modules the company has, as it is set. Read from the
+/// server, which composes the sample the way the draw does.
+final documentNumberingProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).documentNumbering();
+    });
 
 final stockOnHandProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>((ref, warehouseId) {
@@ -444,6 +676,14 @@ final bankReconciliationsProvider = FutureProvider.autoDispose
 final fixedAssetsProvider = FutureProvider.autoDispose
     .family<List<FixedAsset>, bool>((ref, includeDisposed) {
       return requireRepo(ref).fixedAssets(includeDisposed: includeDisposed);
+    });
+
+/// Posted bill lines coded to a fixed asset account with nothing in
+/// the register against them — the reconciliation an auditor opens
+/// with, which the data could not answer before `0382`.
+final uncapitalisedPurchasesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).uncapitalisedPurchases();
     });
 
 final depreciationPreviewProvider = FutureProvider.autoDispose
@@ -495,6 +735,13 @@ final expensesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
 final einvoicesProvider = FutureProvider.autoDispose
     .family<List<EinvoiceDocument>, String>((ref, status) {
       return requireRepo(ref).einvoices(status: status);
+    });
+
+/// Open deals whose figure has drifted from the quotation attached to
+/// them. What the forecast is wrong by, and nothing could ask before.
+final pipelineQuoteMismatchProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).pipelineQuoteMismatch();
     });
 
 final pipelineStagesProvider = FutureProvider<List<PipelineStage>>((ref) {
@@ -638,6 +885,35 @@ final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
   return ref.watch(platformRepoProvider).modules();
 });
 
+/// The bank rules, in the order they are tried. 0625.
+final bankRulesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).bankRules();
+    });
+
+/// How many unclaimed statement lines each rule would take, and how
+/// many nothing describes. Keyed by bank account, null meaning all.
+final bankRuleCoverageProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, bankAccountId) {
+      return requireRepo(ref).bankRuleCoverage(bankAccountId: bankAccountId);
+    });
+
+final bankLinesUnexplainedProvider =
+    FutureProvider.autoDispose.family<int, String?>((ref, bankAccountId) {
+      return requireRepo(ref).bankLinesUnexplained(
+        bankAccountId: bankAccountId,
+      );
+    });
+
+/// What has been closed, for the console. 0619.
+final platformClosuresProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({String? kind, bool includeRestored})>(
+      (ref, args) => ref.watch(platformRepoProvider).closedAccounts(
+        kind: args.kind,
+        includeRestored: args.includeRestored,
+      ),
+    );
+
 final platformSettingsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return ref.watch(platformRepoProvider).settings();
@@ -646,6 +922,25 @@ final platformSettingsProvider =
 // ---------------------------------------------------------------------
 // Module entitlements for the active tenant
 // ---------------------------------------------------------------------
+/// True from the moment a sign-in succeeds until the door checks that
+/// may undo it have finished.
+///
+/// `0346` asks two questions after the password is accepted — is this
+/// account on this company's team, and can it open what this address
+/// opens — and either answer can sign the session straight back out.
+/// Both need a session to ask, so they cannot be asked first.
+///
+/// Meanwhile the session itself is what the router watches. Without
+/// this the order is: password accepted, router moves them into the
+/// app, checks come back, session revoked, router moves them out
+/// again, and only then does the dialog get a screen to appear on.
+/// The person watches themselves get in and thrown out before being
+/// told why, which reads as a fault rather than as a decision.
+///
+/// So the router holds while this is true. Nobody is moved on the
+/// strength of a session that is still being vetted.
+final vettingProvider = StateProvider<bool>((ref) => false);
+
 final enabledModulesProvider = FutureProvider<Set<String>>((ref) async {
   final repo = ref.watch(repoProvider);
   if (repo == null) return <String>{};
@@ -655,12 +950,13 @@ final enabledModulesProvider = FutureProvider<Set<String>>((ref) async {
 /// Every module with what this company may see of it. The settings
 /// screen's list, and the only place `entitled` and `hidden` are shown
 /// side by side.
-final moduleSurfaceProvider =
-    FutureProvider.autoDispose<List<ModuleSurface>>((ref) async {
-      final repo = ref.watch(repoProvider);
-      if (repo == null) return const [];
-      return repo.moduleSurface();
-    });
+final moduleSurfaceProvider = FutureProvider.autoDispose<List<ModuleSurface>>((
+  ref,
+) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return const [];
+  return repo.moduleSurface();
+});
 
 /// Figures for the modules this company actually uses, keyed by module
 /// code. Empty for a company whose dashboard is the accounting one.
@@ -680,6 +976,47 @@ final myModuleAccessProvider = FutureProvider<Map<String, String>>((ref) async {
   return repo.myModuleAccess();
 });
 
+/// What the entitlement list and the access map add up to, given plain
+/// values rather than an `AsyncValue`.
+///
+/// Extracted because three callers state the same rule in three
+/// different ways — `.when(loading: () => true)`, `.valueOrNull` with a
+/// null check, and an awaited read — and their own comments say they
+/// agree ("The answer is the same and so is the permissiveness while it
+/// loads"). Nothing made them. Reading a `WidgetRef` back needs a
+/// widget, so none of the three could be called by a unit test either.
+///
+/// **Null is "not known yet", and it reads as yes.** That is the
+/// permissiveness the comments describe, and it is deliberate: a screen
+/// that hid a button because an entitlement had not arrived would hide
+/// it from the person who does hold it. Hiding is a courtesy in every
+/// one of these — `0127`'s restrictive policies are the control, and
+/// they do not care what the client believes.
+///
+/// An access map that has arrived and does not mention the module is a
+/// different thing again, and also yes: that is what the database
+/// answers for a member with no access type at all.
+bool moduleAllowed({
+  required Set<String>? entitled,
+  required Map<String, String>? access,
+  required String code,
+}) {
+  if (entitled != null && !entitled.contains(code)) return false;
+  return (access?[code] ?? 'write') != 'none';
+}
+
+/// Whether this person may change anything in a module, as opposed to
+/// only looking at it.
+///
+/// Deliberately does not ask about the entitlement. Two callers want
+/// this question on its own — a permission is not sold and never
+/// appears in the entitlement list, so asking would deny every one of
+/// them to everybody.
+bool moduleWriteAllowed({
+  required Map<String, String>? access,
+  required String code,
+}) => (access?[code] ?? 'write') == 'write';
+
 /// Synchronous check for widgets. Treats "still loading" as enabled so
 /// navigation does not flicker on start-up.
 ///
@@ -687,23 +1024,11 @@ final myModuleAccessProvider = FutureProvider<Map<String, String>>((ref) async {
 /// have bought the module, and this person must be allowed into it.
 /// Hiding is a courtesy — the restrictive policies 0127 added are the
 /// control, and they do not care what the client believes.
-bool moduleEnabled(WidgetRef ref, String code) {
-  final modules = ref.watch(enabledModulesProvider);
-  final entitled = modules.when(
-    data: (set) => set.contains(code),
-    loading: () => true,
-    error: (_, __) => true,
-  );
-  if (!entitled) return false;
-
-  return ref
-      .watch(myModuleAccessProvider)
-      .when(
-        data: (access) => (access[code] ?? 'write') != 'none',
-        loading: () => true,
-        error: (_, __) => true,
-      );
-}
+bool moduleEnabled(WidgetRef ref, String code) => moduleAllowed(
+  entitled: ref.watch(enabledModulesProvider).valueOrNull,
+  access: ref.watch(myModuleAccessProvider).valueOrNull,
+  code: code,
+);
 
 /// The same question, asked from somewhere that is not a build method.
 ///
@@ -717,12 +1042,11 @@ bool moduleEnabled(WidgetRef ref, String code) {
 /// Hiding remains a courtesy either way. The server refuses on its own
 /// account, and 0231 gates every loyalty and membership function on the
 /// module rather than on the till.
-bool moduleEnabledNow(WidgetRef ref, String code) {
-  final modules = ref.read(enabledModulesProvider).valueOrNull;
-  if (modules != null && !modules.contains(code)) return false;
-  final access = ref.read(myModuleAccessProvider).valueOrNull;
-  return (access?[code] ?? 'write') != 'none';
-}
+bool moduleEnabledNow(WidgetRef ref, String code) => moduleAllowed(
+  entitled: ref.read(enabledModulesProvider).valueOrNull,
+  access: ref.read(myModuleAccessProvider).valueOrNull,
+  code: code,
+);
 
 /// Whether this person holds a named permission inside a module — an
 /// action a company can hand out separately, like voiding a sent line.
@@ -742,27 +1066,25 @@ Future<bool> permissionHeld(WidgetRef ref, String code) async {
   // is the wrong answer to give quietly, because the database will then
   // refuse and the person will have been walked into it.
   final access = await ref.read(myModuleAccessProvider.future);
-  return (access[code] ?? 'write') == 'write';
+  return moduleWriteAllowed(access: access, code: code);
 }
 
 /// The actions a company can hand out inside the modules it holds.
 /// Read once for the screen that hands them out.
-final accessPermissionsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
-      final repo = ref.watch(repoProvider);
-      if (repo == null) return const [];
-      return repo.accessPermissions();
-    });
+final accessPermissionsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return const [];
+  return repo.accessPermissions();
+});
 
 /// Whether this person may change anything in a module, as opposed to
 /// only looking at it.
-bool moduleWritable(WidgetRef ref, String code) => ref
-    .watch(myModuleAccessProvider)
-    .when(
-      data: (access) => (access[code] ?? 'write') == 'write',
-      loading: () => true,
-      error: (_, __) => true,
-    );
+bool moduleWritable(WidgetRef ref, String code) => moduleWriteAllowed(
+  access: ref.watch(myModuleAccessProvider).valueOrNull,
+  code: code,
+);
 
 // ---------------------------------------------------------------------
 // Team
@@ -770,6 +1092,149 @@ bool moduleWritable(WidgetRef ref, String code) => ref
 final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
   return requireRepo(ref).team();
 });
+
+// ---------------------------------------------------------------------
+// The practice
+//
+// Above the organization rather than inside it, so none of these is
+// scoped by `currentOrgIdProvider` and none goes through `Repo`. Almost
+// everybody gets an empty list from `myFirmsProvider` and never sees any
+// of this: a company that keeps its own books is not a practice.
+// ---------------------------------------------------------------------
+final firmsRepoProvider = Provider<FirmsRepo>(
+  (ref) => FirmsRepo(ref.watch(supabaseProvider)),
+);
+
+final myFirmsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  if (!ref.watch(supabaseReadyProvider)) return Future.value(const []);
+  if (ref.watch(currentUserProvider) == null) return Future.value(const []);
+  return ref.watch(firmsRepoProvider).myFirms();
+});
+
+/// Which practice the firm screen is showing. Null until the list has
+/// arrived, and set to the only one when there is only one.
+final currentFirmIdProvider = StateProvider<String?>((ref) => null);
+
+final firmPortfolioProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, firmId) {
+      return ref.watch(firmsRepoProvider).portfolio(firmId);
+    });
+
+final firmTeamProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, firmId) {
+      return ref.watch(firmsRepoProvider).members(firmId);
+    });
+
+/// Partners and managers only; a member of staff gets a permission
+/// error rather than an empty list, which is why the screen guards it.
+final firmTrailProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, firmId) {
+      return ref.watch(firmsRepoProvider).trail(firmId);
+    });
+
+// ---------------------------------------------------------------------
+// Telling us it is broken
+// ---------------------------------------------------------------------
+
+/// What this person has reported, plus what was reported from inside
+/// their company if they administer it.
+final myFeedbackProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).myFeedback();
+    });
+
+/// Every company's reports. Platform staff only; the server refuses
+/// anybody else outright rather than handing back an empty list.
+final platformFeedbackProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, status) {
+      return ref.watch(platformRepoProvider).feedback(status: status);
+    });
+
+// ---------------------------------------------------------------------
+// One payment across several companies
+// ---------------------------------------------------------------------
+
+/// What is open across every company the signed-in person may post in.
+/// Not scoped to the company that happens to be selected — that is the
+/// point of the screen it feeds.
+final openAcrossCompaniesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, kind) {
+      return requireRepo(ref).openAcrossCompanies(kind: kind);
+    });
+
+// ---------------------------------------------------------------------
+// Statutory remittances
+// ---------------------------------------------------------------------
+
+/// Every posted payroll month, split by the body owed. Empty for a
+/// company that has never posted one.
+final statutoryRemittancesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).statutoryRemittances();
+    });
+
+/// The ones still to send, soonest first. Watched by the payroll screen
+/// so an overdue contribution announces itself rather than waiting to
+/// be looked for.
+final statutoryDueProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).statutoryDue(withinDays: 45);
+    });
+
+// ---------------------------------------------------------------------
+// SST taxable periods
+// ---------------------------------------------------------------------
+
+/// Every taxable period since registration. Empty for a company that is
+/// not SST-registered, which is most of them.
+final sstTaxablePeriodsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).sstTaxablePeriods();
+    });
+
+/// The returns that have not gone in. Watched by the card, so a
+/// deadline appears without anybody going looking for it.
+final sstDueProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
+  ref,
+) {
+  return requireRepo(ref).sstDue(withinDays: 120);
+});
+
+/// What makes up one period's figure, split by tax type and the basis
+/// each part is due on. Keyed by the period end as an ISO date, because
+/// that is what identifies a taxable period.
+final sstReturnLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, periodEnd) {
+      return requireRepo(ref).sstReturnLines(DateTime.parse(periodEnd));
+    });
+
+/// The practice keeping *this* company's books, if any, with the role
+/// its people hold here. Null for the great majority of companies.
+///
+/// `firms_select` lets a client's own members read the firm row their
+/// company names, which is what makes the embed legal.
+final ourPracticeProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((
+  ref,
+) async {
+  final orgId = ref.watch(currentOrgIdProvider);
+  if (orgId == null) return null;
+  final row = await ref
+      .watch(supabaseProvider)
+      .from('organizations')
+      .select('firm_id, firm_member_role, firms(name, email, phone)')
+      .eq('id', orgId)
+      .maybeSingle();
+  if (row == null || row['firm_id'] == null) return null;
+  return Map<String, dynamic>.from(row);
+});
+
+/// Who has held this company before. Owners and admins only.
+final companyTransferHistoryProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      final orgId = ref.watch(currentOrgIdProvider);
+      if (orgId == null) return Future.value(const []);
+      return ref.watch(firmsRepoProvider).transferHistory(orgId);
+    });
 
 /// The places this company trades from. Empty for a company that has
 /// never opened a second one, which is most of them.
@@ -790,6 +1255,16 @@ final groupCompaniesProvider =
 final intercompanyInboxProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).intercompanyInbox();
+    });
+
+/// Sales orders past the delivery date they were given.
+///
+/// Watched by the sales order list so the button appears only when there
+/// is something behind it — a permanent "Late (0)" is a door onto an
+/// empty room.
+final lateOrdersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).lateOrders();
     });
 
 /// How far the move onto this system has got — six imports in the order
@@ -995,6 +1470,55 @@ final mattersProvider = FutureProvider.autoDispose
       return requireRepo(ref).matters(status: args.status, search: args.search);
     });
 
+/// The matters open for one client, for the receipt and payment screens
+/// to offer when a firm holds the legal module (0549).
+///
+/// Open ones only: money is not received on account for a matter that
+/// closed, and a picker offering fifty closed matters is a picker
+/// nobody uses.
+final clientMattersProvider = FutureProvider.autoDispose
+    .family<List<Matter>, String>((ref, contactId) async {
+      final all = await requireRepo(ref).matters(status: 'open');
+      return [for (final m in all) if (m.clientId == contactId) m];
+    });
+
+/// What one matter holds in the client account, now.
+final matterClientBalanceProvider = FutureProvider.autoDispose
+    .family<double, String>((ref, matterId) {
+      return requireRepo(ref).matterClientBalance(matterId);
+    });
+
+/// Client money coming in, and client money going out (0549).
+///
+/// Two providers rather than one family on a bool, because the two
+/// screens show different things and a family keyed on a flag reads as
+/// though they were the same list filtered.
+final clientReceiptsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).clientAccountLedger(types: const ['receipt']);
+    });
+
+/// Payments out and refunds together: both are money leaving a matter,
+/// and a firm closing one wants to see the disbursements and the
+/// balance returned on the same page.
+final clientPayoutsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref)
+          .clientAccountLedger(types: const ['payment', 'refund']);
+    });
+
+/// What each matter holds, for the pickers on both screens.
+final matterClientBalancesProvider =
+    FutureProvider.autoDispose<Map<String, double>>((ref) {
+      return requireRepo(ref).matterClientBalances();
+    });
+
+/// Fixed-fee matters that have gone past what was agreed.
+final mattersOverAgreedFeeProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).mattersOverAgreedFee();
+    });
+
 final matterSummaryProvider = FutureProvider.autoDispose<List<MatterSummary>>((
   ref,
 ) {
@@ -1033,13 +1557,13 @@ void refreshMatter(WidgetRef ref, String matterId) {
 // comes back.
 // ---------------------------------------------------------------------
 final canManageHrProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin', 'hr_manager'].contains(role);
 });
 
 /// Payroll touches the ledger, so it needs a finance role as well as HR.
 final canRunPayrollProvider = Provider<bool>((ref) {
-  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  final role = ref.watch(memberRoleProvider).valueOrNull ?? 'viewer';
   return const ['owner', 'admin', 'hr_manager', 'accountant'].contains(role);
 });
 
@@ -1073,8 +1597,15 @@ final declaredReliefsProvider = FutureProvider.autoDispose
       return requireRepo(ref).declaredReliefs(employeeId, DateTime.now().year);
     });
 
-final reliefTypesProvider = FutureProvider<List<ReliefType>>((ref) {
-  return requireRepo(ref).reliefTypes(DateTime.now());
+/// Keyed on the tax year, because that is what the ceiling is keyed on:
+/// `0408` judges a declaration against the PCB schedule in force at the
+/// end of the year it is declared for, and a list fetched for a
+/// different year would offer reliefs the database then refuses.
+final reliefTypesProvider = FutureProvider.family<List<ReliefType>, int>((
+  ref,
+  taxYear,
+) {
+  return requireRepo(ref).reliefTypes(taxYear);
 });
 
 /// The caller's own employee record. Everything on the self-service
@@ -1105,6 +1636,32 @@ final attendanceProvider = FutureProvider.autoDispose
       return requireRepo(ref).attendance(
         employeeId: employeeId,
         from: DateTime(now.year, now.month, 1),
+      );
+    });
+
+/// Every document running out inside the window.
+///
+/// `0025` built an index for this list and it was never written, so a
+/// lapsing work permit could only be found by opening each employee in
+/// turn — and employing on an expired pass is the company's offence,
+/// not the employee's.
+final expiringDocumentsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>(
+      (ref, days) => requireRepo(ref).expiringDocuments(withinDays: days),
+    );
+
+/// Everyone away over the coming days, and how to reach them.
+///
+/// `contact_while_away` was a column nothing wrote and nothing read
+/// until `0395`; this is the reader. The window runs from today, so
+/// the family key is how many days ahead to look and not a date pair —
+/// a report about who is away has no use for a window in the past.
+final whoIsAwayProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>((ref, days) {
+      final today = DateTime.now();
+      return requireRepo(ref).whoIsAway(
+        from: today,
+        to: today.add(Duration(days: days)),
       );
     });
 
@@ -1216,9 +1773,21 @@ final corpOfficersProvider = FutureProvider.autoDispose
       return requireRepo(ref).corpOfficers(id);
     });
 
+/// Who at a company may be stood in for. Asked of the database, which
+/// is the same list `0380`'s guard will accept.
+final corpPrincipalsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, entityId) {
+      return requireRepo(ref).corpPrincipalsForAlternate(entityId);
+    });
+
 final corpMembersProvider = FutureProvider.autoDispose
     .family<List<CorpMember>, String>((ref, id) {
       return requireRepo(ref).corpRegisterOfMembers(id);
+    });
+
+final corpShareClassesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).corpShareClasses(id);
     });
 
 final corpShareEventsProvider = FutureProvider.autoDispose
@@ -1229,6 +1798,12 @@ final corpShareEventsProvider = FutureProvider.autoDispose
 final corpBeneficialOwnersProvider = FutureProvider.autoDispose
     .family<List<CorpBeneficialOwner>, String>((ref, id) {
       return requireRepo(ref).corpBeneficialOwners(id);
+    });
+
+/// The resolutions a company has passed. 0062.
+final corpResolutionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).corpResolutions(id);
     });
 
 final corpChargesProvider = FutureProvider.autoDispose
@@ -1269,8 +1844,37 @@ final applicantsProvider = FutureProvider.autoDispose<List<Applicant>>((ref) {
   return requireRepo(ref).applicants();
 });
 
+/// Who introduced the people the company hired. HR only; the database
+/// answers an employee with nothing.
+final referralHiresProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).referralHires();
+    });
+
 final appraisalsProvider = FutureProvider.autoDispose<List<Appraisal>>((ref) {
   return requireRepo(ref).appraisals();
+});
+
+final appraisalCyclesProvider =
+    FutureProvider.autoDispose<List<AppraisalCycle>>((ref) {
+      return requireRepo(ref).appraisalCycles();
+    });
+
+/// Whose half is whose, straight from `my_appraisal_parts`. The screen
+/// draws its buttons from this rather than working the rule out again —
+/// see `features/hr/appraisal_part.dart`.
+final myAppraisalPartsProvider =
+    FutureProvider.autoDispose<Map<String, String>>((ref) {
+      return requireRepo(ref).myAppraisalParts();
+    });
+
+/// Who has not written their half, and by how long. HR only; an employee
+/// asking gets nothing, which is the database's answer and not a filter
+/// applied here.
+final appraisalsDueProvider = FutureProvider.autoDispose<List<AppraisalDue>>((
+  ref,
+) {
+  return requireRepo(ref).appraisalsDue();
 });
 
 /// Whether the caller holds a live, admin-approved grant to read payslips.
@@ -1287,7 +1891,7 @@ final payslipAccessRequestsProvider =
 
 /// True for an auditor: no payroll rights, but may ask for them.
 final canRequestPayslipAccessProvider = Provider<bool>((ref) {
-  return (ref.watch(memberRoleProvider).value ?? '') == 'auditor';
+  return (ref.watch(memberRoleProvider).valueOrNull ?? '') == 'auditor';
 });
 
 final payslipAccessLogProvider =
@@ -1310,9 +1914,73 @@ final securitySummaryProvider =
       return requireRepo(ref).securitySummary();
     });
 
+/// What the change history is being narrowed to.
+///
+/// Held as a value rather than as three providers so that changing two
+/// filters at once is one read rather than two — which matters here more
+/// than usual, because reading the trail WRITES a `sensitive_read` and
+/// a screen that re-reads per filter buries the events somebody is
+/// looking for.
+@immutable
+class AuditFilter {
+  const AuditFilter({this.actorId, this.from, this.to});
+
+  final String? actorId;
+  final DateTime? from;
+  final DateTime? to;
+
+  bool get isEmpty => actorId == null && from == null && to == null;
+
+  AuditFilter copyWith({
+    Object? actorId = _same,
+    Object? from = _same,
+    Object? to = _same,
+  }) => AuditFilter(
+    actorId: actorId == _same ? this.actorId : actorId as String?,
+    from: from == _same ? this.from : from as DateTime?,
+    to: to == _same ? this.to : to as DateTime?,
+  );
+
+  // A sentinel, because `null` is a value each of these can take and
+  // `copyWith(actorId: null)` has to mean "clear it" rather than "leave
+  // it".
+  static const _same = Object();
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuditFilter &&
+      other.actorId == actorId &&
+      other.from == from &&
+      other.to == to;
+
+  @override
+  int get hashCode => Object.hash(actorId, from, to);
+}
+
+final auditFilterProvider = StateProvider.autoDispose<AuditFilter>(
+  (ref) => const AuditFilter(),
+);
+
 final auditTrailProvider = FutureProvider.autoDispose<List<AuditEntry>>((ref) {
-  return requireRepo(ref).auditTrail();
+  final filter = ref.watch(auditFilterProvider);
+  return requireRepo(ref).auditTrail(
+    actorId: filter.actorId,
+    from: filter.from,
+    to: filter.to,
+  );
 });
+
+/// A company's own payment methods. 0635.
+final paymentMethodsProvider =
+    FutureProvider.autoDispose<List<PaymentMethod>>((ref) {
+      return requireRepo(ref).paymentMethods();
+    });
+
+/// Who appears in the change history, for the filter's dropdown.
+final auditTrailActorsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).auditTrailActors();
+    });
 
 final departmentsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).departments();
@@ -1371,6 +2039,24 @@ final statutorySchedulesProvider = FutureProvider<List<Map<String, dynamic>>>((
   return ref.watch(platformRepoProvider).statutorySchedules();
 });
 
+/// The platform's own audit trail and security log — the rows with no
+/// organization. `platformRepoProvider` for the same reason the line
+/// above uses it: the person reading these may belong to no company.
+///
+/// `autoDispose`, and deliberately so. Reading the trail is recorded as
+/// a sensitive read, so a provider kept alive across the console would
+/// turn one visit into a stream of identical events every time the tab
+/// was rebuilt.
+final platformAuditTrailProvider = FutureProvider.autoDispose
+    .family<List<AuditEntry>, String?>((ref, table) {
+      return ref.watch(platformRepoProvider).platformAuditTrail(table: table);
+    });
+
+final platformSecurityLogProvider =
+    FutureProvider.autoDispose<List<SecurityEvent>>((ref) {
+      return ref.watch(platformRepoProvider).platformSecurityLog();
+    });
+
 final itemPricesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, itemId) {
       return requireRepo(ref).itemPrices(itemId);
@@ -1419,6 +2105,27 @@ final settlementProvider = FutureProvider.autoDispose
 final documentActivityProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, documentId) {
       return requireRepo(ref).documentActivity(documentId);
+    });
+
+/// What is waiting for the person signed in, in this company.
+final myNotificationsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>((ref, includeRead) {
+      return requireRepo(ref).myNotifications(includeRead: includeRead);
+    });
+
+/// Just the number, for the bell. Separate from the list because the
+/// bell is on every screen and the list is only on the one that is
+/// open.
+final unreadNotificationsProvider =
+    FutureProvider.autoDispose<int>((ref) {
+      return requireRepo(ref).unreadNotifications();
+    });
+
+/// What one expense was divided into. Empty for the ordinary expense,
+/// which is on one account and has no lines at all.
+final expenseSplitProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, expenseId) {
+      return requireRepo(ref).expenseSplit(expenseId);
     });
 
 final appraisalGoalsProvider = FutureProvider.autoDispose
@@ -1498,6 +2205,13 @@ final creditLedgerProvider =
       return requireRepo(ref).creditLedger();
     });
 
+/// What the platform has billed *this* company -- module subscriptions
+/// since 0489, scanning credit since 0111, both in `platform_invoices`.
+///
+/// `RepoOcr.creditInvoices` filters on `org_id` itself, which matters
+/// more than it used to: the read policy also lets a platform
+/// administrator see every tenant's invoices, so an unscoped select
+/// would put all of them on their own company's settings card.
 final creditInvoicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).creditInvoices();
@@ -1688,6 +2402,21 @@ final fsDeadlinesProvider = FutureProvider.autoDispose
       return requireRepo(ref).fsDeadlines(filingId);
     });
 
+/// The same deadlines for the whole list, keyed by filing id.
+///
+/// Six months rather than the function's default sixty days: CA 2016
+/// s.258 gives six months from the year end to circulate and thirty days
+/// after that to lodge, so a window shorter than the statutory one would
+/// hide the filing on the day somebody most wants to start it.
+final fsDeadlinesDueProvider =
+    FutureProvider.autoDispose<Map<String, Map<String, dynamic>>>((ref) async {
+      final rows = await requireRepo(ref).fsDeadlinesDue(withinDays: 180);
+      return {
+        for (final r in rows)
+          if (r['filing_id'] != null) r['filing_id'].toString(): r,
+      };
+    });
+
 /// All three grounds, whether they apply or not. The screen shows the
 /// ones that do not alongside why, because "why am I not exempt" is the
 /// question an accountant actually asks.
@@ -1699,6 +2428,14 @@ final fsExemptionProvider = FutureProvider.autoDispose
 final mbrsElementsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).mbrsElements();
 });
+
+/// The deviations from the default MBRS mapping, and only those. An
+/// empty list means a standard chart mapped the standard way, not an
+/// unmapped one.
+final fsAccountMapProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).fsAccountMap();
+    });
 
 // ---------------------------------------------------------------------
 // Service desk
@@ -1777,9 +2514,22 @@ final ticketEventsProvider = FutureProvider.autoDispose
       return requireRepo(ref).ticketEvents(id);
     });
 
-final ticketTeamsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-  (ref) => requireRepo(ref).ticketTeams(),
-);
+/// Every team, retired ones included. The console's list.
+final ticketTeamsAllProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).ticketTeamsAll(),
+    );
+
+/// Who is on one, leads first.
+final ticketTeamRosterProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, teamId) => requireRepo(ref).ticketTeamRoster(teamId),
+    );
+
+final ticketTeamsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).ticketTeams(),
+    );
 
 final ticketCategoriesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
@@ -1844,9 +2594,10 @@ final posOutletsProvider =
       (ref) => requireRepo(ref).posOutlets(),
     );
 
-final posRegistersProvider = FutureProvider.autoDispose<
-  List<Map<String, dynamic>>
->((ref) => requireRepo(ref).posRegisters());
+final posRegistersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posRegisters(),
+    );
 
 /// The open shift on a register, or null. Everything the till can do
 /// hangs off this being a row, which is why it is a provider rather
@@ -1922,6 +2673,21 @@ final posServiceProvidersProvider = FutureProvider.autoDispose
       (ref, outletId) => requireRepo(ref).posServiceProviders(outletId),
     );
 
+/// The week somebody works. 0217.
+///
+/// Empty means booked at no time, not booked at any time: the check is
+/// an `exists` over this table.
+final posProviderHoursProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, providerId) => requireRepo(ref).posProviderHours(providerId),
+    );
+
+/// And when they are away. 0217.
+final posProviderTimeOffProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, providerId) => requireRepo(ref).posProviderTimeOff(providerId),
+    );
+
 /// What is being made and what is ready, for the screen customers
 /// watch. Keyed on the outlet: the board belongs to the shop, not to
 /// the kiosk that happens to be showing it.
@@ -1977,21 +2743,14 @@ final itemModifierOptionsProvider = FutureProvider.autoDispose
 
 /// The questions a company asks, for the screen that edits them.
 /// Retired ones are in the list — see `pos_modifier_groups_admin`.
-final posModifierGroupsProvider = FutureProvider.autoDispose<
-  List<Map<String, dynamic>>
->((ref) => requireRepo(ref).posModifierGroups());
+final posModifierGroupsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posModifierGroups(),
+    );
 
 final posModifierOptionsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, groupId) => requireRepo(ref).posModifierOptions(groupId),
-    );
-
-/// Which questions a dish is sold with. Separate from
-/// [itemModifierOptionsProvider], which is what the till asks and drops
-/// anything retired — the editor has to show what is actually attached.
-final itemModifierGroupIdsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, itemId) => requireRepo(ref).itemModifierGroupIds(itemId),
     );
 
 /// What was chosen on the lines of a sale. Keyed on the sale rather
@@ -2001,7 +2760,6 @@ final posSaleLineModifiersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, saleId) => requireRepo(ref).posSaleLineModifiers(saleId),
     );
-
 
 // ---------------------------------------------------------------------
 // Memberships
@@ -2018,8 +2776,7 @@ final posMembershipsProvider =
 /// goes looking for when a customer says they were still being charged.
 final membershipSubscriptionsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
-      (ref, status) =>
-          requireRepo(ref).membershipSubscriptions(status: status),
+      (ref, status) => requireRepo(ref).membershipSubscriptions(status: status),
     );
 
 /// What is left this period, for one subscription.
@@ -2037,13 +2794,6 @@ final membershipBillingGapsProvider =
       (ref) => requireRepo(ref).membershipBillingGaps(),
     );
 
-/// What a customer is on, for the till.
-final contactMembershipsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, contactId) => requireRepo(ref).contactMemberships(contactId),
-    );
-
-
 /// What the till owes LHDN and has not filed.
 ///
 /// Watched by the e-Invoice screen rather than fetched on demand: the
@@ -2053,7 +2803,6 @@ final posEinvoiceOutstandingProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).posEinvoiceOutstanding(),
     );
-
 
 /// The axes a style has been split along, and the variants under it.
 final itemVariantMatrixProvider = FutureProvider.autoDispose
@@ -2066,13 +2815,11 @@ final itemVariantsProvider = FutureProvider.autoDispose
       (ref, parentId) => requireRepo(ref).itemVariants(parentId),
     );
 
-
 /// What one customer holds on the loyalty programme.
 final loyaltyAccountBalanceProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>(
       (ref, contactId) => requireRepo(ref).loyaltyAccountBalance(contactId),
     );
-
 
 /// What went off the bills over a range, grouped by reason.
 final posVoidSummaryProvider = FutureProvider.autoDispose
@@ -2130,14 +2877,16 @@ final posDiscountSummaryProvider = FutureProvider.autoDispose
     );
 
 /// The company's active loyalty scheme, or nothing if it runs none.
-final loyaltyProgramProvider = FutureProvider.autoDispose<
-  Map<String, dynamic>?
->((ref) => requireRepo(ref).loyaltyProgram());
+final loyaltyProgramProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>(
+      (ref) => requireRepo(ref).loyaltyProgram(),
+    );
 
 /// The bands a loyalty scheme gives its members. 0253.
-final loyaltyTiersProvider = FutureProvider.autoDispose<
-  List<Map<String, dynamic>>
->((ref) => requireRepo(ref).loyaltyTiers());
+final loyaltyTiersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).loyaltyTiers(),
+    );
 
 /// Which tier one member is in. Keyed on the account rather than the
 /// contact, because the till already has the account.
@@ -2162,12 +2911,43 @@ final posVoidedBillsProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidedBills(range.from, range.to),
     );
 
-
 /// Every OCR reader the platform offers, active or retired.
 final ocrProviderCatalogProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-      (ref) => requireRepo(ref).ocrProviderCatalog(),
+      (ref) => ref.watch(platformRepoProvider).ocrProviderCatalog(),
     );
+
+/// Every AI provider, with whether a key is on file. Platform staff
+/// only — the function behind it refuses anybody else, and it has no
+/// column that could carry a key. 0536.
+final aiProviderCatalogueProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => ref.watch(platformRepoProvider).aiProviderCatalogue(),
+    );
+
+/// The provider catalogue as a company sees it: names and addresses,
+/// nothing private. 0536.
+final aiProvidersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => ref.watch(platformRepoProvider).aiProviders(),
+    );
+
+/// Every model on offer. A table rather than a constant, so a model
+/// that shipped on Tuesday is a row somebody added. 0536.
+final aiModelsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => ref.watch(platformRepoProvider).aiModels(),
+    );
+
+/// Whether this company's assistant is on, what it will call, and
+/// whether that call can be made. 0536.
+final aiStatusProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
+  ref,
+) async {
+  final org = ref.watch(currentOrgIdProvider);
+  if (org == null) return <String, dynamic>{};
+  return requireRepo(ref).aiStatus(org);
+});
 
 /// Every run at an outlet that has not landed yet. 0259.
 final posDeliveryBoardProvider = FutureProvider.autoDispose
@@ -2197,6 +2977,12 @@ final posDriversProvider =
     );
 
 /// What each driver carried on one trading day. 0259.
+/// One day of delivering, per outlet. 0280.
+final posDeliveryDayProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>(
+      (ref, date) => requireRepo(ref).posDeliveryDay(date),
+    );
+
 final posDriverRunsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>(
       (ref, date) => requireRepo(ref).posDriverRuns(date),
@@ -2257,12 +3043,6 @@ final posRecipesProvider =
       (ref) => requireRepo(ref).posRecipes(),
     );
 
-/// The lines of one recipe. 0264.
-final posRecipeLinesProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, recipeId) => requireRepo(ref).posRecipeLines(recipeId),
-    );
-
 /// What one of a dish actually draws, sub-recipes exploded. 0264.
 final posRecipeRequirementProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
@@ -2276,6 +3056,19 @@ final posItemAvailabilityProvider = FutureProvider.autoDispose
     );
 
 /// The units an item's quantities may be written in. 0264.
+/// Every unit of measure the platform knows. Reference data, so it is
+/// held rather than autoDisposed: the list is the same on every screen
+/// that asks and does not change while somebody is looking at it.
+/// Every item with the stall it belongs to, for the food court.
+final itemStallsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).itemStalls(),
+    );
+
+final uomCodesProvider = FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).uomCodes(),
+);
+
 final itemUomOptionsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
@@ -2306,15 +3099,15 @@ final bundleAvailabilityProvider = FutureProvider.autoDispose
 /// Thirteen weeks of cash, or however many were asked for. 0276.
 final cashForecastProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({int weeks, bool useHistory})>(
-      (ref, args) => requireRepo(ref)
-          .cashForecast(weeks: args.weeks, useHistory: args.useHistory),
+      (ref, args) => requireRepo(
+        ref,
+      ).cashForecast(weeks: args.weeks, useHistory: args.useHistory),
     );
 
 /// The week the money runs out, or null when it does not.
-final cashRunsOutProvider = FutureProvider.autoDispose
-    .family<DateTime?, int>(
-      (ref, weeks) => requireRepo(ref).cashRunsOutOn(weeks: weeks),
-    );
+final cashRunsOutProvider = FutureProvider.autoDispose.family<DateTime?, int>(
+  (ref, weeks) => requireRepo(ref).cashRunsOutOn(weeks: weeks),
+);
 
 final cashForecastDetailProvider = FutureProvider.autoDispose
     .family<
@@ -2340,12 +3133,10 @@ final customerPaymentLagsProvider =
 
 /// The post-dated cheque register. 0275.
 final postDatedChequesProvider = FutureProvider.autoDispose
-    .family<
-      List<Map<String, dynamic>>,
-      ({String? direction, String? status})
-    >(
-      (ref, args) => requireRepo(ref)
-          .postDatedCheques(direction: args.direction, status: args.status),
+    .family<List<Map<String, dynamic>>, ({String? direction, String? status})>(
+      (ref, args) => requireRepo(
+        ref,
+      ).postDatedCheques(direction: args.direction, status: args.status),
     );
 
 /// What matures in the next month, and anything already past its date.
@@ -2366,12 +3157,10 @@ final budgetLinesProvider = FutureProvider.autoDispose
 
 /// What happened, what was supposed to, and the difference.
 final budgetVsActualProvider = FutureProvider.autoDispose
-    .family<
-      List<Map<String, dynamic>>,
-      ({String budget, int? from, int? to})
-    >(
-      (ref, args) => requireRepo(ref)
-          .budgetVsActual(args.budget, fromPeriod: args.from, toPeriod: args.to),
+    .family<List<Map<String, dynamic>>, ({String budget, int? from, int? to})>(
+      (ref, args) => requireRepo(
+        ref,
+      ).budgetVsActual(args.budget, fromPeriod: args.from, toPeriod: args.to),
     );
 
 /// Every deposit note, newest first. 0273.
@@ -2438,10 +3227,20 @@ final stockTransfersProvider = FutureProvider.autoDispose
       (ref, status) => requireRepo(ref).stockTransfers(status: status),
     );
 
-/// The lines on one. 0265.
-final stockTransferLinesProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, id) => requireRepo(ref).stockTransferLines(id),
+/// Why a supply is exempt, in LHDN's own list. 0002.
+final exemptionReasonsProvider = FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).exemptionReasons(),
+);
+
+/// The MSIC 2008 codes SSM registers a business activity under. 0002.
+final msicCodesProvider = FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).msicCodes(),
+);
+
+/// What a shop files its items under. 0003.
+final itemCategoriesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).itemCategories(),
     );
 
 /// The conversions a company keeps. 0265.
@@ -2484,4 +3283,10 @@ final posStallSettlementsProvider = FutureProvider.autoDispose
 final invoiceCreditRemainingProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, invoiceId) => requireRepo(ref).invoiceCreditRemaining(invoiceId),
+    );
+
+/// The same, for a supplier's bill. 0376.
+final billCreditRemainingProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, billId) => requireRepo(ref).billCreditRemaining(billId),
     );

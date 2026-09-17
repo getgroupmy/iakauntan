@@ -120,6 +120,43 @@ Noto fallbacks from there for glyphs the bundled font does not have, and
 this is an application whose customer names include Chinese and Tamil
 script. Left alone deliberately.
 
+### The fallback list is not the corrupt font
+
+Reported from an Android handset: one web font fails to load, the
+browser calls the WOFF2 corrupt, and some text falls back. The obvious
+suspect is that list -- the engine bakes 725 `fonts.gstatic.com` URLs
+into the bundle and a stale one would return an HTML 404 page that a
+font decoder describes exactly that way.
+
+It is not that. All 725 were fetched on 2026-09-16 and every one
+answered `200 font/woff2`:
+
+```sh
+python3 - <<'EOF' > /tmp/noto.txt
+import re
+s = open('app/build/web/main.dart.js', errors='replace').read()
+print('\n'.join(sorted(set(
+    re.findall(r'"([a-z0-9]+/v\d+/[A-Za-z0-9_.\-]+\.woff2)"', s)))))
+EOF
+xargs -P 16 -I{} sh -c 'printf "%s {}\n" "$(curl -s -o /dev/null \
+  -w "%{http_code}:%{content_type}" "https://fonts.gstatic.com/s/{}")"' \
+  < /tmp/noto.txt | grep -v '^200:font/woff2 '
+```
+
+An empty result means the list is sound. Worth re-running before
+blaming it again, since the engine's list changes with every Flutter
+upgrade.
+
+The app itself ships no WOFF2 at all -- every font it carries is a
+`.ttf` asset under `assets/fonts/` -- so a same-origin request for one
+is a request for a file that is not there. Until `check_spa_fallback.py`
+the deploy config answered those with `/index.html` and a `200`, which
+is what turns a missing file into a corrupt one in the browser's
+telling. The two remaining explanations are that, and a stale service
+worker serving its own cache; both had a fix land the same day, so if
+the report survives them the Network tab's URL is the next thing to
+read.
+
 ## 5. Rate limiting
 
 The login and password-reset paths are Supabase Auth, not application
@@ -167,46 +204,70 @@ deploying anything else.
 
 ## 7. Database security
 
-Nothing to fix. Measured rather than assumed:
+Nothing to fix. The figures below were re-measured on 2 September 2026,
+against a schema that has roughly doubled since they were first taken —
+177 tables then, 306 now; 290 SECURITY DEFINER functions then, 796 now.
+Every claim still holds. **Two of them hold because CI asserts them**,
+and that distinction is marked, because a number somebody measured once
+is worth less than a number a test defends.
 
 - **TLS.** `select ssl, version, cipher from pg_stat_ssl` on the session
   reporting connection: TLS 1.3, `TLS_AES_256_GCM_SHA384`. Supabase does
-  not expose a non-TLS port.
+  not expose a non-TLS port. *Measured once; nothing guards it.*
 - **No default credentials.** The only login role with superuser
   capability is `supabase_admin`, which is the platform's own.
-- **RLS everywhere.** All 177 tables in `public` carry it. Verified by
-  behaviour, not by reading policies: as `anon` with no JWT,
-  `organizations`, `gl_lines`, `payslips`, `profiles` and `employees` all
-  return 0 rows, while the same queries as an owner return 3, 58 and 6.
-  `einvoice_credentials` and `org_ocr_credentials` refuse outright — RLS
-  on, no policies, service role only.
-- **`search_path` pinned.** All 290 SECURITY DEFINER functions this
-  project owns set it, which is what stops a caller shadowing `round()`
-  in `pg_temp` and running their own code with the definer's rights. Ten
-  SECURITY INVOKER helpers that did not were pinned in migration `0159`,
-  and `supabase/tests/search_path.sql` now asserts it for all 358
-  functions in `public` and `app`, extension members excluded by
-  `pg_depend`.
+  *Measured once; nothing guards it.*
+- **RLS everywhere.** All **306** tables in `public` carry it — none
+  without. **Asserted** by `supabase/tests/table_grants.sql`, which
+  fails naming the offending table, so a new table without a policy
+  cannot reach production quietly. The behavioural check still stands as
+  it was taken: as `anon` with no JWT, `organizations`, `gl_lines`,
+  `payslips`, `profiles` and `employees` all return 0 rows.
+- **`search_path` pinned.** All **796** SECURITY DEFINER functions in
+  `public` and `app` set it — none without — which is what stops a
+  caller shadowing `round()` in `pg_temp` and running their own code
+  with the definer's rights. **Asserted** by
+  `supabase/tests/search_path.sql` across all **1,223** functions in
+  those schemas, extension members excluded by `pg_depend`.
 
-The advisor's remaining warnings, and why they stand:
+The advisor's warnings, re-counted, and why they stand:
 
-- **203 × `authenticated_security_definer_function_executable`.** This is
-  the architecture. Every posting routine is a SECURITY DEFINER function
-  with an `app.can_*` guard inside it; that is how permission is enforced
-  at all.
-- **3 × `anon_security_definer_function_executable`.** The three
-  token-gated flows — opening a signing link, opening a shared document,
-  signing one. Each is reachable only with a 244-bit token.
-- **2 × `extension_in_public`.** `citext` and `pg_trgm`. Moving them is
-  the advisor's fix and it is the wrong call here: `citext` is a column
-  type, every function in this schema pins `search_path` to
-  `pg_catalog, pg_temp`, and relocating the extension would change
-  operator resolution under all of them. No privilege is gained by the
-  move. Left where it is, deliberately.
-- **2 × `rls_enabled_no_policy`.** The two credential tables. That is the
-  design — no policy means nobody but the service role.
+- **609 × `authenticated_security_definer_function_executable`** (was
+  203). This is the architecture. Every posting routine is a SECURITY
+  DEFINER function with an `app.can_*` guard inside it; that is how
+  permission is enforced at all. The count grows with the product and
+  says nothing on its own.
+- **15 × `anon_security_definer_function_executable`** (was 3, and the
+  old note that all three were token-gated is no longer the whole
+  answer). **Ten are token-gated**, each reachable only with a 244-bit
+  token: `corp_open_signing_link`, `corp_sign_with_link`,
+  `corp_decline_with_link`, `open_shared_document`,
+  `shared_payment_options`, `open_shared_ticket`,
+  `reply_to_shared_ticket`, `public_pos_menu`,
+  `public_pos_menu_modifiers` and `place_public_pos_order`.
 
----
+  **Five are not, and each is deliberate**, with the reasoning already
+  written down elsewhere — named here so a reader of this checklist does
+  not have to rediscover it:
+
+  | function | why it answers an unauthenticated caller |
+  |---|---|
+  | `landing_page()` | the marketing page's own content |
+  | `site_pages()` | the same |
+  | `workspace_by_host(host)` | the sign-in page must resolve a hostname before anybody is signed in — `docs/custom-domains.md` |
+  | `report_failed_sign_in(email)` | records a refused attempt; built to be safe against an anonymous caller — `docs/security.md` |
+  | `may_sign_in_here(host, email)` | tells a company's own door that an address is not on that team. **It is an enumeration oracle and is one on purpose**: migration `0347` sets out the trade-off at length, and the sign-in screen's own comment names it. Listed here because a checklist that says "all token-gated" would be false. |
+
+- **3 × `extension_in_public`** (was 2): `citext`, `pg_trgm`, and now
+  `btree_gist`. Moving them is the advisor's fix and it is the wrong
+  call here: `citext` is a column type, every function in this schema
+  pins `search_path`, and relocating the extension would change operator
+  resolution under all of them. No privilege is gained by the move.
+- **4 × `rls_enabled_no_policy`** (was 2): `einvoice_credentials`,
+  `org_ocr_credentials`, and now `idempotency_keys` and
+  `org_payment_gateways`. That is the design — RLS on with no policy
+  means nobody but the service role reaches the table, which is what a
+  credential store, a gateway secret and a replay-guard ledger all want.
 
 ## Still needing somebody with a password
 
@@ -221,3 +282,25 @@ Nothing below can be done from a commit.
    is done.
 4. **Rotate anything that was ever committed.** See the warning in
    `README.md`.
+5. **Take one live payment through a tenant's own acquirer.** Everything
+   either side of the HTTP is asserted and no ringgit has ever been
+   through it. `docs/first-payment.md` is the runbook.
+6. **Turn passkeys on for the project.** The web code is built and the
+   console switch ships off, because GoTrue answers `passkey_disabled`
+   until somebody sets the relying party ID in the dashboard.
+   `docs/passkeys.md` is the runbook. Web only: the phone half is not
+   shipped, and the last section of that runbook says why — the obvious
+   plugin takes the web build down with it — and what a second attempt
+   has to do first.
+7. **If you want a self-hosted reader, deploy it first.** MinerU,
+   PaddleOCR and OCRmyPDF ship in the catalog switched OFF and with no
+   address, because a reader nobody has deployed is a door with nothing
+   behind it. `docs/ocr-self-hosted.md` is the contract and the order.
+   Nothing needs this — Tesseract in the browser is free and already on.
+8. **If you want the SSM lookup, set its two secrets.** `SSMSEARCH_EMAIL`
+   and `SSMSEARCH_PASSWORD` in the Supabase dashboard; until then every
+   search answers "not set up yet". `docs/ssm-lookup.md` is the runbook
+   — read its first section before switching it on, because the interim
+   reader reaches ssmsearch.com in a way their terms of service
+   prohibit, and that is a decision somebody should take knowingly.
+

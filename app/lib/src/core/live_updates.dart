@@ -6,17 +6,29 @@
 /// stayed yesterday's until you reloaded. Nothing was wrong in the
 /// database — the screen had no way to learn it was out of date.
 ///
-/// This subscribes to the organization's rows and re-reads what changed.
+/// This subscribes to ONE table — `public.live_changes`, which `0547`
+/// appends to from a statement trigger on every table carrying an
+/// `org_id`. A row on it is a company and a table name and nothing
+/// else; the app reads the name and re-reads what shows that table.
+///
 /// It does not merge anything by hand: a change arrives, the providers
 /// that show that table are invalidated, and they fetch. Merging a
 /// payload into a cached list would mean two code paths that can
 /// disagree about what a row means, and the fetch is one round trip on a
 /// table somebody is already looking at.
 ///
+/// One subscription rather than two hundred and seventy-three is the
+/// point of the feed. `0117` subscribed per table, which capped what
+/// could be live at the dozen tables somebody had thought to list — and
+/// left the storeman receiving a transfer, the manager approving leave
+/// and the waiter voiding a line all invisible to the screen next to
+/// them.
+///
 /// **Security is the database's, not this file's.** Realtime applies RLS
-/// when deciding who receives a row, and every table below carries
-/// org-membership policies. The `org_id` filter here saves bandwidth; it
-/// is not what stops you seeing another company's invoices.
+/// when deciding who receives a row, and `live_changes` carries a policy
+/// that also holds back the tables `0117` refused to publish: a clerk is
+/// not told that payroll moved. The `org_id` filter here saves
+/// bandwidth; it is not what stops you seeing another company's work.
 library;
 
 import 'dart:async';
@@ -26,7 +38,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'providers.dart';
 
-/// Which providers go stale when a table changes.
+/// Which providers go stale when a named table changes.
+///
+/// This is now an OPTIMISATION, not the mechanism. A table that is not
+/// on it still refreshes the screen — see [_refreshEverythingFetched] —
+/// but by refetching everything on screen rather than the four lists
+/// that actually moved. Naming the hot tables keeps the common case
+/// cheap; naming all two hundred and seventy-three would be a list
+/// nobody could keep true, which is the trap `0117` fell into.
 ///
 /// Families are invalidated whole — one entry covers every argument the
 /// screen might have asked with, which is the point: a colleague's
@@ -37,60 +56,60 @@ import 'providers.dart';
 /// with no listeners is not there to invalidate; being stingy here is
 /// how a dashboard total quietly disagrees with the list under it.
 final Map<String, List<ProviderOrFamily>> _watchers = {
-      'organizations': [organizationsProvider],
-      'sales_documents': [
-        documentsProvider,
-        documentProvider,
-        outstandingProvider,
-        dashboardProvider,
-        revenueTrendProvider,
-        arAgingProvider,
-        agedBalancesProvider,
-        einvoicesProvider,
-        einvoiceStatusProvider,
-        recurringDocumentsProvider,
-      ],
-      'purchase_documents': [
-        documentsProvider,
-        documentProvider,
-        outstandingProvider,
-        dashboardProvider,
-        agedBalancesProvider,
-        recurringDocumentsProvider,
-      ],
-      'receipts': [
-        settlementsProvider,
-        settlementProvider,
-        documentProvider,
-        documentsProvider,
-        outstandingProvider,
-        dashboardProvider,
-        arAgingProvider,
-        agedBalancesProvider,
-      ],
-      'purchase_payments': [
-        settlementsProvider,
-        settlementProvider,
-        documentProvider,
-        documentsProvider,
-        outstandingProvider,
-        dashboardProvider,
-        agedBalancesProvider,
-      ],
-      'contacts': [
-        contactsProvider,
-        customerCreditProvider,
-        arAgingProvider,
-        agedBalancesProvider,
-      ],
-      'items': [itemsProvider, stockOnHandProvider, itemPricesProvider],
-      'expenses': [expensesProvider, dashboardProvider],
-      'gl_entries': [
-        journalsProvider,
-        trialBalanceProvider,
-        dashboardProvider,
-        activitiesProvider,
-      ],
+  'organizations': [organizationsProvider],
+  'sales_documents': [
+    documentsProvider,
+    documentProvider,
+    outstandingProvider,
+    dashboardProvider,
+    revenueTrendProvider,
+    arAgingProvider,
+    agedBalancesProvider,
+    einvoicesProvider,
+    einvoiceStatusProvider,
+    recurringDocumentsProvider,
+  ],
+  'purchase_documents': [
+    documentsProvider,
+    documentProvider,
+    outstandingProvider,
+    dashboardProvider,
+    agedBalancesProvider,
+    recurringDocumentsProvider,
+  ],
+  'receipts': [
+    settlementsProvider,
+    settlementProvider,
+    documentProvider,
+    documentsProvider,
+    outstandingProvider,
+    dashboardProvider,
+    arAgingProvider,
+    agedBalancesProvider,
+  ],
+  'purchase_payments': [
+    settlementsProvider,
+    settlementProvider,
+    documentProvider,
+    documentsProvider,
+    outstandingProvider,
+    dashboardProvider,
+    agedBalancesProvider,
+  ],
+  'contacts': [
+    contactsProvider,
+    customerCreditProvider,
+    arAgingProvider,
+    agedBalancesProvider,
+  ],
+  'items': [itemsProvider, stockOnHandProvider, itemPricesProvider],
+  'expenses': [expensesProvider, dashboardProvider],
+  'gl_entries': [
+    journalsProvider,
+    trialBalanceProvider,
+    dashboardProvider,
+    activitiesProvider,
+  ],
   // A claim only reaches `expense_claims` at the ends of its life —
   // submitted, then approved or rejected once the last stage clears.
   'expense_claims': [
@@ -130,24 +149,29 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
   ],
 };
 
-/// The tables listened to. Must match what `0117_live_updates.sql`,
-/// `0124_a_claim_moves_while_you_watch.sql` and
-/// `0204_an_entitlement_arrives_without_a_reload.sql` publish between
-/// them: a name that is in one and not the other subscribes to nothing,
-/// or is sent changes nobody reads, and neither says so.
+/// The tables with an entry of their own. Every other table refreshes
+/// too — this is the list of the ones that refresh narrowly.
 Iterable<String> get liveUpdateTables => _watchers.keys;
 
-/// What goes stale when [table] changes.
+/// What goes stale when [table] changes. Empty means "no narrow answer
+/// for this one", which is a refetch of everything on screen, not
+/// nothing.
 List<ProviderOrFamily> liveUpdateProviders(String table) =>
     _watchers[table] ?? const [];
 
-/// The column that says which organization a row belongs to.
+/// The one table subscribed to. `0547`.
+const liveChangeFeed = 'live_changes';
+
+/// What must not be thrown away when everything else is.
 ///
-/// `organizations` is the exception and has to be: the organization's own
-/// row is identified by its primary key, and filtering it on a column
-/// that does not exist would silently deliver nothing.
-String liveUpdateColumn(String table) =>
-    table == 'organizations' ? 'id' : 'org_id';
+/// The broad refresh reaches every provider holding an [AsyncValue] —
+/// everything that was fetched from the server, and nothing that
+/// somebody chose or typed. `authStateProvider` is the exception it
+/// cannot tell apart: it holds an [AsyncValue] like a fetched list, but
+/// invalidating it re-subscribes to the auth stream, and a signed-in
+/// person would watch their session flicker every time a colleague
+/// saved anything.
+final Set<ProviderOrFamily> liveUpdateNeverInvalidated = {authStateProvider};
 
 /// Long enough to collect a burst, short enough to feel immediate.
 ///
@@ -202,19 +226,23 @@ class LiveUpdates {
     _client = client;
     final channel = client.channel('org:$orgId');
 
-    for (final table in _watchers.keys) {
-      channel.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: table,
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: liveUpdateColumn(table),
-          value: orgId,
-        ),
-        callback: (_) => _touched(table),
-      );
-    }
+    // One subscription, to the feed. Inserts only: `live_changes` is
+    // append-only, and the nightly prune's deletes are housekeeping
+    // nobody needs to hear about.
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: liveChangeFeed,
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'org_id',
+        value: orgId,
+      ),
+      callback: (payload) {
+        final table = payload.newRecord['table_name'];
+        if (table is String && table.isNotEmpty) noteChange(table);
+      },
+    );
 
     channel.subscribe((status, error) {
       connected = status == RealtimeSubscribeStatus.subscribed;
@@ -223,7 +251,13 @@ class LiveUpdates {
   }
 
   /// A table changed. Note it, and act once the burst is over.
-  void _touched(String table) {
+  ///
+  /// The seam between the socket and everything below it, and public so
+  /// a test can push a table name through the same door a colleague's
+  /// write comes in by. There is no other way in: what this does after
+  /// the burst settles is the whole behaviour, and asserting it against
+  /// a mocked socket would be asserting the mock.
+  void noteChange(String table) {
     _pending.add(table);
     _timer?.cancel();
     _timer = Timer(_settle, _flush);
@@ -237,9 +271,40 @@ class LiveUpdates {
     // invalidated once, not twice.
     final stale = <ProviderOrFamily>{};
     for (final table in tables) {
-      stale.addAll(liveUpdateProviders(table));
+      final narrow = liveUpdateProviders(table);
+      if (narrow.isEmpty) {
+        // A table with no entry of its own. Rather than let the screen
+        // go on being wrong — which is the whole complaint — refetch
+        // everything that was fetched, and stop looking at the rest of
+        // the burst: the broad refresh already covers it.
+        _refreshEverythingFetched();
+        return;
+      }
+      stale.addAll(narrow);
     }
     for (final provider in stale) {
+      _ref.invalidate(provider);
+    }
+  }
+
+  /// Refetch everything on screen that came from the server.
+  ///
+  /// The rule is deliberately about the SHAPE of a provider and not
+  /// about a list of names: anything holding an [AsyncValue] was fetched
+  /// and can be fetched again, and anything else — the client, the
+  /// signed-in user, the organization somebody picked, a form's own
+  /// state — is a choice, not a copy, and resetting it would throw away
+  /// work nobody asked to lose.
+  ///
+  /// It reaches only providers that are ALIVE. An `autoDispose` list
+  /// with no listeners is not in the container to be invalidated, so
+  /// "everything" is bounded by what is actually on screen, which on a
+  /// typical page is a handful.
+  void _refreshEverythingFetched() {
+    for (final element in _ref.container.getAllProviderElements().toList()) {
+      final provider = element.origin;
+      if (provider is! ProviderBase<AsyncValue<Object?>>) continue;
+      if (liveUpdateNeverInvalidated.contains(provider)) continue;
       _ref.invalidate(provider);
     }
   }

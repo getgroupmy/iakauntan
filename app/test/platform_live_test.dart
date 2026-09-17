@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/platform_live.dart';
+import 'package:iakauntan/src/data/site_pages_repository.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/data/landing_repository.dart';
 import 'package:iakauntan/src/data/platform_catalog_repository.dart';
@@ -26,6 +27,25 @@ void main() {
       'landing_page',
       'landing_sections',
       'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
+      // 0341. The five pages around the product — the wording on the
+      // two auth screens, and Terms, Privacy and Contact.
+      'site_pages',
+      // 0548. A promotion is a price. Ending one has to reach the
+      // settings card that is still offering it, and the running total
+      // that is still discounting it.
+      'module_promotions',
+      // 0605. The kinds of business a contact or a company can be.
+      // An administrator adds one FOR somebody — usually somebody on
+      // the telephone with a contact form already open — so "log out
+      // and back in" is not an answer to give them.
+      'entity_types',
+      // 0606. The registers Entity Search offers.
+      'search_registers',
+      // 0614. What AI SmartScan can recognise a paper as.
+      'scan_document_kinds',
     });
   });
 
@@ -104,6 +124,9 @@ void main() {
       'landing_page',
       'landing_sections',
       'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
     ]) {
       expect(
         platformLiveProviders(table),
@@ -125,6 +148,60 @@ void main() {
     expect(
       platformLiveProviders('landing_app_links'),
       contains(landingAppLinksAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_stats'),
+      contains(landingStatsAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_testimonials'),
+      contains(landingTestimonialsAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_logos'),
+      contains(landingLogosAdminProvider),
+    );
+  });
+
+  test('and the sign-in bullets refresh the list they are edited in', () {
+    // 0336 added a fourth `kind` to `landing_sections` and 0341 put it
+    // here. Left out, editing a bullet refreshed the landing page's
+    // three bands and not the list the operator was looking at.
+    expect(
+      platformLiveProviders('landing_sections'),
+      contains(landingSigninPointsAdminProvider),
+    );
+  });
+
+  test('and the five pages refresh both what is read and what is edited',
+      () {
+    // Both, and for different reasons: `sitePagesProvider` is the
+    // sign-in screen's wording and the three public pages, and
+    // `sitePageDraftsProvider` is the console's own view. One without
+    // the other is a tab that disagrees with the page beside it.
+    expect(
+      platformLiveProviders('site_pages'),
+      contains(sitePagesProvider),
+    );
+    expect(
+      platformLiveProviders('site_pages'),
+      contains(sitePageDraftsProvider),
+    );
+  });
+
+  test('and a block of either kind refreshes both console lists', () {
+    // Features and reasons are one table split by `kind`, so a save of
+    // either arrives as a change to `landing_sections`. Refreshing only
+    // the list the admin happened to be looking at is how a reason
+    // typed into the console appears on the public page and not in the
+    // tab it was typed into.
+    expect(
+      platformLiveProviders('landing_sections'),
+      contains(landingReasonsAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_sections'),
+      contains(landingBadgesAdminProvider),
     );
   });
 
@@ -154,8 +231,11 @@ void main() {
     // refreshed, because the first person to notice would not be
     // believed.
     for (final table in platformLiveTables) {
-      expect(platformLiveProviders(table), isNotEmpty,
-          reason: '$table is subscribed to and refreshes nothing');
+      expect(
+        platformLiveProviders(table),
+        isNotEmpty,
+        reason: '$table is subscribed to and refreshes nothing',
+      );
     }
   });
 
@@ -173,17 +253,66 @@ void main() {
     }
   });
 
-  test('the channel is inert until somebody is signed in', () {
-    // Every policy on these tables is granted to `authenticated`, so a
-    // channel opened without a user can only ever receive nothing. It
-    // matters that this is checked before the Supabase client is
-    // reached for, or reading the provider on a signed-out app — or in
-    // this test — would need a Supabase that has been initialised.
+  test('the channel is inert where there is no Supabase to open one', () {
+    // A widget test renders real screens against overridden providers
+    // and never calls `Supabase.initialize`. The provider has to answer
+    // that before it reaches for the client — and before it reads the
+    // user, which goes through the same client — or every shell test
+    // fails on a socket the shell only wanted to listen to.
     final container = ProviderContainer(
       overrides: [currentUserProvider.overrideWithValue(null)],
     );
     addTearDown(container.dispose);
 
     expect(container.read(platformLiveProvider).connected, isFalse);
+  });
+
+  test('a signed-out visitor is no longer a reason not to connect', () {
+    // It used to be. Postgres changes are delivered per subscriber
+    // under RLS and every policy on these tables is granted to
+    // `authenticated`, so a channel opened without a user received
+    // nothing — and the front page, the one screen read by people who
+    // are not signed in, was the one screen that never updated.
+    //
+    // `0322` gives it something to receive that carries no rows: a
+    // nudge naming the table that changed, which the page answers by
+    // asking `landing_page()` again. So being signed out is a reason to
+    // subscribe to less, not a reason to subscribe to nothing.
+    //
+    // Asserted on the map rather than on a live socket, which needs a
+    // server: every landing table the nudge names has to be a table
+    // this file knows what to refresh for, or the message arrives and
+    // nothing happens.
+    for (final table in [
+      'landing_page',
+      'landing_sections',
+      'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
+      'platform_modules',
+    ]) {
+      expect(
+        platformLiveProviders(table),
+        isNotEmpty,
+        reason: '$table nudges the front page and refreshes nothing',
+      );
+      expect(platformLiveProviders(table), contains(anything), reason: table);
+    }
+    // And the landing page itself is what a landing nudge refreshes.
+    for (final table in [
+      'landing_page',
+      'landing_sections',
+      'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
+    ]) {
+      expect(
+        platformLiveProviders(table),
+        contains(landingContentProvider),
+        reason: '$table changes and the page does not',
+      );
+    }
   });
 }

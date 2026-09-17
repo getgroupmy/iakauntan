@@ -1,9 +1,23 @@
-/// Turning a pasted bank statement into rows the importer can take.
+/// Turning a bank statement into rows the importer can take.
 ///
-/// Malaysian banks export CSV in whatever shape they feel like, so this
-/// reads the header rather than assuming column positions, and accepts
-/// the two ways a statement expresses direction: one signed amount, or
-/// separate debit and credit columns.
+/// Two formats, because Malaysian banks give you one or the other and
+/// which one depends on the account rather than the bank:
+///
+///   * **CSV**, which retail online banking exports, in whatever shape
+///     it feels like. Read by header name rather than by column
+///     position, and accepting both ways a statement expresses
+///     direction: one signed amount, or separate debit and credit
+///     columns.
+///
+///   * **MT940**, which corporate accounts get and which no amount of
+///     CSV parsing will read. A SWIFT standard rather than a local
+///     convention: `:61:` is a statement line and `:86:` is what it
+///     says, everywhere in the world, which is why this one can be
+///     written from the specification rather than from samples.
+///
+/// [parseStatement] picks. Nothing above it has to know which arrived,
+/// which matters because what arrives is a file somebody downloaded and
+/// did not look inside.
 library;
 
 import '../../core/csv.dart';
@@ -15,6 +29,7 @@ class StatementRow {
     required this.amount,
     this.description,
     this.reference,
+    this.balance,
   });
 
   final DateTime date;
@@ -24,6 +39,16 @@ class StatementRow {
   final String? description;
   final String? reference;
 
+  /// The account balance after this line, as the bank printed it.
+  ///
+  /// Null where the statement has no balance column, which is ordinary.
+  /// Where it is present it is the only figure on the paste that can be
+  /// checked against the rest of the paste, and `0369` checks it: a line
+  /// the parser dropped or the paste clipped fails the chain on the line
+  /// after the hole, instead of turning up a month later as a difference
+  /// nobody can place.
+  final double? balance;
+
   Map<String, dynamic> toJson() => {
         'transaction_date':
             '${date.year.toString().padLeft(4, '0')}-'
@@ -32,6 +57,7 @@ class StatementRow {
         'amount': amount,
         'description': description,
         'reference': reference,
+        'running_balance': balance,
       };
 }
 
@@ -58,13 +84,32 @@ const _creditNames = ['credit', 'deposit', 'credit amount', 'in', 'cr'];
 const _descNames = ['description', 'details', 'particulars', 'narrative',
                     'transaction description', 'remarks'];
 const _refNames = ['reference', 'ref', 'cheque', 'cheque no', 'transaction ref'];
+// "Baki" because half the local exports are in Malay, and a balance
+// column read as nothing is a check that quietly does not happen.
+const _balanceNames = ['balance', 'running balance', 'closing balance',
+                       'ledger balance', 'balance (rm)', 'baki'];
+
+/// Reads a statement, in whichever of the two formats it arrived in.
+///
+/// MT940 announces itself: `:61:` is a statement line and appears in
+/// every MT940 that has any transactions on it, and appears in no CSV
+/// header that any bank writes. Detected on that rather than on a file
+/// extension, because the extension is `.txt` or `.sta` or `.940`
+/// depending on the bank and is missing entirely from a paste.
+StatementParse parseStatement(String text) {
+  if (_looksLikeMt940(text)) return parseMt940(text);
+  return parseCsvStatement(text);
+}
+
+bool _looksLikeMt940(String text) =>
+    RegExp(r'^:61:', multiLine: true).hasMatch(text);
 
 /// Reads a pasted CSV statement.
 ///
 /// The header row is required. Guessing which column is the date by
 /// looking at the data works until a statement has two date columns, and
 /// then it silently reconciles against the wrong one.
-StatementParse parseStatement(String text) {
+StatementParse parseCsvStatement(String text) {
   final lines = text
       .split(RegExp(r'\r?\n'))
       .where((l) => l.trim().isNotEmpty)
@@ -83,6 +128,7 @@ StatementParse parseStatement(String text) {
   final creditAt = find(_creditNames);
   final descAt = find(_descNames);
   final refAt = find(_refNames);
+  final balanceAt = find(_balanceNames);
 
   if (dateAt < 0) {
     return StatementParse(const [], [
@@ -131,6 +177,10 @@ StatementParse parseStatement(String text) {
       amount: amount,
       description: at(descAt).isEmpty ? null : at(descAt),
       reference: at(refAt).isEmpty ? null : at(refAt),
+      // Not a problem when it is missing or unreadable: a broken link
+      // stops the chain rather than failing it, and a statement with no
+      // balance column still imports.
+      balance: balanceAt < 0 ? null : _number(at(balanceAt)),
     ));
   }
 
@@ -197,4 +247,226 @@ DateTime? _date(int year, int month, int day) {
   final d = DateTime(year, month, day);
   if (d.year != year || d.month != month || d.day != day) return null;
   return d;
+}
+
+// ---------------------------------------------------------------------
+// MT940
+// ---------------------------------------------------------------------
+//
+// The SWIFT customer statement message, which is what a Malaysian bank
+// gives a corporate account and what the CSV parser above cannot read at
+// all. Tags, one per line, continuing onto the next line where it does
+// not start with a colon:
+//
+//   :20:  the statement's own reference
+//   :25:  which account this is
+//   :28C: statement number / sequence
+//   :60F: opening balance    C/D, YYMMDD, currency, amount
+//   :61:  a statement line   (below)
+//   :86:  what that line says, in the bank's own words
+//   :62F: closing balance
+//
+// A `:61:` is fixed-width at the front and free-form after it:
+//
+//   2603060306C1234,56NTRFNONREF//BANKREF123
+//   \_____/\__/|\_____/\_/\____/  \________/
+//   value  entry D/C  amount  type  customer ref, then //bank ref
+//   date   date
+//
+// The entry date is optional and the funds code between the mark and
+// the amount is optional, which is what makes a single regular
+// expression the wrong tool and a left-to-right walk the right one.
+//
+// ## Two things this gets right that a quick version would not
+//
+// **The decimal separator is a comma.** Always, in every MT940, in
+// every country. `1234,56` is one thousand two hundred and thirty-four
+// ringgit and fifty-six sen, and read as an English number it is either
+// a parse failure or -- worse, with a thousands-separator strip --
+// 123456.
+//
+// **`RD` and `RC` are reversals, and the mark is two characters.**
+// A reversal of a debit is money coming BACK, so `RD` is positive.
+// Reading only the first character makes every reversal go the wrong
+// way, which nets to double the error.
+
+/// Reads an MT940 statement.
+StatementParse parseMt940(String text) {
+  final rows = <StatementRow>[];
+  final problems = <String>[];
+
+  final lines = text.split(RegExp(r'\r?\n'));
+
+  // Continuation lines belong to the tag above them. Joined first so
+  // the walk below sees one string per tag, which is what the format
+  // means even where the file wraps at eighty characters.
+  final tags = <({int line, String tag, String body})>[];
+  for (var i = 0; i < lines.length; i++) {
+    final raw = lines[i];
+    final m = RegExp(r'^:(\d{2}[A-Z]?):(.*)$').firstMatch(raw);
+    if (m != null) {
+      tags.add((line: i + 1, tag: m.group(1)!, body: m.group(2)!));
+    } else if (tags.isNotEmpty && raw.trim().isNotEmpty && raw != '-') {
+      final last = tags.removeLast();
+      tags.add((
+        line: last.line,
+        tag: last.tag,
+        body: '${last.body}\n${raw.trim()}',
+      ));
+    }
+  }
+
+  ({DateTime date, double amount, String? reference})? pending;
+  int? pendingLine;
+
+  void flush({String? description}) {
+    if (pending == null) return;
+    rows.add(StatementRow(
+      date: pending!.date,
+      amount: pending!.amount,
+      description: description,
+      reference: pending!.reference,
+      // MT940 carries a balance on :60F: and :62F: rather than per
+      // line, so the running balance the CSV path checks is not
+      // available here. Left null rather than computed: a figure this
+      // parser worked out itself would check the parser against itself,
+      // which is not a check.
+      balance: null,
+    ));
+    pending = null;
+    pendingLine = null;
+  }
+
+  for (final t in tags) {
+    if (t.tag == '61') {
+      flush();
+      final parsed = _parseMt940Line(t.body);
+      if (parsed == null) {
+        problems.add('Line ${t.line}: could not read the statement line '
+            '":61:${t.body.split('\n').first}".');
+        continue;
+      }
+      pending = parsed;
+      pendingLine = t.line;
+    } else if (t.tag == '86') {
+      if (pending == null) continue;
+      // The bank's words, with the file's wrapping taken back out. A
+      // description broken across three lines is one description.
+      flush(description: t.body.replaceAll('\n', ' ').trim());
+    } else if (t.tag == '62F' || t.tag == '62M' || t.tag == '20') {
+      flush();
+    }
+  }
+  flush();
+
+  if (rows.isEmpty && problems.isEmpty) {
+    problems.add('No statement lines found. An MT940 has a ":61:" for '
+        'every transaction.');
+  }
+  // `pendingLine` is read here and nowhere else: a line with no :86:
+  // after it is still a transaction and is kept, which is what `flush`
+  // above does. Named so the reason is visible rather than looking like
+  // a variable somebody forgot.
+  assert(pendingLine == null);
+
+  return StatementParse(rows, problems);
+}
+
+/// One `:61:`, walked left to right because half its fields are
+/// optional.
+({DateTime date, double amount, String? reference})? _parseMt940Line(
+  String body,
+) {
+  final line = body.split('\n').first;
+
+  // Value date: six digits, YYMMDD.
+  final head = RegExp(r'^(\d{6})').firstMatch(line);
+  if (head == null) return null;
+  final date = _mt940Date(head.group(1)!);
+  if (date == null) return null;
+  var at = 6;
+
+  // Entry date: four more digits, MMDD, and optional. Only consumed
+  // where what follows them is a credit/debit mark, so a statement that
+  // omits it and goes straight to `C` is read correctly.
+  final maybeEntry = RegExp(r'^(\d{4})([CD]|R[CD])').firstMatch(line.substring(at));
+  if (maybeEntry != null) at += 4;
+
+  // The mark. Two characters for a reversal, one otherwise, and the
+  // two-character case has to be tested first or `RD` reads as `R`.
+  final rest = line.substring(at);
+  final mark = RegExp(r'^(RC|RD|C|D)').firstMatch(rest);
+  if (mark == null) return null;
+  final code = mark.group(1)!;
+  at += code.length;
+
+  // An optional one-letter funds code sits between the mark and the
+  // amount. It is a letter where the amount is digits, so it is
+  // distinguishable without knowing which letters are legal.
+  final afterMark = line.substring(at);
+  final funds = RegExp(r'^([A-Z])(?=[\d,])').firstMatch(afterMark);
+  if (funds != null) at += 1;
+
+  // The amount, up to the transaction type identifier, which is `N`
+  // followed by three characters in every MT940 this will meet.
+  final amountPart = RegExp(r'^([\d,]+)').firstMatch(line.substring(at));
+  if (amountPart == null) return null;
+  final magnitude = _mt940Amount(amountPart.group(1)!);
+  if (magnitude == null) return null;
+  at += amountPart.group(1)!.length;
+
+  // `D` is money out. `RD` is the reversal of money out, which is money
+  // coming back in, so it is positive — and reading only the first
+  // character of the mark would send every reversal the wrong way.
+  final signed = (code == 'C' || code == 'RD') ? magnitude : -magnitude;
+
+  // What is left is the type identifier and the references. The
+  // customer reference is what a person recognises; the bank's own
+  // reference after `//` is not.
+  final tail = line.substring(at);
+  final refMatch = RegExp(r'^N.{3}(.*)$').firstMatch(tail);
+  var reference = refMatch?.group(1) ?? tail;
+  final bankRefAt = reference.indexOf('//');
+  if (bankRefAt >= 0) reference = reference.substring(0, bankRefAt);
+  reference = reference.trim();
+  // `NONREF` is the SWIFT way of writing "there isn't one". Showing it
+  // to somebody reconciling is worse than showing nothing.
+  if (reference.isEmpty || reference.toUpperCase() == 'NONREF') {
+    reference = '';
+  }
+
+  return (
+    date: date,
+    amount: signed,
+    reference: reference.isEmpty ? null : reference,
+  );
+}
+
+/// `YYMMDD`. The century is this one: MT940 has no room for four
+/// digits, and a bank statement from 1974 is not what anybody is
+/// importing.
+DateTime? _mt940Date(String raw) {
+  if (raw.length != 6) return null;
+  final year = 2000 + int.parse(raw.substring(0, 2));
+  final month = int.parse(raw.substring(2, 4));
+  final day = int.parse(raw.substring(4, 6));
+  return _date(year, month, day);
+}
+
+/// The decimal separator is a comma, in every MT940, everywhere. There
+/// is no thousands separator to strip: `1234,56` is the whole of it.
+double? _mt940Amount(String raw) {
+  final s = raw.replaceFirst(',', '.');
+  // A second comma is not a thousands separator, it is a malformed
+  // line, and guessing would turn 1,234,56 into something plausible.
+  //
+  // Belt and braces: `double.tryParse` rejects `1.234.56` on its own,
+  // so a mutation sweep finds this line EQUIVALENT and it survives. It
+  // stays because it says the rule out loud where the next person can
+  // read it, rather than leaving the format's one hard requirement
+  // resting on a parser's incidental behaviour.
+  if (s.contains(',')) return null;
+  final v = double.tryParse(s);
+  if (v == null || v < 0) return null;
+  return v;
 }

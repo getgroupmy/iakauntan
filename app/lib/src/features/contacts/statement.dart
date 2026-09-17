@@ -36,6 +36,30 @@ class Ageing {
       ];
 }
 
+/// What a document of this type does to the balance.
+///
+/// A credit note, a refund note and a purchase return all REDUCE what
+/// is owed, and they arrive from the ledger with a positive
+/// `balance_amount` like everything else — `sales_documents` stores
+/// what the document is worth, not what it does. So the sign lives
+/// here, beside the arithmetic that uses it, rather than in the query.
+///
+/// `report_ar_aging` makes the same decision in SQL
+/// (`case when d.doc_type in ('credit_note', 'refund_note') then -1
+/// else 1 end`) and the two have to agree: a statement whose total
+/// differs from the ageing report by twice a credit note is the shape
+/// of the bug this replaced.
+///
+/// Anything unrecognised counts as +1. A document type nobody has
+/// taught this about is more likely to be a new kind of charge than a
+/// new kind of credit, and guessing the other way would quietly
+/// subtract it.
+int statementSign(String docType) => switch (docType) {
+  'credit_note' || 'refund_note' => -1,
+  'purchase_credit_note' || 'purchase_return' => -1,
+  _ => 1,
+};
+
 /// Buckets the outstanding balances by days past the due date.
 ///
 /// The boundaries are inclusive at the top of each band — 30 days
@@ -57,7 +81,8 @@ Ageing ageing(List<BusinessDocument> documents, DateTime asAt) {
   final today = DateTime(asAt.year, asAt.month, asAt.day);
 
   for (final doc in documents) {
-    final balance = doc.balanceAmount * doc.exchangeRate;
+    final balance =
+        doc.balanceAmount * doc.exchangeRate * statementSign(doc.docType);
     if (balance == 0) continue;
 
     final due = doc.dueDate;

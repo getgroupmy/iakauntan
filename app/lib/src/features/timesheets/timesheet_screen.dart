@@ -6,6 +6,9 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'billing_rate_sheet.dart';
+import 'project_budget.dart';
+import 'time_entry_sheet.dart';
 
 /// Time recorded, and time turned into an invoice.
 ///
@@ -35,49 +38,99 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
     _to = DateTime(now.year, now.month + 1, 0);
   }
 
+  /// The week being looked at.
+  ///
+  /// Extracted because it sits on the bar at a laptop width and under
+  /// the tabs on a phone, and describing it twice is how the two come
+  /// to disagree.
+  Widget _rangeButton() => OutlinedButton.icon(
+    key: const ValueKey('timesheet-range'),
+    onPressed: () async {
+      final range = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100),
+        initialDateRange: DateTimeRange(start: _from, end: _to),
+      );
+      if (range != null) {
+        setState(() {
+          _from = range.start;
+          _to = range.end;
+        });
+      }
+    },
+    icon: const Icon(Icons.date_range, size: 18),
+    label: Text('${Fmt.date(_from)} — ${Fmt.date(_to)}'),
+  );
+
+  TabBar _tabBar() => const TabBar(
+    tabs: [
+      Tab(text: 'My week'),
+      Tab(text: 'Unbilled'),
+      Tab(text: 'Rates'),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final period = (from: _from, to: _to);
+    final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Timesheets'),
           actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final range = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2100),
-                    initialDateRange: DateTimeRange(start: _from, end: _to),
-                  );
-                  if (range != null) {
-                    setState(() {
-                      _from = range.start;
-                      _to = range.end;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.date_range, size: 18),
-                label: Text('${Fmt.date(_from)} — ${Fmt.date(_to)}'),
-              ),
+            // `projects.budget_amount` has been a column since `0088`
+            // and nothing compared anything against it. This is where
+            // it is read, and where a project can be made at all.
+            IconButton(
+              key: const ValueKey('project-budgets'),
+              tooltip: 'Job costing',
+              icon: const Icon(Icons.donut_small_outlined),
+              onPressed: () => showProjectBudgets(context),
             ),
+            if (!narrow)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _rangeButton(),
+              ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'My week'),
-              Tab(text: 'Unbilled'),
-            ],
-          ),
+          // The same arrangement as `reports_screen.dart`, and for the
+          // same measured reason: the period is twenty-three characters
+          // and went 44 pixels off a 412px phone beside a title reading
+          // "Timesheets". It says which week every hour below it
+          // belongs to, so it moves rather than shortening.
+          bottom: !narrow
+              ? _tabBar()
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(46 + 52),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.lg,
+                          0,
+                          Space.lg,
+                          Space.sm,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: _rangeButton(),
+                        ),
+                      ),
+                      _tabBar(),
+                    ],
+                  ),
+                ),
         ),
         body: TabBarView(
           children: [
             _MyTime(period: period),
             _Unbilled(period: period),
+            const _Rates(),
           ],
         ),
       ),
@@ -90,10 +143,39 @@ class _MyTime extends ConsumerWidget {
 
   final ({DateTime from, DateTime to}) period;
 
+  /// Re-read everything an hour moves: this tab, the unbilled figure
+  /// next door, and the utilisation the report is built from.
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(myTimeEntriesProvider(period));
+    ref.invalidate(timesheetReportProvider(period));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(myTimeEntriesProvider(period));
+    final canWrite = ref.watch(canWriteProvider);
 
+    return Scaffold(
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              key: const ValueKey('record-time'),
+              onPressed: () async {
+                if (await showTimeEntrySheet(context)) _refresh(ref);
+              },
+              icon: const Icon(Icons.timer_outlined),
+              label: const Text('Record time'),
+            )
+          : null,
+      body: _body(context, ref, entries, canWrite),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> entries,
+    bool canWrite,
+  ) {
     return AsyncView(
       value: entries,
       onRetry: () => ref.invalidate(myTimeEntriesProvider(period)),
@@ -132,10 +214,12 @@ class _MyTime extends ConsumerWidget {
             ),
             Expanded(
               child: ListView.separated(
+                padding: const EdgeInsets.only(bottom: 88),
                 itemCount: list.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final e = list[i];
+                  final billed = e['is_billed'] == true;
                   final project = e['projects'] as Map<String, dynamic>?;
                   final matter = e['matters'] as Map<String, dynamic>?;
                   final against =
@@ -143,6 +227,20 @@ class _MyTime extends ConsumerWidget {
                       matter?['name'] as String? ??
                       'Not chargeable to anyone';
                   return ListTile(
+                    // A billed hour is a line on an invoice somebody has
+                    // been sent; changing it here would move the hours
+                    // and leave the invoice where it was.
+                    onTap: !canWrite || !timeEntryIsEditable(billed)
+                        ? null
+                        : () async {
+                            if (await showTimeEntrySheet(
+                              context,
+                              id: e['id'] as String,
+                              existing: e,
+                            )) {
+                              _refresh(ref);
+                            }
+                          },
                     title: Text(
                       e['description'] as String? ?? '—',
                       style: const TextStyle(fontWeight: FontWeight.w600),
@@ -158,7 +256,7 @@ class _MyTime extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Money(e['amount'] as num?, bold: true),
-                        if (e['is_billed'] == true)
+                        if (billed)
                           const StatusChip('billed', compact: true)
                         else if (e['is_billable'] != true)
                           const StatusChip('internal', compact: true),
@@ -190,13 +288,25 @@ class _Unbilled extends ConsumerWidget {
       onRetry: () => ref.invalidate(projectsProvider),
       builder: (list) {
         if (list.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.folder_outlined,
             title: 'No projects yet',
             message:
                 'A project is what hours are recorded against and what they '
                 'are billed to. Give it a client, and the time on it can be '
                 'invoiced.',
+            // The empty state used to say this and offer no way to act
+            // on it: nothing in the client wrote to `projects` at all.
+            action: FilledButton.icon(
+              key: const ValueKey('project-new-empty'),
+              onPressed: () async {
+                if (await showProjectEditor(context)) {
+                  ref.invalidate(projectsProvider);
+                }
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('New project'),
+            ),
           );
         }
         return ListView(
@@ -210,6 +320,19 @@ class _Unbilled extends ConsumerWidget {
               orElse: () => const SizedBox.shrink(),
             ),
             for (final p in list) _ProjectTile(project: p, period: period),
+            Padding(
+              padding: const EdgeInsets.all(Space.lg),
+              child: OutlinedButton.icon(
+                key: const ValueKey('project-new'),
+                onPressed: () async {
+                  if (await showProjectEditor(context)) {
+                    ref.invalidate(projectsProvider);
+                  }
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New project'),
+              ),
+            ),
           ],
         );
       },
@@ -340,5 +463,70 @@ class _ProjectTile extends ConsumerWidget {
       ref.invalidate(timesheetReportProvider(period));
       ref.invalidate(documentsProvider);
     }
+  }
+}
+
+/// What everybody charges.
+///
+/// `billing_rates` has been in `0164` with a provider reading it and
+/// nothing displaying it, and nothing anywhere adding a row -- so the
+/// rate card was invisible and unmaintainable, and every hour had its
+/// rate typed in by hand.
+class _Rates extends ConsumerWidget {
+  const _Rates();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rates = ref.watch(billingRatesProvider);
+    final canWrite = ref.watch(canWriteProvider);
+
+    return Scaffold(
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              key: const ValueKey('add-rate'),
+              onPressed: () => showBillingRateSheet(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Record a rate'),
+            )
+          : null,
+      body: AsyncView(
+        value: rates,
+        onRetry: () => ref.invalidate(billingRatesProvider),
+        builder: (list) {
+          if (list.isEmpty) {
+            return const EmptyState(
+              icon: Icons.price_change_outlined,
+              title: 'No rates recorded',
+              message: 'Record what each person charges, and the rate stops '
+                  'being something typed from memory onto every entry.',
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.only(bottom: 88),
+            itemCount: list.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              final r = list[i];
+              final project = r['projects'] as Map<String, dynamic>?;
+              return ListTile(
+                title: Text(
+                  rateScope(r['project_id'] as String?),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  [
+                    if (project != null) '${project['code']} · ${project['name']}',
+                    'from ${Fmt.date(DateTime.parse(r['effective_from'] as String))}',
+                    if (r['notes'] != null) '${r['notes']}',
+                  ].join(' · '),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: Money(r['hourly_rate'] as num?, bold: true),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }

@@ -54,23 +54,32 @@ class PdfKit {
   static Future<PdfKit> load() async {
     if (_cached != null) return _cached!;
     final regular = pw.Font.ttf(
-        await rootBundle.load('assets/fonts/PlusJakartaSans-Regular.ttf'));
+      await rootBundle.load('assets/fonts/PlusJakartaSans-Regular.ttf'),
+    );
     final bold = pw.Font.ttf(
-        await rootBundle.load('assets/fonts/PlusJakartaSans-Bold.ttf'));
+      await rootBundle.load('assets/fonts/PlusJakartaSans-Bold.ttf'),
+    );
     return _cached = PdfKit._(regular, bold);
   }
 
-  pw.ThemeData get theme => pw.ThemeData.withFont(base: regular, bold: bold)
-      .copyWith(
-          defaultTextStyle:
-              pw.TextStyle(font: regular, fontSize: 9.5, lineSpacing: 1.6));
-
-  pw.TextStyle style({double size = 9.5, bool strong = false, PdfColor? colour}) =>
-      pw.TextStyle(
-        font: strong ? bold : regular,
-        fontSize: size,
-        color: colour,
+  pw.ThemeData get theme =>
+      pw.ThemeData.withFont(base: regular, bold: bold).copyWith(
+        defaultTextStyle: pw.TextStyle(
+          font: regular,
+          fontSize: 9.5,
+          lineSpacing: 1.6,
+        ),
       );
+
+  pw.TextStyle style({
+    double size = 9.5,
+    bool strong = false,
+    PdfColor? colour,
+  }) => pw.TextStyle(
+    font: strong ? bold : regular,
+    fontSize: size,
+    color: colour,
+  );
 
   /// Who issued this. Everything is optional because a company that has
   /// not finished its settings should still be able to print — with gaps
@@ -87,10 +96,12 @@ class PdfKit {
   ///
   /// [mode] decides whether the block is drawn at all — see
   /// [LetterheadMode].
-  pw.Widget letterhead(Organization org,
-      {String? documentLabel,
-      Uint8List? logo,
-      LetterheadMode mode = LetterheadMode.printed}) {
+  pw.Widget letterhead(
+    Organization org, {
+    String? documentLabel,
+    Uint8List? logo,
+    LetterheadMode mode = LetterheadMode.printed,
+  }) {
     final address = [
       org.addressLine1,
       org.addressLine2,
@@ -116,13 +127,20 @@ class PdfKit {
               pw.Expanded(
                 child: ids.isEmpty
                     ? pw.SizedBox()
-                    : pw.Text(ids.join('  ·  '),
-                        style: style(size: 8.5, colour: PdfColors.grey700)),
+                    : pw.Text(
+                        ids.join('  ·  '),
+                        style: style(size: 8.5, colour: PdfColors.grey700),
+                      ),
               ),
               if (documentLabel != null)
-                pw.Text(documentLabel.toUpperCase(),
-                    style:
-                        style(size: 15, strong: true, colour: PdfColors.grey600)),
+                pw.Text(
+                  documentLabel.toUpperCase(),
+                  style: style(
+                    size: 15,
+                    strong: true,
+                    colour: PdfColors.grey600,
+                  ),
+                ),
             ],
           ),
         ],
@@ -141,40 +159,53 @@ class PdfKit {
             width: 92,
             height: 46,
             margin: const pw.EdgeInsets.only(right: 14),
-            child: pw.Image(pw.MemoryImage(logo),
-                fit: pw.BoxFit.contain,
-                alignment: pw.Alignment.topLeft),
+            child: pw.Image(
+              pw.MemoryImage(logo),
+              fit: pw.BoxFit.contain,
+              alignment: pw.Alignment.topLeft,
+            ),
           ),
         ],
         pw.Expanded(
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(org.legalName ?? org.name, style: style(size: 13, strong: true)),
+              pw.Text(
+                org.legalName ?? org.name,
+                style: style(size: 13, strong: true),
+              ),
               for (final line in address)
-                pw.Text(line, style: style(size: 8.5, colour: PdfColors.grey700)),
+                pw.Text(
+                  line,
+                  style: style(size: 8.5, colour: PdfColors.grey700),
+                ),
               if (ids.isNotEmpty)
-                pw.Text(ids.join('  ·  '),
-                    style: style(size: 8.5, colour: PdfColors.grey700)),
+                pw.Text(
+                  ids.join('  ·  '),
+                  style: style(size: 8.5, colour: PdfColors.grey700),
+                ),
               if (_present(org.email) || _present(org.phone))
                 pw.Text(
-                    [org.email, org.phone].where(_present).join('  ·  '),
-                    style: style(size: 8.5, colour: PdfColors.grey700)),
+                  [org.email, org.phone].where(_present).join('  ·  '),
+                  style: style(size: 8.5, colour: PdfColors.grey700),
+                ),
             ],
           ),
         ),
         if (documentLabel != null)
-          pw.Text(documentLabel.toUpperCase(),
-              style: style(size: 15, strong: true, colour: PdfColors.grey600)),
+          pw.Text(
+            documentLabel.toUpperCase(),
+            style: style(size: 15, strong: true, colour: PdfColors.grey600),
+          ),
       ],
     );
   }
 
   pw.Widget rule() => pw.Container(
-        margin: const pw.EdgeInsets.symmetric(vertical: 10),
-        height: 0.7,
-        color: PdfColors.grey400,
-      );
+    margin: const pw.EdgeInsets.symmetric(vertical: 10),
+    height: 0.7,
+    color: PdfColors.grey400,
+  );
 
   /// A label above its value, which is how the header blocks on both an
   /// invoice and a payslip are laid out.
@@ -182,8 +213,10 @@ class PdfKit {
       pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(label.toUpperCase(),
-              style: style(size: 7, colour: PdfColors.grey600)),
+          pw.Text(
+            label.toUpperCase(),
+            style: style(size: 7, colour: PdfColors.grey600),
+          ),
           pw.SizedBox(height: 1),
           pw.Text(value.isEmpty ? '—' : value, style: style(strong: strong)),
         ],
@@ -191,34 +224,38 @@ class PdfKit {
 
   /// A right-aligned amount line: the shape of every total on both
   /// documents.
-  pw.Widget amountRow(String label, num amount,
-          {bool strong = false,
-          double width = 190,
-          String currency = 'MYR'}) =>
-      pw.Container(
-        width: width,
-        padding: const pw.EdgeInsets.symmetric(vertical: 2),
-        child: pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text(label, style: style(strong: strong)),
-            pw.Text(Fmt.money(amount.toDouble(), currency: currency),
-                style: style(strong: strong)),
-          ],
+  pw.Widget amountRow(
+    String label,
+    num amount, {
+    bool strong = false,
+    double width = 190,
+    String currency = 'MYR',
+  }) => pw.Container(
+    width: width,
+    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+    child: pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: style(strong: strong)),
+        pw.Text(
+          Fmt.money(amount.toDouble(), currency: currency),
+          style: style(strong: strong),
         ),
-      );
+      ],
+    ),
+  );
 
   pw.Widget footer(pw.Context context, {String? note}) => pw.Container(
-        alignment: pw.Alignment.centerRight,
-        padding: const pw.EdgeInsets.only(top: 10),
-        child: pw.Text(
-          [
-            if (note != null) note,
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-          ].join('  ·  '),
-          style: style(size: 7.5, colour: PdfColors.grey600),
-        ),
-      );
+    alignment: pw.Alignment.centerRight,
+    padding: const pw.EdgeInsets.only(top: 10),
+    child: pw.Text(
+      [
+        if (note != null) note,
+        'Page ${context.pageNumber} of ${context.pagesCount}',
+      ].join('  ·  '),
+      style: style(size: 7.5, colour: PdfColors.grey600),
+    ),
+  );
 
   static bool _present(String? s) => s != null && s.trim().isNotEmpty;
 }

@@ -114,7 +114,24 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _Section('The company', [
-                      _text('name', 'Registered name *', required: true),
+                      // Name and registered office are not fields here
+                      // any more on an existing company. Changing either
+                      // is an event SSM has to be told about within
+                      // fourteen days, and a rename loses the former
+                      // name the Act requires on documents for twelve
+                      // months — see `0377`, which refuses both from a
+                      // plain update. The entity screen offers the
+                      // actions that do it properly.
+                      if (widget.entityId == null)
+                        _text('name', 'Registered name *', required: true)
+                      else
+                        _ReadOnlyField(
+                          label: 'Registered name',
+                          value: _ctl('name').text,
+                          note: 'Changed from the company page, where the '
+                              'date and the former name are recorded with '
+                              'it',
+                        ),
                       _row([
                         _text('registration_no', 'Registration number',
                             helper: 'The twelve-digit SSM number'),
@@ -197,8 +214,17 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
                       ],
                     ),
                     _Section('Addresses', [
-                      _text('registered_office', 'Registered office',
-                          helper: 'Where the statutory registers are kept'),
+                      if (widget.entityId == null)
+                        _text('registered_office', 'Registered office',
+                            helper: 'Where the statutory registers are kept')
+                      else
+                        _ReadOnlyField(
+                          label: 'Registered office',
+                          value: _ctl('registered_office').text,
+                          note: 'Moving it is lodged under s.46(3) within '
+                              'fourteen days; change it from the company '
+                              'page',
+                        ),
                       _text('business_address', 'Business address'),
                       _text('nature_of_business', 'Nature of business'),
                     ]),
@@ -293,7 +319,10 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
     setState(() => _saving = true);
 
     final values = <String, dynamic>{
-      'name': _ctl('name').text.trim(),
+      // Omitted on an existing company: `0377` refuses a bare rename,
+      // and sending the unchanged value would be a no-op that only ever
+      // risks tripping the guard.
+      if (widget.entityId == null) 'name': _ctl('name').text.trim(),
       'registration_no': _blank('registration_no'),
       'old_registration_no': _blank('old_registration_no'),
       'entity_type': _type,
@@ -302,7 +331,8 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
           _incorporated == null ? null : Fmt.iso(_incorporated!),
       'financial_year_end_day': _fyeDay,
       'financial_year_end_month': _fyeMonth,
-      'registered_office': _blank('registered_office'),
+      if (widget.entityId == null)
+        'registered_office': _blank('registered_office'),
       'business_address': _blank('business_address'),
       'nature_of_business': _blank('nature_of_business'),
       'client_ref': _blank('client_ref'),
@@ -328,6 +358,36 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
       }
       context.go('/secretarial');
     }
+  }
+}
+
+/// A particular that is not edited here.
+///
+/// Shown rather than hidden: somebody opening the editor to check the
+/// registered name should see it. The note says where the change lives,
+/// because a greyed field with no explanation reads as broken.
+class _ReadOnlyField extends StatelessWidget {
+  const _ReadOnlyField({
+    required this.label,
+    required this.value,
+    required this.note,
+  });
+
+  final String label;
+  final String value;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: note,
+        helperMaxLines: 3,
+        enabled: false,
+      ),
+      child: Text(value.isEmpty ? '—' : value),
+    );
   }
 }
 

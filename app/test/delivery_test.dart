@@ -8,6 +8,7 @@ import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/pos/deliveries_screen.dart';
 import 'package:iakauntan/src/features/pos/delivery_setup_screen.dart';
+import 'package:iakauntan/src/data/places_repository.dart';
 import 'package:iakauntan/src/features/pos/delivery_sheet.dart';
 
 /// An address, a fee and a driver.
@@ -81,6 +82,18 @@ void main() {
       theme: AppTheme.light(),
       home: const DeliveriesScreen(),
     ),
+  );
+
+  /// The address box on the sheet suggests addresses now, so the sheet
+  /// wants a container. Nothing is offered here: what these tests are
+  /// about is the address a cashier types, and a shop with no Places
+  /// key is the same screen.
+  Widget alone(Widget child) => ProviderScope(
+    overrides: [
+      placesProvider.overrideWithValue(_NoPlaces()),
+      orgCountryAlpha2Provider.overrideWithValue(null),
+    ],
+    child: child,
   );
 
   Future<void> show(WidgetTester tester, Widget w) async {
@@ -233,14 +246,16 @@ void main() {
     DeliveryAnswer? got;
     await show(
       tester,
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () async =>
-                  got = await showDeliverySheet(context),
-              child: const Text('open'),
+      alone(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async =>
+                    got = await showDeliverySheet(context),
+                child: const Text('open'),
+              ),
             ),
           ),
         ),
@@ -250,7 +265,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Address'),
+      find.widgetWithText(TextFormField, 'Address'),
       '12 Jalan Sri 3',
     );
     await tester.pumpAndSettle();
@@ -279,14 +294,16 @@ void main() {
   ) async {
     await show(
       tester,
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () async =>
-                  showDeliverySheet(context, existing: run()),
-              child: const Text('open'),
+      alone(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async =>
+                    showDeliverySheet(context, existing: run()),
+                child: const Text('open'),
+              ),
             ),
           ),
         ),
@@ -299,4 +316,19 @@ void main() {
     expect(find.text('12 Jalan Sri 3'), findsOneWidget);
     expect(find.text('58200'), findsOneWidget);
   });
+}
+
+/// A shop with no Places key: the box is a box, which is what these
+/// tests are pressing on.
+class _NoPlaces implements PlacesRepository {
+  @override
+  Future<({List<PlaceSuggestion> suggestions, bool configured})> suggest(
+    String query, {
+    String? country,
+    String? session,
+  }) async => (suggestions: const <PlaceSuggestion>[], configured: false);
+
+  @override
+  Future<PlaceAddress?> address(String placeId, {String? session}) async =>
+      null;
 }

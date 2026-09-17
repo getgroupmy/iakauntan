@@ -285,4 +285,410 @@ begin
   raise notice 'ok   credit_note_return';
 end $$;
 
+-- =====================================================================
+-- The charges a return has to give back too
+-- =====================================================================
+-- `0440`. `credit_sales_invoice` copies the invoice's contact, currency,
+-- rate and every line with its item, price, tax code and warehouse, and
+-- did not copy `shipping_amount`, `service_charge_amount` or
+-- `discount_amount`. Those are header columns and the credit note was
+-- written before two of the three existed -- the `0410` shape, a fourth
+-- time.
+--
+-- Measured before the fix: an invoice for RM11,600 -- RM10,000 of goods,
+-- RM500 delivery, RM300 service charge, RM800 tax -- credited in full
+-- came back at RM10,800. The customer returned everything and still
+-- owed RM800 for delivering and serving it, the receivable never
+-- cleared, and the invoice sat on the ageing forever.
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Pulangan Penuh Sdn Bhd');
+  v_own  uuid := pg_temp.test_user();
+  v_cust uuid; v_st8 uuid; v_inv uuid; v_note uuid; v_part uuid;
+  v_line uuid;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'ST8', 'Service Tax 8%', '02', 8,
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_st8;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
+
+  -- Two lines of RM5,000, so a partial credit has a clean half to take.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status, shipping_amount, service_charge_amount)
+  values (v_org, 'invoice', 'INV-CHG', current_date, current_date + 30,
+          v_cust, 'MYR', 1, 'draft', 500, 300)
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     uom_code, unit_price, tax_code_id, tax_rate)
+  values (v_org, v_inv, 1, 'item', 'First half', 1, 'C62', 5000, v_st8, 8)
+  returning id into v_line;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     uom_code, unit_price, tax_code_id, tax_rate)
+  values (v_org, v_inv, 2, 'item', 'Second half', 1, 'C62', 5000, v_st8, 8);
+
+  perform app.post_sales_document_internal(v_inv);
+  perform pg_temp.check_eq('the invoice is RM11,600 all in',
+    (select total_amount from public.sales_documents where id = v_inv), 11600);
+
+  -- Half of it, by naming one line. `0417`'s rule: the charge follows
+  -- the share of the source lines being taken.
+  v_part := public.credit_sales_invoice(
+    v_inv, jsonb_build_array(jsonb_build_object('line', v_line, 'quantity', 1)),
+    'Half returned');
+
+  perform pg_temp.check_eq('crediting half the goods gives half the delivery',
+    (select shipping_amount from public.sales_documents where id = v_part), 250);
+  perform pg_temp.check_eq('and half the service charge',
+    (select service_charge_amount from public.sales_documents where id = v_part), 150);
+
+  -- And the rest. Together the two credits must come to the invoice,
+  -- which is the identity that matters: a returned invoice clears.
+  v_note := public.credit_sales_invoice(v_inv, null, 'The rest returned');
+  perform pg_temp.check_eq('the other half gives back the other half',
+    (select shipping_amount from public.sales_documents where id = v_note), 250);
+
+  perform pg_temp.check_eq(
+    'and a fully returned invoice is fully credited -- the receivable clears',
+    (select coalesce(sum(total_amount), 0) from public.sales_documents
+      where org_id = v_org and doc_type = 'credit_note'),
+    (select total_amount from public.sales_documents where id = v_inv));
+
+  -- The header amount reaches the total, not just the row. `0417`
+  -- found this the hard way: `app.recalc_sales_totals` fires on the
+  -- LINES, so a charge written after the last line sits in the column
+  -- and never reaches `total_amount`.
+  perform pg_temp.check_eq(
+    'and the charge is inside the credit note''s own total',
+    (select round(total_amount
+                  - subtotal - tax_amount
+                  - shipping_amount - service_charge_amount
+                  + discount_amount, 2)
+       from public.sales_documents where id = v_part), 0);
+
+  raise notice 'ok   credit_note_return: the charges come back too';
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- The nine a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Twenty-one one-line mutants of `credit_sales_invoice`; nine survived
+-- everything twelve test files asserted.
+--
+-- This function was swept because of what the P0004 change to
+-- `_helpers.sql` revealed about it. Its "there is nothing left to
+-- credit" assertion -- the guard stopping an invoice being credited
+-- twice -- was catching its own failure and could never fail. A file
+-- written against a helper that could not fail deserves a second look
+-- at everything else in it, and this is that look.
+--
+-- Three shapes again, and the first two are the ones every sweep this
+-- session has found:
+--
+--   * THE FRONT DOOR. Not an invoice at all, not posted yet, and not
+--     allowed to post -- three refusals at the top of the function,
+--     none asserted. The file went straight to the arithmetic.
+--
+--   * FOREIGN CURRENCY. The note copies the invoice's currency and
+--     rate. Nothing here was in anything but ringgit, so it could take
+--     the company's base currency at par instead and every assertion
+--     held -- crediting USD 500 with a note for RM 500.
+--
+--   * A DELIBERATE DECISION, UNASSERTED. `v_src_net = 0` -- an invoice
+--     entirely discounted, or a swap -- has a comment in the function
+--     saying "all of it on a whole credit and none on a partial one are
+--     the only defensible answers". Both halves of that could be
+--     inverted and nothing noticed. A decision worth a comment is worth
+--     an assertion.
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid;
+  v_svc   uuid;
+  v_inv   uuid;
+  v_usd   uuid;
+  v_zero  uuid;
+  v_quote uuid;
+  v_draft uuid;
+  v_note  uuid;
+  v_line  uuid;
+  v_who   uuid;
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Kredit Sapu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', app.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Pelanggan Kredit', 'customer') returning id into v_cust;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'SVC', 'Consulting', 'service', false, 100)
+  returning id into v_svc;
+
+  -- ==================================================================
+  -- 1. Only an invoice, only once it has reached the ledger
+  -- ==================================================================
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'quotation', 'QUO-K1', app.today(), app.today(), v_cust,
+          'MYR', 1, 'draft')
+  returning id into v_quote;
+
+  begin
+    perform public.credit_sales_invoice(v_quote);
+    raise exception 'a quotation was credited';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a quotation is not an invoice, and is refused',
+      v_msg, 'No such invoice.');
+  end;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-K0', app.today(), app.today(), v_cust,
+          'MYR', 1, 'draft')
+  returning id into v_draft;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_draft, 1, 'item', v_svc, 'Not issued yet', 1, 100);
+
+  begin
+    perform public.credit_sales_invoice(v_draft);
+    raise exception 'a draft invoice was credited';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'a draft invoice has nothing in the ledger to credit',
+      v_msg, 'That invoice is draft, so there is nothing to credit yet.');
+  end;
+
+  -- ==================================================================
+  -- 2. And only by somebody who may post
+  --
+  -- A credit note is a posted document: it moves the receivable and the
+  -- revenue. Crediting is therefore posting, and the refusal says so
+  -- rather than talking about credit notes.
+  -- ==================================================================
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status, shipping_amount, discount_amount,
+     service_charge_amount)
+  values (v_org, 'invoice', 'INV-K1', app.today(), app.today(), v_cust,
+          'MYR', 1, 'draft', 60, 40, 20)
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_svc, 'First half', 5, 100),
+         (v_org, v_inv, 2, 'item', v_svc, 'Second half', 5, 100);
+  perform public.post_sales_document(v_inv);
+
+  v_who := pg_temp.another_user('credit-viewer@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_who, 'viewer', 'active', now());
+  perform pg_temp.sign_in_as(v_who);
+
+  begin
+    perform public.credit_sales_invoice(v_inv);
+    raise exception 'somebody who may not post issued a credit note';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'crediting is posting, and needs the right to post',
+      v_msg,
+      'Crediting an invoice posts a document, which needs permission this '
+      'account has not been given.');
+  end;
+
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ==================================================================
+  -- 3. The header charges follow the share credited -- all three
+  --
+  -- The freight and the service charge were asserted; the discount was
+  -- not, and it is the one that moves the total the other way. Half the
+  -- invoice credited takes half of each.
+  -- ==================================================================
+  select l.id into v_line from public.sales_document_lines l
+   where l.document_id = v_inv and l.line_no = 1;
+
+  v_note := public.credit_sales_invoice(v_inv,
+    jsonb_build_array(jsonb_build_object('line', v_line, 'quantity', 5)));
+
+  perform pg_temp.check_eq('half the invoice takes half the freight',
+    (select shipping_amount from public.sales_documents where id = v_note),
+    30::numeric);
+  perform pg_temp.check_eq('half the discount',
+    (select discount_amount from public.sales_documents where id = v_note),
+    20::numeric);
+  perform pg_temp.check_eq('and half the service charge',
+    (select service_charge_amount from public.sales_documents where id = v_note),
+    10::numeric);
+
+  -- ==================================================================
+  -- 4. An invoice that nets to nothing
+  --
+  -- The function's own comment calls this the only defensible answer,
+  -- and nothing held it. A whole credit takes all the header charges --
+  -- there is no line value to apportion by, and the charges were real.
+  -- A partial credit of such an invoice takes none, because "half of
+  -- nothing" names no share at all.
+  -- ==================================================================
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status, shipping_amount)
+  values (v_org, 'invoice', 'INV-K2', app.today(), app.today(), v_cust,
+          'MYR', 1, 'draft', 80)
+  returning id into v_zero;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, discount_amount)
+  values (v_org, v_zero, 1, 'item', v_svc, 'Swapped out', 1, 100, 100),
+         (v_org, v_zero, 2, 'item', v_svc, 'Swapped in',  1, 100, 100);
+  perform public.post_sales_document(v_zero);
+  perform pg_temp.check_eq('the invoice nets to nothing',
+    (select coalesce(sum(line_subtotal), 0) from public.sales_document_lines
+      where document_id = v_zero), 0::numeric);
+
+  select l.id into v_line from public.sales_document_lines l
+   where l.document_id = v_zero and l.line_no = 1;
+  v_note := public.credit_sales_invoice(v_zero,
+    jsonb_build_array(jsonb_build_object('line', v_line, 'quantity', 1)));
+  perform pg_temp.check_eq(
+    'a partial credit of it takes none of the freight',
+    (select shipping_amount from public.sales_documents where id = v_note),
+    0::numeric);
+
+  v_note := public.credit_sales_invoice(v_zero);
+  perform pg_temp.check_eq(
+    'and a whole one takes all of it',
+    (select shipping_amount from public.sales_documents where id = v_note),
+    80::numeric);
+
+  -- ==================================================================
+  -- 5. A foreign invoice is credited in its own currency
+  --
+  -- Nothing else in this file leaves ringgit, so the note could take
+  -- the company's base currency at par and every assertion above still
+  -- held. Crediting USD 500 with a note for RM 500 leaves USD 500 -
+  -- RM 500 sitting on the receivable, which is not a rounding
+  -- difference and will not clear.
+  -- ==================================================================
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_org, 'USD', 'MYR', 4.70, app.today() - 7, 'manual');
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-USD', app.today(), app.today(), v_cust,
+          'USD', 4.70, 'draft')
+  returning id into v_usd;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_usd, 1, 'item', v_svc, 'Exported advice', 5, 100);
+  perform public.post_sales_document(v_usd);
+
+  v_note := public.credit_sales_invoice(v_usd);
+  perform pg_temp.check_eq('a foreign invoice is credited in its currency',
+    (select currency::text from public.sales_documents where id = v_note), 'USD');
+  perform pg_temp.check_eq('at the rate the invoice was struck on',
+    (select exchange_rate from public.sales_documents where id = v_note),
+    4.70::numeric);
+  perform pg_temp.check_eq('and the ringgit taken off the receivable says so',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+       join public.accounts ac on ac.id = gl.account_id
+       join public.sales_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_note and ac.code = '1210'),
+    2350::numeric);
+
+  -- ==================================================================
+  -- 6. Nothing left to credit leaves nothing behind
+  --
+  -- The refusal itself was asserted -- and was one of the three
+  -- assertions the P0004 change revived, having been catching its own
+  -- failure since the file was written. What was never asserted is that
+  -- the half-built note is removed: without the delete, every refused
+  -- attempt leaves a draft credit note in the company's documents for
+  -- somebody to find and explain.
+  -- ==================================================================
+  begin
+    perform public.credit_sales_invoice(v_usd);
+    raise exception 'an invoice was credited twice over';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('an invoice fully credited cannot be credited again',
+      v_msg, 'There is nothing left to credit on INV-USD.');
+  end;
+
+  perform pg_temp.check_eq(
+    'and the refusal left no half-built note behind',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org and doc_type = 'credit_note'
+        and original_invoice_id = v_usd), 1);
+
+  -- ==================================================================
+  -- 7. The reason given is the reason recorded
+  -- ==================================================================
+  v_note := public.credit_sales_invoice(v_inv, null, 'Damaged in transit');
+  perform pg_temp.check_eq('the reason given is what the note says',
+    (select notes from public.sales_documents where id = v_note),
+    'Damaged in transit');
+
+  -- ==================================================================
+  -- What the sweep could not kill, and why
+  -- ==================================================================
+  -- Twenty-one mutants; twenty die against the assertions above. The
+  -- twenty-first is EQUIVALENT, and it is equivalent for a reason worth
+  -- writing down, because the function's own comment claims otherwise.
+  --
+  -- Beside the delete, `credit_sales_invoice` says: "The half-built
+  -- note is removed rather than left as an empty document somebody has
+  -- to explain." Delete that line and no empty document appears --
+  -- probed directly, with the delete removed, after a refused second
+  -- credit: one note in the table, the one that succeeded.
+  --
+  -- The reason is that the raise on the next line aborts the
+  -- subtransaction the call runs in, and PostgreSQL discards the insert
+  -- with it. There is no path where the function inserts the note,
+  -- reaches this branch, and continues -- so there is nothing for the
+  -- delete to remove. It is dead code describing a job the engine
+  -- already does.
+  --
+  -- The same shape as the round(..., 2) beside a numeric(18, 2) in
+  -- contra.sql: something written to be careful, doing nothing, and
+  -- reading to a later maintainer as though the care were load-bearing.
+  -- It is left in place -- removing it is churn on a posted function --
+  -- and recorded here so that the next sweep does not spend an hour on
+  -- it, and so nobody deletes the RAISE thinking the delete is what
+  -- keeps the table clean.
+  perform pg_temp.check_eq(
+    'a refused credit leaves no note, delete or no delete',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org and doc_type = 'credit_note'
+        and original_invoice_id = v_usd), 1);
+
+  raise notice 'ok   credit note: the nine a sweep found';
+end $$;
+
 rollback;

@@ -604,4 +604,223 @@ begin
 end;
 $$;
 
+-- =====================================================================
+-- The rules a single happy sale never reaches
+--
+-- Everything above is one shop, one member and a sale that goes
+-- through. A mutation sweep over the accrual, the bands and the
+-- dormancy sweep found nine survivors, and seven of them were rules the
+-- fixture simply never arrived at: no fractional point, no retirement
+-- between two sales, no earnings older than the tier window, no
+-- redemption overtaken by a clawback, no scheme without an expiry rule,
+-- no card already down to nothing, and nobody but an owner ever calling
+-- the sweep.
+--
+-- The two that are not gaps are recorded rather than asserted:
+--
+--   * `greatest(coalesce(p_paid, 0), 0)` in `app.pos_settle_loyalty`
+--     cannot be observed, because a POS sale's total cannot go
+--     negative. Checked rather than assumed: a negative line quantity
+--     is refused outright ("A line needs a quantity"), a bill discount
+--     over the gross is refused, and a redemption is capped at the
+--     basket. Nothing reaches the settle with money owed back.
+--   * `coalesce(max(e.created_at), a.joined_on)` in
+--     `expire_loyalty_points` changes which accounts enter the loop and
+--     never what the loop does. An account with no entries has a
+--     balance of nothing by construction, and the loop skips a balance
+--     of nothing, so the member who joined and never came back is left
+--     alone either way. Confirmed by building one: no entries, balance
+--     nought, sweep returns nothing and writes nothing.
+--
+-- A third is asserted anyway, and the assertion cannot fail. The early
+-- `return` for a programme with no `dormancy_expiry_months` is a
+-- shortcut rather than a guard: without it the query still selects
+-- nothing, because `make_interval(months => null)` is null and every
+-- comparison against it is null, so the HAVING keeps no rows. The
+-- assertion below states the behaviour a shopkeeper depends on -- a
+-- scheme that expires nothing expires nothing -- and would survive
+-- somebody replacing that null-safe comparison with one that is not.
+-- =====================================================================
+do $$
+declare
+  v_org uuid; v_wh uuid; v_item uuid; v_walkin uuid;
+  v_m1 uuid; v_m2 uuid; v_m3 uuid;
+  v_outlet uuid; v_reg uuid; v_cash uuid; v_prog uuid;
+  v_a1 uuid; v_a2 uuid; v_a3 uuid;
+  v_sale uuid; v_clerk uuid; v_owner uuid := pg_temp.test_user();
+  v_top uuid;
+begin
+  v_org := pg_temp.test_org('Kedai Ujian Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','loyalty','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'ROKIAH', 'Puan Rokiah', 'customer') returning id into v_m1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'HALIM', 'Encik Halim', 'customer') returning id into v_m2;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SITI', 'Cik Siti', 'customer') returning id into v_m3;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'SVC', 'Potong rambut', 'service', false, 'C62', 10.50, 0)
+  returning id into v_item;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'SHOP', 'The shop', 'service', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
+  insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, false);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_org, 'CASH', 'Cash', 'cash', '01', true, true) returning id into v_cash;
+
+  -- A point a ringgit, a sen a point, and a tier band measured over the
+  -- last twelve months.
+  insert into public.loyalty_programs
+    (org_id, code, name, earn_points_per_myr, redeem_value_per_point,
+     min_redeem_points, tier_window_months)
+  values (v_org, 'KAD', 'Kad Ujian', 1, 0.01, 100, 12) returning id into v_prog;
+  v_a1 := public.enrol_loyalty_member(v_m1, 'CARD-9001');
+  v_a2 := public.enrol_loyalty_member(v_m2, 'CARD-9002');
+  v_a3 := public.enrol_loyalty_member(v_m3, 'CARD-9003');
+
+  perform public.open_pos_shift(v_reg, 100.00);
+
+  -- ==================================================================
+  -- Half a point is no point
+  -- ==================================================================
+  v_sale := public.open_pos_sale(v_reg, v_m1);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.50);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 10.50)));
+  perform pg_temp.check_eq('ten ringgit fifty earns ten points, not eleven',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 10);
+
+  -- ==================================================================
+  -- The band that pays, as against the band on the screen
+  -- ==================================================================
+  perform public.upsert_loyalty_tier(v_prog, 'AHLI', 'Ahli', 0, 1);
+  perform public.upsert_loyalty_tier(v_prog, 'EMAS', 'Emas', 500, 2);
+  select t.id into v_top from public.loyalty_tiers t
+   where t.program_id = v_prog and t.code = 'EMAS';
+
+  -- Spent, not granted. A band is a band over what was EARNED, so the
+  -- member has to reach it across the counter.
+  v_sale := public.open_pos_sale(v_reg, v_m2);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 600.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 600.00)));
+  perform pg_temp.check_eq('the bill that carries them over earns at the old rate',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 600);
+
+  v_sale := public.open_pos_sale(v_reg, v_m2);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  perform pg_temp.check_eq('a member in the top band earns at its rate',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 20);
+
+  perform public.retire_loyalty_tier(v_top);
+  v_sale := public.open_pos_sale(v_reg, v_m2);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  perform pg_temp.check_eq('and stops the day the band is retired',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 10);
+
+  -- ==================================================================
+  -- A band is what you spent lately
+  -- ==================================================================
+  -- Put the band back, so the only thing that can keep the member out
+  -- of it now is the window rather than the retirement above.
+  perform public.upsert_loyalty_tier(v_prog, 'EMAS', 'Emas', 500, 2, v_top, true);
+  update public.loyalty_entries set created_at = now() - interval '18 months'
+   where account_id = v_a2;
+  v_sale := public.open_pos_sale(v_reg, v_m2);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  perform pg_temp.check_eq('earnings older than the window do not hold a band',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 10);
+
+  -- ==================================================================
+  -- Points that went away between the redemption and the tender
+  -- ==================================================================
+  perform public.adjust_loyalty_points(v_a3, 1000, 'Opening balance');
+  v_sale := public.open_pos_sale(v_reg, v_m3);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform * from public.redeem_loyalty_points(v_sale, 500);
+  perform public.adjust_loyalty_points(v_a3, -900, 'Clawback');
+  begin
+    perform public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 5.00)));
+    raise exception 'FAIL: redeemed points the account no longer held';
+  exception when check_violation then
+    raise notice 'ok   points gone between the redemption and the tender';
+  end;
+  -- ==================================================================
+  -- What the dormancy sweep leaves alone
+  -- ==================================================================
+  -- The programme above sets no dormancy rule at all, which is the
+  -- ordinary case: most schemes never expire anything. Everything on
+  -- this org is now eighteen months old, so a sweep that ignored the
+  -- rule would take the lot.
+  update public.loyalty_entries set created_at = now() - interval '18 months'
+   where org_id = v_org;
+  perform pg_temp.check_eq(
+    'a scheme with no expiry rule expires nothing, however old the card',
+    (select count(*) from public.expire_loyalty_points(v_org)), 0);
+
+  -- Now give it one, and the same cards are swept.
+  update public.loyalty_programs set dormancy_expiry_months = 12
+   where id = v_prog;
+  perform pg_temp.check_true('with a rule, the dormant ones are swept',
+    (select count(*) from public.expire_loyalty_points(v_org)) > 0);
+
+  -- A dormant card with nothing left on it is not swept and is not
+  -- reported. It has no points to take, and a report of expiries
+  -- listing members who lost nothing is a report nobody can act on.
+  --
+  -- The backdating has to be redone here: the sweep above wrote an
+  -- entry against each account it took, which is itself activity, so
+  -- without this the cards look busy rather than empty and the case
+  -- never arises.
+  update public.loyalty_entries set created_at = now() - interval '18 months'
+   where org_id = v_org;
+  perform pg_temp.check_eq('a card down to nothing is left off the sweep',
+    (select count(*) from public.expire_loyalty_points(v_org)), 0);
+  perform pg_temp.check_eq('and no entry is written for nothing',
+    (select count(*) from public.loyalty_entries e
+      where e.org_id = v_org and e.kind = 'expire' and e.points = 0), 0);
+
+  -- ==================================================================
+  -- Who may take points away
+  -- ==================================================================
+  -- Expiring points is taking money off a customer. It is an owner or
+  -- admin decision, and the guard was never exercised.
+  update public.loyalty_entries set created_at = now() - interval '18 months'
+   where org_id = v_org;
+  v_clerk := pg_temp.another_user('clerk@example.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_clerk, 'accounts_clerk', 'active', now())
+  on conflict (org_id, user_id) do update
+    set role = 'accounts_clerk', status = 'active';
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    perform * from public.expire_loyalty_points(v_org);
+    raise exception 'FAIL: a clerk expired a customer''s points';
+  exception when insufficient_privilege then
+    raise notice 'ok   only an owner or admin takes points away';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+end $$;
+
 rollback;

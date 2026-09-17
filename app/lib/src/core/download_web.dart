@@ -25,7 +25,10 @@ Future<bool> saveTextFile(String filename, String mimeType, String text) async {
 
 /// The same, for a file that is bytes rather than text — a PDF, say.
 Future<bool> saveBytesFile(
-    String filename, String mimeType, Uint8List bytes) async {
+  String filename,
+  String mimeType,
+  Uint8List bytes,
+) async {
   final blob = web.Blob(
     <JSAny>[bytes.toJS].toJS,
     web.BlobPropertyBag(type: mimeType),

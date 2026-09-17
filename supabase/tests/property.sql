@@ -284,6 +284,7 @@ declare
   v_full numeric; v_part numeric; v_months numeric;
   v_count integer; v_total numeric; v_invoiced numeric;
   v_due integer; v_overdue boolean;
+  v_org2 uuid; v_site2 uuid; v_days integer;
 begin
   v_org := pg_temp.test_org('Probe Property Holdings');
 
@@ -357,6 +358,104 @@ begin
     'and the invoices agree with the run', v_invoiced, 4096.80);
 
   -- ------------------------------------------------------------------
+  -- Raising it again, which used to bill everybody twice
+  -- ------------------------------------------------------------------
+  --
+  -- The unique constraint on (site_id, period_from, period_to) already
+  -- refused the SAME period. What it could not see was an overlapping
+  -- one -- a different pair of dates is a different row -- so the
+  -- fortnight in the middle was invoiced twice and nothing said so.
+  -- `0584` is the check; these are the assertions that would fail if it
+  -- were removed.
+  perform pg_temp.check_refused(
+    'the same period again is refused by name',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-01', date '2026-01-31'),
+    '%already been raised%');
+
+  -- The one the constraint missed. Starts inside January and runs into
+  -- February, so the middle fortnight would be billed a second time.
+  perform pg_temp.check_refused(
+    'and so is a period that merely overlaps it',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-15', date '2026-02-15'),
+    '%already been raised%');
+
+  -- A period that ENDS the day the raised one begins touches nothing.
+  -- Asserted because an overlap test written with the wrong bound
+  -- refuses this too, and a property manager who cannot bill December
+  -- after billing January has been handed a worse bug than the one
+  -- being fixed.
+  perform pg_temp.check_refused(
+    'but the refusal names the run, so somebody can go and look',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-20', date '2026-01-25'),
+    '%run %');
+
+  v_run := public.raise_rent_invoices(
+    v_site, date '2026-02-01', date '2026-02-28', date '2026-02-07');
+  perform pg_temp.check_true(
+    'and the next month, which touches nothing, still raises',
+    v_run is not null);
+
+  -- ------------------------------------------------------------------
+  -- The way back (0585)
+  -- ------------------------------------------------------------------
+  --
+  -- 0584 refused a second raise and said plainly that it stopped short
+  -- of an exclusion constraint because a wrong period could never be
+  -- corrected. These assert the correction actually works.
+  perform pg_temp.check_refused(
+    'undoing a run without saying why is refused',
+    format('select public.void_rent_run(%L)', v_run),
+    '%Say why%');
+
+  select count(*) into v_count
+    from public.rent_run_lines where run_id = v_run;
+  perform pg_temp.check_eq('February billed two tenancies', v_count, 2);
+
+  perform pg_temp.check_eq(
+    'and undoing it voids both invoices',
+    public.void_rent_run(v_run, 'wrong dates'), 2);
+
+  select count(*) into v_count
+    from public.rent_run_lines l
+    join public.sales_documents d on d.id = l.invoice_id
+   where l.run_id = v_run and d.status = 'void';
+  perform pg_temp.check_eq('both really are void', v_count, 2);
+
+  perform pg_temp.check_refused(
+    'and a run cannot be undone twice',
+    format('select public.void_rent_run(%L, %L)', v_run, 'again'),
+    '%already voided%');
+
+  -- The whole point of the undo, and the assertion that would fail if
+  -- either half of 0585 were missing -- the partial index or the
+  -- voided_at clause in the overlap check.
+  v_run := public.raise_rent_invoices(
+    v_site, date '2026-02-01', date '2026-02-28', date '2026-02-07');
+  perform pg_temp.check_true(
+    'so the corrected period can be raised again', v_run is not null);
+
+  -- And the refusal that keeps the undo from reintroducing the bug it
+  -- exists to fix. One invoice paid, and the run will not come apart.
+  update public.sales_documents d
+     set paid_amount = 1.00
+   where d.id = (select l.invoice_id from public.rent_run_lines l
+                  where l.run_id = v_run limit 1);
+  perform pg_temp.check_refused(
+    'but a run with a paid invoice refuses to come apart at all',
+    format('select public.void_rent_run(%L, %L)', v_run, 'too late'),
+    '%have been paid%');
+
+  select count(*) into v_count
+    from public.rent_run_lines l
+    join public.sales_documents d on d.id = l.invoice_id
+   where l.run_id = v_run and d.status = 'void';
+  perform pg_temp.check_eq(
+    'and nothing was voided on the way to refusing', v_count, 0);
+
+  -- ------------------------------------------------------------------
   -- One unit, one tenant, over any given day
   -- ------------------------------------------------------------------
   begin
@@ -392,20 +491,24 @@ begin
     (org_id, site_id, kind, authority, account_no, period_year, amount,
      due_date)
   values (v_org, v_site, 'quit_rent', 'Pejabat Tanah dan Galian',
-          'QR-99', 2026, 1250.00, current_date + 20);
+          'QR-99', 2026, 1250.00, app.today() + 20);
 
   insert into public.property_statutory_charges
     (org_id, site_id, kind, authority, account_no, period_year, period_half,
      amount, due_date)
   values (v_org, v_site, 'assessment', 'Majlis Bandaraya', 'AS-77',
-          2026, 1, 880.00, current_date - 10);
+          2026, 1, 880.00, app.today() - 10);
 
   -- Paid, so it must not appear however overdue it looks.
   insert into public.property_statutory_charges
     (org_id, site_id, kind, authority, account_no, period_year, period_half,
-     amount, due_date, paid_on)
+     amount, due_date, paid_on, reference)
   values (v_org, v_site, 'assessment', 'Majlis Bandaraya', 'AS-77',
-          2025, 2, 880.00, current_date - 200, current_date - 190);
+          2025, 2, 880.00, app.today() - 200, app.today() - 190,
+          -- The receipt, because `0387` refuses a paid date with
+          -- nothing behind it: paid at the counter is a real way to pay
+          -- an assessment, but it has to name what paid it.
+          'MBSA receipt 40218');
 
   select count(*) into v_due
     from public.property_statutory_due(v_org, 60);
@@ -423,12 +526,65 @@ begin
     (org_id, site_id, kind, authority, account_no, period_year, amount,
      due_date)
   values (v_org, v_site, 'quit_rent', 'Pejabat Tanah dan Galian',
-          'QR-98', 2027, 1250.00, current_date + 80);
+          'QR-98', 2027, 1250.00, app.today() + 80);
   select count(*) into v_due from public.property_statutory_due(v_org, 60);
   perform pg_temp.check_eq(
     'a bill beyond the window is not reported', v_due, 2);
   select count(*) into v_due from public.property_statutory_due(v_org, 120);
   perform pg_temp.check_eq('and is, when the window reaches it', v_due, 3);
+
+  -- The window with nothing in it is sixty days, not for ever. The app
+  -- passes a non-null integer, but the function is an RPC and anything
+  -- holding a session can call it with no window at all; falling back
+  -- to every bill on file would turn "what is due next" into the whole
+  -- register.
+  select count(*) into v_due from public.property_statutory_due(v_org, null);
+  perform pg_temp.check_eq('no window given is sixty days', v_due, 2);
+
+  -- The countdown itself, which is what the screen sorts and colours by
+  -- and which nothing here read.
+  --
+  -- The fixture above dates from `app.today()`, not `current_date`,
+  -- because that is what the function counts from. `app.today()` is
+  -- `app.malaysian_day(now())`, and the CI runner is UTC: after 16:00
+  -- UTC the two are different days, so a bill written `current_date +
+  -- 20` read 19 and this file failed for eight hours out of every
+  -- twenty-four. The clock was the only thing that changed. It is days until, not days since: a
+  -- bill due in twenty days reads +20 and one missed ten days ago -10,
+  -- and swapping them turns the urgent into the comfortable.
+  select days_until into v_days
+    from public.property_statutory_due(v_org, 60)
+   where account_no = 'QR-99';
+  perform pg_temp.check_eq('a bill due in twenty days counts down', v_days, 20);
+  select days_until into v_days
+    from public.property_statutory_due(v_org, 60)
+   where account_no = 'AS-77' and period = '2026 H1';
+  perform pg_temp.check_eq('and a missed one counts up past zero',
+                           v_days, -10);
+
+  -- And it is this company's register. A managing agent's own books and
+  -- the schemes they manage sit in one login, so `is_org_member` passes
+  -- for every company on the screen and is no help at all here: the
+  -- only thing keeping one site's quit rent off another's report is the
+  -- org_id in the where clause.
+  v_org2 := pg_temp.test_org('Probe Estates');
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org2, 'property_nonstrata', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org2, 'ROW2', 'Somebody else''s shoplots', 'non_strata')
+  returning id into v_site2;
+  insert into public.property_statutory_charges
+    (org_id, site_id, kind, authority, account_no, period_year, amount,
+     due_date)
+  values (v_org2, v_site2, 'quit_rent', 'Pejabat Tanah dan Galian',
+          'QR-OTHER', 2026, 4000.00, app.today() + 5);
+
+  select count(*) into v_due from public.property_statutory_due(v_org, 60);
+  perform pg_temp.check_eq(
+    'and another company''s bills are not on this one''s report', v_due, 2);
+  select count(*) into v_due from public.property_statutory_due(v_org2, 60);
+  perform pg_temp.check_eq('while its own company still sees it', v_due, 1);
 
   raise notice 'non-strata: % tenancies billed, rent %', v_count, v_total;
 end $$;

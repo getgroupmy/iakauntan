@@ -119,10 +119,49 @@ put its opening entry rather than disguising it as a manual journal.
 
 These are ours to fix, and they are the real work.
 
-### 1. Nothing records where a row came from
+### 1. ~~Nothing records where a row came from~~ — built, `0610`
 
-There is **no `external_id`, `legacy_id`, `source_system` or
-`import_batch_id` column anywhere in the schema.** I checked every table.
+> There is **no `external_id`, `legacy_id`, `source_system` or
+> `import_batch_id` column anywhere in the schema.** I checked every
+> table.
+
+That was true and is no longer. `0610` adds `import_source`,
+`import_ref`, `import_batch_id` and `imported_at` to every table an
+import can write to — the nineteen named in `app.import_target_tables()`,
+in the order this document's dependency list writes them — with a partial
+unique index on `(org_id, import_source, import_ref)` and a check that
+the pair is present or absent together.
+
+**Not `source_system` / `source_id`, which is what this document
+proposed.** `gl_entries.source_id` and `stock_movements.source_id` have
+meant something else since `0013` — which document the row came from
+inside this system — and `add column if not exists` does nothing against
+a column that is already there, so the pair constraint read the existing
+column and refused every journal the product writes. Five assertion files
+said so on the first run.
+
+Alongside them: `import_batches` (one run, with its status and what it
+found) and `import_rows` (what was pulled, as raw JSON, before anybody
+interpreted it — stage one of the three below), plus
+`start_import_batch`, `finish_import_batch`, `import_batch_summary` and
+`rollback_import_batch`.
+
+The rollback refuses rather than cascades. Once somebody has raised an
+invoice against an imported customer, deleting the import is not undoing
+it, and a posted batch is refused outright — that has reached the ledger
+and is reversed with a journal, like every other document in this
+product.
+
+`supabase/tests/import_provenance.sql` has 27 assertions, and the one it
+exists for is the re-run: import the same thing twice and get one row,
+while a different row that happens to share a code stays a different row.
+
+What remains of this obstacle is nothing. Stages two and three below —
+reconcile and post — are still unbuilt, and they now have somewhere to
+stand.
+
+<details>
+<summary>The original finding</summary>
 
 Without provenance:
 
@@ -139,6 +178,8 @@ can receive migrated data, with a unique index on
 `(org_id, source_system, source_id)`. It costs one migration and makes
 the whole exercise re-runnable, which is what turns a migration from an
 event into a process you can rehearse.
+
+</details>
 
 ### 2. Every posting must land inside a fiscal period
 

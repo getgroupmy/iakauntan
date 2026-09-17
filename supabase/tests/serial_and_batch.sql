@@ -336,9 +336,13 @@ declare
   v_in integer; v_out integer;
 begin
   v_bill := pg_temp.bill_line(v_org, v_item, 20, 10);
+  -- Twenty days from the Malaysian day, because that is the day
+  -- `report_expiring_stock` counts from since `0419`. Dated from the
+  -- session's clock this drifts to nineteen for the eight hours the two
+  -- zones disagree, which is how it was found.
   perform public.set_line_lots('purchase_document_lines', v_bill,
     format('[{"lot_ref":"B-SOON","quantity":20,"expiry_date":"%s"}]',
-           (current_date + 20)::text)::jsonb);
+           ((now() at time zone 'Asia/Kuala_Lumpur')::date + 20)::text)::jsonb);
   perform pg_temp.post_bill(v_bill);
 
   select * into r from public.report_expiring_stock(v_org, 30) limit 1;

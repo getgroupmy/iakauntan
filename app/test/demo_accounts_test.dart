@@ -47,9 +47,18 @@ void main() {
         'clerk@iakauntan.com',
         'auditor@iakauntan.com',
         'secretary@iakauntan.com',
+        // Both seeded long before they were offered, which is the
+        // omission this assertion is here to catch: `legal@` has been
+        // built by the rebuild since the law firm was added, and
+        // `accountant@` since 0485 brought the practice into it. A
+        // seeded login the picker does not offer is invisible.
+        'accountant@iakauntan.com',
+        'legal@iakauntan.com',
         'property@iakauntan.com',
         'warung@iakauntan.com',
         'salon@iakauntan.com',
+        'kedai@iakauntan.com',
+        'kilang@iakauntan.com',
         'stall@iakauntan.com',
       ]);
     });

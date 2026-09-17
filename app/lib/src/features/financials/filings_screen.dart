@@ -20,6 +20,13 @@ class FilingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filings = ref.watch(fsFilingsProvider);
     final canWrite = ref.watch(canWriteProvider);
+    // Asked once for the whole list rather than once per row. It is
+    // allowed to fail without taking the screen with it: the list is
+    // still the list if the countdown is missing, and `report_fs_deadlines`
+    // answers only for a company that holds the MBRS module.
+    final due = ref
+        .watch(fsDeadlinesDueProvider)
+        .maybeWhen(data: (m) => m, orElse: () => const <String, Map<String, dynamic>>{});
 
     return Scaffold(
       appBar: AppBar(title: const Text('Financial statements')),
@@ -39,7 +46,10 @@ class FilingsScreen extends ConsumerWidget {
           return ListView.separated(
             itemCount: list.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, i) => _FilingTile(row: list[i]),
+            itemBuilder: (context, i) => _FilingTile(
+              row: list[i],
+              due: due[list[i]['id']?.toString()],
+            ),
           );
         },
       ),
@@ -78,9 +88,15 @@ class FilingsScreen extends ConsumerWidget {
 }
 
 class _FilingTile extends StatelessWidget {
-  const _FilingTile({required this.row});
+  const _FilingTile({required this.row, this.due});
 
   final Map<String, dynamic> row;
+
+  /// The row `report_fs_deadlines` returned for this filing, or null if
+  /// it returned none — which means lodged, or due further out than the
+  /// window the provider asks for. Either way there is nothing to count
+  /// down to and the tile says nothing.
+  final Map<String, dynamic>? due;
 
   @override
   Widget build(BuildContext context) {
@@ -105,16 +121,103 @@ class _FilingTile extends StatelessWidget {
         end == null ? 'Financial year' : 'Year ended ${Fmt.date(end)}',
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
-      subtitle: Text(
-        [
-          (row['framework']?.toString() ?? 'mpers').toUpperCase(),
-          Fmt.label(audit),
-          if (row['mbrs_reference'] != null) '${row['mbrs_reference']}',
-        ].join(' · '),
-        style: const TextStyle(fontSize: 12),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            [
+              (row['framework']?.toString() ?? 'mpers').toUpperCase(),
+              Fmt.label(audit),
+              if (row['mbrs_reference'] != null) '${row['mbrs_reference']}',
+            ].join(' · '),
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (due != null) _Countdown(due: due!),
+        ],
       ),
       trailing: StatusChip(status),
       onTap: () => context.go('/financial-statements/${row['id']}'),
+    );
+  }
+}
+
+/// The line under a filing, from the row `report_fs_deadlines` returned.
+///
+/// Null when there is nothing to say: no row, or a row with no
+/// `lodge_by` in it. A caller that gets null shows nothing rather than
+/// an empty line, because a filing with no deadline is a filing already
+/// lodged and saying "Lodge by —" about it would be wrong twice.
+///
+/// Separated from the widget so the wording can be asserted. The
+/// arithmetic behind it is `fs_deadlines`, asserted in
+/// `supabase/tests/fs_statutory_order.sql` against hand-worked s.258
+/// dates; what is asserted here is only that the right one of the two
+/// sentences is chosen, and that "1 day" is not "1 days".
+({String text, bool late})? lodgementLine(Map<String, dynamic>? due) {
+  if (due == null) return null;
+  final by = Fmt.parseDate(due['lodge_by']);
+  if (by == null) return null;
+  final left = (due['days_left'] as num?)?.toInt();
+  final late = due['is_late'] == true;
+
+  // Past tense once the date has gone, because a countdown that has run
+  // out is not a countdown. `days_left` goes negative there and saying
+  // "-12 days" reads as a bug rather than as a breach.
+  if (late) return (text: 'Lodgement was due ${Fmt.date(by)}', late: true);
+  if (left == null) return (text: 'Lodge by ${Fmt.date(by)}', late: false);
+  if (left == 0) return (text: 'Lodge by ${Fmt.date(by)} — today', late: false);
+  return (
+    text: 'Lodge by ${Fmt.date(by)} — $left ${left == 1 ? 'day' : 'days'}',
+    late: false,
+  );
+}
+
+/// How long is left to lodge, in the words the deadline is set in.
+///
+/// CA 2016 s.258 gives six months from the year end to circulate the
+/// accounts and thirty days after that to lodge them. `fs_deadlines`
+/// does that arithmetic and `report_fs_deadlines` carries it for the
+/// whole list; this only says which of the two sentences it is and
+/// colours the one that has run out.
+///
+/// Late is `danger` rather than `warning` because it is not a warning:
+/// the date has passed and the company is in breach.
+class _Countdown extends StatelessWidget {
+  const _Countdown({required this.due});
+
+  final Map<String, dynamic> due;
+
+  @override
+  Widget build(BuildContext context) {
+    final line = lodgementLine(due);
+    if (line == null) return const SizedBox.shrink();
+    final late = line.late;
+    final text = line.text;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            late ? Icons.error_outline : Icons.schedule_outlined,
+            size: 13,
+            color: late ? context.colors.danger : null,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                color: late ? context.colors.danger : null,
+                fontWeight: late ? FontWeight.w600 : null,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

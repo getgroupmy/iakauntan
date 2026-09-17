@@ -527,4 +527,338 @@ begin
     has_table_privilege('authenticated', 'public.recurring_documents', 'select'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A quarter is not a Postgres interval (0447)
+--
+-- `app.advance_schedule` built its interval by pasting a number to a
+-- word, and one of the words was wrong: Postgres has no `quarters`
+-- unit, so `'1 quarters'::interval` raises 22007. The recurring journal
+-- editor offers **Quarter** in its dropdown, so this was reachable and
+-- had never worked. Measured through the real scheduler before the fix:
+--
+--     quarterly journal ran, 0 raised
+--     last_error: invalid input syntax for type interval: "1 quarters"
+--     next_run_date is still: 2026-01-31
+--
+-- The runner catches the failure and leaves `next_run_date` alone so it
+-- retries, which is right for a transient fault and wrong for one that
+-- cannot stop happening: it failed every night and said so only in a
+-- column.
+--
+-- The second fault needed two steps to see, which is why nothing had.
+-- Adding a month to 31 January gives 28 February, correctly; adding a
+-- month to *that* gives 28 March. A tenancy invoiced on the last day of
+-- every month became the 28th of every month for good, the first time
+-- it crossed February.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_eq('a quarter is three months',
+    app.advance_schedule(date '2026-01-31', 'quarterly', 1,
+                         date '2026-01-31')::text, '2026-04-30');
+
+  perform pg_temp.check_eq('and two quarters are six',
+    app.advance_schedule(date '2026-01-15', 'quarterly', 2,
+                         date '2026-01-15')::text, '2026-07-15');
+
+  -- The drift, in the two steps it takes to appear.
+  perform pg_temp.check_eq('the end of January is the end of February',
+    app.advance_schedule(date '2026-01-31', 'monthly', 1,
+                         date '2026-01-31')::text, '2026-02-28');
+
+  perform pg_temp.check_eq('and comes back to the thirty-first in March',
+    app.advance_schedule(date '2026-02-28', 'monthly', 1,
+                         date '2026-01-31')::text, '2026-03-31');
+
+  -- February is as long as February is: an anchor of the 31st must be
+  -- clamped rather than handed to a date that does not exist.
+  perform pg_temp.check_eq('February is as long as February is',
+    app.advance_schedule(date '2026-01-31', 'monthly', 1,
+                         date '2026-01-31')::text, '2026-02-28');
+
+  perform pg_temp.check_eq('and twenty-nine of it in a leap year',
+    app.advance_schedule(date '2024-01-31', 'monthly', 1,
+                         date '2024-01-31')::text, '2024-02-29');
+
+  -- A day in the middle of the month is not touched by any of this.
+  perform pg_temp.check_eq('the fifteenth stays the fifteenth',
+    app.advance_schedule(date '2026-01-15', 'monthly', 1,
+                         date '2026-01-15')::text, '2026-02-15');
+
+  -- Nor is anything counted in days or weeks: a fortnightly schedule is
+  -- every fourteen days, and snapping it to a day of the month would
+  -- turn it into something else entirely.
+  perform pg_temp.check_eq('a fortnightly schedule is left alone',
+    app.advance_schedule(date '2026-01-31', 'weekly', 2,
+                         date '2026-01-31')::text, '2026-02-14');
+
+  perform pg_temp.check_eq('and so is a daily one',
+    app.advance_schedule(date '2026-01-31', 'daily', 3,
+                         date '2026-01-31')::text, '2026-02-03');
+
+  perform pg_temp.check_eq('a year is a year',
+    app.advance_schedule(date '2026-02-28', 'yearly', 1,
+                         date '2026-02-28')::text, '2027-02-28');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And through the scheduler, which is where it mattered
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Suku Tahun Sdn Bhd');
+  v_j   uuid;
+  v_n   integer;
+begin
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date, next_run_date,
+     is_active, auto_post, template)
+  values (v_org, 'Quarterly accrual', 'quarterly', 1, date '2026-01-31',
+          date '2026-01-31', true, false, '{"lines": []}'::jsonb)
+  returning id into v_j;
+
+  v_n := app.run_recurring_journals(date '2026-02-01');
+  perform pg_temp.check_eq('the quarterly journal runs at all', v_n, 1);
+
+  perform pg_temp.check_true('and records no error',
+    (select last_error is null from public.recurring_journals
+      where id = v_j));
+
+  perform pg_temp.check_eq('and is next due three months on',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_j), '2026-04-30');
+
+  -- The monthly case, twice, because one step cannot show the drift.
+  update public.recurring_journals
+     set frequency = 'monthly', next_run_date = date '2026-01-31'
+   where id = v_j;
+
+  perform app.run_recurring_journals(date '2026-02-01');
+  perform pg_temp.check_eq('a monthly one reaches the end of February',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_j), '2026-02-28');
+
+  perform app.run_recurring_journals(date '2026-03-01');
+  perform pg_temp.check_eq('and the end of March, rather than the 28th',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_j), '2026-03-31');
+end $$;
+
+-- =====================================================================
+-- The stops, and the one that is not a date
+--
+-- 0447 pinned the calendar and the assertions above cover it: a quarter
+-- is three months, a year is a year, the 31st is the 28th in February
+-- and the 31st again in March. A mutation sweep confirms all six of
+-- those die. What it also found was the other half of the scheduler --
+-- the rules about when to stop -- largely open.
+--
+-- Three of the survivors are masked rather than untested, and are
+-- recorded here rather than chased:
+--
+--   * `exit when not r.is_active` inside the loop and `where d.is_active`
+--     in the runner each cover the other. Break one and the other still
+--     refuses; only breaking both would let a stopped schedule run, and
+--     a sweep changes one thing at a time.
+--   * the same pair for `next_run_date <= p_on`: the runner selects on
+--     it and the loop exits on it.
+--
+-- The rest are real, and the block below is about the shapes that reach
+-- them: a schedule left alone for most of a year, one whose ceiling has
+-- already been reached and is switched back on, a company that has been
+-- suspended, and the date helper called with an interval no schedule in
+-- the table could carry.
+-- =====================================================================
+
+do $$
+declare
+  v_org uuid := pg_temp.rec_org('Jadual Sdn Bhd');
+  v_cust uuid; v_seed uuid; v_sched uuid; v_doc uuid; v_n integer;
+begin
+  v_cust := pg_temp.customer(v_org, 'C-001', 'Steady Bhd');
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status, due_date)
+  values (v_org,'invoice','INV-1', date '2026-01-01', v_cust,'MYR',1,
+          100,100,100,'draft', date '2026-01-31')
+  returning id into v_seed;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_seed, 1, 'Retainer', 1, 100);
+  perform public.post_sales_document(v_seed);
+
+  -- ------------------------------------------------------------------
+  -- The helper's own contract
+  -- ------------------------------------------------------------------
+  -- `interval_count` is CHECKed at one or more, so no schedule in the
+  -- table can carry nought. `app.advance_schedule` is a general date
+  -- helper with its own callers, and an interval of nought there would
+  -- return the date it was given -- a schedule that never moves and is
+  -- therefore due for ever. The floor is what stops that.
+  perform pg_temp.check_true('an interval of nought still advances a month',
+    app.advance_schedule(date '2026-01-15', 'monthly', 0, date '2026-01-15')
+      = date '2026-02-15');
+  perform pg_temp.check_true('and so does an interval of nothing at all',
+    app.advance_schedule(date '2026-01-15', 'monthly', null, date '2026-01-15')
+      = date '2026-02-15');
+
+  -- ------------------------------------------------------------------
+  -- Sixty at a time
+  -- ------------------------------------------------------------------
+  -- A daily schedule left alone for half a year is the shape that turns
+  -- one overnight job into a two-hundred-invoice run. The cap stops at
+  -- sixty and the rest wait for tomorrow, so a mistake is a long
+  -- catch-up rather than a flood nobody can unpick.
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Daily, forgotten',
+    p_frequency => 'daily', p_start_date => date '2026-01-01');
+  perform pg_temp.check_eq('a long-forgotten schedule catches up sixty at a time',
+    public.run_recurring_documents_for(v_org, date '2026-12-31'), 60);
+  perform pg_temp.check_eq('and the rest are still waiting',
+    (select occurrences from public.recurring_documents where id = v_sched), 60);
+  update public.recurring_documents set is_active = false where id = v_sched;
+
+  -- ------------------------------------------------------------------
+  -- A ceiling stays a ceiling
+  -- ------------------------------------------------------------------
+  -- Reaching the agreed number switches the schedule off, and switching
+  -- it back on is not the same as agreeing to more: the count is still
+  -- against the ceiling. Somebody restarting a finished instalment plan
+  -- has to raise the number, not just tick the box.
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Two instalments',
+    p_frequency => 'monthly', p_start_date => date '2026-02-01',
+    p_max_occurrences => 2);
+  perform pg_temp.check_eq('two, and it stops',
+    public.run_recurring_documents_for(v_org, date '2026-12-31'), 2);
+
+  update public.recurring_documents set is_active = true where id = v_sched;
+  perform pg_temp.check_eq('turning it back on does not buy a third',
+    public.run_recurring_documents_for(v_org, date '2026-12-31'), 0);
+  perform pg_temp.check_eq('and the count is where it was',
+    (select occurrences from public.recurring_documents where id = v_sched), 2);
+  update public.recurring_documents set is_active = false where id = v_sched;
+
+  -- ------------------------------------------------------------------
+  -- A company that has been suspended is not billed
+  -- ------------------------------------------------------------------
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Monthly, suspended',
+    p_frequency => 'monthly', p_start_date => date '2026-02-01');
+  -- Counted against this company rather than against the run's own
+  -- total: `app.run_recurring_documents` is the nightly job for the
+  -- whole platform, and the blocks above this one leave schedules of
+  -- their own standing due in other companies.
+  select count(*)::integer into v_n from public.sales_documents
+   where org_id = v_org;
+  update public.organizations set status = 'suspended' where id = v_org;
+  perform app.run_recurring_documents(date '2026-12-31');
+  perform pg_temp.check_eq(
+    'a suspended company raises nothing on the nightly run',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org) - v_n, 0);
+
+  update public.organizations set status = 'active' where id = v_org;
+  perform app.run_recurring_documents(date '2026-12-31');
+  perform pg_temp.check_true('and starts again when it is put back',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org) - v_n > 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The one the scheduler actually calls
+--
+-- Every assertion above runs `run_recurring_documents_for(org, date)`,
+-- which takes one company. What the nightly job calls is
+-- `app.run_recurring_documents(date)`, which takes none and sweeps
+-- every company on the platform. The two are near-duplicates -- the
+-- same loop over the same table calling the same
+-- `app.advance_recurring_document` -- and a mutation sweep found that
+-- the global one had almost no coverage at all: its filters could be
+-- removed and nothing in the suite noticed.
+--
+-- That is the wrong way round. The per-org function is called by a
+-- person who is looking at the result. The global one runs unattended
+-- at night across every tenant, and its two extra filters are exactly
+-- the ones a multi-tenant scheduler needs:
+--
+--   - `next_run_date <= p_on`, without which every template on the
+--     platform is raised on every run, whether or not it is due
+--   - `o.status = 'active'`, so a closed company's templates stop
+--
+-- and its return value is the number the job logs, which is how anybody
+-- would notice it had gone wrong.
+--
+-- Two of its four mutants survive this block, and both are equivalent
+-- rather than untested. `app.advance_recurring_document`, which the
+-- loop calls, re-checks both conditions itself -- `exit when not
+-- r.is_active` and `exit when r.next_run_date > p_on` -- and returns
+-- zero. So the two filters in the sweep are SELECTION, not correctness:
+-- they keep the nightly job from loading every template on the platform
+-- to be told no. Removing either changes the work done, not the result,
+-- and nothing short of also removing the worker's own guards would show
+-- it. The assertions below are kept because they pin the behaviour the
+-- scheduler has to have; they do not prove those two lines are
+-- load-bearing, and that was established by probe rather than assumed.
+-- ---------------------------------------------------------------------
+
+do $$
+declare
+  v_org   uuid;
+  v_cust  uuid;
+  v_seed  uuid;
+  v_sched uuid;
+  v_n     integer;
+  v_before integer;
+begin
+  v_org  := pg_temp.rec_org('Jadual Malam Sdn Bhd');
+  v_cust := pg_temp.customer(v_org, 'C-N', 'Tetap Bhd', 'ap@tetap.example');
+  v_seed := pg_temp.invoice(v_org, v_cust, 'INV-N',
+                            date '2026-01-01', date '2026-01-31');
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed,
+    p_name        => 'Monthly retainer',
+    p_frequency   => 'monthly',
+    p_start_date  => date '2026-02-01',
+    p_auto_post   => true);
+
+  -- Not due yet. The global sweep must leave it alone, and the count it
+  -- returns is what says so.
+  select count(*)::integer into v_before
+    from public.sales_documents where org_id = v_org;
+  v_n := app.run_recurring_documents(date '2026-01-31');
+  perform pg_temp.check_eq(
+    'the nightly sweep raises nothing before a template is due', v_n, 0);
+  perform pg_temp.check_eq('and writes nothing either',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org), v_before);
+
+  -- Due. One document, and the function says one.
+  v_n := app.run_recurring_documents(date '2026-02-01');
+  perform pg_temp.check_eq(
+    'the nightly sweep raises the one that is due, and counts it',
+    v_n, 1);
+  perform pg_temp.check_eq('which is the document it wrote',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org), v_before + 1);
+
+  -- And on the date it was asked for, not the date it ran. The
+  -- scheduler passes the day it is catching up to, and a run that
+  -- ignored it would date a February invoice today.
+  perform pg_temp.check_true(
+    'and dates it the day the sweep was asked for, not the day it ran',
+    exists (select 1 from public.sales_documents
+             where org_id = v_org and doc_date = date '2026-02-01'
+               and id <> v_seed));
+
+  -- Switched off, and the sweep leaves it.
+  update public.recurring_documents set is_active = false
+   where id = v_sched;
+  v_n := app.run_recurring_documents(date '2026-03-01');
+  perform pg_temp.check_eq(
+    'a template that is switched off is not raised by the sweep', v_n, 0);
+
+  raise notice 'the nightly sweep: due, not due, switched off, and counted';
+end $$;
+
 rollback;

@@ -1,0 +1,6 @@
+name = "iakauntan-email-router"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# INBOUND_SECRET and FUNCTION_URL are secrets, set with
+# `npx wrangler secret put <name>` and never written here.

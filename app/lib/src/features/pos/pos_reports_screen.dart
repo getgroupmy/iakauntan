@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'offline_problems_dialog.dart';
 
 /// The periods a report can be saved as.
 ///
@@ -183,7 +184,20 @@ class _PosReportsScreenState extends ConsumerState<PosReportsScreen> {
     final reports = ref.watch(posReportsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Report builder')),
+      appBar: AppBar(
+        title: const Text('Report builder'),
+        actions: [
+          // Beside the reports, because it is the one figure a shop
+          // cannot build a report about: a sale the server never took
+          // is in none of the tables the builder reads.
+          IconButton(
+            key: const ValueKey('offline-problems'),
+            icon: const Icon(Icons.cloud_off_outlined),
+            tooltip: 'What the tills could not land',
+            onPressed: () => showOfflineProblems(context),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _build,
         icon: const Icon(Icons.add_chart),
@@ -487,6 +501,7 @@ class _BuilderSheetState extends State<_BuilderSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _period,
               decoration: const InputDecoration(labelText: 'Over'),
               items: [

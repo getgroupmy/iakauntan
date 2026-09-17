@@ -12,6 +12,15 @@ import '../../data/corp_models.dart';
 import '../../data/corp_repository.dart';
 import '../shared/attachments_card.dart';
 import 'document_pdf.dart';
+import 'beneficial_owner_sheet.dart';
+import 'charge_sheet.dart';
+import '../mia/mia_credential.dart';
+import '../mia/mia_service.dart';
+import 'officer_sheet.dart';
+import 'particulars_sheet.dart';
+import 'share_class_sheet.dart';
+import 'resolution_sheet.dart';
+import 'share_event_sheet.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
 /// requires a secretary to keep, and the documents drawn from them.
@@ -32,6 +41,24 @@ class CorpEntityScreen extends ConsumerWidget {
         ),
         title: Text(entity.valueOrNull?.name ?? 'Company'),
         actions: [
+          // The three changes that are events rather than edits. Kept
+          // off the editor deliberately: `0377` refuses a rename or an
+          // office move made as a plain update, because each starts a
+          // clock and a rename has to keep the former name.
+          if (ref.watch(canWriteProvider))
+            TextButton.icon(
+              key: const ValueKey('change-particulars'),
+              onPressed: () async {
+                final e = entity.valueOrNull;
+                if (e == null) return;
+                if (await showParticularsSheet(context, entity: e)) {
+                  ref.invalidate(corpEntityProvider(entityId));
+                  ref.invalidate(corpFilingsProvider);
+                }
+              },
+              icon: const Icon(Icons.published_with_changes, size: 18),
+              label: const Text('Change of particulars'),
+            ),
           if (ref.watch(canWriteProvider))
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
@@ -52,7 +79,7 @@ class CorpEntityScreen extends ConsumerWidget {
                 icon: Icons.error_outline, title: 'Company not found');
           }
           return DefaultTabController(
-            length: 6,
+            length: 7,
             child: Column(
               children: [
                 const TabBar(
@@ -64,16 +91,18 @@ class CorpEntityScreen extends ConsumerWidget {
                     Tab(text: 'Members'),
                     Tab(text: 'Beneficial owners'),
                     Tab(text: 'Charges'),
+                    Tab(text: 'Resolutions'),
                     Tab(text: 'Documents'),
                   ],
                 ),
                 Expanded(
                   child: TabBarView(children: [
                     _Particulars(entity: e),
-                    _Officers(entityId: entityId),
+                    OfficersTab(entityId: entityId),
                     _Members(entityId: entityId),
                     _BeneficialOwners(entityId: entityId),
                     _Charges(entityId: entityId),
+                    _Resolutions(entityId: entityId),
                     _Documents(entityId: entityId),
                   ]),
                 ),
@@ -168,14 +197,20 @@ class _Row extends StatelessWidget {
   }
 }
 
-class _Officers extends ConsumerWidget {
-  const _Officers({required this.entityId});
+/// The s.57 register, as a tab.
+///
+/// Public so a test can pump it on its own. Reaching it through
+/// `EntityScreen` means a tab bar, a route and four other providers,
+/// none of which the register's own rules depend on.
+class OfficersTab extends ConsumerWidget {
+  const OfficersTab({super.key, required this.entityId});
 
   final String entityId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final officers = ref.watch(corpOfficersProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return AsyncView(
       value: officers,
@@ -196,16 +231,44 @@ class _Officers extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionHeader(
+                        SectionHeader(
                           'Register of directors, managers and secretaries',
                           subtitle: 'Companies Act 2016, section 57',
+                          action: canWrite
+                              ? FilledButton.tonalIcon(
+                                  key: const ValueKey('appoint-officer'),
+                                  onPressed: () => showOfficerSheet(
+                                    context,
+                                    entityId: entityId,
+                                  ),
+                                  icon: const Icon(Icons.person_add_outlined,
+                                      size: 18),
+                                  label: const Text('Appoint'),
+                                )
+                              : null,
                         ),
                         if (current.isEmpty)
-                          const Text('No officers on the register.')
+                          // A register with nobody on it is a company
+                          // in breach of s.196, not an empty list, so
+                          // it says which.
+                          const Text(
+                            'Nobody is on the register. A company must have '
+                            'at least one director who ordinarily resides in '
+                            'Malaysia.',
+                          )
                         else
                           for (var i = 0; i < current.length; i++) ...[
                             if (i > 0) const Divider(height: 1),
-                            _OfficerRow(officer: current[i]),
+                            _OfficerRow(
+                              officer: current[i],
+                              onTap: canWrite
+                                  ? () => showOfficerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        officer: current[i],
+                                      )
+                                  : null,
+                            ),
                           ],
                       ],
                     ),
@@ -220,7 +283,17 @@ class _Officers extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SectionHeader('Ceased'),
-                          for (final o in past) _OfficerRow(officer: o),
+                          for (final o in past)
+                            _OfficerRow(
+                              officer: o,
+                              onTap: canWrite
+                                  ? () => showOfficerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        officer: o,
+                                      )
+                                  : null,
+                            ),
                         ],
                       ),
                     ),
@@ -237,9 +310,10 @@ class _Officers extends ConsumerWidget {
 }
 
 class _OfficerRow extends StatelessWidget {
-  const _OfficerRow({required this.officer});
+  const _OfficerRow({required this.officer, this.onTap});
 
   final CorpOfficer officer;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +322,9 @@ class _OfficerRow extends StatelessWidget {
         .bodySmall
         ?.copyWith(color: context.scheme.onSurfaceVariant);
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,11 +374,53 @@ class _OfficerRow extends StatelessWidget {
                     'validly appointed secretary',
                     colour: context.colors.danger,
                   ),
+                // Only for the auditor, and only where something was
+                // recorded. A line reading "not checked" under every
+                // auditor of every company is a nag, not a fact; the
+                // card inside the appointment is where one is added.
+                if (roleNeedsMia(officer.role)) _MiaLine(officerId: officer.id),
               ],
             ),
           ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// What MIA's register said about this auditor, in one line.
+///
+/// Silent where nothing was recorded, and silent while it loads — a
+/// register that flickered "nothing recorded" on every rebuild would
+/// say something false for as long as it took to answer.
+class _MiaLine extends ConsumerWidget {
+  const _MiaLine({required this.officerId});
+
+  final String officerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = ref
+            .watch(miaCredentialsProvider((
+              subjectType: 'corp_officer',
+              subjectId: officerId,
+            )))
+            .valueOrNull ??
+        const <MiaCredential>[];
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final stale = rows.any((c) => c.isStale);
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Text(
+      'MIA ${rows.map((c) => c.number).join(' · ')}'
+      '${stale ? ' · checked over a year ago' : ''}',
+      key: const ValueKey('officer-mia-line'),
+      style: stale ? muted?.copyWith(color: context.colors.warning) : muted,
     );
   }
 }
@@ -341,6 +459,8 @@ class _Members extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final members = ref.watch(corpMembersProvider(entityId));
     final events = ref.watch(corpShareEventsProvider(entityId));
+    final classes = ref.watch(corpShareClassesProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return SingleChildScrollView(
       child: PageBody(
@@ -385,7 +505,24 @@ class _Members extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SectionHeader('Share movements'),
+                    SectionHeader(
+                      'Share movements',
+                      subtitle: 'What the register above is computed from. '
+                          'A movement entered wrongly is corrected by a '
+                          'movement the other way, which is what the '
+                          'paperwork does too.',
+                      action: canWrite
+                          ? FilledButton.tonalIcon(
+                              key: const ValueKey('record-share-event'),
+                              onPressed: () => showShareEventSheet(
+                                context,
+                                entityId: entityId,
+                              ),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Record'),
+                            )
+                          : null,
+                    ),
                     AsyncView(
                       value: events,
                       onRetry: () =>
@@ -401,9 +538,110 @@ class _Members extends ConsumerWidget {
                 ),
               ),
             ),
+            const SizedBox(height: Space.lg),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(Space.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionHeader(
+                      'Classes of shares',
+                      subtitle: 'Par value and authorised capital were '
+                          'abolished by the 2016 Act, so a class is its '
+                          'code, its currency and the rights attached.',
+                      action: canWrite
+                          ? FilledButton.tonalIcon(
+                              key: const ValueKey('add-share-class-tab'),
+                              onPressed: () => showShareClassSheet(
+                                context,
+                                entityId: entityId,
+                              ),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add'),
+                            )
+                          : null,
+                    ),
+                    AsyncView(
+                      value: classes,
+                      onRetry: () =>
+                          ref.invalidate(corpShareClassesProvider(entityId)),
+                      loading: const LinearProgressIndicator(),
+                      builder: (list) => list.isEmpty
+                          ? const Text('No class of shares yet.')
+                          : Column(children: [
+                              for (var i = 0; i < list.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                _ShareClassRow(
+                                  shareClass: list[i],
+                                  onTap: canWrite
+                                      ? () => showShareClassSheet(
+                                            context,
+                                            entityId: entityId,
+                                            shareClass: list[i],
+                                          )
+                                      : null,
+                                ),
+                              ],
+                            ]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: Space.xxl),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ShareClassRow extends StatelessWidget {
+  const _ShareClassRow({required this.shareClass, this.onTap});
+
+  final Map<String, dynamic> shareClass;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+    final votes = shareClass['votes_per_share'];
+    final rights = shareClass['rights'] as String?;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.sm),
+        child: Row(children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${shareClass['code']} \u00b7 ${shareClass['name']}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  '${shareClass['currency']} \u00b7 '
+                  '${votes == 1 ? 'one vote' : '${Fmt.plain(votes)} votes'} a share'
+                  '${shareClass['is_redeemable'] == true ? ' \u00b7 redeemable' : ''}',
+                  style: muted,
+                ),
+                if (rights != null && rights.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(rights, style: muted),
+                  ),
+              ],
+            ),
+          ),
+          if (onTap != null)
+            Icon(Icons.chevron_right,
+                size: 18, color: context.scheme.onSurfaceVariant),
+        ]),
       ),
     );
   }
@@ -519,51 +757,113 @@ class _BeneficialOwners extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final owners = ref.watch(corpBeneficialOwnersProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return SingleChildScrollView(
       child: PageBody(
         maxWidth: 900,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(Space.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: AsyncView(
+          value: owners,
+          onRetry: () =>
+              ref.invalidate(corpBeneficialOwnersProvider(entityId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) {
+            final current = list.where((o) => o.isCurrent).toList();
+            final ceased = list.where((o) => !o.isCurrent).toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionHeader(
-                  'Register of beneficial owners',
-                  subtitle: 'Section 60B, in force since 1 April 2024. The '
-                      'company must keep this and notify the Registrar within '
-                      'fourteen days of obtaining the information.',
-                ),
-                AsyncView(
-                  value: owners,
-                  onRetry: () =>
-                      ref.invalidate(corpBeneficialOwnersProvider(entityId)),
-                  loading: const LinearProgressIndicator(),
-                  builder: (list) {
-                    final current = list.where((o) => o.isCurrent).toList();
-                    if (current.isEmpty) {
-                      return Text(
-                        'Nobody entered. A company with no beneficial owner '
-                        'identified must record the steps it took to find '
-                        'one — an empty register is itself a statement.',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: context.scheme.onSurfaceVariant),
-                      );
-                    }
-                    return Column(children: [
-                      for (var i = 0; i < current.length; i++) ...[
-                        if (i > 0) const Divider(height: 1),
-                        _OwnerRow(owner: current[i]),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionHeader(
+                          'Register of beneficial owners',
+                          subtitle:
+                              'Section 60B, in force since 1 April 2024. The '
+                              'company must keep this and notify the Registrar '
+                              'within fourteen days of obtaining the '
+                              'information.',
+                          action: canWrite
+                              ? FilledButton.tonalIcon(
+                                  key: const ValueKey('declare-owner'),
+                                  onPressed: () => showBeneficialOwnerSheet(
+                                    context,
+                                    entityId: entityId,
+                                  ),
+                                  icon: const Icon(Icons.person_add_outlined,
+                                      size: 18),
+                                  label: const Text('Declare'),
+                                )
+                              : null,
+                        ),
+                        if (current.isEmpty)
+                          Text(
+                            'Nobody entered. A company with no beneficial '
+                            'owner identified must record the steps it took '
+                            'to find one — an empty register is itself a '
+                            'statement.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    color: context.scheme.onSurfaceVariant),
+                          )
+                        else
+                          for (var i = 0; i < current.length; i++) ...[
+                            if (i > 0) const Divider(height: 1),
+                            _OwnerRow(
+                              owner: current[i],
+                              onTap: canWrite
+                                  ? () => showBeneficialOwnerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        owner: current[i],
+                                      )
+                                  : null,
+                            ),
+                          ],
                       ],
-                    ]);
-                  },
+                    ),
+                  ),
                 ),
+                // Kept rather than dropped. s.60B requires the register
+                // to be *kept*, and somebody who controlled the company
+                // until last year is part of what it records; showing
+                // only the current entries answers "who controls this
+                // company" and silently loses "who did".
+                if (ceased.isNotEmpty) ...[
+                  const SizedBox(height: Space.lg),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(Space.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SectionHeader('Ceased'),
+                          for (final o in ceased)
+                            _OwnerRow(
+                              owner: o,
+                              onTap: canWrite
+                                  ? () => showBeneficialOwnerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        owner: o,
+                                      )
+                                  : null,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: Space.xxl),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -571,9 +871,10 @@ class _BeneficialOwners extends ConsumerWidget {
 }
 
 class _OwnerRow extends StatelessWidget {
-  const _OwnerRow({required this.owner});
+  const _OwnerRow({required this.owner, this.onTap});
 
   final CorpBeneficialOwner owner;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -582,7 +883,9 @@ class _OwnerRow extends StatelessWidget {
         .bodySmall
         ?.copyWith(color: context.scheme.onSurfaceVariant);
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -593,12 +896,17 @@ class _OwnerRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(owner.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      decoration: owner.isCurrent
+                          ? null
+                          : TextDecoration.lineThrough,
+                    )),
                 const SizedBox(height: 2),
                 Text(owner.identifier ?? '—', style: muted),
                 for (final g in owner.grounds)
                   Text('· $g', style: muted),
-                if (owner.notifiedOn == null)
+                if (owner.isCurrent && owner.notifiedOn == null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text('Not yet notified to the Registrar',
@@ -616,6 +924,87 @@ class _OwnerRow extends StatelessWidget {
             ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// The minute book.
+///
+/// `corp_resolutions` carried every field a minute needs -- who was in
+/// the chair, who was present, the count for and against -- and had no
+/// reader or writer at all. A filing, a share event and a generated
+/// document each carry a `resolution_id` and none of them could ever
+/// be pointed at anything.
+class _Resolutions extends ConsumerWidget {
+  const _Resolutions({required this.entityId});
+
+  final String entityId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resolutions = ref.watch(corpResolutionsProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
+
+    return SingleChildScrollView(
+      child: PageBody(
+        maxWidth: 900,
+        child: AsyncView(
+          value: resolutions,
+          onRetry: () => ref.invalidate(corpResolutionsProvider(entityId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) => Card(
+            child: Padding(
+              padding: const EdgeInsets.all(Space.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionHeader(
+                    'Resolutions',
+                    subtitle: 'What the directors and the members have '
+                        'resolved. A written resolution is circulated for '
+                        'signature under s.297 rather than put to a '
+                        'meeting; a special resolution needs three quarters '
+                        'of the votes cast under s.292(1).',
+                    action: canWrite
+                        ? FilledButton.tonalIcon(
+                            key: const ValueKey('record-resolution'),
+                            onPressed: () => showResolutionSheet(
+                              context,
+                              entityId: entityId,
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Record'),
+                          )
+                        : null,
+                  ),
+                  if (list.isEmpty)
+                    const Text('Nothing has been resolved yet.')
+                  else
+                    for (var i = 0; i < list.length; i++) ...[
+                      if (i > 0) const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${list[i]['title']}'),
+                        subtitle: Text(resolutionLine(list[i])),
+                        trailing: list[i]['reference'] == null
+                            ? null
+                            : Text('${list[i]['reference']}'),
+                        onTap: canWrite
+                            ? () => showResolutionSheet(
+                                  context,
+                                  entityId: entityId,
+                                  resolution: list[i],
+                                )
+                            : null,
+                      ),
+                    ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -628,38 +1017,98 @@ class _Charges extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final charges = ref.watch(corpChargesProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return SingleChildScrollView(
       child: PageBody(
         maxWidth: 900,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(Space.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: AsyncView(
+          value: charges,
+          onRetry: () => ref.invalidate(corpChargesProvider(entityId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) {
+            final outstanding = list.where((c) => !c.isSatisfied).toList();
+            final satisfied = list.where((c) => c.isSatisfied).toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionHeader(
-                  'Register of charges',
-                  subtitle: 'Section 357. A charge must be registered within '
-                      'thirty days of creation (s.352) or it is void against '
-                      'the liquidator.',
-                ),
-                AsyncView(
-                  value: charges,
-                  onRetry: () => ref.invalidate(corpChargesProvider(entityId)),
-                  loading: const LinearProgressIndicator(),
-                  builder: (list) => list.isEmpty
-                      ? const Text('No charges registered.')
-                      : Column(children: [
-                          for (var i = 0; i < list.length; i++) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionHeader(
+                          'Register of charges',
+                          subtitle:
+                              'Section 357. A charge must be registered '
+                              'within thirty days of creation (s.352) or it '
+                              'is void against the liquidator.',
+                          action: canWrite
+                              ? FilledButton.tonalIcon(
+                                  key: const ValueKey('register-charge'),
+                                  onPressed: () => showChargeSheet(
+                                    context,
+                                    entityId: entityId,
+                                  ),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Register'),
+                                )
+                              : null,
+                        ),
+                        if (outstanding.isEmpty)
+                          const Text('No charges outstanding.')
+                        else
+                          for (var i = 0; i < outstanding.length; i++) ...[
                             if (i > 0) const Divider(height: 1),
-                            _ChargeRow(charge: list[i]),
+                            _ChargeRow(
+                              charge: outstanding[i],
+                              onTap: canWrite
+                                  ? () => showChargeSheet(
+                                        context,
+                                        entityId: entityId,
+                                        charge: outstanding[i],
+                                      )
+                                  : null,
+                            ),
                           ],
-                        ]),
+                      ],
+                    ),
+                  ),
                 ),
+                // Satisfied charges stay on the register. s.357 requires
+                // it kept, and a charge that was discharged last year is
+                // part of what a lender's solicitor is searching for.
+                if (satisfied.isNotEmpty) ...[
+                  const SizedBox(height: Space.lg),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(Space.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SectionHeader('Satisfied'),
+                          for (final c in satisfied)
+                            _ChargeRow(
+                              charge: c,
+                              onTap: canWrite
+                                  ? () => showChargeSheet(
+                                        context,
+                                        entityId: entityId,
+                                        charge: c,
+                                      )
+                                  : null,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: Space.xxl),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -667,9 +1116,10 @@ class _Charges extends ConsumerWidget {
 }
 
 class _ChargeRow extends StatelessWidget {
-  const _ChargeRow({required this.charge});
+  const _ChargeRow({required this.charge, this.onTap});
 
   final CorpCharge charge;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -678,7 +1128,9 @@ class _ChargeRow extends StatelessWidget {
         .bodySmall
         ?.copyWith(color: context.scheme.onSurfaceVariant);
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -724,6 +1176,7 @@ class _ChargeRow extends StatelessWidget {
           if (charge.amountSecured != null)
             SizedBox(width: 130, child: Money(charge.amountSecured)),
         ],
+      ),
       ),
     );
   }
@@ -1295,6 +1748,16 @@ class _SignatureRow extends ConsumerWidget {
               tooltip: 'Send a signing link',
               onPressed: () => _link(context, ref),
             ),
+            // The other answer. Without it a director who will not sign
+            // is indistinguishable from one who has not read the email,
+            // and the secretary cannot tell whether to chase or to redo
+            // the resolution.
+            IconButton(
+              key: const ValueKey('decline-signature'),
+              icon: const Icon(Icons.do_not_disturb_alt, size: 18),
+              tooltip: 'They will not sign',
+              onPressed: () => _decline(context, ref),
+            ),
           ],
         ],
       ),
@@ -1313,6 +1776,29 @@ class _SignatureRow extends ConsumerWidget {
       action: () =>
           ref.read(repoProvider)!.corpSignDocument(signature.id, name),
       successMessage: 'Signed',
+    );
+    ref.invalidate(corpSignaturesProvider(documentId));
+  }
+
+  /// Refusing to sign, which nothing could record until `0378`.
+  ///
+  /// The reason is required: a line that says only "declined" leaves the
+  /// secretary the same phone call to make, and this is the moment the
+  /// answer is known.
+  Future<void> _decline(BuildContext context, WidgetRef ref) async {
+    final why = await promptForText(
+      context,
+      title: 'Why is ${signature.personName} not signing?',
+      label: 'Reason',
+      confirmLabel: 'Record the refusal',
+    );
+    if (why == null || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.corpDeclineSignature(signature.id, why),
+      successMessage: 'Recorded',
     );
     ref.invalidate(corpSignaturesProvider(documentId));
   }

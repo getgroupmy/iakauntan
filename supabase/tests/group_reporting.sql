@@ -76,7 +76,7 @@ declare
   v_group uuid; v_a uuid; v_b uuid; v_c uuid;
   v_contact_a uuid; v_contact_b uuid;
   v_n int; v_amount numeric; v_revenue numeric;
-  v_refused boolean := false; v_role text;
+  v_role text;
 begin
   insert into public.company_groups (name, created_by)
   values ('Kumpulan Ujian', v_boss) returning id into v_group;
@@ -133,16 +133,19 @@ begin
   -- Two currencies are refused, not added
   -- ---------------------------------------------------------------
   update public.organizations set base_currency = 'SGD' where id = v_b;
-  begin
-    perform count(*) from public.report_group_trial_balance(v_a);
-  exception when others then v_refused := true;
-  end;
-  -- A caught exception rolls back to a savepoint and takes the sign-in
-  -- with it.
-  perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true(
+  -- On the words. Three of the four refusals in this file are 42501
+  -- and they are three different rules, so recording only that
+  -- something failed passes when the wrong one fires -- and passes
+  -- with the rule under test deleted.
+  perform pg_temp.check_refused(
     'ringgit and dollars are refused rather than summed into a number '
-    'that looks like money and is not', v_refused);
+    'that looks like money and is not',
+    format($q$ select count(*) from public.report_group_trial_balance(%L) $q$,
+           v_a),
+    '%different currencies%', '22000');
+  -- A caught exception rolls back to a savepoint and takes the sign-in
+  -- with it. `check_refused` catches too, so this is still needed.
+  perform pg_temp.sign_in_as(v_boss);
 
   update public.organizations set base_currency = 'MYR' where id = v_b;
   perform pg_temp.check_true('and with one currency the report works again',
@@ -152,15 +155,12 @@ begin
   -- The group names a relationship; it does not open the books
   -- ---------------------------------------------------------------
   perform pg_temp.sign_in_as(v_outsider);
-  v_refused := false;
-  begin
-    perform count(*) from public.report_group_trial_balance(v_a);
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.sign_in_as(v_outsider);
-  perform pg_temp.check_true(
+  perform pg_temp.check_refused(
     'somebody in the group but not in that company cannot report on it',
-    v_refused);
+    format($q$ select count(*) from public.report_group_trial_balance(%L) $q$,
+           v_a),
+    '%not a member of this company%', '42501');
+  perform pg_temp.sign_in_as(v_outsider);
   perform pg_temp.check_true('while their own company reports normally',
     (select count(*) from public.report_group_trial_balance(v_c)) > 0);
 
@@ -186,7 +186,7 @@ declare
   v_boss  uuid := pg_temp.another_user('boss2@group.test');
   v_other uuid := pg_temp.another_user('other2@group.test');
   v_group uuid; v_a uuid; v_b uuid; v_hidden uuid; v_contact uuid;
-  v_refused boolean;
+
 begin
   insert into public.company_groups (name, created_by)
   values ('Kumpulan Dua', v_boss) returning id into v_group;
@@ -200,26 +200,19 @@ begin
   perform pg_temp.sign_in_as(v_boss);
 
   -- A company in the group that this person is not a member of.
-  v_refused := false;
-  begin
-    perform public.link_group_contact(v_contact, v_hidden);
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true(
+  perform pg_temp.check_refused(
     'a contact cannot be pointed at a group company you are not in — '
     'otherwise linking becomes a way to discover which companies exist',
-    v_refused);
+    format($q$ select public.link_group_contact(%L, %L) $q$,
+           v_contact, v_hidden),
+    '%not a company in this group that you belong to%', '42501');
+  perform pg_temp.sign_in_as(v_boss);
 
   -- Itself.
-  v_refused := false;
-  begin
-    perform public.link_group_contact(v_contact, v_a);
-  exception when others then v_refused := true;
-  end;
+  perform pg_temp.check_refused('and a company cannot be its own customer',
+    format($q$ select public.link_group_contact(%L, %L) $q$, v_contact, v_a),
+    '%cannot be its own customer%', '42501');
   perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true('and a company cannot be its own customer',
-    v_refused);
 
   -- The control for both. Without it the two refusals above would pass
   -- for a function that refuses everything, including a broken one.

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 
 void main() {
@@ -88,4 +89,30 @@ void main() {
       );
     });
   });
+
+  group('what a bundle margin claims', () {
+    test('bad news when it is priced under its own parts', () {
+      expect(marginTone({'margin': -1}), Tone.bad);
+      expect(marginTone({'margin': -0.01}), Tone.bad);
+    });
+
+    test('worth looking at when it is priced at exactly what they cost', () {
+      // Selling at cost is not a mistake and not a healthy price. The
+      // boundary is exact: a sen either side is a different statement
+      // about the same shelf.
+      expect(marginTone({'margin': 0}), Tone.warn);
+      expect(marginTone({'margin': 0.01}), isNull);
+    });
+
+    test('and nothing at all when there is a margin', () {
+      expect(marginTone({'margin': 12.5}), isNull);
+    });
+
+    test('a bundle nobody has costed claims nothing', () {
+      // Null is "not worked out yet", not "priced at cost". Amber there
+      // would put a warning on every bundle the moment it is created.
+      expect(marginTone(null), isNull);
+    });
+  });
+
 }

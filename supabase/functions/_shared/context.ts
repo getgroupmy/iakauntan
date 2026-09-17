@@ -7,6 +7,7 @@
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireEnv } from "./env.ts";
 import { ApiCall, MyInvoisEnv } from "./myinvois.ts";
+import { SigningMaterial } from "./xades.ts";
 
 export interface Ctx {
   userClient: SupabaseClient;
@@ -114,6 +115,40 @@ export async function loadCredentials(ctx: Ctx): Promise<Credentials> {
     clientId: data.client_id,
     clientSecret: data.client_secret,
     environment: data.environment as MyInvoisEnv,
+  };
+}
+
+/**
+ * The certificate an organization signs its 1.1 documents with, or null.
+ *
+ * Read with the service role and never returned to a caller. The
+ * private key is in `einvoice_credentials`, a table with RLS and no
+ * policies and no grants at all -- so this is the only code in the
+ * product that can see it, and nothing it returns leaves the function.
+ *
+ * Null rather than an error when there is no certificate. A company on
+ * version 1.0 is a company that does not need one, and `submit` decides
+ * what to do about a 1.1 document without one -- which is a refusal
+ * naming the setup step, not a stack trace here.
+ */
+export async function loadSigningMaterial(
+  ctx: Ctx,
+  environment: MyInvoisEnv,
+): Promise<SigningMaterial | null> {
+  const { data } = await ctx.admin
+    .from("einvoice_credentials")
+    .select("cert_pem, cert_private_key_pem")
+    .eq("org_id", ctx.orgId)
+    .eq("environment", environment)
+    .maybeSingle();
+
+  // Both or neither. A certificate without its key cannot sign, and a
+  // key without its certificate has nothing to put in the document --
+  // either alone is a half-finished setup rather than a usable one.
+  if (!data?.cert_pem || !data?.cert_private_key_pem) return null;
+  return {
+    certificatePem: data.cert_pem,
+    privateKeyPem: data.cert_private_key_pem,
   };
 }
 

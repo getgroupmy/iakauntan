@@ -5,7 +5,7 @@ accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for
 Malaysian businesses. `README.md` is the real orientation — read it before
 changing anything statutory.
 
-Two things to know before you touch the code:
+Three things to know before you touch the code:
 
 - **The database is the application.** Business rules live in SQL — numbered,
   append-only migrations in `supabase/migrations/`, applied in order and never
@@ -15,6 +15,12 @@ Two things to know before you touch the code:
 - **Statutory arithmetic is asserted, not eyeballed.** `supabase/tests/*.sql`
   runs in CI. Anything touching EPF, SOCSO, EIS, PCB or an SSM deadline needs a
   test that would fail if the number moved.
+- **A widget test that passes has not yet proved anything.** Break the screen
+  on purpose and watch the test fail: `python3 scripts/mutate.py <source>
+  <test> <mutants.py>`, always with a no-op control, because a harness that
+  errors on every run reports a clean sweep. `docs/widget-tests.md` lists ten
+  ways a green test covers a broken screen — every one of them happened here,
+  and three of them hid a real defect.
 
 ## After every push: watch CI to green
 
@@ -29,8 +35,41 @@ the branch's latest CI run every 5 minutes and keep it running:
 Do not stop the watch the first time a run turns green; it should also catch
 the next push. Do not poll with `sleep` — schedule it.
 
-CI is the only place the SQL assertions in `supabase/tests/` actually run, so a
-red run is the project's real failure signal, not a formality.
+CI is where the SQL assertions in `supabase/tests/` are authoritative, so a red
+run is the project's real failure signal, not a formality. `supabase/tests/run_locally.sh`
+runs the same list against a throwaway Postgres on this machine in about two
+minutes — use it to find a broken assertion before pushing, not to skip the
+push. It stubs Supabase's `auth` and `storage` schemas, and its own header says
+where the stubs stop being the real thing.
+
+The edge functions have the same arrangement.
+`supabase/functions/_local_check/check_locally.sh` type-checks all of them here,
+stubbing `jsr:@supabase/supabase-js` so the check does not need jsr.io — which
+is unreachable from some machines this gets worked on, and was the reason a
+type error in `pay-invoice-callback` was found by CI rather than before the
+push. Green there is not green in CI: every call made *on* the Supabase client
+is unchecked. Red there is red in CI.
+
+Where there is no `deno`, it now **fetches one from npm** before giving up.
+`dl.deno.land` is what Deno's own installer uses and is exactly what a
+locked-down network refuses, but Deno is published to npm as well, and
+`registry.npmjs.org` is reachable from the same places — so one
+`npm install` produces a real `deno` where the installer cannot. Cached
+under `$TMPDIR/iakauntan-deno`; `DENO_SKIP_NPM=1` goes straight to the
+fallback.
+
+It then runs **every `deno test` file CI runs** — seventeen of them now, and
+the number is not worth keeping in prose — reading their names and flags out of
+`ci.yml` so the list cannot drift, and refusing to start if the count it
+matched disagrees with the count the workflow names. Those tests had never run
+anywhere but CI.
+
+Only where npm cannot supply one either does it hand over to
+`check_with_tsc.sh` — same entry points, same supabase-js stub, plus a narrow
+declaration of the four pieces of Deno this repository uses. It needs a `tsc`
+(`npm install --no-save typescript@5`, or set `TSC`). Weaker again, in the same
+direction: green under tsc is not green under `deno check`, which is not green
+in CI, and red at any level is red at every level above it.
 
 ## graphify
 
@@ -41,3 +80,9 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- **Install the SQL grammar first: `pip install "graphifyy[sql]"`.** Without it
+  `tree_sitter_sql` is missing and every one of the ~800 migrations contributes
+  **nothing** to the graph — silently, as one warning line at the end of a long
+  extraction. On a project whose own first rule is that the database is the
+  application, a graph built without it is a graph of the front end. It is worth
+  5,476 nodes: 25,212 without, 30,688 with.

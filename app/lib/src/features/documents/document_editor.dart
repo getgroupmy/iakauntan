@@ -11,12 +11,17 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
+import '../contacts/new_contact_dialog.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
 import '../shared/scan_intake.dart';
+import 'credit_banner_state.dart';
 import 'doc_types.dart';
+import 'document_dates.dart';
 import 'email_dialog.dart';
 import 'fx.dart';
 import 'invoice_pdf.dart';
@@ -24,6 +29,7 @@ import 'line_draft.dart';
 import 'line_editor.dart';
 import 'settlement_dialog.dart';
 import 'transfer.dart';
+import 'void_document.dart';
 import 'credit_dialog.dart';
 import 'transfer_dialog.dart';
 import 'repeat_dialog.dart';
@@ -33,6 +39,32 @@ import 'share_dialog.dart';
 /// One editor for every document type in both cycles. What changes
 /// between them — which contacts are selectable, whether posting writes a
 /// journal, whether MyInvois applies — comes from DocTypeMeta.
+/// What a party has on deposit, altogether.
+///
+/// `deposits_held_for` returns the open notes with something left on
+/// them, so the sum is what could be set against this document — not
+/// what was ever taken.
+double depositsHeldTotal(Iterable<Map<String, dynamic>> rows) => double.parse(
+  rows
+      .fold<double>(
+        0,
+        (a, r) => a + (double.tryParse('${r['balance'] ?? 0}') ?? 0),
+      )
+      .toStringAsFixed(2),
+);
+
+/// How the held deposits read on the banner.
+///
+/// The count is named because two deposits and one of twice the size
+/// settle differently: each note is applied on its own, and somebody
+/// looking at a single figure would expect one action.
+String depositsHeldLabel(List<Map<String, dynamic>> rows) {
+  final total = Fmt.money(depositsHeldTotal(rows));
+  return rows.length == 1
+      ? '$total held on deposit'
+      : '$total held on ${rows.length} deposits';
+}
+
 class DocumentEditor extends ConsumerStatefulWidget {
   const DocumentEditor({super.key, required this.docType, this.documentId});
 
@@ -53,6 +85,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   String _docNo = '';
   DateTime _docDate = DateTime.now();
   DateTime? _dueDate;
+
+  /// The day the price stops holding, on a quotation or a proforma, and
+  /// the day delivery was promised. Columns since `0005` that nothing
+  /// set until `0374`.
+  DateTime? _validUntil;
+  DateTime? _deliveryDate;
   String _currency = 'MYR';
 
   /// Null means no rate is known. Distinct from 1, which is a rate — and
@@ -85,6 +123,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// department earned nothing.
   String? _departmentCode;
   String? _salespersonId;
+  Map<String, dynamic> _customFields = const {};
   String _status = 'draft';
 
   /// How much of this document has already gone forward. Shown because a
@@ -92,6 +131,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// that has not, and transferring it twice is the mistake that follows.
   String _fulfilment = 'pending';
   String _einvoiceStatus = 'not_applicable';
+
+  /// Whether this bill owes LHDN an e-Invoice that WE have to file.
+  /// `0611`. Meaningless on a sales document and never read there.
+  bool _requiresSelfBilled = false;
   String? _glEntryId;
   double _paidAmount = 0;
 
@@ -130,8 +173,24 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     try {
       if (_isNew) {
-        _docNo = await repo.nextDocumentNumber(widget.docType);
+        // NOT numbered here. `next_document_number` advances a counter,
+        // so a number drawn when the editor opens is a number BURNT the
+        // moment somebody changes their mind and closes it -- and a gap
+        // in a sales invoice series is what an auditor asks about. It
+        // is drawn at the save, one statement before the insert that
+        // uses it. See `Repo.saveDocument`.
+        //
+        // Two people opening this screen at the same moment were never
+        // at risk of the SAME number: the counter is read `for update`,
+        // so the second waits for the first. The cost was only ever the
+        // gaps, and that is what this removes.
         _dueDate = DateTime.now().add(const Duration(days: 30));
+        // A new quotation arrives with a date on it. The alternative is
+        // that it arrives with none and never gets one, which is how a
+        // price came to be held open indefinitely.
+        if (showsValidUntil(widget.docType)) {
+          _validUntil = defaultValidUntil(_docDate);
+        }
         _currency = _base;
         _exchangeRate = 1;
         _rate.text = '1';
@@ -142,6 +201,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _contactId = doc.contactId;
         _docDate = doc.docDate;
         _dueDate = doc.dueDate;
+        _validUntil = doc.validUntil;
+        _deliveryDate = doc.deliveryDate;
         _currency = doc.currency;
         // The stored rate, not today's. This is the figure the ledger
         // posted at and the figure the gain on settlement is measured
@@ -152,6 +213,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _status = doc.status;
         _fulfilment = doc.fulfilmentStatus;
         _einvoiceStatus = doc.einvoiceStatus;
+        _requiresSelfBilled = doc.requiresSelfBilled;
         _glEntryId = doc.glEntryId;
         _paidAmount = doc.paidAmount;
         _projectCode = doc.lines
@@ -161,6 +223,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
             .map((l) => l.departmentCode)
             .firstWhere((c) => c != null, orElse: () => null);
         _salespersonId = doc.salespersonId;
+        _customFields = doc.customFields;
         _reference.text = doc.reference ?? '';
         _supplierDocNo.text = doc.supplierDocNo ?? '';
         _notes.text = doc.notes ?? '';
@@ -217,7 +280,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   double get _taxTotal => _lines.fold(0, (sum, l) => sum + l.totals.tax);
   double get _grandTotal {
     final raw = _subtotal + _taxTotal;
-    return switch (ref.read(currentOrgProvider).value?.roundingMethod) {
+    // `valueOrNull`. The `?.` already says an absent company means
+    // "no rounding method", but `AsyncError.value` THROWS, so a
+    // company that failed to load threw out of the getter that
+    // computes the invoice total -- from `build`, on a screen whose
+    // whole job is the total.
+    return switch (ref.read(currentOrgProvider).valueOrNull?.roundingMethod) {
       'nearest_5cent' => (raw * 20).round() / 20,
       'nearest_10cent' => (raw * 10).round() / 10,
       _ => (raw * 100).round() / 100,
@@ -239,7 +307,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// printed figure is a posted amount that does not match the return.
   void _applyScan(OcrExtraction read) {
     setState(() {
-      if (read.documentNo != null) _supplierDocNo.text = read.documentNo!;
+      // The number goes in `supplier_doc_no`, which is the supplier's
+      // own number and exists on a purchase document only. A sales
+      // document's number is this company's own sequence, generated
+      // here and never typed — and the paper being scanned into one is
+      // this company's own paper, so there is no other number on it to
+      // keep. What the scan is worth on an invoice is the date and the
+      // lines.
+      if (read.documentNo != null && !_kind.isSales) {
+        _supplierDocNo.text = read.documentNo!;
+      }
       if (read.documentDate != null) _docDate = read.documentDate!;
 
       // Only into an empty document. Somebody who has already keyed the
@@ -249,7 +326,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       );
       if (!blank) return;
 
-      final lines = read.lines
+      // Continuation rows folded back into the item above them first.
+      // A reader that splits a wrapped description into two rows would
+      // otherwise put a phantom line at price zero on the bill, with
+      // the real charge's detail in it. See `foldOcrContinuations`.
+      final lines = foldOcrContinuations(read.lines)
           .where((l) => (l.description ?? '').trim().isNotEmpty)
           .map(
             (l) => LineDraft(
@@ -392,6 +473,24 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _toast('Add at least one line.');
       return null;
     }
+    // Every line has to name a real item. A line carrying only typed
+    // words is one the item list has never heard of: nothing can cost
+    // it, nothing counts it, and no report can group by it. Both boxes
+    // on the line offer to create the item from what was typed, so the
+    // way past this is one tap rather than a trip to another screen.
+    final unnamed = validLines.where((l) => l.itemId == null).toList();
+    if (unnamed.isNotEmpty) {
+      final first = unnamed.first.description.trim();
+      _toast(
+        unnamed.length == 1
+            ? 'Line "${first.isEmpty ? '(blank)' : first}" has no item. '
+                  'Pick one, or use "Create" in the box to add it.'
+            : '${unnamed.length} lines have no item, starting with '
+                  '"${first.isEmpty ? '(blank)' : first}". Pick one on '
+                  'each, or use "Create" to add it.',
+      );
+      return null;
+    }
     // Refused here rather than left to post at 1. A foreign document
     // saved without a rate converts at par, balances, and understates
     // the ledger by the whole currency movement without a single check
@@ -411,14 +510,24 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     setState(() => _saving = true);
     try {
       final repo = ref.read(repoProvider)!;
-      final id = await repo.saveDocument(
+      final saved = await repo.saveDocument(
         kind: _kind,
         id: widget.documentId,
         docType: widget.docType,
         header: {
-          'doc_no': _docNo,
+          // Null on a document that has never been saved, so the number
+          // is drawn at the insert. An empty string is not null, and
+          // `'' ?? x` is `''` -- which is how a document could have
+          // been written with no number at all.
+          'doc_no': _docNo.isEmpty ? null : _docNo,
           'doc_date': Fmt.iso(_docDate),
           'due_date': _dueDate == null ? null : Fmt.iso(_dueDate!),
+          if (showsValidUntil(widget.docType))
+            'valid_until': _validUntil == null ? null : Fmt.iso(_validUntil!),
+          if (showsDeliveryDate(widget.docType))
+            'delivery_date': _deliveryDate == null
+                ? null
+                : Fmt.iso(_deliveryDate!),
           'contact_id': _contactId,
           'reference': _nullIfBlank(_reference.text),
           if (!_kind.isSales)
@@ -429,6 +538,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           // Sales only. The column is on `sales_documents` alone,
           // and a bill has no salesperson by definition.
           if (_kind.isSales) 'salesperson_id': _salespersonId,
+          'custom_fields': _customFields,
         },
         lines: validLines.map((l) {
           l.projectCode = _projectCode;
@@ -440,14 +550,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // Only now, because until `saveDocument` returned the lines did
       // not exist under ids anything could point at. Matched by order,
       // which is the one property that survives delete-and-reinsert.
+      final id = saved.id;
+      // The number this document is now called. On a new one it did not
+      // exist until the line above, and the title bar has been saying
+      // "New invoice" until now.
+      _docNo = saved.docNo;
+
       final tracked = validLines.toList();
       if (tracked.any((l) => l.lots.isNotEmpty)) {
-        final saved = await repo.documentLineIds(kind: _kind, documentId: id);
-        for (var i = 0; i < tracked.length && i < saved.length; i++) {
+        final lineIds =
+            await repo.documentLineIds(kind: _kind, documentId: id);
+        for (var i = 0; i < tracked.length && i < lineIds.length; i++) {
           if (tracked[i].lots.isEmpty) continue;
           await repo.setLineLots(
             lineTable: _kind.lineTable,
-            lineId: saved[i]['id'] as String,
+            lineId: lineIds[i]['id'] as String,
             lots: tracked[i].lots,
           );
         }
@@ -522,6 +639,33 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     );
   }
 
+  /// Puts a new date on an offer whose price has run out.
+  ///
+  /// A deliberate act with a date somebody chooses, rather than a
+  /// transfer that quietly honours last year's price. The default is
+  /// another thirty days from today, which is what somebody extending a
+  /// quote almost always means.
+  Future<void> _extendValidity() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: defaultValidUntil(DateTime.now()),
+      // Never into the past: `extend_document_validity` refuses it, and
+      // a picker that offers it is a form asking to be rejected.
+      firstDate: DateTime.now(),
+      lastDate: DateTime(DateTime.now().year + 3),
+    );
+    if (picked == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .extendDocumentValidity(widget.documentId!, picked),
+      successMessage: 'Good until ${Fmt.date(picked)}',
+    );
+    if (ok && mounted) setState(() => _validUntil = picked);
+  }
+
   Future<void> _downloadPdf() async {
     final messenger = ScaffoldMessenger.of(context);
     final org = ref.read(currentOrgProvider).valueOrNull;
@@ -574,21 +718,31 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     final id = await _save(silent: true);
     if (id == null || !mounted) return;
 
+    // A receiving note is a different sentence. It does not put the
+    // supplier in the payables ledger — no bill has arrived — it puts
+    // the goods on the shelf and accrues what will be owed for them.
+    final receiving = _meta.postRpc == 'post_goods_received';
     final ok = await confirm(
       context,
-      title: 'Post to ledger?',
-      message:
-          'This writes a balanced journal entry and locks the document '
-          'for editing. Stock will move for inventory items.',
-      confirmLabel: 'Post',
+      title: receiving ? 'Receive the goods?' : 'Post to ledger?',
+      message: receiving
+          ? 'This puts the stock on the shelf and records what will be '
+                'owed for it under Goods Received Not Invoiced. The '
+                'supplier\'s bill clears that when it arrives.'
+          : 'This writes a balanced journal entry and locks the document '
+                'for editing. Stock will move for inventory items.',
+      confirmLabel: receiving ? 'Receive' : 'Post',
     );
     if (!ok || !mounted) return;
 
     final posted = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.postDocument(_kind, id),
-      successMessage: 'Posted to the general ledger',
-      pendingMessage: 'Posting…',
+      action: () =>
+          ref.read(repoProvider)!.postDocument(_kind, id, rpc: _meta.postRpc),
+      successMessage: receiving
+          ? 'Received — the stock is on the shelf'
+          : 'Posted to the general ledger',
+      pendingMessage: receiving ? 'Receiving…' : 'Posting…',
     );
 
     if (posted && mounted) {
@@ -617,6 +771,46 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         .valueOrNull;
   }
 
+  String? get _voidBlocked => voidBlockedBecause(
+    status: _status,
+    paidAmount: _paidAmount,
+    einvoiceStatus: _einvoiceStatus,
+  );
+
+  Future<void> _void() async {
+    final id = widget.documentId;
+    if (id == null) return;
+    final reason = await askVoidReason(context, docNo: _docNo);
+    if (reason == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.voidSalesDocument(id, reason),
+      successMessage: 'Voided and reversed',
+    );
+    if (ok && mounted) {
+      refreshLedgerData(ref);
+      setState(() => _loading = true);
+      await _load();
+    }
+  }
+
+  Future<void> _discard() async {
+    final id = widget.documentId;
+    if (id == null) return;
+    if (!await askDiscard(context, docNo: _docNo) || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.deleteDocument(_kind, id),
+      successMessage: 'Discarded',
+    );
+    if (ok && mounted) {
+      refreshLedgerData(ref);
+      Navigator.of(context).maybePop();
+    }
+  }
+
   Future<void> _submitForApproval() async {
     final id = await _save(silent: true);
     if (id == null || !mounted) return;
@@ -640,23 +834,56 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     }
   }
 
+  /// Says whether this bill owes LHDN a self-billed e-Invoice.
+  ///
+  /// Saved on its own rather than with the rest of the form. `0611`
+  /// refuses the change once one has been filed — that is cancelled at
+  /// MyInvois, not un-ticked here — and a refusal buried inside a
+  /// twenty-field save reads as "the save failed" rather than as what
+  /// it is.
+  Future<void> _setSelfBilled(bool value) async {
+    final id = await _save(silent: true);
+    if (id == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.setRequiresSelfBilled(id, value),
+      successMessage: value
+          ? 'This bill now owes LHDN a self-billed e-Invoice'
+          : 'No self-billed e-Invoice is owed for this bill',
+    );
+    if (ok && mounted) setState(() => _requiresSelfBilled = value);
+  }
+
   Future<void> _submitEinvoice() async {
     if (widget.documentId == null) return;
-    final org = ref.read(currentOrgProvider).value;
+    final org = ref.read(currentOrgProvider).valueOrNull;
 
     if (org?.einvoiceEnabled != true) {
       _toast('Enable e-Invoice in Settings first.');
       return;
     }
 
+    final selfBilled = _kind != DocKind.sales;
     final ok = await confirm(
       context,
-      title: 'Submit to MyInvois?',
-      message: org?.einvoiceEnvironment == 'production'
-          ? 'This sends the document to LHDN production. Once validated it '
-                'can only be cancelled within 72 hours.'
-          : 'This sends the document to the LHDN sandbox for testing.',
-      confirmLabel: 'Submit',
+      title: selfBilled
+          ? 'File this on the supplier\'s behalf?'
+          : 'Submit to MyInvois?',
+      message:
+          (selfBilled
+              ? 'This supplier cannot file an e-Invoice for what they '
+                    'sold you, so LHDN expects one from you instead. It '
+                    'goes out under your TIN, with the supplier named as '
+                    'the supplier. '
+              : '') +
+          (org?.einvoiceEnvironment == 'production'
+              ? 'This sends the document to LHDN production. Once '
+                    'validated it can only be cancelled within 72 hours.'
+              : 'This sends the document to the LHDN sandbox for '
+                    'testing.'),
+      confirmLabel: selfBilled ? 'File it' : 'Submit',
     );
     if (!ok || !mounted) return;
 
@@ -664,8 +891,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       context,
       action: () async {
         final repo = ref.read(repoProvider)!;
+        // A sale is an e-Invoice we owe for a supply we made. A
+        // self-billed one is an e-Invoice we owe for a supply we
+        // RECEIVED, because the seller cannot file it. Same submission,
+        // different preparation.
         final result = await repo.submitEinvoice(
-          salesDocumentId: widget.documentId,
+          salesDocumentId: _kind == DocKind.sales ? widget.documentId : null,
+          purchaseDocumentId: _kind == DocKind.sales
+              ? null
+              : widget.documentId,
         );
         if ((result['rejected'] as int? ?? 0) > 0) {
           throw Exception('LHDN rejected the document: ${result['errors']}');
@@ -730,15 +964,20 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// about that one.
   Future<void> _credit() async {
     if (widget.documentId == null) return;
+    final purchase = widget.docType == 'bill';
     final made = await showCreditDialog(
       context,
       ref,
       invoiceId: widget.documentId!,
       invoiceNo: _docNo,
+      purchase: purchase,
     );
     if (made == null || !mounted) return;
     _toast('Credit note created', success: true);
-    context.go('${_kind.routePrefix}/credit_note/$made');
+    context.go(
+      '${_kind.routePrefix}/'
+      '${purchase ? 'purchase_credit_note' : 'credit_note'}/$made',
+    );
   }
 
   Future<void> _settle() async {
@@ -782,7 +1021,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     // whose only outcome is being told to go to Settings, which is a
     // worse way to say "not set up" than not being there at all.
     final einvoiceOn =
-        ref.watch(currentOrgProvider).value?.einvoiceEnabled == true;
+        ref.watch(currentOrgProvider).valueOrNull?.einvoiceEnabled == true;
 
     final primary = switch (null) {
       _ when editable && canPost && _meta.posts => (
@@ -794,6 +1033,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _ when _isPosted && _meta.einvoice && einvoiceOn => (
         label: einvoiceValid ? 'e-Invoice valid' : 'Submit e-Invoice',
         short: einvoiceValid ? 'Valid' : 'Submit',
+        icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
+        onTap: einvoiceValid ? null : _submitEinvoice,
+      ),
+      // `0611`. Two conditions, not one: the document TYPE has to be
+      // capable of a self-billed e-Invoice, and this particular bill
+      // has to actually owe one. A bill from a Malaysian supplier who
+      // files their own is `selfBillable` and does not owe anything,
+      // and offering the button there would invite somebody to file a
+      // second e-Invoice for a supply LHDN already has one for.
+      _ when _isPosted &&
+              _meta.selfBillable &&
+              _requiresSelfBilled &&
+              einvoiceOn => (
+        label: einvoiceValid ? 'Self-billed e-Invoice filed' : 'File self-billed',
+        short: einvoiceValid ? 'Filed' : 'Self-bill',
         icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
         onTap: einvoiceValid ? null : _submitEinvoice,
       ),
@@ -843,6 +1097,25 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           icon: Icons.payments_outlined,
           onTap: canPost ? _settle : null,
         ),
+      // Taking one back. Sales only, because `void_sales_document` is
+      // the only void in the schema -- there is no purchase equivalent,
+      // and a bill entered in error is corrected with the supplier.
+      // The item is shown disabled with its reason rather than hidden,
+      // so somebody looking for it learns why it is not on.
+      if (!_isNew && _isPosted && _kind.isSales && canPost)
+        (
+          label: _voidBlocked ?? 'Void this ${_meta.singular.toLowerCase()}',
+          icon: Icons.block_outlined,
+          onTap: _saving || _voidBlocked != null ? null : _void,
+        ),
+      // A draft has never reached the ledger, so it is thrown away
+      // rather than voided.
+      if (!_isNew && canWrite && canDiscard(_status))
+        (
+          label: 'Discard',
+          icon: Icons.delete_outline,
+          onTap: _saving ? null : _discard,
+        ),
     ];
 
     Widget primaryButton() {
@@ -877,6 +1150,23 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         StatusChip(_fulfilment),
         const SizedBox(width: 12),
       ],
+
+      // A quotation whose price has run out. `0374` refuses to transfer
+      // it, and a refusal with no way through is how somebody ends up
+      // voiding the quote and retyping it — so the way through is here,
+      // beside the transfer that will otherwise say no.
+      if (!_isNew &&
+          showsValidUntil(widget.docType) &&
+          quoteExpired(_validUntil))
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: TextButton.icon(
+            key: const ValueKey('extend-validity'),
+            icon: const Icon(Icons.event_repeat_outlined, size: 18),
+            label: const Text('Extend'),
+            onPressed: _saving ? null : _extendValidity,
+          ),
+        ),
 
       // Only once it exists: there is nothing to print from a form that
       // has not been saved, and a PDF of a half-typed invoice is a
@@ -947,16 +1237,19 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                 },
         ),
 
-      // Crediting a posted invoice. Offered here rather than as a new
-      // blank credit note, because a credit note that names its invoice
-      // can be capped at what was actually sold — and, for a counter
-      // sale, can tell the recipe which ingredients came back. A
-      // hand-written one can do neither. See 0269.
+      // Crediting a posted invoice, or a posted bill. Offered here
+      // rather than as a new blank credit note, because a credit note
+      // that names its document can be capped at what was actually sold
+      // or bought — and, for a counter sale, can tell the recipe which
+      // ingredients came back. A hand-written one can do neither. See
+      // 0269 for the sales side and 0376 for the purchase side.
       if (!_isNew &&
-          widget.docType == 'invoice' &&
+          const {'invoice', 'bill'}.contains(widget.docType) &&
           const {'posted', 'partial', 'completed'}.contains(_status))
         IconButton(
-          tooltip: 'Credit this invoice',
+          tooltip: widget.docType == 'bill'
+              ? 'Credit this bill'
+              : 'Credit this invoice',
           icon: const Icon(Icons.assignment_return_outlined, size: 20),
           onPressed: _saving || !canPost ? null : _credit,
         ),
@@ -1054,6 +1347,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                       // chosen, and only when a limit was actually set.
                       if (_kind.isSales && _contactId != null && !_isPosted)
                         _CreditBanner(contactId: _contactId!),
+                      // What this party already has on deposit.
+                      // `deposits_held_for` calls itself "the number
+                      // somebody needs before raising the invoice the
+                      // deposit was taken for", and nothing read it —
+                      // so the invoice went out for the full amount
+                      // and somebody remembered the deposit later, or
+                      // did not.
+                      if (_contactId != null && !_isPosted)
+                        _DepositBanner(contactId: _contactId!),
                       if (transferred && !_isPosted)
                         _TransferredBanner(status: _fulfilment),
                       // Only where a rule covers it. On a deployment
@@ -1069,12 +1371,31 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                           kind: _kind,
                           settles: _meta.settles,
                         ),
+                      // `0611`. Only where the document type can carry
+                      // one and the company files e-Invoices at all.
+                      // Everything else about this card is a question
+                      // nobody in that position has.
+                      if (_meta.selfBillable &&
+                          ref
+                                  .watch(currentOrgProvider)
+                                  .value
+                                  ?.einvoiceEnabled ==
+                              true)
+                        _SelfBilledCard(
+                          required: _requiresSelfBilled,
+                          locked: _einvoiceStatus == 'submitted' ||
+                              _einvoiceStatus == 'valid',
+                          onChanged: _setSelfBilled,
+                        ),
                       _HeaderCard(
                         docNo: _docNo,
                         kind: _kind,
                         contactId: _contactId,
                         docDate: _docDate,
                         dueDate: _dueDate,
+                        docType: widget.docType,
+                        validUntil: _validUntil,
+                        deliveryDate: _deliveryDate,
                         reference: _reference,
                         supplierDocNo: _supplierDocNo,
                         editable: editable,
@@ -1135,13 +1456,36 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                           setState(() => _dueDate = d);
                           _markDirty();
                         },
+                        onValidUntil: (d) {
+                          setState(() => _validUntil = d);
+                          _markDirty();
+                        },
+                        onDeliveryDate: (d) {
+                          setState(() => _deliveryDate = d);
+                          _markDirty();
+                        },
                         onTextChanged: _markDirty,
+                      ),
+                      // The boxes this company added to a document of
+                      // its own. Above the lines, because a header
+                      // field is about the whole paper.
+                      CustomFieldsSection(
+                        entity: _kind.isSales
+                            ? 'sales_document'
+                            : 'purchase_document',
+                        values: _customFields,
+                        enabled: editable,
+                        onChanged: (v) {
+                          setState(() => _customFields = v);
+                          _markDirty();
+                        },
                       ),
                       const SizedBox(height: 16),
                       LineEditorCard(
                         lines: _lines,
                         editable: editable,
                         currency: _currency,
+                        sales: _kind.isSales,
                         receiving: !_kind.isSales,
                         // Sales, and not a credit note. A bill is not
                         // revenue, so 0309 has nothing to defer on the
@@ -1152,8 +1496,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         // 1 and defers like an invoice, and quotations
                         // and orders carry the period 0311 takes
                         // forward to the document that will defer it.
-                        defers: _kind.isSales &&
-                            widget.docType != 'credit_note',
+                        defers:
+                            _kind.isSales && widget.docType != 'credit_note',
                         // Sales only: a price level is what we charge a
                         // customer, not what a supplier charges us.
                         priceFor: _kind.isSales && _contactId != null
@@ -1189,26 +1533,43 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         onNotesChanged: _markDirty,
                       ),
 
-                      // The supplier's own paperwork, filed against the
-                      // document it justifies. Purchases only: a bill is
-                      // evidence somebody else produced and an auditor
-                      // will ask for, where an invoice is evidence this
-                      // company produced and already holds.
+                      // The paper behind the document.
+                      //
+                      // This used to be purchases only, on the reasoning
+                      // that a bill is evidence somebody else produced
+                      // where an invoice is evidence this company
+                      // produced and already holds. True of an invoice
+                      // raised here, and false of the case people
+                      // actually have: a company moving onto this system
+                      // types last year's invoices in, and the PDF it
+                      // issued at the time is the only record of what it
+                      // actually looked like. A signed delivery order and
+                      // the customer's own purchase order want filing
+                      // against the invoice too.
                       //
                       // Only once saved, because an attachment hangs off
                       // a record id and a new document has none yet.
-                      if (!_isNew && !_kind.isSales) ...[
+                      if (!_isNew) ...[
                         const SizedBox(height: 16),
                         AttachmentsCard(
-                          table: 'purchase_documents',
+                          table: _kind.isSales
+                              ? 'sales_documents'
+                              : 'purchase_documents',
+                          title: _kind.isSales
+                              ? 'Paperwork'
+                              : 'Supplier paperwork',
                           recordId: widget.documentId!,
-                          title: 'Supplier paperwork',
-                          subtitle:
-                              'The bill, delivery order or quotation '
-                              'this was raised from.',
-                          // Reading it fills the number, the date and the
-                          // lines — which is the whole reason the paper
-                          // is here rather than in a filing cabinet.
+                          subtitle: _kind.isSales
+                              ? 'The invoice as it was issued, a signed '
+                                    'delivery order, the customer\'s own '
+                                    'purchase order.'
+                              : 'The bill, delivery order or quotation '
+                                    'this was raised from.',
+                          // Reading it fills the date and the lines —
+                          // which is the whole reason the paper is here
+                          // rather than in a filing cabinet, and it is
+                          // the typing on an old invoice being entered
+                          // after the fact.
                           onExtracted: _applyScan,
                         ),
                       ],
@@ -1232,6 +1593,66 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 /// Silent when no limit is set, when the organization has credit control
 /// off, and when there is room left — a line saying "RM 8,000 available"
 /// on every invoice is a line nobody reads.
+/// What this party already has sitting with the company.
+///
+/// Shown while the document can still be changed, because the point is
+/// to raise it knowing about the deposit rather than to be told
+/// afterwards. Silent when there is none, which is most documents.
+class _DepositBanner extends ConsumerWidget {
+  const _DepositBanner({required this.contactId});
+
+  final String contactId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final held = ref.watch(depositsHeldForProvider(contactId)).valueOrNull;
+    if (held == null || held.isEmpty) return const SizedBox.shrink();
+
+    final total = depositsHeldTotal(held);
+    if (total <= 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            children: [
+              Icon(
+                Icons.savings_outlined,
+                size: 20,
+                color: context.colors.info,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      depositsHeldLabel(held),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.info,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Apply it from the Deposits screen once this is '
+                      'posted — it settles against the invoice rather '
+                      'than coming off the lines.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CreditBanner extends ConsumerWidget {
   const _CreditBanner({required this.contactId});
 
@@ -1242,17 +1663,15 @@ class _CreditBanner extends ConsumerWidget {
     final status = ref.watch(customerCreditProvider(contactId)).valueOrNull;
     if (status == null) return const SizedBox.shrink();
 
-    final control = status['control']?.toString() ?? 'warn';
-    final limit = Fmt.toDouble(status['credit_limit']);
-    if (control == 'off' || limit <= 0) return const SizedBox.shrink();
+    final state = creditBannerFor(status);
+    if (!state.shows) return const SizedBox.shrink();
 
-    final over = status['over_limit'] == true;
-    final available = Fmt.toDouble(status['available']);
-    // Quiet until it is close, because a warning shown every time is a
-    // warning nobody sees when it matters.
-    if (!over && available > limit * 0.1) return const SizedBox.shrink();
-
-    final colour = over ? context.colors.danger : context.colors.warning;
+    final over = state.kind == CreditBannerKind.over;
+    final hold = state.kind == CreditBannerKind.hold;
+    final available = state.available;
+    final colour = (over || hold)
+        ? context.colors.danger
+        : context.colors.warning;
     const blockedNote = '. Posting past it is blocked.';
 
     return Padding(
@@ -1263,7 +1682,11 @@ class _CreditBanner extends ConsumerWidget {
           child: Row(
             children: [
               Icon(
-                over ? Icons.credit_card_off : Icons.credit_card,
+                hold
+                    ? Icons.block
+                    : over
+                    ? Icons.credit_card_off
+                    : Icons.credit_card,
                 size: 20,
                 color: colour,
               ),
@@ -1273,7 +1696,11 @@ class _CreditBanner extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      over
+                      hold
+                          ? (state.contactName == null
+                                ? 'On credit hold'
+                                : '${state.contactName} is on credit hold')
+                          : over
                           ? 'Over their credit limit by '
                                 '${Fmt.money(-available)}'
                           : '${Fmt.money(available)} of credit left',
@@ -1283,9 +1710,15 @@ class _CreditBanner extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      'Owes ${Fmt.money(Fmt.toDouble(status['outstanding']))} '
-                      'against a limit of ${Fmt.money(limit)}'
-                      '${control == 'block' ? blockedNote : ''}',
+                      hold
+                          // The same two answers the refusal gives,
+                          // said before the invoice is typed rather
+                          // than after it is finished.
+                          ? 'This cannot be posted. Take the hold off in '
+                                'the contact, or raise it as a cash sale.'
+                          : 'Owes ${Fmt.money(state.outstanding)} '
+                                'against a limit of ${Fmt.money(state.limit)}'
+                                '${state.blocked ? blockedNote : ''}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -1487,6 +1920,9 @@ class _HeaderCard extends ConsumerWidget {
     required this.contactId,
     required this.docDate,
     required this.dueDate,
+    required this.docType,
+    required this.validUntil,
+    required this.deliveryDate,
     required this.reference,
     required this.supplierDocNo,
     required this.editable,
@@ -1509,6 +1945,8 @@ class _HeaderCard extends ConsumerWidget {
     required this.onContactChanged,
     required this.onDocDate,
     required this.onDueDate,
+    required this.onValidUntil,
+    required this.onDeliveryDate,
     required this.onTextChanged,
   });
 
@@ -1517,6 +1955,13 @@ class _HeaderCard extends ConsumerWidget {
   final String? contactId;
   final DateTime docDate;
   final DateTime? dueDate;
+  final String docType;
+
+  /// The day the price stops holding, and the day delivery was promised.
+  /// Shown only on the document types that carry them — see
+  /// `document_dates.dart`.
+  final DateTime? validUntil;
+  final DateTime? deliveryDate;
   final TextEditingController reference;
   final TextEditingController supplierDocNo;
   final bool editable;
@@ -1539,12 +1984,15 @@ class _HeaderCard extends ConsumerWidget {
   final ValueChanged<Contact> onContactChanged;
   final ValueChanged<DateTime> onDocDate;
   final ValueChanged<DateTime> onDueDate;
+  final ValueChanged<DateTime> onValidUntil;
+  final ValueChanged<DateTime> onDeliveryDate;
   final VoidCallback onTextChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // An offer may be made to a prospect; a sale may not. 0478.
     final contacts = ref.watch(
-      contactsProvider((type: kind.contactType, search: '')),
+      contactsProvider((type: contactTypeFor(docType), search: '')),
     );
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
@@ -1553,32 +2001,53 @@ class _HeaderCard extends ConsumerWidget {
         final selected = list.where((c) => c.id == contactId).firstOrNull;
         final warnMissingTin =
             requiresEinvoice && selected != null && !selected.readyForEinvoice;
-        return DropdownButtonFormField<String>(
-          value: selected?.id,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: '${kind.contactLabel} *',
-            helperText: warnMissingTin
-                ? 'No TIN on file — e-Invoice will be rejected'
-                : null,
-            helperStyle: TextStyle(color: context.colors.warning),
-          ),
-          items: [
+        // A box somebody types into, not a list they scroll. Four
+        // hundred customers in a dropdown is a scrollbar; the same four
+        // hundred behind a search are two keystrokes. Findable by CODE
+        // as well as by name, because whoever filed the document knows
+        // one and whoever is chasing it knows the other.
+        return SearchablePicker<String>(
+          options: [
             for (final c in list)
-              DropdownMenuItem(
+              PickerOption(
                 value: c.id,
-                child: Text(
-                  '${c.name} (${c.code})',
-                  overflow: TextOverflow.ellipsis,
-                ),
+                label: c.name,
+                sublabel: c.code,
+                keywords: [c.code],
               ),
           ],
-          onChanged: editable
-              ? (v) {
-                  final picked = list.where((c) => c.id == v).firstOrNull;
-                  if (picked != null) onContactChanged(picked);
-                }
+          value: selected?.id,
+          enabled: editable,
+          label: '${kind.contactLabel} *',
+          hint: 'Type a name or a code',
+          // Kept from the dropdown this replaced. A customer with no
+          // TIN is one LHDN will reject, and the moment to say so is
+          // when they are chosen rather than when the invoice is filed.
+          helperText: warnMissingTin
+              ? 'No TIN on file — e-Invoice will be rejected'
               : null,
+          helperStyle: TextStyle(color: context.colors.warning),
+          createLabel: 'Add ${kind.contactLabel.toLowerCase()}',
+          // Not on file is not a dead end. The document stays where it
+          // is and the new contact is chosen when it comes back.
+          onCreate: !editable
+              ? null
+              : (typed) async {
+                  final created = await showDialog<Contact>(
+                    context: context,
+                    builder: (_) => NewContactDialog(
+                      contactType: contactTypeFor(docType),
+                      seedName: typed,
+                    ),
+                  );
+                  if (created == null) return null;
+                  onContactChanged(created);
+                  return created.id;
+                },
+          onChanged: (v) {
+            final picked = list.where((c) => c.id == v).firstOrNull;
+            if (picked != null) onContactChanged(picked);
+          },
         );
       },
       loading: () => const LinearProgressIndicator(),
@@ -1607,6 +2076,32 @@ class _HeaderCard extends ConsumerWidget {
         ),
         flex: 1,
       ),
+      // The day the price stops holding. A quotation without one is an
+      // offer with no end, and `0374` will let it become an invoice at
+      // last year's price for as long as anybody likes.
+      if (showsValidUntil(docType))
+        (
+          child: _DateField(
+            label: 'Valid until',
+            value: validUntil,
+            enabled: editable,
+            onChanged: onValidUntil,
+            note: validityNote(docType, validUntil),
+          ),
+          flex: 1,
+        ),
+      // What the customer was told, carried forward by the transfer onto
+      // the order and the delivery order raised from it.
+      if (showsDeliveryDate(docType))
+        (
+          child: _DateField(
+            label: 'Delivery promised',
+            value: deliveryDate,
+            enabled: editable,
+            onChanged: onDeliveryDate,
+          ),
+          flex: 1,
+        ),
       (
         child: _CurrencyField(
           value: currency,
@@ -1638,22 +2133,20 @@ class _HeaderCard extends ConsumerWidget {
       if (kind.isSales &&
           (ref.watch(salespeopleProvider).valueOrNull?.isNotEmpty ?? false))
         (
-          child: DropdownButtonFormField<String?>(
-            value: salespersonId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Salesperson'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
-              for (final s in ref.watch(salespeopleProvider).value ?? const [])
-                DropdownMenuItem(
+          child: SearchablePicker<String>(
+            options: [
+              for (final s
+                  in ref.watch(salespeopleProvider).valueOrNull ?? const [])
+                PickerOption(
                   value: s['id'] as String,
-                  child: Text(
-                    s['name']?.toString() ?? '',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  label: s['name']?.toString() ?? '',
                 ),
             ],
-            onChanged: editable ? onSalespersonChanged : null,
+            value: salespersonId,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Salesperson',
+            onChanged: onSalespersonChanged,
           ),
           flex: 1,
         ),
@@ -1661,22 +2154,21 @@ class _HeaderCard extends ConsumerWidget {
       // invoice is a control that teaches people to ignore controls.
       if (ref.watch(projectsProvider).valueOrNull?.isNotEmpty ?? false)
         (
-          child: DropdownButtonFormField<String?>(
-            value: projectCode,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Project'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
-              for (final p in ref.watch(projectsProvider).value ?? const [])
-                DropdownMenuItem(
+          child: SearchablePicker<String>(
+            options: [
+              for (final p
+                  in ref.watch(projectsProvider).valueOrNull ?? const [])
+                PickerOption(
                   value: p['code'] as String,
-                  child: Text(
-                    '${p['code']} · ${p['name']}',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  label: '${p['code']} · ${p['name']}',
+                  keywords: ['${p['code']}', '${p['name']}'],
                 ),
             ],
-            onChanged: editable ? onProjectChanged : null,
+            value: projectCode,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Project',
+            onChanged: onProjectChanged,
           ),
           flex: 1,
         ),
@@ -1687,22 +2179,21 @@ class _HeaderCard extends ConsumerWidget {
       // in it is how people learn to skip pickers.
       if (ref.watch(departmentsProvider).valueOrNull?.isNotEmpty ?? false)
         (
-          child: DropdownButtonFormField<String?>(
-            value: departmentCode,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Department'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
-              for (final d in ref.watch(departmentsProvider).value ?? const [])
-                DropdownMenuItem(
+          child: SearchablePicker<String>(
+            options: [
+              for (final d
+                  in ref.watch(departmentsProvider).valueOrNull ?? const [])
+                PickerOption(
                   value: d['code'] as String,
-                  child: Text(
-                    '${d['code']} · ${d['name']}',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  label: '${d['code']} · ${d['name']}',
+                  keywords: ['${d['code']}', '${d['name']}'],
                 ),
             ],
-            onChanged: editable ? onDepartmentChanged : null,
+            value: departmentCode,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Department',
+            onChanged: onDepartmentChanged,
           ),
           flex: 1,
         ),
@@ -1740,7 +2231,13 @@ class _HeaderCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SectionHeader('Document $docNo'),
+            // A document that has not been saved has no number yet,
+            // and saying so is better than "Document " with nothing
+            // after it. The number is drawn at the save; see
+            // `Repo.saveDocument`.
+            SectionHeader(
+              docNo.isEmpty ? 'Numbered when you save it' : 'Document $docNo',
+            ),
             if (narrow)
               Column(
                 children: [
@@ -1805,21 +2302,25 @@ class _CurrencyField extends ConsumerWidget {
 
     final names = {for (final c in available) c.code: c.name};
 
-    return DropdownButtonFormField<String>(
-      value: value,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Currency'),
-      items: [
+    // Searchable, not because a company uses many currencies but
+    // because the LIST is long: somebody billing in Singapore dollars
+    // should type "sgd" rather than scroll past a hundred and eighty
+    // codes. No offer to add one — the currency list is reference data
+    // and not the user's to extend, which is exactly the case
+    // `onCreate: null` exists for.
+    return SearchablePicker<String>(
+      options: [
         for (final code in codes)
-          DropdownMenuItem(
+          PickerOption(
             value: code,
-            child: Text(
-              names[code] == null ? code : '$code — ${names[code]}',
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: names[code] == null ? code : '$code — ${names[code]}',
+            keywords: [code, names[code] ?? ''],
           ),
       ],
-      onChanged: enabled ? (v) => v == null ? null : onChanged(v) : null,
+      value: value,
+      enabled: enabled,
+      label: 'Currency',
+      onChanged: (v) => v == null ? null : onChanged(v),
     );
   }
 }
@@ -1902,12 +2403,17 @@ class _DateField extends StatelessWidget {
     required this.value,
     required this.enabled,
     required this.onChanged,
+    this.note,
   });
 
   final String label;
   final DateTime? value;
   final bool enabled;
   final ValueChanged<DateTime> onChanged;
+
+  /// What the date means, where it means something worth saying. Null on
+  /// the ordinary case so a healthy document carries no chatter.
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
@@ -1928,6 +2434,8 @@ class _DateField extends StatelessWidget {
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_today, size: 18),
           enabled: enabled,
+          helperText: note,
+          helperMaxLines: 3,
         ),
         child: Text(Fmt.date(value)),
       ),
@@ -2089,6 +2597,63 @@ class _TotalRow extends StatelessWidget {
               : Theme.of(context).textTheme.bodyMedium,
         ),
       ],
+    );
+  }
+}
+
+/// Whether a bill owes LHDN an e-Invoice that WE have to file.
+///
+/// Where the seller cannot file one — a foreign supplier outside
+/// MyInvois, an individual who is not registered — LHDN requires the
+/// buyer to file on their behalf. `0611` sets this from the supplier's
+/// country when the bill is created, which is right for the common case
+/// and not the only one: an unregistered individual in Malaysia owes one
+/// too, and a supplier who has since registered does not.
+///
+/// So the switch exists to be disagreed with, and the subtitle says
+/// which way the guess went rather than leaving somebody to infer it
+/// from a toggle position.
+class _SelfBilledCard extends StatelessWidget {
+  const _SelfBilledCard({
+    required this.required,
+    required this.locked,
+    required this.onChanged,
+  });
+
+  final bool required;
+
+  /// Once it is with LHDN the answer is theirs, not ours. The database
+  /// refuses the change too; this stops somebody reaching a refusal.
+  final bool locked;
+
+  final Future<void> Function(bool) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: Space.lg),
+      child: SwitchListTile(
+        key: const ValueKey('requires-self-billed'),
+        value: required,
+        onChanged: locked ? null : (v) => onChanged(v),
+        title: const Text('We file the e-Invoice for this'),
+        subtitle: Text(
+          locked
+              ? 'Already filed with LHDN. Cancel it there to change this.'
+              : required
+              ? 'This supplier cannot issue a Malaysian e-Invoice, so LHDN '
+                    'expects one from you instead. It goes out under your '
+                    'TIN with the supplier named as the supplier.'
+              : 'This supplier files their own. Turn this on for a '
+                    'foreign supplier or anyone not registered with '
+                    'MyInvois.',
+          style: muted,
+        ),
+      ),
     );
   }
 }

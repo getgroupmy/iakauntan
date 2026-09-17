@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/places_repository.dart';
 
 /// Where stock is kept.
 ///
@@ -185,6 +187,11 @@ class _WarehouseDialogState extends ConsumerState<_WarehouseDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Watched rather than read, so the reference list is on its
+    // way before anybody picks a suggestion.
+    final states = ref.watch(refStatesProvider).valueOrNull ?? const [];
+    final country = ref.watch(orgCountryAlpha2Provider);
+
     return AlertDialog(
       title: Text(_isNew ? 'New warehouse' : 'Edit ${_code.text}'),
       content: SizedBox(
@@ -220,10 +227,17 @@ class _WarehouseDialogState extends ConsumerState<_WarehouseDialog> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
+              AddressField(
                 controller: _line1,
                 enabled: !_saving,
-                decoration: const InputDecoration(labelText: 'Address'),
+                country: country,
+                onChosen: (a) => fillAddressBoxes(
+                  a,
+                  states,
+                  postcode: _postcode,
+                  city: _city,
+                  stateCode: _state,
+                ),
               ),
               const SizedBox(height: 8),
               Row(

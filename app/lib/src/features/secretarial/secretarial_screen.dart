@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
+import 'filing_lifecycle.dart';
 
 /// The secretarial desk: what is falling due, and for whom.
 ///
@@ -28,6 +29,15 @@ class SecretarialScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Company secretarial'),
         actions: [
+          // The people are a list of their own because they outlive any
+          // one company: a director resigns from one board and sits on
+          // another with the same NRIC and the same file.
+          TextButton.icon(
+            key: const ValueKey('open-people'),
+            onPressed: () => context.go('/secretarial/people'),
+            icon: const Icon(Icons.badge_outlined, size: 18),
+            label: const Text('People'),
+          ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
@@ -215,12 +225,35 @@ class _FilingRow extends ConsumerWidget {
                             ? FontWeight.w600
                             : null,
                       )),
+                  // Whether anybody has taken this deadline up. The
+                  // list is computed from the Act, so without this it
+                  // shows the same filing as due for as long as the
+                  // company exists, however many times it was lodged.
+                  const SizedBox(height: 4),
+                  _step(context, ref),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _step(BuildContext context, WidgetRef ref) {
+    final next = filingNextStep(filing.filingId, filing.status);
+    if (next == 'done') {
+      return StatusChip(filing.status, compact: true);
+    }
+    return TextButton(
+      key: ValueKey('filing-step-${filing.entityId}-${filing.filingType}'),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      onPressed: () => showFilingStep(context, filing: filing),
+      child: Text(next == 'open' ? 'Start it' : 'Lodged?'),
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'receipt_view.dart';
+import '../settings/tax_code_dialog.dart';
 
 /// What goes on the paper, chosen by the shop.
 ///
@@ -43,10 +44,19 @@ class _ReceiptSettingsScreenState
   bool _points = true;
   bool _qr = true;
 
+  // The service charge is not a printing choice — it changes what the
+  // customer pays — but it lands on the same paper and is set per
+  // outlet, so it is set here rather than on a screen of its own that
+  // would hold one field.
+  final _serviceCharge = TextEditingController();
+  String? _serviceTaxCode;
+  bool _savingCharge = false;
+
   @override
   void dispose() {
     _header.dispose();
     _footer.dispose();
+    _serviceCharge.dispose();
     super.dispose();
   }
 
@@ -64,6 +74,36 @@ class _ReceiptSettingsScreenState
     _customer = row['show_customer'] != false;
     _points = row['show_points'] != false;
     _qr = row['show_einvoice_qr'] != false;
+  }
+
+  Future<void> _saveCharge(String outletId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final typed = double.tryParse(_serviceCharge.text.trim());
+    if (_serviceCharge.text.trim().isNotEmpty && typed == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That is not a percentage')),
+        );
+      }
+      return;
+    }
+    setState(() => _savingCharge = true);
+    await runWithFeedback(
+      context,
+      action: () => repo.savePosServiceCharge(
+        outletId: outletId,
+        percent: typed ?? 0,
+        // A charge with no tax on it is what an outlet that is not
+        // registered for service tax has, so an empty choice is a real
+        // answer rather than a missing one.
+        taxCodeId: (typed ?? 0) == 0 ? null : _serviceTaxCode,
+      ),
+      successMessage: 'Service charge saved',
+    );
+    if (mounted) setState(() => _savingCharge = false);
+    ref.invalidate(posOutletsProvider);
+    ref.invalidate(posRecentSaleProvider(outletId));
   }
 
   Future<void> _save(String outletId) async {
@@ -132,6 +172,13 @@ class _ReceiptSettingsScreenState
               if (_loadedFor != outlet) {
                 _loadedFor = outlet;
                 _load(row);
+                final shop = shops.firstWhere(
+                  (s) => s['id'] == outlet,
+                  orElse: () => const <String, dynamic>{},
+                );
+                final pct = (shop['service_charge_percent'] as num?) ?? 0;
+                _serviceCharge.text = pct == 0 ? '' : '$pct';
+                _serviceTaxCode = shop['service_charge_tax_code_id'] as String?;
               }
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -282,6 +329,23 @@ class _ReceiptSettingsScreenState
                     child: const Text('Save'),
                   ),
                   const Divider(height: 32),
+                  const SectionHeader(
+                    'Service charge',
+                    subtitle:
+                        'Ten per cent is the Malaysian norm. Service tax is '
+                        'charged on the bill after the charge, so this '
+                        'changes what the customer pays and not only what '
+                        'the paper says.',
+                  ),
+                  _ServiceCharge(
+                    outletId: outlet,
+                    controller: _serviceCharge,
+                    taxCodeId: _serviceTaxCode,
+                    saving: _savingCharge,
+                    onTaxCode: (v) => setState(() => _serviceTaxCode = v),
+                    onSave: () => _saveCharge(outlet),
+                  ),
+                  const Divider(height: 32),
                   const SectionHeader('The paper'),
                   _Preview(outletId: outlet),
                 ],
@@ -326,6 +390,74 @@ class _Preview extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// The percentage and the tax that rides it.
+///
+/// Split out so the form above stays readable, and stateless because
+/// the two values live on the screen's state where the outlet picker
+/// can reset them.
+class _ServiceCharge extends ConsumerWidget {
+  const _ServiceCharge({
+    required this.outletId,
+    required this.controller,
+    required this.taxCodeId,
+    required this.saving,
+    required this.onTaxCode,
+    required this.onSave,
+  });
+
+  final String outletId;
+  final TextEditingController controller;
+  final String? taxCodeId;
+  final bool saving;
+  final ValueChanged<String?> onTaxCode;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 140,
+              child: TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Charge',
+                  suffixText: '%',
+                  hintText: '0',
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TaxCodePicker(
+                value: taxCodeId,
+                label: 'Tax on the charge',
+                allowEmpty: true,
+                onChanged: onTaxCode,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.tonal(
+            onPressed: saving ? null : onSave,
+            child: const Text('Save the charge'),
+          ),
+        ),
+      ],
     );
   }
 }

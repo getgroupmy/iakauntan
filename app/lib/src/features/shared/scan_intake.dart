@@ -8,6 +8,7 @@ import '../../data/ocr_repository.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
 import 'scan_result_dialog.dart';
+import 'scan_runner.dart';
 
 /// Start from the paper.
 ///
@@ -49,6 +50,11 @@ Future<StagedReceipt?> showScanIntake(
   // showing it is that somebody may put a figure right.
   final accepted = await showScanResult(context, staged.read!, canApply: true);
   if (accepted != null) {
+    // What the paper was taken to be, onto the scan. `0614`. Before the
+    // return, because the caller is about to go and build a document
+    // and this is a note about the reading rather than part of it.
+    await rememberDocumentKind(ref,
+        attachmentId: staged.attachmentId, accepted: accepted);
     return StagedReceipt(
       attachmentId: staged.attachmentId,
       placeholderId: staged.placeholderId,

@@ -235,6 +235,73 @@ begin
     '2026-07-25');
 
   -- ==================================================================
+  -- And the period has to be a month, because the tables are monthly
+  -- ==================================================================
+  -- 0359. `calculate_payroll_run` never reads `pay_frequency`: it
+  -- pro-rates a joiner across the period's dates and then applies the
+  -- EPF, SOCSO, EIS and PCB tables, all of which are monthly. A seven
+  -- day period was accepted, paid a full `basic_salary` because the
+  -- employee worked all of it, read the statutory bands at their
+  -- monthly figures, and finished `calculated`. Nothing refused.
+  begin
+    insert into public.pay_periods
+      (org_id, code, period_start, period_end, pay_date)
+    values (v_org, '2026-W40', date '2026-10-05', date '2026-10-11',
+            date '2026-10-11');
+    raise exception 'FAIL: a seven-day pay period was accepted';
+  exception when check_violation then
+    raise notice 'ok   a week is not a pay period the engine can compute';
+  end;
+
+  -- Nor a fortnight dressed as a month, which is the shape somebody
+  -- reaches for when the run is late.
+  begin
+    insert into public.pay_periods
+      (org_id, code, period_start, period_end, pay_date)
+    values (v_org, '2026-10H1', date '2026-10-01', date '2026-10-15',
+            date '2026-10-15');
+    raise exception 'FAIL: half a month was accepted';
+  exception when check_violation then
+    raise notice 'ok   nor half of one';
+  end;
+
+  -- A month long, and not a calendar month. The mutation run found this
+  -- gap: a week and a fortnight are both caught by the end-date clause
+  -- alone, so without this case the "starts on the first" half of the
+  -- constraint was untested. It is the one that matters most, because
+  -- the 5th of October to the 4th of November is a full month of pay
+  -- straddling two of the months the statutory returns are filed for.
+  begin
+    insert into public.pay_periods
+      (org_id, code, period_start, period_end, pay_date)
+    values (v_org, '2026-10M', date '2026-10-05', date '2026-11-04',
+            date '2026-11-04');
+    raise exception 'FAIL: a month starting mid-month was accepted';
+  exception when check_violation then
+    raise notice 'ok   nor a month that straddles two of them';
+  end;
+
+  -- And the label cannot say something the row is not. A calendar month
+  -- called `weekly` would be read by a person as a weekly run, and by
+  -- the engine as what it always reads: a month.
+  begin
+    insert into public.pay_periods
+      (org_id, code, period_start, period_end, pay_date, frequency)
+    values (v_org, '2026-11', date '2026-11-01', date '2026-11-30',
+            date '2026-11-25', 'weekly');
+    raise exception 'FAIL: a month labelled weekly was accepted';
+  exception when check_violation then
+    raise notice 'ok   and a month may not be labelled anything else';
+  end;
+
+  -- The control: the real shape still goes in.
+  perform public.ensure_pay_period(v_org, 2026, 12);
+  perform pg_temp.check_eq('a whole calendar month is what fits',
+    (select (period_start::text || '..' || period_end::text)
+       from public.pay_periods where org_id = v_org and code = '2026-12'),
+    '2026-12-01..2026-12-31');
+
+  -- ==================================================================
   -- Neither is open to somebody outside the organization
   -- ==================================================================
   perform pg_temp.sign_in_as(pg_temp.another_user('outsider@example.test'));

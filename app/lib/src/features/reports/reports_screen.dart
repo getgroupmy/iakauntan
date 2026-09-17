@@ -40,10 +40,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   /// unreachable.
   String? _department;
 
+  /// The account the general ledger is narrowed to, or null for every
+  /// account that moved. Only the ledger takes it, and only the ledger
+  /// shows the chooser: a year of a busy company is tens of thousands
+  /// of lines, and the question is almost always about one account.
+  String? _account;
+
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 9, vsync: this);
+    _tabs = TabController(length: 10, vsync: this);
     // The download button belongs to whichever report is on screen, so
     // it has to rebuild when the tab changes.
     _tabs.addListener(() => setState(() {}));
@@ -74,16 +80,62 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
 
     return Padding(
       padding: const EdgeInsets.only(left: 4),
-      child: DropdownButton<String?>(
-        value: selected,
-        hint: Text(allLabel),
-        underline: const SizedBox.shrink(),
-        items: [
-          DropdownMenuItem(value: null, child: Text(allLabel)),
-          for (final code in codes)
-            DropdownMenuItem(value: code, child: Text(code)),
-        ],
-        onChanged: onChanged,
+      child: SizedBox(
+        width: _filterWidth,
+        child: DropdownButton<String?>(
+          value: selected,
+          isExpanded: true,
+          hint: Text(allLabel, overflow: TextOverflow.ellipsis),
+          underline: const SizedBox.shrink(),
+          items: [
+            DropdownMenuItem(value: null, child: Text(allLabel)),
+            for (final code in codes)
+              DropdownMenuItem(value: code, child: Text(code)),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  /// Which account the ledger is showing.
+  ///
+  /// Every account in the chart, not only the ones that have moved:
+  /// "why is there nothing in 6300" is a question somebody asks, and a
+  /// chooser that hides empty accounts cannot answer it.
+  Widget _accountFilter() {
+    final accounts = ref.watch(accountsProvider).valueOrNull ?? const [];
+    if (accounts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: SizedBox(
+        width: _filterWidth,
+        child: DropdownButton<String?>(
+          value: _account,
+          // Bounded, and the CLOSED control ellipsises. A
+          // `DropdownButton` sizes itself to its widest item, so one
+          // account called "Professional fees and subscriptions" made
+          // this control 290 pixels wide and pushed the date range off
+          // the right of a 1000px window -- a laptop, not a phone.
+          // Measured at 116 pixels over. The open menu is unaffected
+          // and still shows every name in full.
+          isExpanded: true,
+          hint: const Text('All accounts', overflow: TextOverflow.ellipsis),
+          underline: const SizedBox.shrink(),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('All accounts')),
+            for (final a in accounts.where((a) => !a.isGroup))
+              DropdownMenuItem(
+                value: a.id,
+                child: Text(
+                  '${a.code} ${a.name}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (v) => setState(() => _account = v),
+        ),
       ),
     );
   }
@@ -202,9 +254,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       await Clipboard.setData(ClipboardData(text: csv));
     }
     messenger.showSnackBar(
-      SnackBar(
-        content: Text(saved ? 'Downloaded' : 'Copied to the clipboard'),
-      ),
+      SnackBar(content: Text(saved ? 'Downloaded' : 'Copied to the clipboard')),
     );
   }
 
@@ -214,19 +264,126 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       '${spec.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}'
       '-${Fmt.iso(_range.end)}';
 
+  /// How wide a filter on the bar may be.
+  ///
+  /// A `DropdownButton` with no bound sizes itself to its WIDEST item,
+  /// so the width of this bar was decided by the longest account name
+  /// in the company's chart. Enough for "All accounts" and a code with
+  /// some of a name; the open menu shows every name in full.
+  static const _filterWidth = 180.0;
+
+  /// The range the whole screen is reporting on.
+  ///
+  /// Extracted because it sits in the app bar on a laptop and under the
+  /// tabs on a phone, and describing it twice is how the two come to
+  /// disagree.
+  Widget _rangeButton() => OutlinedButton.icon(
+    key: const ValueKey('reports-range'),
+    onPressed: () async {
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+        initialDateRange: _range,
+      );
+      if (picked != null) setState(() => _range = picked);
+    },
+    icon: const Icon(Icons.date_range, size: 18),
+    label: Text('${Fmt.date(_range.start)} – ${Fmt.date(_range.end)}'),
+  );
+
+  TabBar _tabBar() => TabBar(
+    controller: _tabs,
+    isScrollable: true,
+    tabAlignment: TabAlignment.start,
+    tabs: const [
+      Tab(text: 'Profit & Loss'),
+      Tab(text: 'Balance Sheet'),
+      Tab(text: 'Trial Balance'),
+      Tab(text: 'General Ledger'),
+      Tab(text: 'Aged Receivables'),
+      Tab(text: 'Aged Payables'),
+      Tab(text: 'Cash Flows'),
+      Tab(text: 'Changes in Equity'),
+      Tab(text: 'SST Summary'),
+      Tab(text: 'Deferred Revenue'),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final spec = _visibleSpec;
+
+    // The date range is the widest thing on this bar -- "01/09/2026 –
+    // 30/09/2026" is twenty-three characters -- and it labels every
+    // figure underneath it, so it is the one action that keeps its
+    // button. Measured: the bar ran 96 pixels off a 412px phone and 36
+    // off a 600px window with the group button showing, and Flutter
+    // CLIPS a toolbar rather than reporting it in a release build.
+    // 900, not the 700 this was first written at. Measured: the full
+    // bar -- group button, two downloads, the account filter and the
+    // range -- was still four pixels over at 800. The sweep in
+    // `reports_screen_test.dart` is what said so and what holds this
+    // number honest, because it is an estimate of how much a row of
+    // buttons wants and nothing stops the next label being longer.
+    final narrow = MediaQuery.sizeOf(context).width < 900;
+
+    // Folded rather than dropped: downloading the report on screen is
+    // the reason most people open it, and the group button is the only
+    // way to reach the consolidated figures.
+    final folded = <({String label, IconData icon, VoidCallback? onTap})>[
+      if (_inAGroup)
+        (
+          label: 'Group reports',
+          icon: Icons.account_tree_outlined,
+          onTap: () => context.push('/reports/group'),
+        ),
+      (
+        label: 'Download PDF',
+        icon: Icons.picture_as_pdf_outlined,
+        onTap: spec == null ? null : () => _download(spec),
+      ),
+      (
+        label: 'Download CSV',
+        icon: Icons.table_chart_outlined,
+        onTap: spec == null ? null : () => _downloadCsv(spec),
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reports'),
         actions: [
+          if (narrow)
+            PopupMenuButton<int>(
+              key: const ValueKey('reports-more'),
+              tooltip: 'More',
+              itemBuilder: (_) => [
+                for (var i = 0; i < folded.length; i++)
+                  PopupMenuItem(
+                    value: i,
+                    enabled: folded[i].onTap != null,
+                    child: Row(
+                      children: [
+                        Icon(folded[i].icon, size: 18),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            folded[i].label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              onSelected: (i) => folded[i].onTap?.call(),
+            ),
           // Only for somebody who is in more than one company of a
           // group. For everybody else the group reports would be this
           // company's figures under a heading claiming otherwise, which
           // is worse than not offering them.
-          if (_inAGroup)
+          if (!narrow && _inAGroup)
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: TextButton.icon(
@@ -236,16 +393,18 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                 label: const Text('Group'),
               ),
             ),
-          IconButton(
-            tooltip: 'Download PDF',
-            icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
-            onPressed: spec == null ? null : () => _download(spec),
-          ),
-          IconButton(
-            tooltip: 'Download CSV',
-            icon: const Icon(Icons.table_chart_outlined, size: 20),
-            onPressed: spec == null ? null : () => _downloadCsv(spec),
-          ),
+          if (!narrow)
+            IconButton(
+              tooltip: 'Download PDF',
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              onPressed: spec == null ? null : () => _download(spec),
+            ),
+          if (!narrow)
+            IconButton(
+              tooltip: 'Download CSV',
+              icon: const Icon(Icons.table_chart_outlined, size: 20),
+              onPressed: spec == null ? null : () => _downloadCsv(spec),
+            ),
           // Only on the P&L, and only once something in the ledger
           // actually carries a project code — an empty dropdown on every
           // report is a control that teaches people to ignore it.
@@ -263,41 +422,36 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               onChanged: (v) => setState(() => _department = v),
             ),
           ],
-          Padding(
-            padding: const EdgeInsets.only(right: 12, left: 4),
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final picked = await showDateRangePicker(
-                  context: context,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                  initialDateRange: _range,
-                );
-                if (picked != null) setState(() => _range = picked);
-              },
-              icon: const Icon(Icons.date_range, size: 18),
-              label: Text(
-                '${Fmt.date(_range.start)} – ${Fmt.date(_range.end)}',
-              ),
-            ),
-          ),
+          if (_tabs.index == 3) _accountFilter(),
+          if (!narrow) _rangeButton(),
         ],
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Profit & Loss'),
-            Tab(text: 'Balance Sheet'),
-            Tab(text: 'Trial Balance'),
-            Tab(text: 'Aged Receivables'),
-            Tab(text: 'Aged Payables'),
-            Tab(text: 'Cash Flows'),
-            Tab(text: 'Changes in Equity'),
-            Tab(text: 'SST Summary'),
-            Tab(text: 'Deferred Revenue'),
-          ],
-        ),
+        // On a phone the range moves BELOW the tabs rather than being
+        // shortened. It is twenty-three characters and it labels every
+        // figure on the screen; "01/09 – 30/09" would drop the year
+        // from a report somebody is about to file.
+        bottom: !narrow
+            ? _tabBar()
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(46 + 52),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Space.lg,
+                        0,
+                        Space.lg,
+                        Space.sm,
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: _rangeButton(),
+                      ),
+                    ),
+                    _tabBar(),
+                  ],
+                ),
+              ),
       ),
       body: TabBarView(
         controller: _tabs,
@@ -332,6 +486,24 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: Icons.table_chart_outlined,
               title: 'No ledger activity',
               message: 'The trial balance fills in as you post documents.',
+            ),
+          ),
+          // Straight after the trial balance, because it is what the
+          // trial balance is made of and that is the order somebody
+          // reads them in: the total first, then the lines behind it.
+          _Report(
+            provider: _generalLedgerProvider((
+              range: _range,
+              account: _account,
+            )),
+            spec: (rows) => generalLedgerSpec(rows, _range),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.menu_book_outlined,
+              title: 'No ledger activity',
+              message:
+                  'Post a document or a journal and every account it '
+                  'touched appears here, with the balance carried down.',
             ),
           ),
           _Report(
@@ -703,6 +875,23 @@ final _dimensionsProvider =
 final _balanceSheetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
       return requireRepo(ref).balanceSheet(asAt: asAt);
+    });
+
+/// The ledger, for the chosen range and optionally one account.
+///
+/// A record rather than two families because both have to change
+/// together: asking for last year's dates against this year's chosen
+/// account would be two requests and one confusing answer.
+final _generalLedgerProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({DateTimeRange range, String? account})
+    >((ref, args) {
+      return requireRepo(ref).generalLedger(
+        from: args.range.start,
+        to: args.range.end,
+        accountId: args.account,
+      );
     });
 
 final _sstProvider = FutureProvider.autoDispose

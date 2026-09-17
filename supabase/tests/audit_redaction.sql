@@ -124,7 +124,20 @@ begin
   -- Every audited column in the live schema, checked against the rule
   -- rather than against a list somebody typed. Asserted as a count so
   -- the day a new sensitive column is added it is this that says so.
-  perform pg_temp.check_eq('exactly five audited columns are redacted today',
+  --
+  -- It has said so once: 0452 put the audit trigger on `firm_members`,
+  -- which carries an `invite_token` of its own, and this assertion read
+  -- 6 where it expected 5. The rule caught the new column without being
+  -- told about it, which is what it is for -- but the number is a
+  -- witness, so it is moved deliberately rather than relaxed.
+  --
+  --   corp_signing_links.token_hash
+  --   einvoice_credentials.cert_private_key_pem
+  --   einvoice_credentials.client_secret
+  --   firm_members.invite_token          (0452)
+  --   org_members.invite_token
+  --   organizations.einvoice_secret_ref
+  perform pg_temp.check_eq('exactly six audited columns are redacted today',
     (with audited as (
        select distinct tgrelid as rel from pg_trigger
         where not tgisinternal and tgfoid = 'app.write_audit_log'::regproc)
@@ -133,7 +146,7 @@ begin
        join pg_attribute att on att.attrelid = a.rel
         and att.attnum > 0 and not att.attisdropped
       where (app.audit_redact(jsonb_build_object(att.attname, 'X'))
-               ->> att.attname) = '***'), 5);
+               ->> att.attname) = '***'), 6);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -367,5 +380,330 @@ begin
   end;
   perform pg_temp.check_true('a path cannot be moved to another company later', v_ok);
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Who changed the rate everybody is paid by (0442)
+--
+-- `docs/security.md` says data changes are recorded by `audit_changes`
+-- on 41 tables, and that was still exactly true on a schema grown from
+-- 249 tables to 306 — which is the question the number does not answer:
+-- is anything that should be audited outside those 41?
+--
+-- One thing was, and it is the widest-reaching row in the product.
+-- `statutory_schedules` and `statutory_rates` hold the EPF, SOCSO, EIS
+-- and PCB schedules that `calculate_payroll_run` reads for every
+-- employee of every tenant. Measured before `0442`: publishing one
+-- wrote nothing to `audit_logs`, nothing to `security_events`, and
+-- there is no `published_by` column — so the change with the widest
+-- blast radius here was the one nobody had to put their name to, while
+-- `payroll_settings` and `salary_components` were both audited.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid;
+  v_sched uuid;
+  v_rows  integer;
+begin
+  -- A platform administrator of its own. `pg_temp.test_user()` returns
+  -- the same fixture user every time and that user owns every company
+  -- this suite builds, so making *them* a platform admin would put the
+  -- tenant and the platform in one pair of hands -- which is exactly
+  -- what the section below has to tell apart.
+  insert into auth.users (
+    id, email, created_at, updated_at, confirmation_token, recovery_token,
+    email_change_token_new, email_change_token_current,
+    phone_change_token, reauthentication_token, email_change, phone_change)
+  values (gen_random_uuid(), 'publisher-0442@iakauntan.test', now(), now(),
+          '', '', '', '', '', '', '', '')
+  returning id into v_admin;
+
+  insert into public.platform_admins (user_id) values (v_admin)
+  on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  -- One band covering every wage. `assert_statutory_bands` from `0404`
+  -- refuses a schedule with a hole in it, in the same transaction that
+  -- inserts the rates, so the fixture has to be a schedule somebody
+  -- could actually publish rather than a shell.
+  select public.platform_publish_statutory_schedule(
+           'epf', 'EPF probe', 'percentage', date '2026-01-01',
+           jsonb_build_array(jsonb_build_object(
+             'category', 'default', 'wage_from', 0,
+             'employee_rate', 11, 'employer_rate', 13)),
+           'A probe, not a gazette', 'written by a test')
+    into v_sched;
+
+  perform pg_temp.check_true('the schedule was published', v_sched is not null);
+
+  -- The record, and the name on it. `user_id` is what the whole
+  -- section is for: `created_at` and `source` were already on the row
+  -- and neither of them says who.
+  select count(*) into v_rows from public.audit_logs
+   where table_name = 'statutory_schedules' and record_id = v_sched;
+  perform pg_temp.check_eq('and the trail recorded it', v_rows, 1);
+
+  perform pg_temp.check_eq(
+    'with the name of whoever published it',
+    (select user_id from public.audit_logs
+      where table_name = 'statutory_schedules' and record_id = v_sched),
+    v_admin);
+
+  -- It belongs to no company, which is why the read policy needed a
+  -- second clause: `app.can_admin(null)` is false for everybody, so
+  -- before `0442` this row would have been written and readable by
+  -- nobody at all — an audit row that discharges nothing.
+  perform pg_temp.check_eq(
+    'the row belongs to no company',
+    (select count(*) from public.audit_logs
+      where table_name = 'statutory_schedules' and record_id = v_sched
+        and org_id is null), 1);
+
+  raise notice 'ok   a change to what everybody is paid by has a name on it';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And who may read it, under RLS rather than around it
+--
+-- `pg_temp.sign_in_as` sets the JWT claim and nothing else; the session
+-- is still `postgres`, which owns these tables and is exempt from row
+-- level security. So the two assertions that matter here change role as
+-- well, at the top level -- `set local role` inside a `do` block does
+-- not survive the block, which is why `no_tenant_sees_another.sql`
+-- issues it as a statement of its own and this follows that.
+--
+-- Measured the hard way, twice: the first draft asserted a company
+-- administrator sees none of the platform's trail while still running
+-- as the owner, and failed reading 2 rows; the second moved the role
+-- change inside a `do` block and failed reading 6. Both failures are
+-- the good outcome. Had either fixture happened to leave the count at
+-- zero, the assertion would have passed while testing nothing -- which
+-- is the shape this whole file exists to be careful about.
+-- ---------------------------------------------------------------------
+create temporary table t_442
+  (admin_user uuid, owner_user uuid, org uuid, sched uuid);
+grant select on t_442 to authenticated;
+insert into t_442 values (null, null, null, null);
+
+do $$
+declare v_admin uuid; v_org uuid; v_owner uuid; v_sched uuid;
+begin
+  -- Two distinct people, which this suite does not hand out.
+  -- `pg_temp.test_user()` always returns the same fixture user, so the
+  -- company's owner and the platform administrator would be one person
+  -- and the comparison would be between somebody and themselves --
+  -- measured: making that one user a platform admin left the tenant
+  -- half unsatisfiable. The platform administrator is created here.
+  insert into auth.users (
+    id, email, created_at, updated_at, confirmation_token, recovery_token,
+    email_change_token_new, email_change_token_current,
+    phone_change_token, reauthentication_token, email_change, phone_change)
+  values (gen_random_uuid(), 'platform-0442@iakauntan.test', now(), now(),
+          '', '', '', '', '', '', '', '')
+  returning id into v_admin;
+
+  v_org := pg_temp.test_org('Syarikat Kedua Sdn Bhd');
+  select user_id into v_owner from public.org_members
+   where org_id = v_org and status = 'active' limit 1;
+
+  -- One row of this company's own trail, so "still sees their own" has
+  -- something to see.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-442', 'Pelanggan Biasa', 'customer');
+
+  insert into public.platform_admins (user_id) values (v_admin)
+  on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  select public.platform_publish_statutory_schedule(
+           'socso', 'SOCSO probe', 'table', date '2026-01-01',
+           jsonb_build_array(jsonb_build_object(
+             'category', 'default', 'wage_from', 0,
+             'employee_amount', 0.50, 'employer_amount', 1.75)),
+           'A probe, not a gazette', 'written by a test')
+    into v_sched;
+
+  update t_442 set admin_user = v_admin, owner_user = v_owner,
+                   org = v_org, sched = v_sched;
+end $$;
+
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select admin_user from t_442),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare c record; v_seen integer;
+begin
+  select * into c from t_442;
+  perform pg_temp.check_eq('the session really is a client role',
+    current_user, 'authenticated');
+  perform pg_temp.check_true('and this one is a platform administrator',
+    app.is_platform_admin());
+
+  select count(*) into v_seen from public.audit_logs
+   where table_name = 'statutory_schedules' and record_id = c.sched;
+  perform pg_temp.check_eq(
+    'a platform administrator reads the platform''s own trail', v_seen, 1);
+
+  -- And no further. `0442`'s clause is `org_id is null and
+  -- is_platform_admin()`, not `is_platform_admin()` alone, and the
+  -- difference is every company's audit trail. Measured: without this
+  -- assertion, widening the clause to every row passed the whole file
+  -- -- a surviving mutant, which is a missing assertion and not a
+  -- passing test.
+  select count(*) into v_seen from public.audit_logs
+   where org_id = c.org;
+  perform pg_temp.check_eq(
+    'and not one row of any company''s own trail', v_seen, 0);
+end $$;
+
+reset role;
+
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select owner_user from t_442),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare c record; v_seen integer;
+begin
+  select * into c from t_442;
+  perform pg_temp.check_true('this one is not a platform administrator',
+    not app.is_platform_admin());
+
+  -- The half that must not have widened. `0442` added `org_id is null
+  -- and is_platform_admin()`, so no tenant row moved either way.
+  select count(*) into v_seen from public.audit_logs
+   where table_name in ('statutory_schedules', 'statutory_rates');
+  perform pg_temp.check_eq(
+    'while a company administrator sees none of it', v_seen, 0);
+
+  -- And still sees their own, or the clause would have taken something
+  -- away rather than added to it.
+  select count(*) into v_seen from public.audit_logs where org_id = c.org;
+  perform pg_temp.check_true(
+    'and still sees their own company''s trail', v_seen > 0);
+
+  raise notice 'ok   the platform''s trail and a tenant''s stay apart';
+end $$;
+
+reset role;
+
+-- ---------------------------------------------------------------------
+-- The platform's own trail had no reader (0444)
+--
+-- 0442 widened the policy and stopped. Measured on the installed
+-- schema: `audit_trail(p_org_id, ...)` filters `l.org_id = p_org_id`,
+-- so no argument reaches a row whose `org_id` is null, and it is the
+-- only function in the schema that returns audit rows. The statutory
+-- publish 0442 started recording was readable by policy and reachable
+-- by nothing.
+--
+-- These assertions run through the route rather than the table, which
+-- is the difference between the two migrations.
+-- ---------------------------------------------------------------------
+create temporary table t_444
+  (admin_user uuid, owner_user uuid, org uuid);
+grant select on t_444 to authenticated;
+insert into t_444 values (null, null, null);
+
+do $$
+declare v_admin uuid; v_org uuid; v_owner uuid;
+begin
+  insert into auth.users (
+    id, email, created_at, updated_at, confirmation_token, recovery_token,
+    email_change_token_new, email_change_token_current,
+    phone_change_token, reauthentication_token, email_change, phone_change)
+  values (gen_random_uuid(), 'reader-0444@iakauntan.test', now(), now(),
+          '', '', '', '', '', '', '', '')
+  returning id into v_admin;
+
+  v_org := pg_temp.test_org('Syarikat Ketiga Sdn Bhd');
+  select user_id into v_owner from public.org_members
+   where org_id = v_org and status = 'active' limit 1;
+
+  -- A row of this company's own, so "not one row of any company's own"
+  -- is a claim about something that exists.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-444', 'Pelanggan Ketiga', 'customer');
+
+  insert into public.platform_admins (user_id) values (v_admin)
+  on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  perform public.platform_publish_statutory_schedule(
+    'eis', 'EIS probe for 0444', 'table', date '2027-01-01',
+    jsonb_build_array(jsonb_build_object(
+      'category', 'default', 'wage_from', 0,
+      'employee_amount', 0.20, 'employer_amount', 0.20)),
+    'A probe, not a gazette', 'written by a test');
+
+  update t_444 set admin_user = v_admin, owner_user = v_owner, org = v_org;
+end $$;
+
+-- The platform administrator, through the route.
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select admin_user from t_444),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare c record; v_n integer; v_reads integer;
+begin
+  select * into c from t_444;
+
+  select count(*) into v_n from public.platform_audit_trail();
+  perform pg_temp.check_true(
+    'the platform trail can be read by the platform', v_n > 0);
+
+  select count(*) into v_n from public.platform_audit_trail()
+   where table_name not in ('statutory_schedules', 'statutory_rates');
+  perform pg_temp.check_eq(
+    'and not one row of any company''s own', v_n, 0);
+
+  -- Narrowing by table is what a reader actually does with it.
+  select count(*) into v_n
+    from public.platform_audit_trail('statutory_rates');
+  perform pg_temp.check_true('one table at a time', v_n > 0);
+
+  -- Reading it is an event, and the platform log is where it lands --
+  -- which is the reason that function exists at all.
+  select count(*) into v_reads from public.platform_security_log()
+   where kind = 'sensitive_read' and target = 'platform_audit_trail';
+  perform pg_temp.check_true(
+    'reading the platform trail is itself recorded', v_reads > 0);
+
+  raise notice 'ok   the platform can read its own trail';
+end $$;
+
+reset role;
+
+-- The company's owner, through the same route.
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select owner_user from t_444),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare v_n integer;
+begin
+  begin
+    select count(*) into v_n from public.platform_audit_trail();
+    raise exception
+      'FAIL an org owner read the platform trail and got % rows', v_n;
+  exception when sqlstate '42501' then
+    raise notice 'ok   an org owner cannot read the platform''s trail';
+  end;
+
+  begin
+    select count(*) into v_n from public.platform_security_log();
+    raise exception
+      'FAIL an org owner read the platform security log';
+  exception when sqlstate '42501' then
+    raise notice 'ok   nor the platform''s security log';
+  end;
+end $$;
+
+reset role;
 
 rollback;

@@ -37,14 +37,14 @@ class AuditTrailCard extends ConsumerWidget {
                 onPressed: () => ref.invalidate(auditTrailProvider),
               ),
             ),
+            const _Filters(),
             AsyncView(
               value: entries,
               onRetry: () => ref.invalidate(auditTrailProvider),
               loading: const LinearProgressIndicator(),
               builder: (list) => list.isEmpty
                   ? Text(
-                      'Nothing recorded yet. Entries appear as records are '
-                      'created, amended or removed.',
+                      auditTrailEmptyLine(ref.watch(auditFilterProvider)),
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
@@ -83,6 +83,7 @@ class _EntryTile extends StatelessWidget {
     'org_members': 'Team member',
     'org_modules': 'Module',
     'organizations': 'Company',
+    'number_sequences': 'Document numbering',
   };
 
   Color _colour(BuildContext context) => switch (entry.action) {
@@ -211,3 +212,112 @@ class _FieldChange extends StatelessWidget {
     );
   }
 }
+
+
+/// The two filters somebody actually arrives with: a person and a range
+/// of days.
+///
+/// `0634`. The trail is capped at 500 rows newest first, so "who
+/// changed the bank details in March" was unanswerable once five
+/// hundred things had happened since.
+///
+/// Reading the trail WRITES a `sensitive_read`, so nothing here reads
+/// on change: the dates are picked in a dialog that returns once, and
+/// the person is a dropdown that closes. There is no free-text field to
+/// re-read on every keystroke, which is the shape this had to avoid.
+class _Filters extends ConsumerWidget {
+  const _Filters();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final filter = ref.watch(auditFilterProvider);
+    final actors = ref.watch(auditTrailActorsProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.md),
+      child: Wrap(
+        spacing: Space.sm,
+        runSpacing: Space.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          // Only where there is more than one person to choose between:
+          // a company where one person has changed everything does not
+          // need a filter that can only say "that person".
+          if (actors.length > 1)
+            DropdownButton<String?>(
+              key: const ValueKey('audit-actor'),
+              value: filter.actorId,
+              hint: const Text('Anyone'),
+              underline: const SizedBox.shrink(),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Anyone')),
+                for (final a in actors)
+                  DropdownMenuItem(
+                    value: a['user_id']?.toString(),
+                    child: Text(a['name']?.toString() ?? ''),
+                  ),
+              ],
+              onChanged: (v) => ref
+                  .read(auditFilterProvider.notifier)
+                  .update((f) => f.copyWith(actorId: v)),
+            ),
+          OutlinedButton.icon(
+            key: const ValueKey('audit-dates'),
+            icon: const Icon(Icons.date_range, size: 16),
+            label: Text(auditRangeLabel(filter)),
+            onPressed: () async {
+              final picked = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime.now(),
+                initialDateRange: filter.from == null || filter.to == null
+                    ? null
+                    : DateTimeRange(start: filter.from!, end: filter.to!),
+              );
+              if (picked == null) return;
+              ref.read(auditFilterProvider.notifier).update(
+                    (f) => f.copyWith(from: picked.start, to: picked.end),
+                  );
+            },
+          ),
+          if (!filter.isEmpty)
+            TextButton(
+              key: const ValueKey('audit-clear'),
+              onPressed: () => ref
+                  .read(auditFilterProvider.notifier)
+                  .update((_) => const AuditFilter()),
+              child: const Text('Clear'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the date button says.
+///
+/// The RANGE when there is one, because "1 Mar – 31 Mar" is what
+/// somebody needs to see to know the list in front of them is not
+/// everything.
+String auditRangeLabel(AuditFilter filter) {
+  if (filter.from == null && filter.to == null) return 'Any date';
+  if (filter.from != null && filter.to != null) {
+    return '${Fmt.date(filter.from)} – ${Fmt.date(filter.to)}';
+  }
+  return filter.from != null
+      ? 'From ${Fmt.date(filter.from)}'
+      : 'To ${Fmt.date(filter.to)}';
+}
+
+/// What an empty list means, which depends on whether anything is
+/// filtered.
+///
+/// "Nothing recorded yet" is wrong and discouraging when the truth is
+/// "nothing in March by that person" — and somebody who believes the
+/// first will stop looking.
+String auditTrailEmptyLine(AuditFilter filter) => filter.isEmpty
+    ? 'Nothing recorded yet. Entries appear as records are created, '
+          'amended or removed.'
+    : 'Nothing matches those filters. Widen the dates, or choose '
+          'anyone.';

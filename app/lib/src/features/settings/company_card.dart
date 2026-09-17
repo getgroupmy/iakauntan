@@ -2,14 +2,39 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/entity_types_repository.dart';
 import '../../data/models.dart';
+import '../../data/places_repository.dart';
 import '../../data/repository.dart';
+import 'msic_picker.dart';
 
 bool _present(String? s) => s != null && s.trim().isNotEmpty;
+
+/// What to call a kind of business, given the list and the code on the
+/// company.
+///
+/// Public and pure. Three cases, and the third is the one that matters:
+/// the list has loaded and the code is on it, so its own label wins;
+/// the list has not loaded yet, so `Fmt.label` guesses from the code;
+/// and the code is not on the list at all, which after `0607` means a
+/// kind that was retired and then removed -- the foreign key stops it
+/// from being removed while a company holds it, but a company read out
+/// of a cache can still name one. Showing the raw code is right there:
+/// it is what is actually stored, and inventing a label for it would
+/// hide that.
+String entityTypeLabel(List<EntityType>? types, String code) {
+  if (code.trim().isEmpty) return 'Not set';
+  if (types == null) return Fmt.label(code);
+  for (final t in types) {
+    if (t.code == code) return t.display;
+  }
+  return code;
+}
 
 /// The parts of an address that exist, on one line. Empty is "Not set"
 /// rather than a run of commas, because a company with no address needs
@@ -59,7 +84,18 @@ class CompanyCard extends ConsumerWidget {
             _StationeryRow(org: org),
             const Divider(height: Space.xl),
             FieldRow(label: 'Name', value: org.name),
-            FieldRow(label: 'Entity type', value: Fmt.label(org.entityType)),
+            FieldRow(
+              label: 'Entity type',
+              // The table's own name for the kind, where the list has
+              // loaded. `Fmt.label` turns `sole_proprietor` into
+              // "Sole proprietor", which is right for the ten that
+              // shipped and wrong for a kind whose name is not its
+              // code -- "LLP (PLT)" reads as "Llp plt".
+              value: entityTypeLabel(
+                ref.watch(allEntityTypesProvider).valueOrNull,
+                org.entityType,
+              ),
+            ),
             FieldRow(
               label: 'SSM registration',
               value: org.registrationNo ?? 'Not set',
@@ -108,10 +144,131 @@ class CompanyCard extends ConsumerWidget {
             FieldRow(label: 'Phone', value: org.phone ?? 'Not set'),
             FieldRow(label: 'Base currency', value: org.baseCurrency),
             FieldRow(label: 'Rounding', value: Fmt.label(org.roundingMethod)),
+            if (ref.watch(isOwnerProvider)) ...[
+              const Divider(height: Space.xl),
+              _CloseCompany(org: org),
+            ],
           ],
         ),
       ),
     );
+  }
+}
+
+/// Closing the company.
+///
+/// The counterpart of closing a login, and the half somebody holding
+/// several companies actually needs: a company that has stopped trading
+/// should go away without taking the person, or their other companies,
+/// with it.
+///
+/// Nothing is deleted. The books stay exactly where they are — which is
+/// not a technicality, because the Companies Act 2016 s.245 and the
+/// Income Tax Act 1967 s.82 require them kept for seven years after the
+/// company stops needing them. What changes is that nobody in the
+/// product can reach them any more.
+class _CloseCompany extends ConsumerWidget {
+  const _CloseCompany({required this.org});
+
+  final Organization org;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Close this company',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          'Its ledger, documents, payroll and everything else stay '
+          'exactly where they are and stop being visible to anybody — '
+          'including you. The law requires those books kept for seven '
+          'years, so nothing is erased. Only the operator of this '
+          'platform can reopen it.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: Space.sm),
+        OutlinedButton.icon(
+          key: const ValueKey('close-company'),
+          onPressed: () => _close(context, ref),
+          icon: const Icon(Icons.business_outlined, size: 18),
+          label: const Text('Close this company'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: context.colors.danger,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _close(BuildContext context, WidgetRef ref) async {
+    final reason = TextEditingController();
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Close ${org.name}?'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Everybody on this company loses access immediately, '
+                'including you, and it disappears from the company '
+                'switcher. Nothing is deleted and only the operator of '
+                'this platform can reopen it.',
+              ),
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('close-company-reason'),
+                controller: reason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (optional)',
+                  helperText: 'Kept with the closure, for the operator.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('close-company-confirm'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.danger,
+            ),
+            child: const Text('Close it'),
+          ),
+        ],
+      ),
+    );
+    final why = reason.text.trim();
+    reason.dispose();
+    if (go != true || !context.mounted) return;
+
+    final done = await runWithFeedback(
+      context,
+      doing: 'close the company',
+      action: () => ref
+          .read(repoProvider)!
+          .closeOrganization(org.id, reason: why.isEmpty ? null : why),
+      successMessage: '${org.name} is closed',
+    );
+    if (!done || !context.mounted) return;
+
+    // The company the app is pointed at no longer exists as far as
+    // every guard in the database is concerned, so staying on it would
+    // be a screenful of empty lists and permission errors.
+    ref.read(currentOrgIdProvider.notifier).clear();
+    ref.invalidate(organizationsProvider);
   }
 }
 
@@ -161,19 +318,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
   late String _rounding;
   bool _saving = false;
 
-  static const _entityTypes = {
-    'sdn_bhd': 'Private limited (Sdn Bhd)',
-    'bhd': 'Public limited (Berhad)',
-    'llp': 'Limited liability partnership (PLT)',
-    'enterprise': 'Enterprise',
-    'sole_proprietor': 'Sole proprietor',
-    'partnership': 'Partnership',
-    'association': 'Association',
-    'government': 'Government',
-    'individual': 'Individual',
-    'other': 'Other',
-  };
-
   static const _roundings = {
     'none': 'None',
     'nearest_5cent': 'Nearest 5 sen',
@@ -189,9 +333,13 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _tin.text = o.tin ?? '';
     _msic.text = o.msicCode ?? '';
     _currency.text = o.baseCurrency;
-    _entityType = _entityTypes.containsKey(o.entityType)
-        ? o.entityType
-        : 'other';
+    // Verbatim, and deliberately. This used to fall back to `other`
+    // when the code was not in a hardcoded map, which was harmless
+    // while the map WAS the enum and could not go stale. After `0607`
+    // the list is a table an administrator adds to, so the same line
+    // would quietly refile a company on a new kind as `other` the next
+    // time anybody opened this dialog and pressed Save.
+    _entityType = o.entityType;
     _rounding = _roundings.containsKey(o.roundingMethod)
         ? o.roundingMethod
         : 'none';
@@ -307,6 +455,12 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     // it is wrong relabels every figure the company has.
     final posted = ref.watch(hasPostingsProvider).value ?? true;
 
+    // Watched rather than read, so the reference list is on its way
+    // before anybody picks a suggestion. A state arriving after the
+    // pick would leave the box empty with no way to tell why.
+    final states = ref.watch(refStatesProvider).valueOrNull ?? const [];
+    final country = ref.watch(orgCountryAlpha2Provider);
+
     return AlertDialog(
       title: const Text('Company details'),
       content: SizedBox(
@@ -324,17 +478,51 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 decoration: const InputDecoration(labelText: 'Name'),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: _entityType,
-                decoration: const InputDecoration(labelText: 'Entity type'),
-                items: [
-                  for (final e in _entityTypes.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _entityType = v!),
+              Builder(
+                builder: (context) {
+                  final offered =
+                      ref
+                          .watch(organizationEntityTypesProvider)
+                          .valueOrNull ??
+                      const <EntityType>[];
+                  // The kind this company is already filed as, even
+                  // where it is switched off or not offered to
+                  // companies. A dropdown whose `value` is not among
+                  // its `items` throws, and the company that would
+                  // throw is exactly the one somebody opened this
+                  // dialog to correct.
+                  final codes = [for (final e in offered) e.code];
+                  final extra = !codes.contains(_entityType);
+                  return DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: offered.isEmpty && !extra ? null : _entityType,
+                    decoration: const InputDecoration(
+                      labelText: 'Entity type',
+                    ),
+                    items: [
+                      if (extra)
+                        DropdownMenuItem(
+                          value: _entityType,
+                          child: Text(
+                            entityTypeLabel(
+                              ref
+                                  .watch(allEntityTypesProvider)
+                                  .valueOrNull,
+                              _entityType,
+                            ),
+                          ),
+                        ),
+                      for (final e in offered)
+                        DropdownMenuItem(
+                          value: e.code,
+                          child: Text(e.display),
+                        ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _entityType = v!),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -357,13 +545,36 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _msic,
-                enabled: !_saving,
-                decoration: const InputDecoration(
-                  labelText: 'MSIC code',
-                  hintText: '62010',
-                ),
+              // Picked, not typed. A wrong MSIC code is a misstatement
+              // on the incorporation and on every annual return after
+              // it, and it is not a thing anybody types correctly from
+              // memory.
+              Consumer(
+                builder: (context, ref, _) {
+                  final all =
+                      ref.watch(msicCodesProvider).valueOrNull ??
+                      const <Map<String, dynamic>>[];
+                  return ListTile(
+                    key: const ValueKey('company-msic'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('What the business does'),
+                    subtitle: Text(msicSummary(all, _msic.text)),
+                    trailing: const Icon(Icons.search, size: 18),
+                    onTap: _saving
+                        ? null
+                        : () async {
+                            final picked = await pickMsicCode(
+                              context,
+                              current: _msic.text.trim().isEmpty
+                                  ? null
+                                  : _msic.text.trim(),
+                            );
+                            if (picked != null) {
+                              setState(() => _msic.text = picked);
+                            }
+                          },
+                  );
+                },
               ),
               const Divider(height: Space.xl),
               Text(
@@ -376,11 +587,19 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 style: TextStyle(fontSize: 12),
               ),
               const SizedBox(height: Space.sm),
-              TextField(
-                key: const ValueKey('company-address1'),
+              AddressField(
+                fieldKey: const ValueKey('company-address1'),
                 controller: _line1,
                 enabled: !_saving,
-                decoration: const InputDecoration(labelText: 'Address line 1'),
+                label: 'Address line 1',
+                country: country,
+                onChosen: (a) => fillAddressBoxes(
+                  a,
+                  states,
+                  postcode: _postcode,
+                  city: _city,
+                  stateCode: _state,
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -470,12 +689,18 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 title: const Text('Same as the business address'),
               ),
               if (!_registeredSameAsBusiness) ...[
-                TextField(
-                  key: const ValueKey('company-registered-address1'),
+                AddressField(
+                  fieldKey: const ValueKey('company-registered-address1'),
                   controller: _regLine1,
                   enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Address line 1',
+                  label: 'Address line 1',
+                  country: country,
+                  onChosen: (a) => fillAddressBoxes(
+                    a,
+                    states,
+                    postcode: _regPostcode,
+                    city: _regCity,
+                    stateCode: _regState,
                   ),
                 ),
                 const SizedBox(height: 8),

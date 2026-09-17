@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
 // `RepoPos` is an extension, and a Dart extension is only in scope
 // where its declaring library is imported.
 import '../../data/repository.dart';
+import 'provider_roster_screen.dart';
 import 'till_screen.dart' show PosRegisterPicker, posNum;
 
 /// The diary.
@@ -148,6 +150,16 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       appBar: AppBar(
         title: const Text('Diary'),
         actions: [
+          // A diary is a list of people before it is a list of hours,
+          // and until somebody's week is written down every booking
+          // made for them is refused by name.
+          if (_outletId != null)
+            IconButton(
+              key: const ValueKey('diary-roster'),
+              icon: const Icon(Icons.people_alt_outlined),
+              tooltip: 'Who does the work',
+              onPressed: () => showProviderRoster(context, _outletId!),
+            ),
           registers.maybeWhen(
             data: (rows) => PosRegisterPicker(
               registers: rows,
@@ -504,19 +516,19 @@ class _BookingDialogState extends State<_BookingDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            value: _itemId,
-            decoration: const InputDecoration(labelText: 'What'),
-            items: [
+          SearchablePicker<String>(
+            options: [
               for (final s in widget.services)
-                DropdownMenuItem(
-                  value: (s['items'] as Map?)?['id'] as String?,
-                  child: Text(
-                    '${(s['items'] as Map?)?['name'] ?? ''} · '
-                    '${s['duration_minutes']}m',
-                  ),
+                PickerOption<String>(
+                  value: '${(s['items'] as Map?)?['id']}',
+                  label: '${(s['items'] as Map?)?['name'] ?? ''}',
+                  // How long it takes, which is what decides whether it
+                  // fits in the gap somebody is booking into.
+                  sublabel: '${s['duration_minutes']}m',
                 ),
             ],
+            value: _itemId,
+            label: 'What',
             onChanged: (v) => setState(() => _itemId = v),
           ),
           const SizedBox(height: 12),

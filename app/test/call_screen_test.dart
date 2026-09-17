@@ -101,7 +101,8 @@ class FakeCallEngine extends ChangeNotifier implements CallEngine {
 }
 
 void main() {
-  Widget harness(FakeCallEngine engine) => ProviderScope(
+  Widget harness(FakeCallEngine engine, {bool isMine = false}) =>
+      ProviderScope(
     // No session, so no repository. Every RPC the screen would make is
     // skipped, which is what makes this a test of the screen rather
     // than of Supabase.
@@ -118,6 +119,7 @@ void main() {
                     callId: 'call-1',
                     title: 'Siti Nurhaliza',
                     video: false,
+                    isMine: isMine,
                     engine: engine,
                   ),
                 ),
@@ -130,8 +132,12 @@ void main() {
     ),
   );
 
-  Future<void> open(WidgetTester tester, FakeCallEngine engine) async {
-    await tester.pumpWidget(harness(engine));
+  Future<void> open(
+    WidgetTester tester,
+    FakeCallEngine engine, {
+    bool isMine = false,
+  }) async {
+    await tester.pumpWidget(harness(engine, isMine: isMine));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
   }
@@ -236,6 +242,60 @@ void main() {
     // the answer is otherwise visible to everybody except them.
     expect(find.text('You are sharing your screen'), findsOneWidget);
     expect(find.byIcon(Icons.stop_screen_share_outlined), findsOneWidget);
+  });
+
+  testWidgets('only whoever started the call may end it for everybody', (
+    tester,
+  ) async {
+    // `chat_end_call` refuses everybody else -- "Only whoever started
+    // the call may end it for everybody" -- so the button is only
+    // offered to the one person the server will take it from. Absent
+    // rather than greyed out, like the share button below.
+    await open(tester, FakeCallEngine());
+    expect(find.byKey(const ValueKey('call-end-all')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('call-hang-up')),
+      findsOneWidget,
+      reason: 'leaving is always yours to do',
+    );
+  });
+
+  testWidgets('and whoever did is offered it, beside leaving', (
+    tester,
+  ) async {
+    await open(tester, FakeCallEngine(), isMine: true);
+    expect(find.byKey(const ValueKey('call-end-all')), findsOneWidget);
+    expect(find.byKey(const ValueKey('call-hang-up')), findsOneWidget);
+  });
+
+  testWidgets('ending it for everybody asks first', (tester) async {
+    // Hanging up on four colleagues is not the same act as leaving
+    // them to it, and the two buttons sit next to each other.
+    await open(tester, FakeCallEngine(), isMine: true);
+    await tester.tap(find.byKey(const ValueKey('call-end-all')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('End the call for everybody?'), findsOneWidget);
+    expect(
+      find.textContaining('lets the rest carry on without you'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('and saying no leaves everybody on it', (tester) async {
+    // Including the person who asked. Backing out of hanging up on
+    // four colleagues must not hang up on them.
+    await open(tester, FakeCallEngine(), isMine: true);
+    await tester.tap(find.byKey(const ValueKey('call-end-all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('call-hang-up')),
+      findsOneWidget,
+      reason: 'still on the call',
+    );
   });
 
   testWidgets('a device that cannot share is not offered the button', (

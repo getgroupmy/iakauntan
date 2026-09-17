@@ -303,7 +303,17 @@ void main() {
 
     /// `pumpAndSettle` cannot be used: an unreachable repository leaves
     /// `AsyncView` retrying on a periodic timer, which never settles.
+    ///
+    /// The WIDTH is not incidental. What is asserted below is whether
+    /// group reports are OFFERED, and below 900 the button folds into
+    /// the bar's overflow menu -- the full row of actions was four
+    /// pixels over at 800, which `reports_screen_test.dart` measures.
+    /// So these render at a laptop width, where the button is a button.
+    /// Both placements are asserted there.
     Future<void> open(WidgetTester tester, {required int companies}) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1400, 900);
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(reports(companies: companies));
       await tester.pump();
       await tester.pump();
@@ -325,6 +335,78 @@ void main() {
     testWidgets('and a company that has another beside it is', (tester) async {
       await open(tester, companies: 2);
       expect(find.byKey(const ValueKey('open-group-reports')), findsOneWidget);
+    });
+  });
+
+  /// The bar above the three consolidation tabs, at every width one is
+  /// opened at.
+  ///
+  /// It ran 48 pixels off a 412px phone and 100 off a 360: the range
+  /// button carries twenty-three characters beside the download icon.
+  /// Flutter CLIPS an overflowing toolbar in a release build rather
+  /// than reporting it, so a phone lost the right-hand end of the
+  /// control that says which period the consolidation covers.
+  ///
+  /// These assert nothing but that the screen rendered, because a
+  /// `RenderFlex` overflow IS a test failure here.
+  group('the group bar fits', () {
+    Widget screen() => ProviderScope(
+      overrides: [
+        repoProvider.overrideWithValue(null),
+        groupCompaniesProvider.overrideWith(
+          (ref) async => const [
+            {'org_id': 'o1', 'name': 'One Sdn Bhd', 'is_current': true},
+            {'org_id': 'o2', 'name': 'Two Sdn Bhd', 'is_current': false},
+          ],
+        ),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const GroupReportsScreen(),
+      ),
+    );
+
+    /// `pumpAndSettle` cannot be used here either: an unreachable
+    /// repository leaves `AsyncView` retrying on a periodic timer.
+    Future<void> openAt(WidgetTester tester, double width) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = Size(width, 900);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(screen());
+      await tester.pump();
+      await tester.pump();
+    }
+
+    for (final width in [1400.0, 1000.0, 800.0, 700.0, 600.0, 412.0, 360.0]) {
+      testWidgets('at ${width.toInt()} wide', (tester) async {
+        await openAt(tester, width);
+
+        expect(find.byType(GroupReportsScreen), findsOneWidget);
+      });
+    }
+
+    testWidgets('and the range keeps its full dates on a phone',
+        (tester) async {
+      await openAt(tester, 412);
+
+      final range = find.byKey(const ValueKey('group-range'));
+      final tabs = find.byType(TabBar);
+      expect(range, findsOneWidget);
+      expect(tester.getCenter(range).dy, lessThan(tester.getCenter(tabs).dy));
+
+      final label = tester
+          .widget<Text>(find.descendant(of: range, matching: find.byType(Text)))
+          .data!;
+      expect(RegExp(r'\d{2}/\d{2}/\d{4}').allMatches(label), hasLength(2));
+    });
+
+    testWidgets('and sits on the toolbar on a laptop', (tester) async {
+      await openAt(tester, 1400);
+
+      expect(
+        tester.getCenter(find.byKey(const ValueKey('group-range'))).dy,
+        lessThan(56),
+      );
     });
   });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -142,28 +143,26 @@ class _ItemParamsDialogState extends ConsumerState<_ItemParamsDialog> {
                 ),
                 const SizedBox(height: Space.sm),
                 suppliers.maybeWhen(
-                  data: (list) => DropdownButtonFormField<String?>(
-                    value: _supplier,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Buy this from',
-                      helperText:
-                          'Overrides the preferred supplier on the item. '
-                          'Orders are grouped by supplier, and an item with '
-                          'none cannot be ordered at all.',
-                      helperMaxLines: 3,
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Use the item\'s preferred supplier'),
-                      ),
+                  data: (list) => SearchablePicker<String>(
+                    options: [
                       for (final Contact c in list)
-                        DropdownMenuItem<String?>(
+                        PickerOption<String>(
                           value: c.id,
-                          child: Text(c.name),
+                          label: c.name,
+                          sublabel: c.code,
+                          keywords: [c.code],
                         ),
                     ],
+                    value: list.any((c) => c.id == _supplier)
+                        ? _supplier
+                        : null,
+                    label: 'Buy this from',
+                    helperText:
+                        'Overrides the preferred supplier on the item. '
+                        'Orders are grouped by supplier, and an item with '
+                        'none cannot be ordered at all.',
+                    allowEmpty: true,
+                    emptyLabel: 'Use the item\'s preferred supplier',
                     onChanged: (v) => setState(() => _supplier = v),
                   ),
                   orElse: () => const LinearProgressIndicator(),

@@ -2,13 +2,22 @@
  * Renders queued e-Invoice documents to UBL 2.1 JSON and submits the
  * batch to MyInvois.
  *
- * Payload: { einvoice_ids?: string[], sales_document_id?: string }
- * With neither, everything queued for the org is sent, up to the batch cap.
+ * Payload: { einvoice_ids?: string[], sales_document_id?: string,
+ *            purchase_document_id?: string }
+ * With none of them, everything queued for the org is sent, up to the
+ * batch cap.
+ *
+ * `purchase_document_id` is the SELF-BILLED path (0611): the e-Invoice a
+ * buyer owes LHDN for a supply the seller cannot file -- a foreign
+ * supplier, an unregistered individual. Same submission, different
+ * preparation, and the supplier block holds the supplier rather than
+ * this company.
  */
 import {
   Ctx,
   HttpError,
   loadCredentials,
+  loadSigningMaterial,
   persistLogs,
   requirePostingRole,
 } from "../_shared/context.ts";
@@ -19,6 +28,7 @@ import {
   toBase64,
 } from "../_shared/myinvois.ts";
 import { buildUblDocument, EinvoiceLineRow, EinvoiceRow } from "../_shared/ubl.ts";
+import { SIGNED_VERSION, signUblJsonDocument } from "../_shared/xades.ts";
 
 // MyInvois caps a submission at 100 documents / 5 MB.
 const BATCH_LIMIT = 100;
@@ -27,7 +37,17 @@ export async function submit(ctx: Ctx) {
   requirePostingRole(ctx, "submit e-Invoices");
 
   const salesDocumentId = ctx.body.sales_document_id as string | undefined;
+  const purchaseDocumentId = ctx.body.purchase_document_id as
+    | string
+    | undefined;
   const einvoiceIds = ctx.body.einvoice_ids as string[] | undefined;
+
+  if (salesDocumentId && purchaseDocumentId) {
+    throw new HttpError(
+      400,
+      "Name a sales document or a purchase document, not both",
+    );
+  }
 
   // Snapshot the source document first when one was named.
   if (salesDocumentId) {
@@ -35,6 +55,18 @@ export async function submit(ctx: Ctx) {
       p_sales_document_id: salesDocumentId,
     });
     if (error) throw new HttpError(400, `Could not prepare e-Invoice: ${error.message}`);
+  }
+  if (purchaseDocumentId) {
+    const { error } = await ctx.userClient.rpc(
+      "prepare_self_billed_einvoice",
+      { p_purchase_document_id: purchaseDocumentId },
+    );
+    if (error) {
+      throw new HttpError(
+        400,
+        `Could not prepare self-billed e-Invoice: ${error.message}`,
+      );
+    }
   }
 
   const { data: org } = await ctx.admin
@@ -62,6 +94,10 @@ export async function submit(ctx: Ctx) {
     query = query
       .eq("source_table", "sales_documents")
       .eq("source_id", salesDocumentId);
+  } else if (purchaseDocumentId) {
+    query = query
+      .eq("source_table", "purchase_documents")
+      .eq("source_id", purchaseDocumentId);
   }
 
   const { data: docs, error: docsError } = await query;
@@ -71,6 +107,38 @@ export async function submit(ctx: Ctx) {
   }
 
   const client = new MyInvoisClient(creds);
+
+  // A 1.1 document must be signed; a 1.0 one must not be. The version
+  // is on each document rather than on the organization, because
+  // `prepare_einvoice` snapshots it when the document is prepared —
+  // so a company that switches to 1.1 does not retroactively make its
+  // queued 1.0 documents invalid.
+  const signing = (docs as EinvoiceRow[]).some(
+      (d) => d.einvoice_version === SIGNED_VERSION,
+    )
+    ? await loadSigningMaterial(ctx, creds.environment)
+    : null;
+
+  // Before the batch rather than during it. Half a submission is worse
+  // than none: the documents already sent are validated and immutable,
+  // and the rest come back as "queued" with nothing saying why.
+  if (!signing) {
+    const unsigned = (docs as EinvoiceRow[]).filter(
+      (d) => d.einvoice_version === SIGNED_VERSION,
+    );
+    if (unsigned.length > 0) {
+      const which = unsigned.length === 1
+        ? unsigned[0].internal_doc_no
+        : `${unsigned.length} documents`;
+      throw new HttpError(
+        400,
+        `${which} must be signed, because they are e-Invoice version ` +
+          `${SIGNED_VERSION}, and no signing certificate is loaded for the ` +
+          `${creds.environment} environment. Load one under ` +
+          `Settings > e-Invoice, or set the version back to 1.0.`,
+      );
+    }
+  }
 
   // Render every document, keeping the exact payload we hashed so the
   // stored copy always matches what LHDN validated.
@@ -82,10 +150,26 @@ export async function submit(ctx: Ctx) {
       .from("einvoice_lines")
       .select("*")
       .eq("einvoice_id", doc.id)
-      .order("line_no");
+      // Said out loud because the two clients disagree: supabase-js
+      // defaults `ascending` to true and postgrest-dart to false. The
+      // lines of a document go on the invoice in the order they were
+      // written, and LHDN is sent what the customer was sent.
+      .order("line_no", { ascending: true });
 
-    const ubl = buildUblDocument(doc, (lines ?? []) as EinvoiceLineRow[]);
-    const raw = JSON.stringify(ubl);
+    const built = buildUblDocument(doc, (lines ?? []) as EinvoiceLineRow[]);
+
+    // The signature is over the FINAL document, and `documentHash`
+    // below is over the same bytes — so the signed string is carried
+    // forward rather than the object being stringified a second time.
+    // Two `JSON.stringify` calls on one object give the same string
+    // today; one edit that rebuilds it in between and they do not.
+    let ubl: unknown = built;
+    let raw = JSON.stringify(built);
+    if (doc.einvoice_version === SIGNED_VERSION && signing) {
+      const signed = await signUblJsonDocument(built, signing);
+      ubl = signed.document;
+      raw = signed.minified;
+    }
     const hash = await sha256Hex(raw);
 
     rendered.set(doc.id, { ubl, hash });

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/documents/line_draft.dart';
 
 /// What `item_uom_options` returns for a tin of milk powder that the
@@ -123,4 +124,105 @@ void main() {
       expect(line.totals.total, 480);
     });
   });
+
+  // The tax code is the half this function exists for. Its own comment
+  // records the bug: the wide row and the narrow card filled a line
+  // separately and had drifted, and the narrow one set everything
+  // except the tax code — so a line added on a phone silently carried
+  // no SST. Silent, on a tax invoice, is the worst place for it.
+  group('filling a line from the item master', () {
+    Item item({String? salesTaxCodeId}) => Item(
+          id: 'i1',
+          code: 'MILK',
+          name: 'Milk powder 900g',
+          itemType: 'stock',
+          uomCode: 'TIN',
+          classificationCode: '004',
+          unitPrice: 21.50,
+          salesTaxCodeId: salesTaxCodeId,
+        );
+
+    TaxCode tax({
+      required String id,
+      required double rate,
+      bool isDefault = false,
+    }) =>
+        TaxCode(
+          id: id,
+          code: 'S$rate',
+          name: 'Service tax',
+          rate: rate,
+          taxTypeCode: '01',
+          isDefault: isDefault,
+        );
+
+    test('carries the price, the unit and the classification across', () {
+      final line = LineDraft();
+      applyItemToLine(line, item(), const []);
+
+      expect(line.itemId, 'i1');
+      expect(line.description, 'Milk powder 900g');
+      expect(line.unitPrice, 21.50);
+      expect(line.uomCode, 'TIN');
+      // LHDN's classification, which every e-Invoice line has to carry.
+      expect(line.classificationCode, '004');
+    });
+
+    test('and the tax code the item itself carries', () {
+      final line = LineDraft();
+      applyItemToLine(line, item(salesTaxCodeId: 't8'), [
+        tax(id: 't6', rate: 6, isDefault: true),
+        tax(id: 't8', rate: 8),
+      ]);
+
+      expect(line.taxCodeId, 't8');
+      expect(line.taxRate, 8);
+    });
+
+    test('falling back to the default for an item that names none', () {
+      // Not "no tax". An item that has never been given a code is the
+      // ordinary case, and the company's default is what it is sold at.
+      final line = LineDraft();
+      applyItemToLine(line, item(), [
+        tax(id: 't6', rate: 6, isDefault: true),
+        tax(id: 't8', rate: 8),
+      ]);
+
+      expect(line.taxCodeId, 't6');
+      expect(line.taxRate, 6);
+    });
+
+    test('and to the default when the item names one that is gone', () {
+      // A tax code retired since the item was set up. Leaving the line
+      // with a dangling id would post a document against a code the
+      // ledger no longer has.
+      final line = LineDraft();
+      applyItemToLine(line, item(salesTaxCodeId: 'retired'), [
+        tax(id: 't6', rate: 6, isDefault: true),
+      ]);
+
+      expect(line.taxCodeId, 't6');
+    });
+
+    test('a company with no default leaves the line as it found it', () {
+      // Writing a zero rate here would be this screen deciding a supply
+      // is exempt, which is not its decision to make.
+      final line = LineDraft(taxCodeId: 'kept', taxRate: 6);
+      applyItemToLine(line, item(), const []);
+
+      expect(line.taxCodeId, 'kept');
+      expect(line.taxRate, 6);
+    });
+
+    test('and the quantity somebody already typed is not touched', () {
+      // Picking the item is not re-typing the line. A quantity reset to
+      // one on item selection is a wrong invoice nobody looks at twice.
+      final line = LineDraft(quantity: 12, discountPercent: 5);
+      applyItemToLine(line, item(), const []);
+
+      expect(line.quantity, 12);
+      expect(line.discountPercent, 5);
+    });
+  });
+
 }

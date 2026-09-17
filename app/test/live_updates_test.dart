@@ -11,13 +11,13 @@ import 'package:iakauntan/src/core/providers.dart';
 /// leaves one screen stale while its neighbours update, and neither
 /// shows up as an error. So the map is asserted rather than trusted.
 void main() {
-  test('the tables subscribed to are the ones the database publishes', () {
-    // Kept in step with `0117_live_updates.sql`,
-    // `0124_a_claim_moves_while_you_watch.sql` and
-    // `0204_an_entitlement_arrives_without_a_reload.sql` by hand, so it
-    // is written down twice on purpose: if they ever disagree, one side
-    // listens for something nobody sends and the feature quietly does
-    // nothing.
+  test('the tables with a narrow answer are these, and only these', () {
+    // Not the tables that are LIVE any more — `0547` made that every
+    // table with an `org_id`. These are the ones whose refresh is
+    // narrowed to the handful of lists that actually moved, instead of
+    // refetching the screen. Pinned so that adding one is a decision:
+    // a wrong entry here is worse than no entry, because no entry still
+    // refreshes and a wrong one refreshes the wrong thing.
     expect(
       liveUpdateTables.toSet(),
       {
@@ -92,15 +92,11 @@ void main() {
     expect(liveUpdateProviders('expense_claims'), contains(claimsProvider));
   });
 
-  test('the organization is filtered by its own key, not by org_id', () {
-    // `organizations` has no `org_id` column. Filtering on one would
-    // match no rows and deliver nothing — the settings screen would go
-    // back to needing a reload, and nothing would say why.
-    expect(liveUpdateColumn('organizations'), 'id');
-    for (final table in liveUpdateTables) {
-      if (table == 'organizations') continue;
-      expect(liveUpdateColumn(table), 'org_id', reason: table);
-    }
+  test('there is one subscription, and it is to the feed', () {
+    // `0547`. The app no longer names a table per subscription — the
+    // trigger does, and the name arrives in the row. This is the whole
+    // of the coupling between the two sides now, so it is written down.
+    expect(liveChangeFeed, 'live_changes');
   });
 
   test('every table re-reads something', () {
@@ -138,10 +134,13 @@ void main() {
     expect(stale, isNot(contains(currentOrgProvider)));
   });
 
-  test('nothing private is subscribed to', () {
-    // The database refuses to publish these; this is the other half,
-    // so a table added to the publication by hand still would not be
-    // listened to without a deliberate change here.
+  test('nothing private has a narrow answer here', () {
+    // These are held back in the database, by the policy on
+    // `live_changes` that `0547` wrote and
+    // `supabase/tests/live_change_feed.sql` asserts: a clerk is not
+    // told that payroll moved. This is the other half — no entry here
+    // either, so a name that somehow arrived would refresh the screen
+    // and not point at a payroll list.
     const private = [
       'einvoice_credentials',
       'org_ocr_credentials',
@@ -153,6 +152,119 @@ void main() {
     for (final table in private) {
       expect(liveUpdateTables, isNot(contains(table)), reason: table);
     }
+  });
+
+  test('the auth stream is never thrown away with the rest', () {
+    // The broad refresh reaches everything holding an AsyncValue, and
+    // the auth stream holds one. Re-subscribing to it would flicker a
+    // signed-in person's session every time a colleague saved
+    // anything, so it is the one exception — and it is the exception by
+    // name, in one place, rather than by a check scattered about.
+    expect(liveUpdateNeverInvalidated, contains(authStateProvider));
+  });
+
+  test('a table with no entry of its own still refreshes something', () {
+    // The point of `0547`. `stock_transfers` is not on the narrow list
+    // and never will be worth putting there — but a storeman receiving
+    // one must not leave the warehouse screen on the next desk showing
+    // it in transit. Empty here means "refetch the screen", not
+    // "nothing happens", which is only true because `_flush` reads it
+    // that way.
+    expect(liveUpdateProviders('stock_transfers'), isEmpty);
+    expect(liveUpdateProviders('leave_requests'), isEmpty);
+    expect(liveUpdateProviders('pos_sales'), isEmpty);
+  });
+
+  group('what a change actually refreshes', () {
+    // A provider that counts how often it was asked, standing in for
+    // every list on a screen.
+    var fetched = 0;
+    late AutoDisposeFutureProvider<int> aList;
+    late StateProvider<String> whatSomebodyTyped;
+
+    setUp(() {
+      fetched = 0;
+      aList = FutureProvider.autoDispose<int>((ref) async => ++fetched);
+      whatSomebodyTyped = StateProvider<String>((ref) => 'untouched');
+    });
+
+    Future<(ProviderContainer, LiveUpdates)> harness() async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final probe = Provider<LiveUpdates>(LiveUpdates.new);
+      // Listened to, not read once: an autoDispose provider with no
+      // listener is not in the container at all, and "everything alive"
+      // would then be nothing.
+      container.listen(aList, (_, __) {});
+      container.listen(whatSomebodyTyped, (_, __) {});
+      await container.read(aList.future);
+      return (container, container.read(probe));
+    }
+
+    test('a table with a narrow answer refreshes what that answer names',
+        () async {
+      final (container, live) = await harness();
+      expect(fetched, 1);
+
+      live.noteChange('sales_documents');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      // Not this list: `sales_documents` has a narrow answer, and this
+      // list is not on it. That is the optimisation working.
+      expect(fetched, 1);
+      container.dispose();
+    });
+
+    test('a table with none refetches everything that was fetched',
+        () async {
+      final (container, live) = await harness();
+      expect(fetched, 1);
+
+      live.noteChange('stock_transfers');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await container.read(aList.future);
+
+      expect(fetched, 2,
+          reason: 'a storeman receiving a transfer has to reach the '
+              'warehouse screen on the next desk');
+      container.dispose();
+    });
+
+    test('and leaves what somebody typed alone', () async {
+      final (container, live) = await harness();
+      container.read(whatSomebodyTyped.notifier).state = 'half a name';
+
+      live.noteChange('stock_transfers');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      // The rule is about the shape of a provider, not a list of names:
+      // an AsyncValue was fetched and can be fetched again; a State is
+      // a choice, and resetting it would throw away work nobody asked
+      // to lose.
+      expect(container.read(whatSomebodyTyped), 'half a name');
+      container.dispose();
+    });
+
+    test('and waits for the burst to settle before it does', () async {
+      final (container, live) = await harness();
+
+      // Posting a document writes the document, its lines and a journal
+      // entry, and each arrives separately. Refetching on the first
+      // would be three round trips for one action a colleague took, and
+      // a list that flickers twice on the way to the right answer.
+      live.noteChange('stock_transfers');
+      live.noteChange('stock_movements');
+      live.noteChange('stock_levels');
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await container.read(aList.future);
+      expect(fetched, 1, reason: 'the burst is not over yet');
+
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await container.read(aList.future);
+      expect(fetched, 2, reason: 'and then it refetches once');
+      container.dispose();
+    });
   });
 
   test('with nobody signed in, nothing is listening', () {

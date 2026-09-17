@@ -376,6 +376,7 @@ declare
   v_in uuid; v_out uuid; r record; v_ok boolean;
   v_type uuid; v_type2 uuid; v_inv uuid;
   v_buyer uuid := pg_temp.another_user('buyer@cek.test');
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   v_org := pg_temp.test_org('Daftar Cek Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -396,18 +397,23 @@ begin
   returning id into v_bank;
 
   -- Dated relative to today on purpose: `days_to_go` is measured against
-  -- current_date, so a fixed date would make the assertion drift by a
-  -- day every day and fail on some future morning for no reason.
+  -- today, so a fixed date would make the assertion drift by a day every
+  -- day and fail on some future morning for no reason.
+  --
+  -- And today in Kuala Lumpur, not in whatever zone the session happens
+  -- to be in. `0419` pinned `pdc_list` to Malaysia; this fixture said
+  -- `current_date`, and between midnight and eight in the morning there
+  -- the two are a day apart, which is how this line came to be written.
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
      amount, received_on, bank_account_id, bank_name)
-  values (v_org, 'PDC-IN', 'incoming', v_cust, '900001', current_date + 10,
-          1500, current_date, v_bank, 'CIMB')
+  values (v_org, 'PDC-IN', 'incoming', v_cust, '900001', v_today + 10,
+          1500, v_today, v_bank, 'CIMB')
   returning id into v_in;
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
      amount, bank_account_id, bank_name)
-  values (v_org, 'PDC-OUT', 'outgoing', v_sup, '900002', current_date + 20,
+  values (v_org, 'PDC-OUT', 'outgoing', v_sup, '900002', v_today + 20,
           900, v_bank, 'Maybank')
   returning id into v_out;
 
@@ -513,5 +519,615 @@ begin
   perform pg_temp.sign_in_as(v_owner);
   perform pg_temp.check_true('and somebody let into neither is refused', not v_ok);
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Cek Jiran Sdn Bhd: a cheque clears into its own company's bank
+--
+-- `clear_pdc` takes an optional bank account to clear the cheque into.
+-- It checked that account against the cheque's company in one place —
+-- the lookup that resolves which ledger account to post to — while the
+-- balance it updates and the account it writes back onto the cheque
+-- both used the argument raw. Clearing into another company's account
+-- moved THEIR balance. That is 0506, and it is the same shape 0505
+-- closed in settle_deposit.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid; v_org2 uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid; v_bank uuid; v_theirs uuid; v_pdc uuid;
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Cek Kami Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Encik Zul', 'customer') returning id into v_cust;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org,
+          (select id from public.accounts where org_id = v_org and code = '1120'),
+          'Our account', 'Maybank', '544444444444', 'MYR', 0, 0, true)
+  returning id into v_bank;
+
+  v_org2 := pg_temp.test_org('Cek Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org2,
+          (select id from public.accounts where org_id = v_org2 and code = '1120'),
+          'Their account', 'RHB', '555555555555', 'MYR', 0, 6000, true)
+  returning id into v_theirs;
+
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount,
+     received_on, bank_account_id, status)
+  values (v_org, 'PDC-JIRAN', 'incoming', v_cust, '600001', current_date,
+          800, current_date, v_bank, 'held')
+  returning id into v_pdc;
+
+  begin
+    perform public.clear_pdc(v_pdc, current_date, v_theirs);
+    raise exception 'FAIL cleared a cheque into another company''s account';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a cheque cannot clear into another company',
+      v_msg like '%belongs to another company%');
+  end;
+  perform pg_temp.check_eq('and their balance did not move',
+    (select b.current_balance from public.bank_accounts b where b.id = v_theirs),
+    6000::numeric);
+  perform pg_temp.check_true('the cheque is still waiting, in its own bank',
+    (select c.status::text = 'held' and c.bank_account_id = v_bank
+       from public.post_dated_cheques c where c.id = v_pdc));
+
+  -- Into its own, it clears.
+  perform public.clear_pdc(v_pdc, current_date, v_bank);
+  perform pg_temp.check_eq('cleared into its own account, the money arrives',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    800::numeric);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The twenty-eight a mutation sweep found
+--
+-- Forty-four one-line mutants of `record_pdc` against seventeen test
+-- files. Sixteen died, and they are the journal in both directions, the
+-- held-cheque account chosen by direction, the cheque-date rule, and
+-- the allocation. Twenty-eight survived, and they are the FRONT DOOR
+-- and the SCOPING -- the same split this programme has now seen on
+-- fourteen functions.
+--
+-- Two of the twenty-eight are cross-tenant. The lookup that finds the
+-- document a cheque settles is scoped by `d.org_id = p_org`, and
+-- deleting that from either the invoice branch or the bill branch
+-- passed the whole suite: a cheque could settle ANOTHER COMPANY'S
+-- document, clearing a receivable in books its holder cannot see. Two
+-- more are the document TYPE -- without it a quotation is settled as
+-- though it were an invoice, and a purchase order as though it were a
+-- bill, so a cheque discharges a debt nobody has incurred yet.
+--
+-- Every refusal below compares the WHOLE message, so a probe cannot be
+-- satisfied by whichever guard happens to fire first.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid := pg_temp.test_user();
+  v_other uuid; v_cust uuid; v_sup uuid; v_item uuid;
+  v_bank uuid; v_inv uuid; v_bill uuid; v_quote uuid;
+  v_ar2 uuid; v_ap2 uuid; v_rel uuid; v_relsup uuid;
+  v_relinv uuid; v_relbill uuid; v_pdc uuid;
+  v_far_org uuid; v_far_cust uuid; v_far_inv uuid;
+  v_msg text; v_took boolean;
+begin
+  v_org := pg_temp.test_org('Cek Sapu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C', 'Pelanggan', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'KERJA', 'Kerja', 'service', false, 1) returning id into v_item;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org, (select id from public.accounts where org_id = v_org and code = '1120'),
+          'Semasa', 'Maybank', '111', 'MYR', 0, 0, true) returning id into v_bank;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (v_org, 'invoice', 'INV-1', current_date, current_date + 30, v_cust,
+          'draft', 'MYR', 1) returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Kerja', 1000, 1);
+  perform public.post_sales_document(v_inv);
+
+  -- A quotation, posted, for the same customer and the same money.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_org, 'quotation', 'QUO-1', current_date, current_date + 30,
+          v_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
+  returning id into v_quote;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_org, 'bill', 'BILL-1', current_date, current_date + 30, v_sup,
+          'posted', 'MYR', 1, 1000, 1000, 1000) returning id into v_bill;
+
+  -- ==================================================================
+  -- 1. The front door
+  -- ==================================================================
+  begin
+    perform public.record_pdc(v_org, 'sideways', v_cust, '1',
+      current_date + 30, 100);
+    raise exception 'a cheque went sideways';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a cheque is either taken in or written out',
+      v_msg, 'A cheque is either taken in or written out.');
+  end;
+
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+      current_date + 30, 0);
+    raise exception 'a cheque for nothing was recorded';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a cheque for nothing at all',
+      v_msg, 'A cheque has to be for something.');
+  end;
+
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '   ',
+      current_date + 30, 100);
+    raise exception 'a cheque with no number was recorded';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a number of nothing but spaces is no number',
+      v_msg, 'A cheque has a number on it.');
+  end;
+
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '1', null, 100);
+    raise exception 'a cheque with no date was recorded';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a cheque has a date on it',
+      v_msg, 'A cheque has a date on it.');
+  end;
+
+  begin
+    perform public.record_pdc(v_org, 'incoming', gen_random_uuid(), '1',
+      current_date + 30, 100);
+    raise exception 'a cheque was taken from nobody';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a contact that does not exist',
+      v_msg, 'No such contact.');
+  end;
+
+  -- And a contact of ANOTHER company, which is a different question:
+  -- the row exists, it is simply not ours.
+  v_far_org := pg_temp.test_org('Syarikat Lain Sdn Bhd');
+  perform public.create_fiscal_year(v_far_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_far_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_far_org, 'C', 'Orang Lain', 'customer') returning id into v_far_cust;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_far_org, 'invoice', 'INV-LAIN', current_date, current_date + 30,
+          v_far_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
+  returning id into v_far_inv;
+  perform pg_temp.sign_in_as(v_owner);
+
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_far_cust, '1',
+      current_date + 30, 100);
+    raise exception 'a cheque was taken from another company''s customer';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('nor a contact of another company',
+      v_msg, 'No such contact.');
+  end;
+
+  -- ==================================================================
+  -- 2. What a cheque may settle
+  -- ==================================================================
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+      current_date + 30, 100,
+      jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 0)));
+    raise exception 'a settlement for nothing was accepted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a settlement for nothing',
+      v_msg, 'A settlement has to be for something.');
+  end;
+
+  -- THE CROSS-TENANT ONE. Another company's invoice, settled by our
+  -- cheque, would clear a receivable in books we cannot see.
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+      current_date + 30, 1000,
+      jsonb_build_array(jsonb_build_object('document', v_far_inv,
+                                           'amount', 1000)));
+    raise exception 'a cheque settled another company''s invoice';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('another company''s invoice is not an invoice here',
+      v_msg, 'No such invoice.');
+  end;
+
+  -- A quotation is not a debt. Settled as one, a cheque discharges
+  -- money nobody has been billed for.
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+      current_date + 30, 1000,
+      jsonb_build_array(jsonb_build_object('document', v_quote,
+                                           'amount', 1000)));
+    raise exception 'a cheque settled a quotation';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('nor is a quotation',
+      v_msg, 'No such invoice.');
+  end;
+
+  -- A deleted invoice is not one either.
+  declare v_gone uuid;
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount,
+       deleted_at)
+    values (v_org, 'invoice', 'INV-GONE', current_date, current_date + 30,
+            v_cust, 'posted', 'MYR', 1, 1000, 1000, 1000, now())
+    returning id into v_gone;
+    begin
+      perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+        current_date + 30, 1000,
+        jsonb_build_array(jsonb_build_object('document', v_gone,
+                                             'amount', 1000)));
+      raise exception 'a cheque settled a deleted invoice';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_eq('nor an invoice somebody deleted',
+        v_msg, 'No such invoice.');
+    end;
+  end;
+
+  -- The same on the buying side: another company's bill, and a purchase
+  -- order that is not a bill.
+  declare v_far_bill uuid; v_po uuid;
+  begin
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_far_org, 'S', 'Pembekal Lain', 'supplier') returning id into v_far_cust;
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount)
+    values (v_far_org, 'bill', 'BILL-LAIN', current_date, current_date + 30,
+            v_far_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
+    returning id into v_far_bill;
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount)
+    values (v_org, 'purchase_order', 'PO-1', current_date, current_date + 30,
+            v_sup, 'posted', 'MYR', 1, 1000, 1000, 1000)
+    returning id into v_po;
+
+    begin
+      perform public.record_pdc(v_org, 'outgoing', v_sup, '2',
+        current_date + 30, 1000,
+        jsonb_build_array(jsonb_build_object('document', v_far_bill,
+                                             'amount', 1000)));
+      raise exception 'a cheque settled another company''s bill';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_eq('another company''s bill is not a bill here',
+        v_msg, 'No such bill.');
+    end;
+
+    begin
+      perform public.record_pdc(v_org, 'outgoing', v_sup, '2',
+        current_date + 30, 1000,
+        jsonb_build_array(jsonb_build_object('document', v_po,
+                                             'amount', 1000)));
+      raise exception 'a cheque settled a purchase order';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_eq('nor is a purchase order',
+        v_msg, 'No such bill.');
+    end;
+  end;
+
+  -- A draft is not outstanding.
+  declare v_draft uuid;
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount)
+    values (v_org, 'invoice', 'INV-DRAFT', current_date, current_date + 30,
+            v_cust, 'draft', 'MYR', 1, 1000, 1000, 1000)
+    returning id into v_draft;
+    begin
+      perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+        current_date + 30, 1000,
+        jsonb_build_array(jsonb_build_object('document', v_draft,
+                                             'amount', 1000)));
+      raise exception 'a cheque settled a draft';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_eq('a cheque settles an outstanding document',
+        v_msg, 'INV-DRAFT is draft, and a cheque settles an outstanding '
+            || 'document.');
+    end;
+  end;
+
+  -- Somebody else's invoice, in our own books.
+  declare v_other_cust uuid; v_other_inv uuid;
+  begin
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org, 'C2', 'Pelanggan Dua', 'customer') returning id into v_other_cust;
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount)
+    values (v_org, 'invoice', 'INV-2', current_date, current_date + 30,
+            v_other_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
+    returning id into v_other_inv;
+    begin
+      perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+        current_date + 30, 1000,
+        jsonb_build_array(jsonb_build_object('document', v_other_inv,
+                                             'amount', 1000)));
+      raise exception 'one customer''s cheque settled another''s invoice';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_eq('a cheque settles its own party''s document',
+        v_msg, 'That cheque is not INV-2''s.');
+    end;
+  end;
+
+  -- A foreign invoice. A cheque held for weeks carries an exchange
+  -- difference that only clearing settles.
+  declare v_usd uuid;
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount)
+    values (v_org, 'invoice', 'INV-USD', current_date, current_date + 30,
+            v_cust, 'posted', 'USD', 4.7, 1000, 1000, 1000)
+    returning id into v_usd;
+    begin
+      perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+        current_date + 30, 1000,
+        jsonb_build_array(jsonb_build_object('document', v_usd,
+                                             'amount', 1000)));
+      raise exception 'a cheque settled a foreign invoice';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_true('a foreign document is banked, not held',
+        v_msg like 'INV-USD is in USD, and a cheque held for weeks in '
+                || 'another currency%');
+    end;
+  end;
+
+  -- More than the document owes.
+  begin
+    perform public.record_pdc(v_org, 'incoming', v_cust, '1',
+      current_date + 30, 1500,
+      jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 1500)));
+    raise exception 'a cheque settled more than the invoice owed';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a cheque cannot settle more than is owed',
+      v_msg, 'INV-1 has 1000.00 outstanding and the cheque would settle '
+          || '1500.00.');
+  end;
+
+  -- ==================================================================
+  -- 3. The control accounts the party names
+  --
+  -- THE COALESCE FALLBACK. Both sides read the contact's own control
+  -- account and fall back to 1210 / 2110, and every cheque in this file
+  -- was drawn by a contact that has none.
+  -- ==================================================================
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '1215', 'Receivable — related', 'asset', 'accounts_receivable')
+  returning id into v_ar2;
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '2115', 'Payable — related', 'liability', 'accounts_payable')
+  returning id into v_ap2;
+  insert into public.contacts
+    (org_id, code, name, contact_type, receivable_account_id)
+  values (v_org, 'C-REL', 'Anak Syarikat', 'customer', v_ar2) returning id into v_rel;
+  insert into public.contacts
+    (org_id, code, name, contact_type, payable_account_id)
+  values (v_org, 'S-REL', 'Induk', 'supplier', v_ap2) returning id into v_relsup;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_org, 'invoice', 'INV-REL', current_date, current_date + 30,
+          v_rel, 'posted', 'MYR', 1, 600, 600, 600) returning id into v_relinv;
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_org, 'bill', 'BILL-REL', current_date, current_date + 30,
+          v_relsup, 'posted', 'MYR', 1, 700, 700, 700) returning id into v_relbill;
+
+  v_pdc := public.record_pdc(v_org, 'incoming', v_rel, '900',
+    current_date + 30, 600,
+    jsonb_build_array(jsonb_build_object('document', v_relinv, 'amount', 600)),
+    v_bank);
+  perform pg_temp.check_eq(
+    'the receivable relieved is the one the customer names',
+    (select sum(gl.credit) from public.gl_lines gl
+       join public.post_dated_cheques c on c.gl_entry_id = gl.entry_id
+      where c.id = v_pdc and gl.account_id = v_ar2), 600::numeric);
+  perform pg_temp.check_eq('and nothing of it in the ordinary one',
+    (select coalesce(sum(gl.credit), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.post_dated_cheques c on c.gl_entry_id = gl.entry_id
+      where c.id = v_pdc and a.code = '1210'), 0::numeric);
+  perform pg_temp.check_eq('and both lines name the party',
+    (select count(*) from public.gl_lines gl
+       join public.post_dated_cheques c on c.gl_entry_id = gl.entry_id
+      where c.id = v_pdc and gl.contact_id = v_rel), 2);
+  -- `app.today()`, not `current_date`. `record_pdc` dates the entry
+  -- with Malaysia's day (`v_on := coalesce(p_received, app.today())`),
+  -- and this session's `current_date` is UTC. Between 16:00 and
+  -- midnight UTC those are DIFFERENT DAYS, so written the other way
+  -- this assertion fails for eight hours out of every twenty-four --
+  -- which is exactly what it did, at 00:41 in Kuala Lumpur.
+  --
+  -- `malaysian_clock.sql` exists for this and says so: the day a
+  -- Malaysian business is having is `app.today()`, and a test that
+  -- reaches for the server's own date is asking a different question.
+  perform pg_temp.check_true('the journal is dated the day it was taken in',
+    (select e.entry_date = app.today() from public.gl_entries e
+       join public.post_dated_cheques c on c.gl_entry_id = e.id
+      where c.id = v_pdc));
+  perform pg_temp.check_eq('and filed as a cheque',
+    (select e.source::text from public.gl_entries e
+       join public.post_dated_cheques c on c.gl_entry_id = e.id
+      where c.id = v_pdc), 'cheque');
+  perform pg_temp.check_eq('with the number trimmed of its spaces',
+    (select cheque_no from public.post_dated_cheques where id = v_pdc), '900');
+
+  v_pdc := public.record_pdc(v_org, 'outgoing', v_relsup, '  901  ',
+    current_date + 30, 700,
+    jsonb_build_array(jsonb_build_object('document', v_relbill, 'amount', 700)),
+    v_bank);
+  perform pg_temp.check_eq(
+    'the payable relieved is the one the supplier names',
+    (select sum(gl.debit) from public.gl_lines gl
+       join public.post_dated_cheques c on c.gl_entry_id = gl.entry_id
+      where c.id = v_pdc and gl.account_id = v_ap2), 700::numeric);
+  perform pg_temp.check_eq('with nothing of it in the ordinary one',
+    (select coalesce(sum(gl.debit), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.post_dated_cheques c on c.gl_entry_id = gl.entry_id
+      where c.id = v_pdc and a.code = '2110'), 0::numeric);
+  perform pg_temp.check_eq('and the number is stored trimmed',
+    (select cheque_no from public.post_dated_cheques where id = v_pdc), '901');
+
+  -- A document that is PART paid is still outstanding, and this is the
+  -- ordinary case: a customer pays half today and post-dates a cheque
+  -- for the rest. Refuse it and the second half can never be recorded
+  -- as a cheque at all.
+  declare v_half uuid; v_rcp uuid;
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+       currency, exchange_rate, subtotal, total_amount, balance_amount)
+    values (v_org, 'invoice', 'INV-HALF', current_date, current_date + 30,
+            v_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
+    returning id into v_half;
+    insert into public.receipts
+      (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
+       currency, exchange_rate, amount, unapplied_amount)
+    values (v_org, 'RCP-HALF', current_date, v_cust, v_bank, 'MYR', 1,
+            400, 400) returning id into v_rcp;
+    insert into public.payment_allocations
+      (org_id, receipt_id, invoice_id, amount)
+    values (v_org, v_rcp, v_half, 400);
+    perform pg_temp.check_eq('the invoice is part paid',
+      (select status::text from public.sales_documents where id = v_half),
+      'partial');
+
+    v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '906',
+      current_date + 30, 600,
+      jsonb_build_array(jsonb_build_object('document', v_half, 'amount', 600)),
+      v_bank);
+    perform pg_temp.check_eq(
+      'and a cheque may settle the rest of a part-paid document',
+      (select balance_amount from public.sales_documents where id = v_half),
+      0::numeric);
+  end;
+
+  -- ==================================================================
+  -- 4. A cheque against nothing is in the register and nowhere else
+  -- ==================================================================
+  v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '902',
+    current_date + 30, 250, '[]'::jsonb, v_bank);
+  perform pg_temp.check_true('a cheque against nothing posts no journal',
+    (select gl_entry_id is null from public.post_dated_cheques where id = v_pdc));
+  perform pg_temp.check_eq('and settles nothing',
+    (select count(*) from public.payment_allocations where pdc_id = v_pdc), 0);
+
+  -- ==================================================================
+  -- 5. Who may write one
+  -- ==================================================================
+  -- Somebody outside the company. The guard is app.can_write_module,
+  -- which is about MODULE ACCESS rather than about role: a member whose
+  -- access type is unset is granted write, so an ordinary member is not
+  -- the probe for it. The two things it actually refuses are a stranger
+  -- and a module the company does not hold, and both are below.
+  declare v_clerk uuid := pg_temp.another_user('stranger@cek.test');
+  begin
+    perform pg_temp.sign_in_as(v_clerk);
+    begin
+      perform public.record_pdc(v_org, 'incoming', v_cust, '903',
+        current_date + 30, 100);
+      v_msg := null;
+    exception when others then get stacked diagnostics v_msg = message_text;
+    end;
+    perform pg_temp.sign_in_as(v_owner);
+    perform pg_temp.check_eq('somebody who may not write may not take a cheque',
+      v_msg, 'not permitted to write for this organization');
+  end;
+
+  -- And an outgoing cheque is the PURCHASES module, not sales. Read as
+  -- sales, a company that bought the sales module and not purchases
+  -- could write cheques it has no right to write.
+  declare v_seller uuid := pg_temp.another_user('seller@cek.test');
+  begin
+    update public.org_modules set is_enabled = false
+     where org_id = v_org and module_code = 'purchases';
+    begin
+      perform public.record_pdc(v_org, 'outgoing', v_sup, '904',
+        current_date + 30, 100);
+      v_msg := null;
+    exception when others then get stacked diagnostics v_msg = message_text;
+    end;
+    perform pg_temp.check_eq(
+      'an outgoing cheque is the purchases module, not sales',
+      v_msg, 'not permitted to write for this organization');
+    -- The control: with sales still on, an incoming one goes through.
+    v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '905',
+      current_date + 30, 100, '[]'::jsonb, v_bank);
+    perform pg_temp.check_true('while an incoming one still may be taken',
+      v_pdc is not null);
+    update public.org_modules set is_enabled = true
+     where org_id = v_org and module_code = 'purchases';
+  end;
+
+  perform pg_temp.sign_out();
+  raise notice 'ok   cheques: the twenty-eight a sweep found';
+end $$;
+
 
 rollback;

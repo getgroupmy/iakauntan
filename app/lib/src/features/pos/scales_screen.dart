@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../items/new_item_dialog.dart';
 
 /// What a scale's label layout reads as, in the words a shopkeeper uses.
 ///
@@ -200,13 +202,11 @@ class _WeighedDialogState extends State<_WeighedDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
+          SearchablePicker<String>(
+            options: itemPickerOptions(widget.items),
             value: _item,
-            decoration: const InputDecoration(labelText: 'What'),
-            items: [
-              for (final i in widget.items)
-                DropdownMenuItem(value: i.id, child: Text(i.name)),
-            ],
+            label: 'What',
+            hint: 'Type a name or a number',
             onChanged: (v) => setState(() => _item = v),
           ),
           TextField(
@@ -448,6 +448,7 @@ class _FormatSheetState extends ConsumerState<_FormatSheet> {
             ),
             const SizedBox(height: Space.md),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _kind,
               decoration: const InputDecoration(labelText: 'That number is'),
               items: const [

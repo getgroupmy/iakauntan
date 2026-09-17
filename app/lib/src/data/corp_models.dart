@@ -1,5 +1,29 @@
 import '../core/format.dart';
 
+/// Today, in the only place a CA 2016 deadline can fall.
+///
+/// Not the device's days. A statutory deadline falls on a date in
+/// Malaysia whether the person looking at it is in Kuala Lumpur,
+/// London or on a plane, and `0305` pinned the server's half of this
+/// to `Asia/Kuala_Lumpur` for the same reason. A client that went on
+/// reading the device clock would disagree with the list it is
+/// labelling, which is the defect `0305` fixed wearing a different
+/// hat.
+///
+/// The offset is hard-coded because Malaysia has had none of the
+/// complications a time zone database exists for: a fixed UTC+8 with
+/// no daylight saving since 1982. `toUtc()` first, so the arithmetic
+/// does not pass through the device's own offset on the way.
+///
+/// Library-level since it is needed by three registers rather than
+/// one. It was a private static on [CorpFiling], which is why
+/// `CorpOfficer.licenceLapsed` and `CorpCharge.registrationLate` each
+/// read the device clock instead.
+DateTime corpToday() {
+  final kl = DateTime.now().toUtc().add(const Duration(hours: 8));
+  return DateTime(kl.year, kl.month, kl.day);
+}
+
 /// Corporate secretarial records.
 ///
 /// The subject here is a *client company* — one the firm acts as company
@@ -116,6 +140,18 @@ class CorpPerson {
     this.isResident = true,
     this.idVerifiedOn,
     this.isPep = false,
+    this.formerName,
+    this.passportCountry,
+    this.gender,
+    this.incorporatedIn,
+    this.line1,
+    this.line2,
+    this.city,
+    this.postcode,
+    this.stateCode,
+    this.country,
+    this.idDocumentType,
+    this.kycNotes,
   });
 
   final String id;
@@ -132,6 +168,23 @@ class CorpPerson {
   final bool isResident;
   final DateTime? idVerifiedOn;
   final bool isPep;
+
+  // The editable parts. `address` above is those four joined for
+  // display; an editor needs them apart, because a person moves house
+  // one line at a time and a joined string cannot be typed back into
+  // the columns it came from.
+  final String? formerName;
+  final String? passportCountry;
+  final String? gender;
+  final String? incorporatedIn;
+  final String? line1;
+  final String? line2;
+  final String? city;
+  final String? postcode;
+  final String? stateCode;
+  final String? country;
+  final String? idDocumentType;
+  final String? kycNotes;
 
   bool get isCorporate => kind == 'corporate';
 
@@ -160,6 +213,18 @@ class CorpPerson {
         isResident: j['is_resident_in_malaysia'] != false,
         idVerifiedOn: Fmt.parseDate(j['id_verified_on']),
         isPep: j['is_pep'] == true,
+        formerName: j['former_name']?.toString(),
+        passportCountry: j['passport_country']?.toString(),
+        gender: j['gender']?.toString(),
+        incorporatedIn: j['incorporated_in']?.toString(),
+        line1: j['address_line1']?.toString(),
+        line2: j['address_line2']?.toString(),
+        city: j['city']?.toString(),
+        postcode: j['postcode']?.toString(),
+        stateCode: j['state_code']?.toString(),
+        country: j['country']?.toString(),
+        idDocumentType: j['id_document_type']?.toString(),
+        kycNotes: j['kyc_notes']?.toString(),
       );
 }
 
@@ -178,6 +243,8 @@ class CorpOfficer {
     this.licenceBody,
     this.licenceExpiresOn,
     this.isAlternate = false,
+    this.alternateFor,
+    this.alternateForName,
   });
 
   final String id;
@@ -194,6 +261,15 @@ class CorpOfficer {
   final DateTime? licenceExpiresOn;
   final bool isAlternate;
 
+  /// Whose place this officer acts in. s.208 of the Companies Act 2016:
+  /// an alternate director is appointed by a particular director and
+  /// votes instead of them rather than as well, so a register that does
+  /// not name the principal cannot answer whether the board had a
+  /// quorum. `isAlternate` is derived from this by the database since
+  /// `0380` and is never sent from here.
+  final String? alternateFor;
+  final String? alternateForName;
+
   bool get isCurrent => resignedOn == null;
 
   /// s.201 consent and the s.198 declaration. A secretary who cannot
@@ -206,10 +282,22 @@ class CorpOfficer {
   /// A secretary must be a member of a prescribed body or hold a licence
   /// from the Registrar. An expired one is a company without a valid
   /// secretary.
-  bool get licenceLapsed =>
-      role == 'secretary' &&
-      licenceExpiresOn != null &&
-      licenceExpiresOn!.isBefore(DateTime.now());
+  ///
+  /// Compared as a DATE, on the Malaysian day. `licence_expires_on` is
+  /// a `date` column and arrives as midnight, so against
+  /// `DateTime.now()` a licence was lapsed from 00:01 on the day it
+  /// expires -- a full day early, on every secretary, every year. A
+  /// licence expiring on the 30th is valid on the 30th.
+  ///
+  /// The sentence this raises is "the company has no validly appointed
+  /// secretary", in the danger colour, which is not a thing to say to
+  /// somebody whose secretary is validly appointed until midnight.
+  bool get licenceLapsed {
+    final expires = licenceExpiresOn;
+    if (role != 'secretary' || expires == null) return false;
+    return DateTime(expires.year, expires.month, expires.day)
+        .isBefore(corpToday());
+  }
 
   factory CorpOfficer.fromJson(Map<String, dynamic> j) {
     final p = j['corp_persons'];
@@ -230,6 +318,12 @@ class CorpOfficer {
       licenceBody: j['licence_body']?.toString(),
       licenceExpiresOn: Fmt.parseDate(j['licence_expires_on']),
       isAlternate: j['is_alternate'] == true,
+      alternateFor: j['alternate_for'] as String?,
+      alternateForName: j['principal'] is Map
+          ? (j['principal']['corp_persons'] is Map
+              ? j['principal']['corp_persons']['full_name']?.toString()
+              : null)
+          : null,
     );
   }
 }
@@ -364,24 +458,7 @@ class CorpFiling {
 
   /// Days until this is due, counted in Malaysian days.
   ///
-  /// Not the device's days. A statutory deadline under CA 2016 falls on
-  /// a date in Malaysia whether the person looking at it is in Kuala
-  /// Lumpur, London or on a plane, and 0305 pinned the server's half of
-  /// this to `Asia/Kuala_Lumpur` for the same reason. A client that
-  /// went on reading the device clock would disagree with the list it
-  /// is labelling, which is the defect 0305 fixed wearing a different
-  /// hat.
-  ///
-  /// The offset is hard-coded because Malaysia has had none of the
-  /// complications a time zone database exists for: a fixed UTC+8 with
-  /// no daylight saving since 1982. `toUtc()` first, so the arithmetic
-  /// does not pass through the device's own offset on the way.
-  static DateTime _malaysianToday() {
-    final kl = DateTime.now().toUtc().add(const Duration(hours: 8));
-    return DateTime(kl.year, kl.month, kl.day);
-  }
-
-  int get daysLeft => dueDate.difference(_malaysianToday()).inDays;
+  int get daysLeft => dueDate.difference(corpToday()).inDays;
 
   bool get isOverdue => daysLeft < 0;
   bool get isUrgent => daysLeft >= 0 && daysLeft <= 14;
@@ -475,6 +552,10 @@ class CorpCharge {
     this.amountSecured,
     this.propertyCharged,
     this.satisfiedOn,
+    this.currency = 'MYR',
+    this.ranking,
+    this.satisfactionFiledOn,
+    this.notes,
   });
 
   final String id;
@@ -487,13 +568,44 @@ class CorpCharge {
   final String? propertyCharged;
   final DateTime? satisfiedOn;
 
+  // The rest of the row, for the sheet that edits it.
+  final String currency;
+  final String? ranking;
+  final DateTime? satisfactionFiledOn;
+  final String? notes;
+
   bool get isSatisfied => satisfiedOn != null;
 
   /// s.352 gives thirty days from creation. Miss it and the charge is
   /// void against the liquidator, which is not a paperwork problem.
-  DateTime get registrationDue => createdOn.add(const Duration(days: 30));
+  ///
+  /// Calendar arithmetic rather than `add(Duration(days: 30))`:
+  /// `created_on` is a `date` column and arrives as local midnight, and
+  /// adding a fixed duration to a local `DateTime` on a device in a
+  /// daylight-saving zone lands at 23:00 or 01:00 on the wrong side of
+  /// the boundary.
+  DateTime get registrationDue =>
+      DateTime(createdOn.year, createdOn.month, createdOn.day + 30);
+
+  /// Late from the thirty-FIRST day, on the Malaysian date.
+  ///
+  /// Two things it used to get wrong, and `corp_filing_clock_test.dart`
+  /// had already written both down for filings:
+  ///
+  ///  * `DateTime.now().isAfter(registrationDue)` is true from 00:01 on
+  ///    day thirty, which is still inside the thirty days. A deadline
+  ///    is missed the day AFTER it falls, not on it -- the same rule
+  ///    `CorpFiling.isOverdue` applies and `0304` applies on the
+  ///    server.
+  ///  * and it read the DEVICE clock, so a secretary on a laptop set to
+  ///    London saw a different answer from the one the server would
+  ///    give about the same charge.
+  ///
+  /// The sentence this raises is "the charge is void against the
+  /// liquidator", in the danger colour, which is not a thing to say a
+  /// day early to somebody who still has a day to file.
   bool get registrationLate =>
-      registeredOn == null && DateTime.now().isAfter(registrationDue);
+      registeredOn == null && corpToday().isAfter(registrationDue);
 
   factory CorpCharge.fromJson(Map<String, dynamic> j) => CorpCharge(
         id: j['id'] as String,
@@ -507,6 +619,10 @@ class CorpCharge {
             : Fmt.toDouble(j['amount_secured']),
         propertyCharged: j['property_charged']?.toString(),
         satisfiedOn: Fmt.parseDate(j['satisfied_on']),
+        currency: j['currency']?.toString() ?? 'MYR',
+        ranking: j['ranking']?.toString(),
+        satisfactionFiledOn: Fmt.parseDate(j['satisfaction_filed_on']),
+        notes: j['notes']?.toString(),
       );
 }
 

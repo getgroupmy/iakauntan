@@ -77,7 +77,13 @@ void main() {
   });
 
   testWidgets('a short rail still fills the height', (tester) async {
-    tester.view.physicalSize = const Size(1400, 1200);
+    // Tall enough that the ungated rail really is shorter than the
+    // window, which is the case being tested. It was 1200 until a
+    // destination that carries no module gate was added and the
+    // ungated rail grew past it — at which point this was measuring a
+    // rail that scrolls, and the assertion below is about one that
+    // does not.
+    tester.view.physicalSize = const Size(1400, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -92,6 +98,6 @@ void main() {
     // wrapping its handful of destinations. That is what `trailing:
     // Expanded` needs a bounded height for, and it is the part the
     // scroll view would otherwise have collapsed.
-    expect(tester.getRect(find.byType(NavigationRail)).bottom, 1200);
+    expect(tester.getRect(find.byType(NavigationRail)).bottom, 1600);
   });
 }

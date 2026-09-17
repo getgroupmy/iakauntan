@@ -52,6 +52,14 @@ void main() {
   Future<void> openInvoices(WidgetTester tester) async {
     await tester.pumpWidget(harness());
     await tester.pumpAndSettle();
+    // `ensureVisible` first, like `openBalances` below. This used to
+    // tap directly, and it worked only because 'Open invoices' was the
+    // third of six segments and happened to fit an 800-pixel surface.
+    // 0550 added a seventh -- the chart of accounts, ahead of it -- and
+    // pushed it off the end, at which point the tap landed on nothing
+    // silently and both assertions came back "found 0 widgets".
+    await tester.ensureVisible(find.text('Open invoices'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Open invoices'));
     await tester.pumpAndSettle();
   }
@@ -134,6 +142,8 @@ void main() {
     expect(find.byKey(const ValueKey('import-as-at')), findsNothing);
     expect(find.text('Changeover date'), findsNothing);
 
+    await tester.ensureVisible(find.text('Open invoices'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Open invoices'));
     await tester.pumpAndSettle();
 
@@ -202,6 +212,10 @@ void main() {
       find.byType(TextField),
       'doc_no\nINV-1', // enough to make the parser complain
     );
+    // And back again. Scrolling to 'Open invoices' above moved the row,
+    // so the first segment is now off the other end.
+    await tester.ensureVisible(find.text('Contacts'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Contacts'));
     await tester.pumpAndSettle();
 

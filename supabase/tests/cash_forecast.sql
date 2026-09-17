@@ -75,8 +75,13 @@ begin
   select * into v_row from public.report_cash_forecast(v_org, 4) where week_no = 1;
   perform pg_temp.check_eq('week one opens on the real balance',
     v_row.opening, 10000::numeric);
+  -- Today in Kuala Lumpur, which is what `0419` pinned the forecast to.
+  -- The books are Malaysian and the week the money runs out is counted
+  -- from the Malaysian day, not from whichever day it happens to be in
+  -- the zone the caller connected from.
   perform pg_temp.check_eq('and starts today',
-    v_row.week_start::text, current_date::text);
+    v_row.week_start::text,
+    (now() at time zone 'Asia/Kuala_Lumpur')::date::text);
 
   -- ------------------------------------------------------------------
   -- 2. The assertion this migration is built around

@@ -4,21 +4,47 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
-import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'einvoice_certificate_card.dart';
+import 'module_offer.dart';
+import 'subscription_card.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/platform_catalog_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
+import '../team/invitations.dart';
+import 'addresses_card.dart';
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
+import 'chart_of_accounts_card.dart';
+import 'custom_fields_card.dart';
+import 'document_numbering_card.dart';
 import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
 import 'sst_card.dart';
+import 'sst_returns_card.dart';
 import 'notifications_card.dart';
+import 'passkeys_card.dart';
+import 'two_factor_card.dart';
+import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
+import 'credit_ledger_dialog.dart';
+import 'export_card.dart';
+import '../../core/searchable_picker.dart';
+import '../../data/signup_reference_repository.dart';
+import '../auth/phone_number.dart';
+import '../auth/reset_cooldown.dart' show looksLikeAnAddress;
+import 'bank_feeds_card.dart';
+import 'bank_rules_card.dart';
+import 'payment_methods_card.dart';
+import 'collect_payments_card.dart';
+import 'contact_changes.dart';
+import 'einvoice_credentials.dart';
+import 'landing_settings.dart';
+import 'tax_code_dialog.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -42,11 +68,18 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // First, and above the company card, because it is
+                  // the only card here that is about YOU rather than
+                  // about the company -- and it is the one somebody
+                  // comes to this screen for on their first day.
+                  const LandingSettingsCard(),
+                  const SizedBox(height: 16),
                   if (organization == null) ...[
                     const EmptyState(
                       icon: Icons.business_outlined,
                       title: 'No organization',
-                      message: 'Create a company and its settings appear '
+                      message:
+                          'Create a company and its settings appear '
                           'here. Your own account is below either way.',
                     ),
                     const SizedBox(height: 16),
@@ -57,6 +90,11 @@ class SettingsScreen extends ConsumerWidget {
                     // fact about this company, and it decides what every
                     // invoice line is taxed at.
                     const SstCard(),
+                    // And under the registration, the rhythm it puts
+                    // the company on. Draws nothing at all — not even a
+                    // gap — for a company that is not registered, which
+                    // is why it carries its own spacing.
+                    const SstReturnsCard(),
                     const SizedBox(height: 16),
                     // Beside the company they describe: a branch is part
                     // of this company, a group is the companies beside it.
@@ -75,13 +113,35 @@ class SettingsScreen extends ConsumerWidget {
                     ],
                     const CompanyGroupCard(),
                     const SizedBox(height: 16),
+                    // Beside the company's own details, because that is
+                    // what a name on our domain is: another way of
+                    // saying who they are. Draws nothing for a company
+                    // holding neither module.
+                    const AddressesCard(),
                     _EinvoiceCard(org: organization, canEdit: isAdmin),
+                    const SizedBox(height: 16),
+                    // 0615. Under the credentials, because a certificate
+                    // signs documents for a submitter that can log in --
+                    // and the order on the screen is the order to do it
+                    // in.
+                    EinvoiceCertificateCard(
+                      canEdit: isAdmin,
+                      environment: organization.einvoiceEnvironment,
+                    ),
                     const SizedBox(height: 16),
                     _ScanningCard(canEdit: isAdmin),
                     const SizedBox(height: 16),
                     _ModulesCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
+                    // 0489. What the modules above actually cost, and
+                    // the invoices raised for them. Directly under the
+                    // card that adds them, because the price agreed to
+                    // there is the figure shown here.
+                    SubscriptionCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
                     _FiscalYearsCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    const DocumentNumberingCard(),
                     const SizedBox(height: 16),
                     _CreditControlCard(org: organization, canAdmin: isAdmin),
                     const SizedBox(height: 16),
@@ -101,7 +161,15 @@ class SettingsScreen extends ConsumerWidget {
                       const WarehousesCard(),
                       const SizedBox(height: 16),
                     ],
-                    const _ChartOfAccountsCard(),
+                    // Last among the company cards, because it is the
+                    // one nobody needs until the day they do — and
+                    // because a platform that keeps the door open says
+                    // so plainly rather than burying it.
+                    ExportCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    const ChartOfAccountsCard(),
+                    const SizedBox(height: 16),
+                    const CustomFieldsCard(),
                     const SizedBox(height: 16),
                     _TaxCodesCard(),
                     const SizedBox(height: 16),
@@ -121,6 +189,24 @@ class SettingsScreen extends ConsumerWidget {
                   // no role in one, and printing "Viewer" would be a
                   // statement about a company that is not there.
                   _AboutCard(role: organization == null ? null : role),
+                  // Directly under Change password, because it is the
+                  // same decision — how you prove who you are — and
+                  // somebody just told they can change their password is
+                  // exactly who should be offered the thing that means
+                  // they will not have to. Draws nothing when the
+                  // project has passkeys off.
+                  const SizedBox(height: 16),
+                  const PasskeysCard(),
+                  const SizedBox(height: Space.lg),
+                  // `0613`. The third way to prove who you are, and
+                  // deliberately the middle one in strength: weaker
+                  // than a passkey, stronger than a password alone.
+                  // Offered beside it because a passkey is not
+                  // available everywhere — not on this app's Android
+                  // and iOS builds — and somebody who cannot use the
+                  // strongest thing should not be left with the
+                  // weakest.
+                  const TwoFactorCard(),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -151,11 +237,46 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
   late String _environment;
   bool _saving = false;
 
+  /// Set from the status row rather than from the organization, because
+  /// `my_organizations` does not return `settings` and the version
+  /// lives on it. `einvoiceCredentialStatus` reads the same key and is
+  /// already being fetched for this card.
+  String? _version;
+
   @override
   void initState() {
     super.initState();
     _enabled = widget.org.einvoiceEnabled;
     _environment = widget.org.einvoiceEnvironment;
+  }
+
+  /// Saved as it is chosen, and put back if the database refuses.
+  ///
+  /// It refuses 1.1 without a signing certificate, and a dropdown left
+  /// showing the choice that was rejected is a screen disagreeing with
+  /// the row behind it — which is how somebody submits at a version
+  /// they believe they are on.
+  Future<void> _setVersion(String? value) async {
+    if (value == null || value == _version) return;
+    final previous = _version;
+    setState(() {
+      _version = value;
+      _saving = true;
+    });
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Filing at e-Invoice version $value',
+      action: () => ref.read(repoProvider)!.setEinvoiceVersion(value),
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (!ok) _version = previous;
+    });
+    if (ok) {
+      refreshOrganization(ref);
+      ref.invalidate(einvoiceStatusProvider);
+    }
   }
 
   @override
@@ -216,9 +337,68 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
     }
   }
 
+  /// Take them back out. Removing the credentials of the environment
+  /// the company is actually submitting to switches submission off with
+  /// them, for the reason written above `_save`: a company enabled with
+  /// no credentials is marked live against a submitter that cannot log
+  /// in.
+  Future<void> _clear() async {
+    final alsoDisables = removingLeavesItLive(
+      enabled: _enabled,
+      environment: _environment,
+      current: widget.org.einvoiceEnvironment,
+    );
+    final ok = await askRemoveCredentials(
+      context,
+      environment: _environment,
+      alsoDisables: alsoDisables,
+    );
+    if (!ok || !mounted) return;
+
+    setState(() => _saving = true);
+    final done = await runWithFeedback(
+      context,
+      action: () async {
+        final repo = ref.read(repoProvider)!;
+        await repo.clearEinvoiceCredentials(_environment);
+        if (alsoDisables) {
+          await ref
+              .read(supabaseProvider)
+              .from('organizations')
+              .update({'einvoice_enabled': false, 'einvoice_client_id': null})
+              .eq('id', widget.org.id);
+        }
+      },
+      successMessage: 'Removed',
+    );
+
+    if (mounted) setState(() => _saving = false);
+    if (done && mounted) {
+      setState(() {
+        if (alsoDisables) _enabled = false;
+        _clientId.clear();
+        _clientSecret.clear();
+      });
+      ref.invalidate(organizationsProvider);
+      refreshOrganization(ref);
+      ref.invalidate(einvoiceStatusProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final missingTin = (widget.org.tin ?? '').isEmpty;
+
+    // What the database says the version is, for the dropdown to start
+    // at. `_version` holds what somebody has since chosen — null until
+    // they do, so a refresh of the status row is reflected rather than
+    // frozen at whatever it said when the card was built.
+    final rows =
+        ref.watch(einvoiceStatusProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final storedVersion = rows.isEmpty
+        ? '1.0'
+        : '${rows.first['einvoice_version'] ?? '1.0'}';
 
     return Card(
       child: Padding(
@@ -286,6 +466,42 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
               ),
             ),
             const SizedBox(height: 16),
+            // 0615. Which version LHDN's rules are applied at. It is on
+            // `organizations.settings` and has been read by
+            // `prepare_einvoice` since 0015, and until now there was
+            // nowhere to set it.
+            //
+            // Saved on the spot rather than with the rest of the card,
+            // because the database refuses 1.1 without a signing
+            // certificate and that refusal has to arrive while somebody
+            // is looking at the switch that caused it.
+            DropdownButtonFormField<String>(
+              key: const ValueKey('einvoice-version'),
+              isExpanded: true,
+              value: _version ?? storedVersion,
+              decoration: const InputDecoration(
+                labelText: 'e-Invoice version',
+                helperText:
+                    'A 1.1 document carries a digital signature. A document '
+                    'already prepared keeps the version it was prepared '
+                    'under.',
+              ),
+              items: const [
+                DropdownMenuItem(value: '1.0', child: Text('1.0 — unsigned')),
+                DropdownMenuItem(value: '1.1', child: Text('1.1 — signed')),
+              ],
+              onChanged: widget.canEdit && !_saving ? _setVersion : null,
+            ),
+            const SizedBox(height: 16),
+            if (widget.canEdit)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('clear-einvoice-credentials'),
+                  onPressed: _saving ? null : _clear,
+                  child: Text('Remove the $_environment credentials'),
+                ),
+              ),
             if (widget.canEdit)
               Align(
                 alignment: Alignment.centerRight,
@@ -426,11 +642,17 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
           builder: (ocr) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Named, because `0614` widened it past receipts. The
+              // subtitle names the papers rather than the technology:
+              // the question somebody has is "will it read THIS", and
+              // a list answers it where "AI-powered extraction" does
+              // not.
               const SectionHeader(
-                'Read receipts and bills',
+                'AI SmartScan',
                 subtitle:
-                    'Photograph a receipt and have the supplier, date and '
-                    'amount filled in for you',
+                    'Photograph a bill, a receipt, a delivery order, a '
+                    'name card or a bank statement and have it read — the '
+                    'supplier, the date, the amounts and the lines',
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -652,20 +874,31 @@ class _CreditBalance extends StatelessWidget {
               ],
             ),
           ),
+          // The only question anybody asks of a prepaid balance. The
+          // ledger has recorded every movement all along and nothing
+          // read it, so the number went down and nobody could see what
+          // took it.
+          TextButton(
+            key: const ValueKey('credit-ledger'),
+            onPressed: () => showCreditLedger(context),
+            child: const Text('Where it went'),
+          ),
         ],
       ),
     );
   }
 }
 
-/// The balance, and the invoices raised for it.
+/// The scanning balance, and how the platform is paid.
 ///
 /// `creditInvoicesProvider` has existed since 0111 and had no consumer:
 /// a company could be billed for scanning credit and had nowhere to see
-/// the invoice, let alone settle it. The only instruction was the
-/// sentence in the card above — "ask us to top it up" — which is a fine
-/// thing to say when there is no other way to pay and a poor one now
-/// that there is.
+/// the invoice, let alone settle it. That list lived here from then
+/// until 0489, when `platform_invoices` stopped being only about
+/// scanning — it now carries every company's monthly module bill, and
+/// this section is drawn only when the OCR key source is 'platform'.
+/// The list is on the subscription card now; what is left here is the
+/// balance itself and the ways the platform can be paid.
 class _BillingSection extends StatelessWidget {
   const _BillingSection({required this.ocr});
 
@@ -678,141 +911,30 @@ class _BillingSection extends StatelessWidget {
       children: [
         _CreditBalance(ocr: ocr),
         const SizedBox(height: 12),
-        const _PlatformInvoices(),
+        // 0489. The invoice list used to be here, and only here --
+        // inside the scanning card, drawn only when the key source was
+        // 'platform'. It was written in 0111 for scanning credit, which
+        // is what `platform_invoices` held then; now the table also
+        // holds every company's monthly module bill, and a company on
+        // its own OCR key could not see that bill at all. It is on the
+        // subscription card, which is drawn for an owner or admin
+        // whatever this company does about scanning.
+        const _WaysToPay(),
+        const SizedBox(height: Space.lg),
+        // Above the acquirer, because a method is the thing a receipt
+        // names and the acquirer is one way of providing one.
+        const PaymentMethodsCard(),
+        const SizedBox(height: Space.lg),
+        const CollectPaymentsCard(),
+        const SizedBox(height: Space.lg),
+        // Beside the acquirer credentials on purpose: both are a third
+        // party holding a key that reaches this company's money, both
+        // are held so nothing can read the key back, and somebody
+        // setting one up is usually setting up the other.
+        const BankFeedsCard(),
+        const SizedBox(height: Space.lg),
+        const BankRulesCard(),
       ],
-    );
-  }
-}
-
-/// What the platform has billed this company, and a way to settle it.
-///
-/// Pressing Pay asks `billplz-checkout` for a bill and opens Billplz's
-/// own page. A card number never reaches this app, which is the whole
-/// reason for a hosted checkout rather than a form here.
-///
-/// Nothing on this screen decides whether an invoice may be paid. The
-/// button is drawn for an outstanding one and hidden otherwise, which is
-/// a convenience and not a control: `billplz-checkout` reads the invoice
-/// under the caller's own token and 0297 decides the rest. A screen that
-/// enforced it would only be a second opinion, and the wrong one to
-/// trust.
-class _PlatformInvoices extends ConsumerStatefulWidget {
-  const _PlatformInvoices();
-
-  @override
-  ConsumerState<_PlatformInvoices> createState() => _PlatformInvoicesState();
-}
-
-class _PlatformInvoicesState extends ConsumerState<_PlatformInvoices> {
-  String? _busyId;
-
-  Future<void> _pay(Map<String, dynamic> invoice) async {
-    final id = '${invoice['id']}';
-    // Read nullable rather than asserted. This section only draws once
-    // the invoice list has loaded, which cannot happen without a
-    // repository — but `ref.read(repoProvider)!` is the exact shape that
-    // took the platform console down earlier, and being right about why
-    // it is safe here is not worth a crash if the reasoning ever stops
-    // holding.
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
-    setState(() => _busyId = id);
-    try {
-      final url = await repo.startInvoiceCheckout(id);
-      final opened = await launchExternal(url);
-      if (!mounted) return;
-      if (!opened) {
-        // The bill exists at Billplz whether or not the browser
-        // cooperated, so saying "something went wrong" would be wrong:
-        // the address is real and going there again works.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open the payment page. Try again.'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
-    } finally {
-      // Both guarded. Somebody who taps Pay and immediately navigates
-      // away disposes this widget while the function call is still in
-      // flight, and `ref` after dispose throws — inside a `finally`,
-      // where it would replace whatever was actually being handled.
-      if (mounted) {
-        setState(() => _busyId = null);
-        ref.invalidate(creditInvoicesProvider);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final invoices = ref.watch(creditInvoicesProvider);
-
-    return invoices.maybeWhen(
-      data: (rows) {
-        if (rows.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Invoices',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            for (final r in rows.take(6))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${r['invoice_no']} · '
-                            '${Fmt.money(Fmt.toDouble(r['total_amount']))}',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                          Text(
-                            '${r['description']}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (r['status'] == 'issued')
-                      FilledButton.tonal(
-                        onPressed: _busyId == null ? () => _pay(r) : null,
-                        child: _busyId == '${r['id']}'
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Pay'),
-                      )
-                    else
-                      StatusChip('${r['status']}', compact: true),
-                  ],
-                ),
-              ),
-          ],
-        );
-      },
-      // A billing list that will not load must not take the settings
-      // screen with it. The scanning balance above is the thing somebody
-      // came here for.
-      orElse: () => const SizedBox.shrink(),
     );
   }
 }
@@ -978,6 +1100,92 @@ class _OwnKeyFields extends StatelessWidget {
 /// screens and the rest away and be left with what it uses. Nothing is
 /// revoked by doing so: tickets still post to the same ledger, the API
 /// still answers, and the switch comes back on from this same card.
+/// Adding a paid module is a bill, so it is confirmed before it is
+/// done — and the confirmation says the price rather than leaving
+/// somebody to find it on an invoice.
+Future<void> _addModule(
+  BuildContext context,
+  WidgetRef ref,
+  ModuleSurface m,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(addModuleTitle(m)),
+      content: Text(addModulePrompt(m)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Add it'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  await runWithFeedback(
+    context,
+    action: () => ref.read(repoProvider)!.setOwnModule(m.code, true),
+    doing: 'add ${m.name}',
+    successMessage: '${m.name} is on',
+  );
+  ref.invalidate(moduleSurfaceProvider);
+  ref.invalidate(enabledModulesProvider);
+  ref.invalidate(moduleDashboardProvider);
+  ref.invalidate(canAddCompanyProvider);
+  // 0489. The running total is the running total: a figure that still
+  // says "nothing this month" beside a module somebody just added is
+  // worse than no figure at all.
+  ref.invalidate(moduleChargesProvider);
+}
+
+/// Take a paid add-on off again.
+///
+/// The counterpart to [_addModule], and the thing 0488's copy promised
+/// and did not have: "you can take it off here too" was true of the
+/// visibility switch, which changes nothing about the bill, and false
+/// of the entitlement, which is what carries the price.
+Future<void> _removeModule(
+  BuildContext context,
+  WidgetRef ref,
+  ModuleSurface m,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(removeModuleTitle(m)),
+      content: Text(removeModulePrompt(m)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep it'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Remove it'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  await runWithFeedback(
+    context,
+    action: () => ref.read(repoProvider)!.setOwnModule(m.code, false),
+    doing: 'remove ${m.name}',
+    successMessage: '${m.name} is off',
+  );
+  ref.invalidate(moduleSurfaceProvider);
+  ref.invalidate(enabledModulesProvider);
+  ref.invalidate(moduleDashboardProvider);
+  ref.invalidate(canAddCompanyProvider);
+  ref.invalidate(moduleChargesProvider);
+}
+
 class _ModulesCard extends ConsumerWidget {
   const _ModulesCard({required this.canAdmin});
 
@@ -995,7 +1203,8 @@ class _ModulesCard extends ConsumerWidget {
           children: [
             const SectionHeader(
               'Modules',
-              subtitle: 'Switch off what this company does not use. '
+              subtitle:
+                  'Switch off what this company does not use. '
                   'Nothing is cancelled — the screens come back from here.',
             ),
             AsyncView(
@@ -1003,8 +1212,14 @@ class _ModulesCard extends ConsumerWidget {
               onRetry: () => ref.invalidate(moduleSurfaceProvider),
               loading: const LinearProgressIndicator(),
               builder: (modules) {
-                final held = [for (final m in modules) if (m.entitled) m];
-                final rest = [for (final m in modules) if (!m.entitled) m];
+                final held = [
+                  for (final m in modules)
+                    if (m.entitled) m,
+                ];
+                final rest = [
+                  for (final m in modules)
+                    if (!m.entitled) m,
+                ];
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1021,6 +1236,22 @@ class _ModulesCard extends ConsumerWidget {
                                 m.description!,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                        // 0489. The switch beside this hides the
+                        // screens; this takes the entitlement, and the
+                        // monthly charge, off. Only for what is
+                        // actually an add-on: the core modules are the
+                        // product and cannot be removed from it.
+                        secondary: (!canAdmin || m.isCore)
+                            ? null
+                            : IconButton(
+                                key: ValueKey('remove-module-${m.code}'),
+                                tooltip: 'Remove from this company',
+                                icon: const Icon(
+                                  Icons.remove_circle_outline,
+                                  size: 20,
+                                ),
+                                onPressed: () => _removeModule(context, ref, m),
                               ),
                         onChanged: !canAdmin
                             ? null
@@ -1045,12 +1276,16 @@ class _ModulesCard extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Not on this account',
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Contact us to add one of these.',
+                        // 0488. This used to read "Contact us to add
+                        // one of these", with no address behind it and
+                        // no way to act.
+                        moduleOfferLine(canAdmin: canAdmin),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 12),
@@ -1059,20 +1294,45 @@ class _ModulesCard extends ConsumerWidget {
                         runSpacing: 8,
                         children: [
                           for (final m in rest)
-                            Chip(
+                            ActionChip(
+                              key: ValueKey('add-module-${m.code}'),
                               avatar: Icon(
-                                Icons.remove_circle_outline,
+                                canAdmin
+                                    ? Icons.add_circle_outline
+                                    : Icons.remove_circle_outline,
                                 size: 16,
-                                color: Theme.of(context).colorScheme.outline,
+                                color: canAdmin
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outline,
                               ),
-                              label: Text(
-                                m.monthlyPrice > 0
-                                    ? '${m.name} · ${Fmt.money(m.monthlyPrice)}/mo'
-                                    : m.name,
-                              ),
+                              label: Text(moduleChipLabel(m)),
+                              // Absent rather than refusing: a clerk
+                              // may write invoices all day and still
+                              // not commit the company to a bill, and
+                              // the server says the same.
+                              onPressed: !canAdmin
+                                  ? null
+                                  : () => _addModule(context, ref, m),
                             ),
                         ],
                       ),
+                      // What the promotions on offer actually are. The
+                      // chip carries the price; a price nobody can see
+                      // the old one beside is just a number, and one
+                      // with no end date on it is a promise this
+                      // product would then have to keep.
+                      for (final m in rest)
+                        if (modulePromoNote(m) != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            key: ValueKey('promo-note-${m.code}'),
+                            modulePromoNote(m)!,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                          ),
+                        ],
                     ],
                     if (held.any((m) => m.code == 'legal')) ...[
                       const SizedBox(height: 16),
@@ -1080,8 +1340,9 @@ class _ModulesCard extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Legal firm accounting',
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1380,15 +1641,17 @@ class _DeferredRevenueCardState extends ConsumerState<_DeferredRevenueCard> {
                 else ...[
                   for (final row in ready) _DueRow(row: row, base: _base),
                   const Divider(height: 20),
-                  Row(children: [
-                    const Expanded(
-                      child: Text(
-                        'To release',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'To release',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
-                    ),
-                    Money(readyTotal, currency: _base, bold: true),
-                  ]),
+                      Money(readyTotal, currency: _base, bold: true),
+                    ],
+                  ),
                 ],
                 if (later.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -1475,22 +1738,24 @@ class _DueRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(Fmt.date(row.periodEnd)),
-              Text(
-                '${row.lines} line${row.lines == 1 ? '' : 's'} on '
-                '${row.documents} invoice${row.documents == 1 ? '' : 's'}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(Fmt.date(row.periodEnd)),
+                Text(
+                  '${row.lines} line${row.lines == 1 ? '' : 's'} on '
+                  '${row.documents} invoice${row.documents == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
-        ),
-        Money(row.amount, currency: base),
-      ]),
+          Money(row.amount, currency: base),
+        ],
+      ),
     );
   }
 }
@@ -1741,58 +2006,6 @@ class _YearTile extends ConsumerWidget {
   }
 }
 
-class _ChartOfAccountsCard extends ConsumerWidget {
-  const _ChartOfAccountsCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final accounts = ref.watch(accountsProvider);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Space.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionHeader(
-              'Chart of accounts',
-              subtitle: 'Malaysian SME template, MPERS aligned',
-            ),
-            AsyncView(
-              value: accounts,
-              onRetry: () => ref.invalidate(accountsProvider),
-              loading: const LinearProgressIndicator(),
-              builder: (list) {
-                final byType = <String, int>{};
-                for (final a in list.where((a) => !a.isGroup)) {
-                  byType[a.accountType] = (byType[a.accountType] ?? 0) + 1;
-                }
-                return Column(
-                  children: [
-                    for (final e in byType.entries)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(Fmt.label(e.key))),
-                            Text(
-                              '${e.value} accounts',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// The rates this company charges.
 ///
 /// The seeded codes cover SST as it stands, which is not the same thing
@@ -1809,11 +2022,11 @@ class _TaxCodesCard extends ConsumerWidget {
     final canEdit = ref.watch(canPostProvider);
 
     Future<void> edit([TaxCode? existing]) async {
-      final saved = await showDialog<bool>(
+      final saved = await showDialog<String>(
         context: context,
-        builder: (_) => _TaxCodeDialog(existing: existing),
+        builder: (_) => TaxCodeDialog(existing: existing),
       );
-      if (saved == true) ref.invalidate(taxCodesProvider);
+      if (saved != null) ref.invalidate(taxCodesProvider);
     }
 
     return Card(
@@ -1886,249 +2099,6 @@ class _TaxCodesCard extends ConsumerWidget {
   }
 }
 
-/// Adding a rate, or correcting one.
-///
-/// Retiring rather than deleting is the only part with an opinion in it.
-/// A tax code is on every document that ever used it, and a rate that
-/// stops applying today still applied last year — a deleted one would
-/// leave the trial balance unable to explain itself.
-class _TaxCodeDialog extends ConsumerStatefulWidget {
-  const _TaxCodeDialog({this.existing});
-
-  final TaxCode? existing;
-
-  @override
-  ConsumerState<_TaxCodeDialog> createState() => _TaxCodeDialogState();
-}
-
-class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
-  final _code = TextEditingController();
-  final _name = TextEditingController();
-  final _rate = TextEditingController();
-  late String _taxType;
-  late bool _exempt;
-  bool _saving = false;
-
-  bool get _isNew => widget.existing == null;
-
-  @override
-  void initState() {
-    super.initState();
-    final t = widget.existing;
-    _code.text = t?.code ?? '';
-    _name.text = t?.name ?? '';
-    _rate.text = t == null ? '' : t.rate.toStringAsFixed(2);
-    _taxType = t?.taxTypeCode ?? '06';
-    _exempt = t?.isExempt ?? false;
-  }
-
-  @override
-  void dispose() {
-    _code.dispose();
-    _name.dispose();
-    _rate.dispose();
-    super.dispose();
-  }
-
-  double? get _parsedRate => double.tryParse(_rate.text.trim());
-
-  bool get _valid =>
-      _code.text.trim().isNotEmpty &&
-      _name.text.trim().isNotEmpty &&
-      _parsedRate != null &&
-      _parsedRate! >= 0 &&
-      _parsedRate! <= 100;
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    final repo = ref.read(repoProvider)!;
-    final ok = await runWithFeedback(
-      context,
-      action: () => _isNew
-          ? repo.createTaxCode(
-              code: _code.text.trim().toUpperCase(),
-              name: _name.text.trim(),
-              rate: _parsedRate!,
-              taxTypeCode: _taxType,
-              isExempt: _exempt,
-            )
-          : repo.updateTaxCode(
-              widget.existing!.id,
-              code: _code.text.trim().toUpperCase(),
-              name: _name.text.trim(),
-              rate: _parsedRate!,
-              taxTypeCode: _taxType,
-              isExempt: _exempt,
-            ),
-      successMessage: _isNew ? 'Tax code added' : 'Tax code saved',
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) Navigator.of(context).pop(true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(_isNew ? 'New tax code' : 'Edit ${widget.existing!.code}'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    key: const ValueKey('tax-code-code'),
-                    controller: _code,
-                    enabled: !_saving,
-                    textCapitalization: TextCapitalization.characters,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(labelText: 'Code'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    key: const ValueKey('tax-code-name'),
-                    controller: _name,
-                    enabled: !_saving,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(labelText: 'Name'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    key: const ValueKey('tax-code-rate'),
-                    controller: _rate,
-                    enabled: !_saving,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Rate',
-                      suffixText: '%',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _taxType,
-                    decoration: const InputDecoration(
-                      labelText: 'LHDN tax type',
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: '01', child: Text('01 — Sales')),
-                      DropdownMenuItem(
-                        value: '02',
-                        child: Text('02 — Service'),
-                      ),
-                      DropdownMenuItem(
-                        value: '06',
-                        child: Text('06 — Not applicable'),
-                      ),
-                      DropdownMenuItem(value: 'E', child: Text('E — Exempt')),
-                    ],
-                    onChanged: _saving
-                        ? null
-                        : (v) => setState(() => _taxType = v!),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _exempt,
-              onChanged: _saving ? null : (v) => setState(() => _exempt = v!),
-              title: const Text('Exempt'),
-              subtitle: const Text('Shown on the document as exempt, not zero'),
-            ),
-            if (!_isNew) ...[
-              const Divider(height: Space.xl),
-              Row(
-                children: [
-                  if (!widget.existing!.isDefault)
-                    TextButton(
-                      onPressed: _saving ? null : _makeDefault,
-                      child: const Text('Make default'),
-                    ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: _saving ? null : _retire,
-                    child: Text(
-                      'Retire',
-                      style: TextStyle(color: context.colors.danger),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _valid && !_saving ? _save : null,
-          child: Text(_isNew ? 'Add' : 'Save'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _makeDefault() async {
-    setState(() => _saving = true);
-    final ok = await runWithFeedback(
-      context,
-      action: () =>
-          ref.read(repoProvider)!.setDefaultTaxCode(widget.existing!.id),
-      successMessage: 'Default tax code changed',
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) Navigator.of(context).pop(true);
-  }
-
-  Future<void> _retire() async {
-    final sure = await confirm(
-      context,
-      title: 'Retire ${widget.existing!.code}?',
-      message:
-          'It stops being offered on new documents. Documents that '
-          'already use it keep it, and the figures they carry do not move.',
-      confirmLabel: 'Retire',
-      destructive: true,
-    );
-    if (!sure || !mounted) return;
-
-    setState(() => _saving = true);
-    final ok = await runWithFeedback(
-      context,
-      action: () => ref.read(repoProvider)!.retireTaxCode(widget.existing!.id),
-      successMessage: 'Tax code retired',
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) Navigator.of(context).pop(true);
-  }
-}
-
 class _AboutCard extends ConsumerWidget {
   const _AboutCard({required this.role});
 
@@ -2177,6 +2147,49 @@ class _AboutCard extends ConsumerWidget {
                 icon: const Icon(Icons.password_outlined, size: 18),
                 label: const Text('Change password'),
               ),
+            // Both behind the same password. These two are how an
+            // account is recovered -- the address a reset link goes to
+            // and the number somebody is rung on -- so somebody who
+            // walks past an unattended screen and changes either owns
+            // the account a minute later.
+            if (!ref.watch(isDemoAccountProvider)) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const ValueKey('change-email'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const _ChangeEmailDialog(),
+                ),
+                icon: const Icon(Icons.alternate_email, size: 18),
+                label: const Text(changeEmailLabel),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const ValueKey('change-mobile'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const _ChangeMobileDialog(),
+                ),
+                icon: const Icon(Icons.phone_outlined, size: 18),
+                label: const Text(changeMobileLabel),
+              ),
+            ],
+            const SizedBox(height: 8),
+            // Somebody who already had an account when they were
+            // invited has no other way in. `app.handle_new_user` claims
+            // a pending invitation at *signup*, so the accidental path
+            // only ever worked for people who did not have an account
+            // yet — an accountant taking on a second company's books
+            // was invited, never told, and the row expired in a
+            // fortnight.
+            OutlinedButton.icon(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _JoinCompanyDialog(),
+              ),
+              icon: const Icon(Icons.group_add_outlined, size: 18),
+              label: const Text('Join another company'),
+            ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () async {
@@ -2209,12 +2222,17 @@ class _AboutCard extends ConsumerWidget {
 
 /// Closing your own account.
 ///
-/// What this does is anonymise rather than delete, and the dialog says
-/// so in those words. Roughly a hundred columns record who posted a
-/// journal, approved a payroll or signed a resolution, and a set of
-/// books that cannot answer that is not one anybody can rely on — so the
-/// identity goes and the trail stays. Saying "deleted" here and meaning
-/// something else would be the kind of promise that gets found out.
+/// Nothing is deleted, and the dialog says so in those words. Roughly a
+/// hundred columns record who posted a journal, approved a payroll or
+/// signed a resolution, and a set of books that cannot answer that is
+/// not one anybody can rely on — so the trail stays. What the product
+/// stops showing is the identity, which moves into a record only the
+/// platform operator can read.
+///
+/// That last part is said out loud here rather than implied. "Deleted"
+/// and "we still have it, and can put it back if you ask" are different
+/// promises, and offering the first while meaning the second is the kind
+/// of thing that gets found out.
 class _CloseAccount extends ConsumerWidget {
   const _CloseAccount();
 
@@ -2231,71 +2249,212 @@ class _CloseAccount extends ConsumerWidget {
         ),
         const SizedBox(height: Space.xs),
         Text(
-          'Your name, email address, phone number and picture are removed '
-          'from this system, every device stops receiving notifications, '
-          'and you are signed out of everywhere. Entries you posted keep '
-          'a record that somebody posted them, without saying who — the '
-          'law requires those books to be kept for seven years.',
+          'Your name, email address, phone number and picture stop '
+          'appearing anywhere in this system, every device stops '
+          'receiving notifications, and you are signed out of '
+          'everywhere. Entries you posted keep a record that somebody '
+          'posted them, without saying who — the law requires those '
+          'books to be kept for seven years. Nothing is erased: the '
+          'details are kept where only the operator of this platform '
+          'can see them, and only they can reopen the account.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: Space.sm),
         blockers.when(
           loading: () => const SizedBox.shrink(),
           error: (_, _) => const SizedBox.shrink(),
-          data: (rows) => rows.isEmpty
-              ? OutlinedButton.icon(
-                  key: const ValueKey('close-account'),
-                  onPressed: () => _close(context, ref),
-                  icon: const Icon(Icons.person_remove_outlined, size: 18),
-                  label: const Text('Close my account'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: context.colors.danger,
-                  ),
-                )
-              // Said before the button rather than after pressing it:
-              // the database refuses this, and an action that always
-              // fails is worse than one that is not offered.
-              : Container(
-                  key: const ValueKey('close-account-blocked'),
-                  padding: const EdgeInsets.all(Space.md),
-                  decoration: BoxDecoration(
-                    color: context.colors.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(Radii.md),
-                  ),
-                  child: Text(
-                    'You are the only owner of '
-                    '${rows.map((r) => r['organization']).join(', ')}. '
-                    'Make somebody else an owner first, or the company is '
-                    'left with nobody who can administer it.',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
+          data: (rows) => OutlinedButton.icon(
+            key: rows.isEmpty
+                ? const ValueKey('close-account')
+                : const ValueKey('close-account-sole-owner'),
+            onPressed: () => _close(context, ref, rows),
+            icon: const Icon(Icons.person_remove_outlined, size: 18),
+            label: const Text('Close my account'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.colors.danger,
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Future<void> _close(BuildContext context, WidgetRef ref) async {
-    final ok = await confirm(
-      context,
-      title: 'Close this account?',
-      message:
-          'This cannot be undone. Your name and contact details are '
-          'removed, you lose access to every company you belong to, and '
-          'you cannot sign in again with this address.',
-      confirmLabel: 'Close my account',
+  Future<void> _close(
+    BuildContext context,
+    WidgetRef ref,
+    List<Map<String, dynamic>> blockers,
+  ) async {
+    final answer = await showDialog<CloseAccountAnswer>(
+      context: context,
+      builder: (_) => CloseAccountDialog(blockers: blockers),
     );
-    if (!ok || !context.mounted) return;
+    if (answer == null || !context.mounted) return;
 
     final done = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.deleteMyAccount(),
+      action: () => ref.read(repoProvider)!.closeMyAccount(
+        reason: answer.reason,
+        closeSoleOwnedCompanies: answer.closeCompanies,
+      ),
       successMessage: 'Your account has been closed',
     );
     if (!done || !context.mounted) return;
 
     await ref.read(supabaseProvider).auth.signOut();
     ref.read(currentOrgIdProvider.notifier).clear();
+  }
+}
+
+/// What the dialog came back with.
+///
+/// Public, with the dialog, so a test can pump the dialog on its own
+/// and read what it hands back. The rest of this screen is private and
+/// stays so; this is the one piece whose behaviour is a decision rather
+/// than a layout — a confirm button that is live when it should not be
+/// is the difference between a refusal and an orphaned company.
+typedef CloseAccountAnswer = ({String? reason, bool closeCompanies});
+
+/// The confirmation, which asks two things rather than one.
+///
+/// The reason is optional and is for the operator reading the closure
+/// later — "moving to another firm" is the difference between a record
+/// and a row.
+///
+/// The second question only appears for somebody who is the last owner
+/// of a company, and it is the one that used to be a refusal: the
+/// database would not let them go, because a company with no owner has
+/// nobody who can invite a replacement and no way back in. It still
+/// will not, unless they say here what should happen to those companies
+/// — which is a decision, and so is asked as one.
+class CloseAccountDialog extends StatefulWidget {
+  const CloseAccountDialog({super.key, required this.blockers});
+
+  final List<Map<String, dynamic>> blockers;
+
+  @override
+  State<CloseAccountDialog> createState() => CloseAccountDialogState();
+}
+
+class CloseAccountDialogState extends State<CloseAccountDialog> {
+  final _reason = TextEditingController();
+  bool _closeCompanies = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sole = widget.blockers
+        .map((r) => '${r['organization']}')
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Close this account?'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'You lose access to every company you belong to and you '
+                'cannot sign in again with this address. Your name and '
+                'contact details stop appearing anywhere in the '
+                'product. Only the operator of this platform can undo '
+                'it.',
+              ),
+              if (sole.isNotEmpty) ...[
+                const SizedBox(height: Space.md),
+                Container(
+                  padding: const EdgeInsets.all(Space.md),
+                  decoration: BoxDecoration(
+                    color: context.colors.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'You are the only owner of ${sole.join(', ')}.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: Space.xs),
+                      const Text(
+                        'Make somebody else an owner first, or close '
+                        'those companies with your account. A company '
+                        'left with no owner has nobody who can invite a '
+                        'replacement.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: Space.xs),
+                      CheckboxListTile(
+                        key: const ValueKey('close-sole-owned'),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        dense: true,
+                        value: _closeCompanies,
+                        onChanged: (v) =>
+                            setState(() => _closeCompanies = v ?? false),
+                        title: Text(
+                          'Close ${sole.length == 1 ? 'it' : 'them'} too',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        subtitle: const Text(
+                          'The books stay; nobody but the operator can '
+                          'reach them.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('close-account-reason'),
+                controller: _reason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (optional)',
+                  helperText: 'Kept with the closure, for the operator.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('close-account-confirm'),
+          // Offered and refused rather than absent, when the sole-owner
+          // question has not been answered: an empty space where a
+          // button was is not an explanation, and the sentence above it
+          // is.
+          onPressed: sole.isNotEmpty && !_closeCompanies
+              ? null
+              : () => Navigator.pop<CloseAccountAnswer>(context, (
+                  reason: _reason.text.trim().isEmpty
+                      ? null
+                      : _reason.text.trim(),
+                  closeCompanies: _closeCompanies,
+                )),
+          style: FilledButton.styleFrom(
+            backgroundColor: context.colors.danger,
+          ),
+          child: const Text('Close my account'),
+        ),
+      ],
+    );
   }
 }
 
@@ -2308,6 +2467,310 @@ class _CloseAccount extends ConsumerWidget {
 /// borrowed laptop or a stolen session is enough to lock the owner out of
 /// their own books. The current password is checked by signing in with
 /// it, which is the only way to verify it from a client.
+
+/// Changing the address a password reset goes to, behind the password.
+///
+/// The address does not move when this returns: GoTrue sends a
+/// confirmation to the NEW address and waits for the link to be
+/// followed. That is the protection that matters — somebody who
+/// changes an address they cannot read has changed nothing — and the
+/// password re-entry is the one that stops the change being made at
+/// all by whoever found the screen unlocked.
+class _ChangeEmailDialog extends ConsumerStatefulWidget {
+  const _ChangeEmailDialog();
+
+  @override
+  ConsumerState<_ChangeEmailDialog> createState() => _ChangeEmailDialogState();
+}
+
+class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final auth = ref.read(supabaseProvider).auth;
+    final current = auth.currentUser?.email;
+    if (current == null) {
+      setState(() => _error = 'No signed-in account.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      // GoTrue verifies the password, by being asked to sign in with
+      // it. A check written here would be a check the client could
+      // skip.
+      await auth.signInWithPassword(email: current, password: _password.text);
+      await auth.updateUser(UserAttributes(email: _email.text.trim()));
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(emailChangeSent(_email.text.trim()))),
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = looksWrongPassword(code: e.code, message: e.message)
+              ? wrongPassword
+              : e.message,
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(changeEmailTitle),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                key: const ValueKey('new-email'),
+                controller: _email,
+                autofocus: true,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'New email address',
+                ),
+                validator: (v) => looksLikeAnAddress((v ?? '').trim())
+                    ? null
+                    : 'Enter a valid email address',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const ValueKey('email-password'),
+                controller: _password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: currentPasswordLabel,
+                  helperText: whyPasswordAgain,
+                  helperMaxLines: 3,
+                ),
+                validator: currentPasswordError,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: TextStyle(color: context.colors.danger)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Send the confirmation'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Changing the number somebody is rung on, behind the same password.
+///
+/// The number goes through `update_my_phone`, which applies the same
+/// E.164 rule registration uses: the trunk-prefix zero comes off in the
+/// database rather than here, so it comes off whichever door a number
+/// arrives through.
+class _ChangeMobileDialog extends ConsumerStatefulWidget {
+  const _ChangeMobileDialog();
+
+  @override
+  ConsumerState<_ChangeMobileDialog> createState() =>
+      _ChangeMobileDialogState();
+}
+
+class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _phone = TextEditingController();
+  final _password = TextEditingController();
+  String _dialCode = homeDialCode;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final client = ref.read(supabaseProvider);
+    final current = client.auth.currentUser?.email;
+    if (current == null) {
+      setState(() => _error = 'No signed-in account.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await client.auth.signInWithPassword(
+        email: current,
+        password: _password.text,
+      );
+      final saved = await client.rpc(
+        'update_my_phone',
+        params: {'p_dial': _dialCode, 'p_national': _phone.text.trim()},
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(saved is String ? mobileChanged(saved) : mobileRemoved),
+        ),
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = looksWrongPassword(code: e.code, message: e.message)
+              ? wrongPassword
+              : e.message,
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final codes = withDialCodes(
+      ref.watch(signupReferenceProvider).valueOrNull?.dialCodes ??
+          const <Map<String, dynamic>>[],
+    );
+
+    return AlertDialog(
+      title: const Text(changeMobileTitle),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SearchablePicker<String>(
+                key: const ValueKey('mobile-country'),
+                label: countryFieldLabel,
+                value: codes.any((c) => dialOf(c) == _dialCode)
+                    ? codes.firstWhere((c) => dialOf(c) == _dialCode)['code']
+                          as String?
+                    : null,
+                options: [
+                  for (final c in codes)
+                    PickerOption(
+                      value: '${c['code']}',
+                      label: countryPickerLabel(c),
+                      sublabel: countryPickerSublabel(c),
+                      keywords: ['${c['alpha2']}', '+${dialOf(c)}'],
+                    ),
+                ],
+                onChanged: (v) => setState(() => _dialCode = dialFor(codes, v)),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const ValueKey('new-mobile'),
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: phoneFieldLabel,
+                  prefixText: '+$_dialCode ',
+                  helperText: phoneNote(
+                    dialCode: _dialCode,
+                    number: _phone.text,
+                  ),
+                  helperMaxLines: 2,
+                ),
+                // Not required: an empty box takes the number off,
+                // which is a thing somebody is allowed to want.
+                validator: (v) => phoneError(
+                  dialCode: _dialCode,
+                  number: v ?? '',
+                  required: false,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const ValueKey('mobile-password'),
+                controller: _password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: currentPasswordLabel,
+                  helperText: whyPasswordAgainMobile,
+                  helperMaxLines: 3,
+                ),
+                validator: currentPasswordError,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: TextStyle(color: context.colors.danger)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ChangePasswordDialog extends ConsumerStatefulWidget {
   const _ChangePasswordDialog();
 
@@ -2432,6 +2895,189 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Text('Change password'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Every way this company may settle a platform invoice.
+///
+/// The list comes from `payment_gateways_for`, which answers for the
+/// country the company is registered in. `0292`'s table comment said
+/// the catalogue was readable by a tenant "so that a company can be
+/// shown the ways it may pay", `0295` filled it with forty providers
+/// and where each one sells, and until `0352` gave the reader a caller
+/// none of it reached anybody.
+///
+/// Drawn only when there is something to say. A company whose platform
+/// has switched on the one gateway this app can start a payment with
+/// already has a Pay button above, and repeating "you may pay by card"
+/// under it is noise.
+class _WaysToPay extends ConsumerWidget {
+  const _WaysToPay();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final country = ref.watch(currentOrgProvider).valueOrNull?.countryCode;
+    final gateways = ref.watch(gatewaysForCountryProvider(country)).valueOrNull;
+    // Still loading, or the read failed. Either way this block is an
+    // aside on a settings screen and must not become the reason it
+    // shows an error.
+    if (gateways == null) return const SizedBox.shrink();
+
+    final byHand = payByHandBecause(gateways);
+    if (byHand == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'How to pay',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          byHand,
+          style: TextStyle(
+            fontSize: 12,
+            color: context.scheme.onSurfaceVariant,
+          ),
+        ),
+        for (final g in gateways)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${g['name']}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (methodsLine(g).isNotEmpty)
+                  Text(
+                    methodsLine(g),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.scheme.onSurfaceVariant,
+                    ),
+                  ),
+                if (instructionsOf(g) != null)
+                  Text(
+                    instructionsOf(g)!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Taking up an invitation with the code somebody was given.
+///
+/// The check before the round trip is a courtesy, not a control. What
+/// decides is `accept_invitation`, and the rule that matters is one
+/// this side cannot evaluate: the caller has to be signed in as the
+/// address the invitation names. That is `0353`'s answer to a token
+/// that every member of the inviting company can read.
+class _JoinCompanyDialog extends ConsumerStatefulWidget {
+  const _JoinCompanyDialog();
+
+  @override
+  ConsumerState<_JoinCompanyDialog> createState() => _JoinCompanyState();
+}
+
+class _JoinCompanyState extends ConsumerState<_JoinCompanyDialog> {
+  final _code = TextEditingController();
+  bool _busy = false;
+  String? _said;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _join() async {
+    final blocked = joinBlockedBecause(_code.text);
+    if (blocked != null) {
+      setState(() => _said = blocked);
+      return;
+    }
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() {
+      _busy = true;
+      _said = null;
+    });
+    try {
+      final orgId = await repo.acceptInvitation(cleanCode(_code.text));
+      if (!mounted) return;
+      // Open the company they have just joined, rather than leaving
+      // them on the settings screen of the one they were already in
+      // wondering whether it worked.
+      ref.invalidate(organizationsProvider);
+      ref.read(currentOrgIdProvider.notifier).select(orgId);
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _said = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Join another company'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Paste the invitation code you were sent. It only works for '
+              'the address you are signed in as.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: Space.md),
+            TextField(
+              controller: _code,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Invitation code'),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+            if (_said != null) ...[
+              const SizedBox(height: Space.sm),
+              Text(
+                _said!,
+                style: TextStyle(fontSize: 12, color: context.colors.danger),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _join,
+          child: _busy
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Join'),
         ),
       ],
     );

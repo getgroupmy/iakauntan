@@ -135,6 +135,11 @@ begin
   update public.fs_filings
      set auditor_name = 'Tan & Partners', auditor_firm_no = 'AF 1234',
          opinion = 'unmodified', audit_report_date = date '2026-04-15',
+         -- `0391` refuses a circulation with no approval behind it:
+         -- under s.258 what goes to the members is the *approved*
+         -- accounts, so the board meeting has to be on the record
+         -- first. The fixture now runs in the order the Act does.
+         directors_approval_date = date '2026-04-15',
          circulated_on = date '2026-04-20'
    where id = v_filing;
 
@@ -277,6 +282,30 @@ begin
   perform pg_temp.check_true('one transaction in three years ends dormancy',
     not r.qualifies);
 
+  -- ------------------------------------------------------------------
+  -- Zero revenue, which is not the same as dormant
+  --
+  -- The company above now has a transaction and still no revenue, which
+  -- is exactly the second ground: no turnover in three years and total
+  -- assets never above RM300,000. Its own ceiling had no test — raising
+  -- it to half a million changed nothing anywhere — because the ground
+  -- was only ever asserted negatively.
+  -- ------------------------------------------------------------------
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'zero_revenue';
+  perform pg_temp.check_true('no revenue and small assets is the second ground',
+    r.qualifies);
+
+  -- Capital paid in, not turnover: revenue is still nil and the ground
+  -- ends anyway, which is the whole point of the assets half of it.
+  perform pg_temp.jv(v_org, 'JV-D2', date '2023-07-01', v_bank, v_cap, 400000);
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'zero_revenue';
+  perform pg_temp.check_true('assets over RM300,000 end it even with no revenue',
+    not r.qualifies);
+  perform pg_temp.check_true('and it says that was the ceiling',
+    r.reason like '%RM300,000%');
+
   -- Threshold-qualified: small in all three years.
   v_org := pg_temp.mbrs_org('Probe MBRS Small');
   -- A year at a time: period control refuses a journal dated outside an
@@ -342,7 +371,141 @@ begin
   perform pg_temp.check_true('a missing headcount is "cannot tell"',
     not r.qualifies and r.reason like 'Cannot tell%');
 
+  -- ------------------------------------------------------------------
+  -- The other two ceilings
+  --
+  -- Everything above crosses the revenue ceiling and nothing crosses
+  -- the other two, so until now the RM300,000 of assets and the five
+  -- employees could both be changed to anything at all and this file
+  -- still passed. Found by changing each and re-running.
+  --
+  -- Put the fixture back inside every ceiling first, so what follows
+  -- crosses one at a time.
+  -- ------------------------------------------------------------------
+  update public.fs_filings set employee_count = 4 where id = v_2024;
+  perform pg_temp.jv(v_org, 'JV-S8', date '2023-09-30', v_sales, v_bank, 30000);
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'threshold_qualified';
+  perform pg_temp.check_true('with the extra revenue reversed it qualifies again',
+    r.qualifies);
+
+  -- Six in one year. The ceiling somebody crosses by hiring rather
+  -- than by trading, and the oldest year again, because that is the
+  -- one a person checking only this year would miss.
+  update public.fs_filings set employee_count = 6 where id = v_2023;
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'threshold_qualified';
+  perform pg_temp.check_true('six employees in one year ends it',
+    not r.qualifies);
+  perform pg_temp.check_true('and it says it was the headcount',
+    r.reason like '%five employee ceiling%');
+  update public.fs_filings set employee_count = 2 where id = v_2023;
+
+  -- Assets over RM300,000, which the revenue ceiling cannot catch
+  -- because this is capital paid in and not turnover.
+  perform pg_temp.jv(v_org, 'JV-S9', date '2024-03-01', v_bank, v_cap, 400000);
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'threshold_qualified';
+  perform pg_temp.check_true('assets over the ceiling end it too',
+    not r.qualifies);
+  perform pg_temp.check_true('and it says which ceiling that was',
+    r.reason like '%RM300,000%');
+
   raise notice 'mbrs: all three exemption grounds tested in both directions';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 5. The default mapping, subtype by subtype
+--
+-- `app.fs_default_element` decides which line of the statements every
+-- account lands on when the company has written no override, and until
+-- now nothing asserted a single one of its arms. It is also mirrored in
+-- the app, in `fs_mapping.dart`, so the mapping screen can show what an
+-- account will do before anybody overrides it -- and a mirror that
+-- drifts shows the wrong thing confidently.
+--
+-- Every subtype is checked, so changing one here fails this file and
+-- sends somebody to the copy.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  r record;
+  v_got text;
+begin
+  for r in
+    select * from (values
+      -- Accumulated depreciation deliberately lands on the same element
+      -- as the cost it relieves: the face of the statement shows
+      -- carrying amount and the split is a note.
+      ('fixed_asset',              'PropertyPlantAndEquipment'),
+      ('accumulated_depreciation', 'PropertyPlantAndEquipment'),
+      ('other_asset',              'OtherNonCurrentAssets'),
+      ('inventory',                'Inventories'),
+      ('accounts_receivable',      'TradeAndOtherReceivables'),
+      ('bank',                     'CashAndCashEquivalents'),
+      ('cash',                     'CashAndCashEquivalents'),
+      ('current_asset',            'OtherCurrentAssets'),
+      ('accounts_payable',         'TradeAndOtherPayables'),
+      ('tax_payable',              'CurrentTaxLiabilities'),
+      ('current_liability',        'OtherCurrentLiabilities'),
+      ('long_term_liability',      'LoansAndBorrowings'),
+      ('other_liability',          'OtherNonCurrentLiabilities'),
+      ('share_capital',            'ShareCapital'),
+      ('reserves',                 'Reserves'),
+      ('retained_earnings',        'RetainedEarnings'),
+      -- Drawings are debit-natural equity, so they come back negative
+      -- and correctly reduce retained earnings.
+      ('drawings',                 'RetainedEarnings'),
+      ('sales',                    'Revenue'),
+      ('cost_of_sales',            'CostOfSales'),
+      ('other_income',             'OtherIncome'),
+      ('operating_expense',        'AdministrativeExpenses'),
+      ('payroll_expense',          'StaffCosts'),
+      ('depreciation_expense',     'DepreciationAndAmortisation'),
+      ('finance_cost',             'FinanceCosts'),
+      ('other_expense',            'OtherOperatingExpenses'),
+      ('tax_expense',              'TaxExpense')
+    ) as t(subtype, element)
+  loop
+    -- The type is deliberately wrong for most of these: the function
+    -- reads the subtype first, and an account whose type was mistyped
+    -- still has to land where its subtype says.
+    v_got := app.fs_default_element('asset'::app.account_type,
+                                    r.subtype::app.account_subtype);
+    perform pg_temp.check_eq('default element for ' || r.subtype,
+      v_got, r.element);
+  end loop;
+
+  -- An account created without a subtype still lands somewhere
+  -- defensible rather than vanishing off the face of the statement.
+  perform pg_temp.check_eq('no subtype, asset',
+    app.fs_default_element('asset'::app.account_type, null::app.account_subtype), 'OtherCurrentAssets');
+  perform pg_temp.check_eq('no subtype, liability',
+    app.fs_default_element('liability'::app.account_type, null::app.account_subtype),
+    'OtherCurrentLiabilities');
+  perform pg_temp.check_eq('no subtype, equity',
+    app.fs_default_element('equity'::app.account_type, null::app.account_subtype), 'Reserves');
+  perform pg_temp.check_eq('no subtype, revenue',
+    app.fs_default_element('revenue'::app.account_type, null::app.account_subtype), 'OtherIncome');
+  perform pg_temp.check_eq('no subtype, expense',
+    app.fs_default_element('expense'::app.account_type, null::app.account_subtype),
+    'OtherOperatingExpenses');
+
+  -- Every element the mapping names has to exist in the taxonomy, or
+  -- the override's foreign key would refuse what the default happily
+  -- produces.
+  if exists (
+    select 1 from unnest(enum_range(null::app.account_subtype)) s
+     where app.fs_default_element('asset'::app.account_type, s) is not null
+       and not exists (
+         select 1 from public.mbrs_elements e
+          where e.code = app.fs_default_element('asset'::app.account_type, s))
+  ) then
+    raise exception
+      'FAIL: a subtype defaults to an element that is not in mbrs_elements';
+  end if;
+
+  raise notice 'mbrs: every subtype maps to an element that exists';
 end $$;
 
 rollback;

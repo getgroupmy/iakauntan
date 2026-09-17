@@ -237,6 +237,126 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And the same on the side that pays
+--
+-- A payable moves the opposite way from a receivable: when the ringgit
+-- weakens, a customer's dollars are worth more and a supplier's cost
+-- more, so what is a gain on one side is a loss on the other. That
+-- asymmetry is one sign in `app.realised_fx_on_settlement`, and until
+-- this block every assertion about it was a receipt. Flipping the sign
+-- on the payment branch — booking every foreign supplier settlement's
+-- gain as a loss and every loss as a gain — changed nothing that failed.
+--
+-- Found by changing it and re-running.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('FX Payable Sdn Bhd');
+  v_sup uuid; v_bank uuid; v_ap uuid; v_bill uuid; v_pay uuid;
+  v_bal numeric; v_diff numeric;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  select id into v_ap from public.accounts where org_id=v_org and code='2110';
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'FXS-1', 'Overseas Supplier Inc', 'supplier')
+  returning id into v_sup;
+  insert into public.bank_accounts (org_id, account_id, name)
+  values (v_org, (select id from public.accounts where org_id=v_org and code='1120'),
+          'Current account') returning id into v_bank;
+
+  insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
+  values (v_org,'USD','MYR',4.70,current_date - 10,'manual'),
+         (v_org,'USD','MYR',4.50,current_date,'manual');
+
+  -- USD 10,000 billed when a dollar was RM 4.70.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'bill','FX-BILL-1', current_date - 10, v_sup,'USD',4.70,
+          10000,10000,10000,'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     line_subtotal, line_total)
+  values (v_org, v_bill, 1, 'Imported goods', 1, 10000, 10000, 10000);
+  perform public.post_purchase_document(v_bill);
+
+  perform pg_temp.check_eq('the payable is booked at the bill rate',
+    (select sum(credit-debit) from public.gl_lines g
+       join public.gl_entries e on e.id=g.entry_id
+      where g.account_id=v_ap and e.source_id=v_bill), 47000);
+
+  -- Paid in full when a dollar is RM 4.50, so RM 45,000 settles a
+  -- RM 47,000 payable. The company owed dollars and the dollars got
+  -- cheaper: that is a gain, where the same movement on a receivable
+  -- was a loss.
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org,'FX-PAY-1', current_date, v_sup, 10000, 10000,'USD',4.50, v_bank)
+  returning id into v_pay;
+  insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
+  values (v_org, v_pay, v_bill, 10000);
+  perform public.post_purchase_payment(v_pay);
+
+  select sum(g.debit - g.credit) into v_bal
+    from public.gl_lines g join public.gl_entries e on e.id = g.entry_id
+   where g.account_id = v_ap and e.source_id in (v_bill, v_pay);
+  perform pg_temp.check_eq('payables clear to nothing', v_bal, 0);
+
+  -- 4920 is the gain account; 6500 the loss. Which one it lands in is
+  -- the assertion, because a sign flip puts the right number in the
+  -- wrong one and the ledger still balances.
+  select sum(g.credit - g.debit) into v_diff
+    from public.gl_lines g join public.gl_entries e on e.id = g.entry_id
+   where e.source_id = v_pay
+     and g.account_id = (select id from public.accounts
+                          where org_id=v_org and code='4920');
+  perform pg_temp.check_eq('RM 2,000 booked as an exchange gain, not a loss',
+    v_diff, 2000);
+  perform pg_temp.check_eq('and nothing reaches the loss account',
+    coalesce((select sum(g.debit - g.credit)
+                from public.gl_lines g
+                join public.gl_entries e on e.id = g.entry_id
+               where e.source_id = v_pay
+                 and g.account_id = (select id from public.accounts
+                                      where org_id=v_org and code='6500')), 0), 0);
+  perform pg_temp.check_eq('and it is recorded on the payment',
+    (select fx_gain_loss from public.purchase_payments where id=v_pay), 2000);
+
+  -- And the refusal, which the receipt side asserts and this one did
+  -- not: a ringgit payment cannot settle a dollar bill.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'bill','FX-BILL-2', current_date - 10, v_sup,'USD',4.70,
+          1000,1000,1000,'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     line_subtotal, line_total)
+  values (v_org, v_bill, 1, 'More goods', 1, 1000, 1000, 1000);
+  perform public.post_purchase_document(v_bill);
+
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org,'FX-PAY-2', current_date, v_sup, 4500, 4500,'MYR',1, v_bank)
+  returning id into v_pay;
+  insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
+  values (v_org, v_pay, v_bill, 1000);
+  begin
+    perform public.post_purchase_payment(v_pay);
+    raise exception 'FAIL: a ringgit payment settled a dollar bill';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a ringgit payment cannot settle a dollar bill';
+  end;
+
+  perform pg_temp.sign_out();
+end $$;
+
 -- Settling a USD invoice with a ringgit receipt is refused rather than
 -- guessed at. It is a real thing businesses do, and it needs a stated
 -- conversion; inventing one would be worse than saying so.

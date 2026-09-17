@@ -297,6 +297,11 @@ class _BasesCard extends StatelessWidget {
               ('EPF wage', slip.epfWage),
               ('SOCSO insured wage', slip.socsoWage),
               ('EIS insured wage', slip.eisWage),
+              // Narrower than the EPF wage, and the gap is the bonus.
+              // Shown because a company disagreeing with a HRD Corp
+              // statement needs to know whether it disagrees about the
+              // base or about the rate.
+              ('HRD Corp levy wage', slip.hrdfWage),
               ('Taxable income', slip.taxableIncome),
             ])
               Padding(

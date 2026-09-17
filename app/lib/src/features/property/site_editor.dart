@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 
 /// Add or amend a property the company manages.
@@ -138,6 +140,10 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
         ? const AsyncValue<Map<String, dynamic>?>.data(null)
         : ref.watch(propertySiteProvider(widget.siteId!));
 
+    // Watched rather than read, so the reference list is on its way
+    // before anybody picks a suggestion.
+    final states = ref.watch(refStatesProvider).valueOrNull ?? const [];
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -212,6 +218,7 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
                       ),
                       const SizedBox(height: Space.md),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         value: _tenure,
                         decoration: const InputDecoration(
                           labelText: 'Tenure',
@@ -237,10 +244,18 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
                       ),
 
                       _section('Where it is'),
-                      TextFormField(
+                      AddressField(
                         controller: _ctl('address_line1'),
-                        decoration:
-                            const InputDecoration(labelText: 'Address line 1'),
+                        label: 'Address line 1',
+                        enabled: !_saving,
+                        country: ref.watch(orgCountryAlpha2Provider),
+                        onChosen: (a) => fillAddressBoxes(
+                          a,
+                          states,
+                          postcode: _ctl('postcode'),
+                          city: _ctl('city'),
+                          stateCode: _ctl('state_code'),
+                        ),
                       ),
                       const SizedBox(height: Space.md),
                       TextFormField(

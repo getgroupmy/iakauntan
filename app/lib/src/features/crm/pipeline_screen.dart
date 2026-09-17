@@ -3,9 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../contacts/new_contact_dialog.dart';
+import 'close_deal_dialog.dart';
+import 'quote_mismatch_dialog.dart';
+import 'win_loss_dialog.dart';
 
 /// Kanban board over the sales pipeline. Cards drag between stages; the
 /// database trigger rewrites probability, status and stage history.
@@ -22,6 +28,25 @@ class PipelineScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Sales pipeline'),
         actions: [
+          // What the forecast is wrong by. The pipeline figure was
+          // typed early and round; the quotation was priced later, and
+          // nothing compared them before `0384`.
+          IconButton(
+            key: const ValueKey('quote-mismatch'),
+            tooltip: 'Deals that no longer match their quotation',
+            icon: const Icon(Icons.difference_outlined),
+            onPressed: () => showPipelineQuoteMismatch(context),
+          ),
+          // The board says how much is in the pipeline. This says why it
+          // keeps leaving, which is what the reasons `0373` started
+          // collecting are for — a field with no reader is the same
+          // failure in a different place.
+          IconButton(
+            key: const ValueKey('win-loss'),
+            tooltip: 'Why deals closed',
+            onPressed: () => showWinLoss(context),
+            icon: const Icon(Icons.query_stats_outlined),
+          ),
           IconButton(
             tooltip: 'Refresh',
             onPressed: () {
@@ -55,13 +80,16 @@ class PipelineScreen extends ConsumerWidget {
               return const EmptyState(
                 icon: Icons.view_column_outlined,
                 title: 'No pipeline configured',
-                message: 'Create a pipeline with stages to start tracking deals.',
+                message:
+                    'Create a pipeline with stages to start tracking deals.',
               );
             }
 
             final total = deals.fold<double>(0, (s, d) => s + d.amount);
-            final weighted =
-                deals.fold<double>(0, (s, d) => s + d.weightedAmount);
+            final weighted = deals.fold<double>(
+              0,
+              (s, d) => s + d.weightedAmount,
+            );
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,6 +118,24 @@ class PipelineScreen extends ConsumerWidget {
                             canWrite: canWrite,
                             onDrop: (deal) async {
                               if (deal.stageId == stage.id) return;
+                              // Dropping on a closed column is the
+                              // moment the reason is known, so it is the
+                              // moment to ask. Before `0373` this was
+                              // the same one-field update as any other
+                              // move, and `lost_reason` stayed empty for
+                              // every deal the company ever lost.
+                              if (stage.stageType != 'open') {
+                                final done = await showCloseDealDialog(
+                                  context,
+                                  deal: deal,
+                                  stageType: stage.stageType,
+                                );
+                                if (done) {
+                                  ref.invalidate(opportunitiesProvider);
+                                  ref.invalidate(dashboardProvider);
+                                }
+                                return;
+                              }
                               await ref
                                   .read(repoProvider)!
                                   .moveOpportunity(deal.id, stage.id);
@@ -160,8 +206,10 @@ class _StageColumn extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration:
-                      BoxDecoration(color: _color, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: _color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -171,8 +219,10 @@ class _StageColumn extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text('${deals.length}',
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  '${deals.length}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
             const SizedBox(height: 2),
@@ -200,14 +250,69 @@ class _StageColumn extends StatelessWidget {
   }
 }
 
-class _DealCard extends StatelessWidget {
+class _DealCard extends ConsumerWidget {
   const _DealCard({required this.deal, required this.draggable});
 
   final Opportunity deal;
   final bool draggable;
 
+  /// Put a closed deal back on the board.
+  ///
+  /// `reopen_opportunity` has existed as long as the pipeline and
+  /// nothing has ever called it, so a deal closed by mistake — or one
+  /// the customer came back on a month later, which is the ordinary
+  /// case — could only be recreated from nothing, losing its history
+  /// and its quotation with it.
+  ///
+  /// No stage is named. The RPC takes one and defaults to the first,
+  /// which is the honest place for a deal that has just come back:
+  /// whoever reopened it knows where it really is and can drag it.
+  Future<void> _reopen(BuildContext context, WidgetRef ref) async {
+    final go = await confirm(
+      context,
+      title: 'Reopen ${deal.name}?',
+      message: 'It goes back on the board at the first stage, with its '
+          'history and anything linked to it intact. Drag it to where '
+          'it actually is.',
+      confirmLabel: 'Reopen it',
+    );
+    if (!go || !context.mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.reopenOpportunity(deal.id),
+      successMessage: 'Back on the board.',
+    );
+    if (ok) {
+      ref.invalidate(opportunitiesProvider);
+      ref.invalidate(pipelineQuoteMismatchProvider);
+    }
+  }
+
+  Future<void> _quote(BuildContext context, WidgetRef ref) async {
+    final go = await confirm(
+      context,
+      title: 'Quote ${deal.name}?',
+      message:
+          'A quotation goes out to ${deal.contactName ?? 'the '
+                  'customer'} at ${Fmt.money(deal.amount, currency: deal.currency)}, '
+          'valid for thirty days, and this deal is linked to it. Price it '
+          'properly on the document; the deal follows.',
+      confirmLabel: 'Raise it',
+    );
+    if (!go || !context.mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.quoteOpportunity(deal.id),
+      successMessage: 'Quotation raised and linked.',
+    );
+    if (ok) {
+      ref.invalidate(opportunitiesProvider);
+      ref.invalidate(pipelineQuoteMismatchProvider);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(Space.md),
@@ -219,11 +324,43 @@ class _DealCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            deal.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  deal.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (draggable && !deal.isQuoted && deal.status == 'open')
+                IconButton(
+                  tooltip: 'Raise a quotation',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.request_quote_outlined, size: 16),
+                  onPressed: () => _quote(context, ref),
+                ),
+              // `reopen_opportunity` has existed since the pipeline did
+              // and nothing ever called it, so a deal marked lost by
+              // mistake — or one the customer came back on, which is
+              // the ordinary case — stayed lost. Only on a closed one:
+              // reopening an open deal is not a thing.
+              if (draggable && deal.status != 'open')
+                IconButton(
+                  tooltip: 'Reopen this deal',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.restart_alt, size: 16),
+                  onPressed: () => _reopen(context, ref),
+                ),
+            ],
           ),
           if (deal.contactName != null) ...[
             const SizedBox(height: 4),
@@ -240,7 +377,9 @@ class _DealCard extends StatelessWidget {
               Text(
                 Fmt.money(deal.amount, currency: deal.currency),
                 style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
               const Spacer(),
               Text(
@@ -257,6 +396,22 @@ class _DealCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   Fmt.date(deal.expectedCloseDate),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
+          // The quotation the figure came off. A deal with one can be
+          // checked against what was actually sent; a deal without is
+          // somebody's estimate, and the card says which.
+          if (deal.quotationNo != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.request_quote_outlined, size: 12),
+                const SizedBox(width: 4),
+                Text(
+                  deal.quotationNo!,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -295,6 +450,7 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
   String? _contactId;
   String? _stageId;
   DateTime? _closeDate;
+  Map<String, dynamic> _customFields = const {};
   bool _saving = false;
 
   @override
@@ -323,8 +479,8 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
         'stage_id': stage.id,
         'amount': double.tryParse(_amount.text) ?? 0,
         'probability': stage.probability,
-        'expected_close_date':
-            _closeDate == null ? null : Fmt.iso(_closeDate!),
+        'expected_close_date': _closeDate == null ? null : Fmt.iso(_closeDate!),
+        'custom_fields': _customFields,
       }),
       successMessage: 'Deal created',
     );
@@ -340,9 +496,13 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
   @override
   Widget build(BuildContext context) {
     final stages = ref.watch(pipelineStagesProvider).value ?? const [];
+    // A deal is not a sale, so the company it is with may be a
+    // prospect -- that is what most of them are.
     final contacts =
-        ref.watch(contactsProvider((type: 'customer', search: ''))).value ??
-            const <Contact>[];
+        ref
+            .watch(contactsProvider((type: 'customer_or_prospect', search: '')))
+            .value ??
+        const <Contact>[];
 
     _stageId ??= stages.isNotEmpty ? stages.first.id : null;
 
@@ -361,47 +521,60 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
                 validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contactId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Customer'),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
+                label: 'Customer',
+                hint: 'Type a name or a code',
+                createLabel: 'Add prospect',
+                // A PROSPECT rather than a customer: somebody being put
+                // on the pipeline has not bought anything yet, and
+                // filing them as a customer would put them in the
+                // ageing report owing nothing.
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: 'prospect',
+                  typed: typed,
+                ),
                 onChanged: (v) => setState(() => _contactId = v),
               ),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _amount,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                        labelText: 'Deal value', prefixText: 'RM '),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _amount,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Deal value',
+                        prefixText: 'RM ',
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _stageId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Stage'),
-                    items: [
-                      for (final s in stages)
-                        DropdownMenuItem(value: s.id, child: Text(s.name)),
-                    ],
-                    onChanged: (v) => setState(() => _stageId = v),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _stageId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Stage'),
+                      items: [
+                        for (final s in stages)
+                          DropdownMenuItem(value: s.id, child: Text(s.name)),
+                      ],
+                      onChanged: (v) => setState(() => _stageId = v),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const SizedBox(height: 12),
               InkWell(
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _closeDate ??
+                    initialDate:
+                        _closeDate ??
                         DateTime.now().add(const Duration(days: 30)),
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
@@ -415,6 +588,11 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
                   ),
                   child: Text(Fmt.date(_closeDate)),
                 ),
+              ),
+              CustomFieldsSection(
+                entity: 'opportunity',
+                values: _customFields,
+                onChanged: (v) => setState(() => _customFields = v),
               ),
             ],
           ),

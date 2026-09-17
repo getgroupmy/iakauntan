@@ -7,9 +7,18 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../shared/scan_intake.dart';
+import 'contact_editor.dart';
+import 'contact_records.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
-  const ContactsScreen({super.key});
+  const ContactsScreen({super.key, this.initialType});
+
+  /// Which tab to open on. The sidebar has an entry per kind of contact
+  /// as well as All Contacts, and they are all this screen — a separate
+  /// list widget per type would be three copies of the same search box
+  /// drifting apart.
+  final String? initialType;
 
   @override
   ConsumerState<ContactsScreen> createState() => _ContactsScreenState();
@@ -17,7 +26,7 @@ class ContactsScreen extends ConsumerStatefulWidget {
 
 class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   final _search = TextEditingController();
-  String _type = 'customer';
+  late String _type = widget.initialType ?? 'customer';
   String _query = '';
 
   @override
@@ -36,6 +45,20 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       appBar: AppBar(
         title: const Text('Contacts'),
         actions: [
+          // From the paper, which is how a customer or supplier
+          // actually arrives: a letterhead on an invoice, a name card
+          // at a meeting. Typing a company's registration number off a
+          // card is the part people get wrong.
+          if (canWrite)
+            IconButton(
+              tooltip: 'Scan a letterhead or name card',
+              icon: const Icon(Icons.document_scanner_outlined),
+              onPressed: () => _scanContact(context, ref, _type),
+            ),
+          // What was typed twice before the editor started warning.
+          // The badge is the count, so a company with nothing on file
+          // twice is not invited to go and look.
+          if (canWrite) const _DuplicatesAction(),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -77,6 +100,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   segments: const [
                     ButtonSegment(value: 'customer', label: Text('Customers')),
                     ButtonSegment(value: 'supplier', label: Text('Suppliers')),
+                    ButtonSegment(value: 'prospect', label: Text('Prospects')),
                     ButtonSegment(value: 'all', label: Text('All')),
                   ],
                   selected: {_type},
@@ -181,10 +205,80 @@ class _ContactTile extends StatelessWidget {
                   size: 18, color: context.colors.warning),
             ),
           const SizedBox(width: 8),
-          StatusChip(contact.contactType, compact: true),
+          // The chip is the role, so the company's other records -- and
+          // the roles it has none for yet -- are behind the chip.
+          // Tapping it opens the sheet; tapping anywhere else on the
+          // row still opens the contact.
+          InkWell(
+            key: ValueKey('records-${contact.id}'),
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => showContactRecords(context, contact.id),
+            child: Tooltip(
+              message: 'Records of this company',
+              child: StatusChip(contact.contactType, compact: true),
+            ),
+          ),
           const Icon(Icons.chevron_right, size: 18),
         ],
       ),
+    );
+  }
+}
+
+/// A customer or supplier read off the paper they arrived on.
+///
+/// The same reader the bills go through. It was written for a purchase
+/// document and a letterhead is most of one — a name, a registration
+/// number, a tax number, an address, a telephone — so nothing new is
+/// needed to read a name card or the top of an invoice.
+///
+/// What comes back opens the ordinary editor with those fields filled,
+/// rather than saving anything: a contact is checked before it is
+/// created, because a duplicate customer is a mistake that surfaces
+/// months later in an aged listing.
+Future<void> _scanContact(
+  BuildContext context,
+  WidgetRef ref,
+  String type,
+) async {
+  final staged = await showScanIntake(
+    context,
+    ref,
+    // Parked against `contacts` until the contact it belongs to exists.
+    table: 'contacts',
+    title: 'Scan a letterhead or name card',
+  );
+  if (staged?.read == null || !context.mounted) return;
+
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ContactEditor(contactType: type, scanned: staged!.read),
+    ),
+  );
+}
+
+
+/// The way to the records on file twice, with the number of groups on
+/// it -- and nothing at all when there are none.
+///
+/// Its own widget so that the count is watched here rather than in the
+/// screen: a list rebuilt on every keystroke of the search box must
+/// not re-ask the server what is duplicated.
+class _DuplicatesAction extends ConsumerWidget {
+  const _DuplicatesAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count =
+        ref.watch(contactDuplicatesProvider).valueOrNull?.length ?? 0;
+    if (count == 0) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: '$count set${count == 1 ? '' : 's'} of records on file twice',
+      icon: Badge.count(
+        count: count,
+        child: const Icon(Icons.merge_type),
+      ),
+      onPressed: () => context.go('/duplicate-contacts'),
     );
   }
 }

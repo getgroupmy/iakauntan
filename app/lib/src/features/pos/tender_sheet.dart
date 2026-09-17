@@ -8,6 +8,8 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'member_panel.dart';
+import 'offline_store.dart' show tenderTyped;
+import 'on_account.dart';
 import 'receipt_view.dart';
 import 'till_screen.dart' show posNum;
 
@@ -43,36 +45,86 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
   String? _tenderTypeId;
   bool _busy = false;
 
+  /// Whose account this goes on, when the cashier picked one here.
+  /// Null means the sale's own contact stands, which is what the
+  /// database falls back to.
+  String? _accountContact;
+  String? _accountContactName;
+
   @override
   void dispose() {
     _amount.dispose();
     super.dispose();
   }
 
-  Future<void> _take(double total) async {
+  Future<void> _take(double total, {required bool onAccount}) async {
     final type = _tenderTypeId;
     if (type == null) return;
-    final given = double.tryParse(_amount.text) ?? total;
+    // An empty box is exact money, which is the right default at a
+    // counter. A box that cannot be READ is not, and this used to treat
+    // the two the same: `?? total` meant a mistyped amount completed
+    // the sale as though the customer had handed over the exact basket,
+    // so `0209` worked the change out as nought and somebody walked
+    // away short. See `tenderTyped`.
+    final given = tenderTyped(_amount.text, exact: total);
+    if (given == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('That is not an amount. Leave it empty for exact '
+              'money.'),
+        ),
+      );
+      return;
+    }
     setState(() => _busy = true);
     Map<String, dynamic>? result;
     final ok = await runWithFeedback(
       context,
-      pendingMessage: 'Taking payment…',
+      // Not "Taking payment" when nothing is being taken. The line is
+      // read by whoever is standing on the other side of the counter.
+      pendingMessage: onAccount ? 'Putting it on the account…' : 'Taking payment…',
       successMessage: null,
       action: () async {
-        result = await ref.read(repoProvider)!.completePosSale(widget.saleId, [
-          {'type': type, 'amount': given},
-        ]);
+        result = await ref
+            .read(repoProvider)!
+            .completePosSale(
+              widget.saleId,
+              [
+                {'type': type, 'amount': given},
+              ],
+              contactId: _accountContact,
+            );
       },
     );
     if (!mounted) return;
     setState(() => _busy = false);
     if (!ok || result == null) return;
-    await _showReceipt(result!);
+    await _showReceipt(result!, onAccount: onAccount ? given : 0);
     if (mounted) Navigator.of(context).pop(true);
   }
 
-  Future<void> _showReceipt(Map<String, dynamic> r) => showDialog<void>(
+  /// Asks who, for a sale going on an account.
+  ///
+  /// The same picker the e-Invoice question uses, because it is the
+  /// same question — which customer is this — and a second list of
+  /// customers to keep in step would be a second list to get wrong.
+  Future<void> _pickAccount() async {
+    final chosen = await showModalBottomSheet<Contact>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _EinvoiceCustomerSheet(),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() {
+      _accountContact = chosen.id;
+      _accountContactName = chosen.name;
+    });
+  }
+
+  Future<void> _showReceipt(
+    Map<String, dynamic> r, {
+    double onAccount = 0,
+  }) => showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('${r['invoice_no']}'),
@@ -88,7 +140,19 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
           if (posNum(r['cash_due']) != 0)
             _Row('Cash due', posNum(r['cash_due'])),
           const Divider(),
-          _Row('Change', posNum(r['change_due']), big: true),
+          // Not "Change RM0.00". Nothing was handed over, and that
+          // line reads as a completed cash sale on the one screen a
+          // cashier checks before handing the bag over.
+          if (onAccountNote(onAccount: onAccount) case final note?)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                note,
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
+            )
+          else
+            _Row('Change', posNum(r['change_due']), big: true),
         ],
       ),
       actions: [
@@ -205,7 +269,7 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
 
-    final chosen = await showModalBottomSheet<String>(
+    final chosen = await showModalBottomSheet<Contact>(
       context: context,
       isScrollControlled: true,
       builder: (_) => const _EinvoiceCustomerSheet(),
@@ -215,7 +279,7 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
     await runWithFeedback(
       context,
       successMessage: 'Billed to them — this sale gets its own e-Invoice',
-      action: () => repo.requestEinvoiceForSale(widget.saleId, chosen),
+      action: () => repo.requestEinvoiceForSale(widget.saleId, chosen.id),
     );
     if (mounted && receiptCtx.mounted) Navigator.of(receiptCtx).pop();
   }
@@ -254,6 +318,16 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
             orElse: () => rows.first,
           );
           final isCash = selected['kind'] == 'cash';
+          final onAccount = isOnAccount(selected);
+          final saleContact = sale.maybeWhen(
+            data: (row) => row?['contact_id'] as String?,
+            orElse: () => null,
+          );
+          final blocked = onAccountBlockedBecause(
+            tenderType: selected,
+            saleContact: saleContact,
+            chosenContact: _accountContact,
+          );
 
           return Column(
             mainAxisSize: MainAxisSize.min,
@@ -291,7 +365,11 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
                   prefixText: Fmt.prefix('MYR'),
-                  labelText: isCash ? 'Handed over' : 'Charged',
+                  labelText: isCash
+                      ? 'Handed over'
+                      : onAccount
+                      ? 'On the account'
+                      : 'Charged',
                   // What went in the drawer, not what was owed. Recording
                   // the amount due instead loses the fifty that came in,
                   // which is the only thing the cash-up is about.
@@ -314,11 +392,40 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
                   ],
                 ),
               ],
+              if (onAccount) ...[
+                const SizedBox(height: 8),
+                // Asked here rather than refused after the fact. The
+                // database's refusal is correct and arrives as a red
+                // banner over a queue; this is the same rule one step
+                // earlier, where the answer is a button.
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _pickAccount,
+                  icon: const Icon(Icons.person_outline),
+                  label: Text(
+                    _accountContactName ??
+                        (saleContact == null
+                            ? 'Whose account?'
+                            : 'Somebody else\'s account'),
+                  ),
+                ),
+                if (blocked != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      blocked,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _busy || total <= 0 ? null : () => _take(total),
-                icon: const Icon(Icons.check),
-                label: const Text('Take it'),
+                onPressed: _busy || total <= 0 || blocked != null
+                    ? null
+                    : () => _take(total, onAccount: onAccount),
+                icon: Icon(onAccount ? Icons.receipt_long_outlined : Icons.check),
+                label: Text(onAccount ? 'Put it on the account' : 'Take it'),
               ),
               const SizedBox(height: 8),
             ],
@@ -435,7 +542,7 @@ class _EinvoiceCustomerSheetState
                     ),
                     // Not disabled. The server decides, and a row that
                     // cannot be tapped teaches nothing about why.
-                    onTap: () => Navigator.of(context).pop(c.id),
+                    onTap: () => Navigator.of(context).pop(c),
                   ),
               ],
             ),

@@ -7,8 +7,12 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../data/repository.dart';
+import 'departure.dart';
+import 'departure_dialog.dart';
 import 'employee_records.dart';
+import 'standing_deductions.dart';
 import 'tax_year_section.dart';
 
 /// Create or amend an employee. The statutory identifiers are not
@@ -41,6 +45,16 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
   bool _epf = true, _socso = true, _eis = true, _pcb = true, _hrdf = true;
   bool _saving = false;
   bool _loaded = false;
+  Map<String, dynamic> _customFields = const {};
+
+  /// The day they last worked, when they have left.
+  ///
+  /// Held because it decides two things on this form: the status
+  /// dropdown is hidden — `record_departure` owns the status once
+  /// somebody has gone, and offering it here is how the record came to
+  /// disagree with the payroll run in the first place — and
+  /// `employment_status` is left out of the save entirely.
+  DateTime? _leftOn;
 
   TextEditingController _ctl(String key, [String? initial]) =>
       _c.putIfAbsent(key, () => TextEditingController(text: initial));
@@ -57,6 +71,7 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
   void _hydrate(Employee e) {
     if (_loaded) return;
     _loaded = true;
+    _customFields = e.customFields;
     _ctl('full_name').text = e.fullName;
     _ctl('email').text = e.email ?? '';
     _ctl('phone').text = e.phone ?? '';
@@ -66,9 +81,28 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
     _ctl('epf_no').text = e.epfNo ?? '';
     _ctl('socso_no').text = e.socsoNo ?? '';
     _ctl('income_tax_no').text = e.incomeTaxNo ?? '';
+    // Zero reads as blank rather than as "0". Most employees have none
+    // of these, and a form pre-filled with four zeroes invites somebody
+    // to think they mean something.
+    _ctl('cp38_monthly').text = _blankIfZero(e.cp38Monthly);
+    _ctl('zakat_monthly').text = _blankIfZero(e.zakatMonthly);
+    _ctl('epf_voluntary_employee_rate').text =
+        _blankIfZero(e.epfVoluntaryEmployeeRate);
+    _ctl('epf_voluntary_employer_rate').text =
+        _blankIfZero(e.epfVoluntaryEmployerRate);
     _ctl('bank_name').text = e.bankName ?? '';
     _ctl('bank_account_no').text = e.bankAccountNo ?? '';
-    _status = e.employmentStatus;
+    _ctl('emergency_contact_name').text = e.emergencyContactName ?? '';
+    _ctl('emergency_contact_phone').text = e.emergencyContactPhone ?? '';
+    _ctl('emergency_contact_relation').text =
+        e.emergencyContactRelation ?? '';
+    _leftOn = e.lastWorkingDate;
+    // Never a leaving value: those come from `record_departure`, and a
+    // dropdown showing one is a dropdown offering to change it.
+    _status = departureKinds.containsKey(e.employmentStatus) ||
+            e.employmentStatus == 'notice'
+        ? 'active'
+        : e.employmentStatus;
     _type = e.employmentType;
     _marital = e.maritalStatus;
     _residency = e.residencyStatus;
@@ -214,26 +248,40 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                             },
                             onChanged: (v) => setState(() => _type = v!),
                           ),
-                          _dropdown<String>(
-                            label: 'Status',
-                            value: _status,
-                            items: const {
-                              'probation': 'Probation',
-                              'active': 'Confirmed',
-                              'notice': 'Serving notice',
-                              'resigned': 'Resigned',
-                              'terminated': 'Terminated',
-                              'retired': 'Retired',
-                              'suspended': 'Suspended',
-                            },
-                            onChanged: (v) => setState(() => _status = v!),
-                          ),
+                          // The three leaving statuses and `notice` are
+                          // not on this list any more. Choosing one set a
+                          // field `calculate_payroll_run` has never read,
+                          // so the record said Resigned and the next run
+                          // paid them in full — see `0371`. A departure
+                          // is a last working day, and it is asked for
+                          // below where the date can be given with it.
+                          if (_leftOn == null)
+                            _dropdown<String>(
+                              label: 'Status',
+                              value: _status,
+                              items: const {
+                                'probation': 'Probation',
+                                'active': 'Confirmed',
+                                'suspended': 'Suspended',
+                              },
+                              onChanged: (v) => setState(() => _status = v!),
+                            )
+                          else
+                            const SizedBox.shrink(),
                         ]),
                         _DateField(
                           label: 'Joined on *',
                           value: _hireDate,
                           onChanged: (d) => setState(() => _hireDate = d),
                         ),
+                        if (employee != null)
+                          _DepartureRow(
+                            employee: employee,
+                            onChanged: () {
+                              _loaded = false;
+                              ref.invalidate(employeeProvider);
+                            },
+                          ),
                       ],
                     ),
                     _Section(
@@ -247,6 +295,19 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                           _text('bank_name', 'Bank'),
                           _text('bank_account_no', 'Account number'),
                         ]),
+                      ],
+                    ),
+                    _Section(
+                      title: 'If something happens',
+                      subtitle: 'Who to call. Asked for on the first day '
+                          'and needed on the worst one',
+                      children: [
+                        _row([
+                          _text('emergency_contact_name', 'Name'),
+                          _text('emergency_contact_relation',
+                              'Relationship'),
+                        ]),
+                        _text('emergency_contact_phone', 'Phone'),
                       ],
                     ),
                     _Section(
@@ -274,6 +335,38 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                         ]),
                       ],
                     ),
+                    // Read by `calculate_payroll_run` since 0031 and
+                    // settable nowhere until now. A CP38 direction that
+                    // arrives in the post had no box to go in, and the
+                    // arrears were simply never deducted; zakat is a
+                    // rebate against PCB rather than another deduction,
+                    // so leaving it at zero over-taxes the employee
+                    // every month of the year.
+                    _Section(
+                      title: 'Standing deductions',
+                      subtitle: 'Left blank unless LHDN or the employee '
+                          'has asked for them',
+                      children: [
+                        _row([
+                          _standing('cp38_monthly', 'CP38 instalment',
+                              helper: 'Deducted on top of PCB and remitted '
+                                  'with it'),
+                          _standing('zakat_monthly', 'Monthly zakat',
+                              helper: 'Reduces PCB rather than adding to '
+                                  'the deductions'),
+                        ]),
+                        _row([
+                          _standing('epf_voluntary_employee_rate',
+                              'Voluntary EPF — employee %',
+                              rate: true,
+                              helper: 'Above the statutory rate. 2 means '
+                                  'two per cent'),
+                          _standing('epf_voluntary_employer_rate',
+                              'Voluntary EPF — employer %',
+                              rate: true),
+                        ]),
+                      ],
+                    ),
                     // Only once the employee exists: both of these hang
                     // off an employee id, and there is nothing sensible
                     // to attach them to before Save.
@@ -281,6 +374,11 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                       TaxYearSection(employeeId: widget.employeeId!),
                       EmployeeRecords(employeeId: widget.employeeId!),
                     ],
+                    CustomFieldsSection(
+                      entity: 'employee',
+                      values: _customFields,
+                      onChanged: (v) => setState(() => _customFields = v),
+                    ),
                     const SizedBox(height: Space.xxl),
                   ],
                 ),
@@ -315,6 +413,31 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                 ),
         ),
       );
+
+  static String _blankIfZero(double v) =>
+      v == 0 ? '' : v.toString().replaceFirst(RegExp(r'\.0$'), '');
+
+  /// A standing figure, validated by the rules in
+  /// `standing_deductions.dart` rather than by `_text`'s generic
+  /// number check. The extra rule the rate needs — that a fraction is
+  /// not a percentage — is the one mistake here that nothing else
+  /// would catch.
+  Widget _standing(String key, String label,
+      {bool rate = false, String? helper}) {
+    return TextFormField(
+      controller: _ctl(key),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helper,
+        helperMaxLines: 2,
+        prefixText: rate ? null : Fmt.prefix('MYR'),
+        suffixText: rate ? '%' : null,
+      ),
+      validator: (v) =>
+          rate ? voluntaryRateProblem(v ?? '') : standingAmountProblem(v ?? ''),
+    );
+  }
 
   Widget _text(String key, String label,
       {bool required = false, bool number = false, String? helper}) {
@@ -375,12 +498,22 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
       'department_id': _departmentId,
       'position_id': _positionId,
       'employment_type': _type,
-      'employment_status': _status,
+      // Omitted once they have left. The status and the last working day
+      // are one fact and `record_departure` writes both; sending half of
+      // it from here is exactly what `0371` refuses.
+      if (_leftOn == null) 'employment_status': _status,
       'hire_date': Fmt.iso(_hireDate),
       'basic_salary':
           double.tryParse(_ctl('basic_salary').text.trim()) ?? 0,
       'bank_name': _nullIfBlank('bank_name'),
       'bank_account_no': _nullIfBlank('bank_account_no'),
+      // Columns since `0025` that nothing wrote. There is no rule to
+      // enforce on a next of kin's phone number, so this is a form
+      // field and not a migration.
+      'emergency_contact_name': _nullIfBlank('emergency_contact_name'),
+      'emergency_contact_phone': _nullIfBlank('emergency_contact_phone'),
+      'emergency_contact_relation':
+          _nullIfBlank('emergency_contact_relation'),
       'epf_no': _nullIfBlank('epf_no'),
       'socso_no': _nullIfBlank('socso_no'),
       'income_tax_no': _nullIfBlank('income_tax_no'),
@@ -389,6 +522,13 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
       'eis_eligible': _eis,
       'pcb_eligible': _pcb,
       'hrdf_eligible': _hrdf,
+      ...standingDeductionValues(
+        cp38: _ctl('cp38_monthly').text,
+        zakat: _ctl('zakat_monthly').text,
+        voluntaryEmployee: _ctl('epf_voluntary_employee_rate').text,
+        voluntaryEmployer: _ctl('epf_voluntary_employer_rate').text,
+      ),
+      'custom_fields': _customFields,
     };
 
     final ok = await runWithFeedback(
@@ -437,6 +577,62 @@ class _Section extends StatelessWidget {
               ...children,
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Whether they have left, and the way to say so.
+///
+/// A row rather than a field, because a departure is not an attribute of
+/// a person: it is the thing that takes them off the payroll.
+/// `calculate_payroll_run` reads `last_working_date` and has never read
+/// `employment_status`, so until `0371` a leaver marked in the dropdown
+/// kept being paid, kept having EPF and PCB remitted, and kept being
+/// paid by the bank file.
+class _DepartureRow extends ConsumerWidget {
+  const _DepartureRow({required this.employee, required this.onChanged});
+
+  final Employee employee;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final left = employee.lastWorkingDate;
+    if (left == null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const ValueKey('record-departure'),
+          icon: const Icon(Icons.logout, size: 18),
+          label: const Text('Record a departure'),
+          onPressed: () async {
+            if (await showDepartureDialog(context, employee: employee)) {
+              onChanged();
+            }
+          },
+        ),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(top: Space.sm),
+      child: ListTile(
+        leading: const Icon(Icons.logout),
+        title: Text('Last working day ${Fmt.date(left)}'),
+        subtitle: Text(
+          '${Fmt.label(employee.employmentStatus)} · not on any payroll '
+          'run after that day',
+        ),
+        trailing: TextButton(
+          key: const ValueKey('reinstate'),
+          onPressed: () async {
+            if (await confirmReinstate(context, ref, employee: employee)) {
+              onChanged();
+            }
+          },
+          child: const Text('Reinstate'),
         ),
       ),
     );

@@ -2,14 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
+import '../../core/row_actions.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../banking/new_bank_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import '../shared/receipt_capture.dart';
+import 'mileage_claim.dart';
 
 /// Expense claims, and the two ways one gets settled.
 ///
@@ -127,19 +133,26 @@ class _ClaimTile extends ConsumerWidget {
         isScrollControlled: true,
         builder: (_) => _ClaimSheet(claim: claim),
       ),
-      title: Row(children: [
-        Flexible(
-          child: Text(claim.title ?? claim.claimNo,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        const SizedBox(width: Space.sm),
-        StatusChip(claim.status, compact: true),
-        if (claim.paidAt != null) ...[
-          const SizedBox(width: Space.xs),
-          const StatusChip('completed', compact: true),
+      // A `Wrap`. The `Flexible` on the title looked like it made this
+      // shrinkable and does not: it collapses to nothing and the two
+      // chips are left fixed at 168 pixels between them, which is more
+      // than the row has on a phone. A paid claim carries both, so this
+      // is the ordinary case rather than the awkward one.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Space.sm,
+        runSpacing: 2,
+        children: [
+          Text(
+            claim.title ?? claim.claimNo,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          StatusChip(claim.status, compact: true),
+          if (claim.paidAt != null)
+            const StatusChip('completed', compact: true),
         ],
-      ]),
+      ),
       subtitle: Text(
         '${claim.employeeName ?? ''} · ${claim.claimNo} · '
         '${Fmt.date(claim.claimDate)}'
@@ -149,35 +162,48 @@ class _ClaimTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: pending
-          ? Row(mainAxisSize: MainAxisSize.min, children: [
-              Money(claim.totalAmount, bold: true),
-              const SizedBox(width: Space.md),
-              TextButton(
-                onPressed: () => _decide(context, ref, false),
-                child: Text('Reject',
-                    style: TextStyle(color: context.colors.danger)),
-              ),
-              FilledButton(
-                onPressed: () => _decide(context, ref, true),
-                child: const Text('Approve'),
-              ),
-            ])
-          : Row(mainAxisSize: MainAxisSize.min, children: [
-              Money(
-                claim.status == 'approved'
-                    ? claim.approvedAmount
-                    : claim.totalAmount,
-                bold: true,
-              ),
-              if (postable) ...[
-                const SizedBox(width: Space.md),
-                FilledButton.tonal(
-                  onPressed: () => _post(context, ref),
-                  child: const Text('Post'),
-                ),
-              ],
-            ]),
+      // `RowActions`, so "Reject" and "Approve" become ONE menu below
+      // 700. Together they are 168 pixels of labelled buttons beside
+      // the amount, which on a 360px phone leaves the claim's own title
+      // about thirty -- and a `ListTile` does not overflow there, it
+      // GIVES the title thirty pixels and wraps it one letter per line.
+      // The amount stays put at every width: it is what the row is
+      // about, not an action.
+      trailing: RowActions(
+        menuKey: 'claim-actions',
+        leading: Money(
+          pending
+              ? claim.totalAmount
+              : claim.status == 'approved'
+              ? claim.approvedAmount
+              : claim.totalAmount,
+          bold: true,
+        ),
+        actions: [
+          if (pending) ...[
+            RowAction(
+              actionKey: 'approve-claim',
+              label: 'Approve',
+              icon: Icons.check,
+              emphasis: RowActionEmphasis.filled,
+              onTap: () => _decide(context, ref, true),
+            ),
+            RowAction(
+              actionKey: 'reject-claim',
+              label: 'Reject',
+              icon: Icons.close,
+              onTap: () => _decide(context, ref, false),
+            ),
+          ] else if (postable)
+            RowAction(
+              actionKey: 'post-claim',
+              label: 'Post',
+              icon: Icons.post_add_outlined,
+              emphasis: RowActionEmphasis.filled,
+              onTap: () => _post(context, ref),
+            ),
+        ],
+      ),
     );
   }
 
@@ -290,19 +316,17 @@ class _PostClaimDialogState extends ConsumerState<_PostClaimDialog> {
             if (_reimburseNow && canReimburse)
               Padding(
                 padding: const EdgeInsets.only(left: 32, bottom: Space.sm),
-                child: DropdownButtonFormField<String>(
+                child: SearchablePicker<String>(
+                  options: bankPickerOptions(accounts),
+                  createLabel: 'Add bank account',
+                  // 0529 made this list writable for the first
+                  // time. Until then a company that opened a
+                  // second account had nowhere in the product to
+                  // say so.
+                  onCreate: (typed) =>
+                      createBankAccountFromPicker(context, typed: typed),
                   value: _bankAccountId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                      isDense: true, labelText: 'Pay from'),
-                  items: [
-                    for (final a in accounts)
-                      DropdownMenuItem(
-                        value: a['id'] as String,
-                        child: Text(a['name']?.toString() ?? '',
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
+                  label: 'Pay from',
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
               ),
@@ -350,7 +374,22 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
   final _title = TextEditingController();
   final _description = TextEditingController();
   final _amount = TextEditingController();
+  final _quantity = TextEditingController();
   String? _typeId;
+
+  /// The claim type row behind `_typeId`, or null while the list is
+  /// still arriving — which is a first frame rather than an error, and
+  /// is why every function in `mileage_claim.dart` takes a nullable.
+  Map<String, dynamic>? _selectedType(
+    AsyncValue<List<Map<String, dynamic>>> types,
+  ) {
+    final list = types.valueOrNull;
+    if (list == null || _typeId == null) return null;
+    for (final t in list) {
+      if (t['id'] == _typeId) return t;
+    }
+    return null;
+  }
   final DateTime _date = DateTime.now();
   bool _saving = false;
   bool _payWithPayroll = true;
@@ -368,6 +407,7 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
     _title.dispose();
     _description.dispose();
     _amount.dispose();
+    _quantity.dispose();
     super.dispose();
   }
 
@@ -396,17 +436,35 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
               types.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text('$e'),
-                data: (list) => DropdownButtonFormField<String>(
-                  value: _typeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: [
+                data: (list) => SearchablePicker<String>(
+                  options: [
                     for (final t in list)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: t['id'] as String,
-                        child: Text(t['name']?.toString() ?? ''),
+                        label: t['name']?.toString() ?? '',
                       ),
                   ],
+                  value: _typeId,
+                  label: 'Category',
+                  createLabel: 'Add category',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New claim category',
+                    blurb: 'Not on the list yet. The account it posts '
+                        'to and any cap per claim are set in HR setup.',
+                    nameHint: 'Mileage',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.claimType,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(claimTypesProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _typeId = v),
                 ),
               ),
@@ -418,18 +476,29 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
                     (v ?? '').trim().isEmpty ? 'Describe the expense' : null,
               ),
               const SizedBox(height: Space.md),
-              TextFormField(
-                controller: _amount,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                    labelText: 'Amount (RM) *', prefixText: 'RM '),
-                validator: (v) {
-                  final n = double.tryParse((v ?? '').trim());
-                  if (n == null || n <= 0) return 'Enter an amount';
-                  return null;
-                },
-              ),
+              // 0368. A mileage type is claimed by the distance and
+              // priced by the database, so asking for a ringgit figure
+              // here would ask for a number that is then ignored — and
+              // the distance, the one thing anybody could check against
+              // a map, would go unrecorded.
+              if (isMileage(_selectedType(types)))
+                _MileageField(
+                  controller: _quantity,
+                  claimType: _selectedType(types),
+                )
+              else
+                TextFormField(
+                  controller: _amount,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Amount (RM) *', prefixText: 'RM '),
+                  validator: (v) {
+                    final n = double.tryParse((v ?? '').trim());
+                    if (n == null || n <= 0) return 'Enter an amount';
+                    return null;
+                  },
+                ),
               const SizedBox(height: Space.md),
               _ReceiptPicker(
                 files: _receipts,
@@ -493,7 +562,14 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
               'claim_type_id': _typeId,
               'expense_date': Fmt.iso(_date),
               'description': _description.text.trim(),
-              'amount': double.parse(_amount.text.trim()),
+              // The distance for a measured type; the database prices
+              // it and ignores anything sent as an amount. Sending both
+              // would be two numbers that should agree and are stored
+              // separately, which is the failure 0368 exists to remove.
+              if (isMileage(_selectedType(ref.read(claimTypesProvider))))
+                'quantity': double.parse(_quantity.text.trim())
+              else
+                'amount': double.parse(_amount.text.trim()),
             }
           ],
           payWithPayroll: _payWithPayroll,
@@ -788,6 +864,54 @@ class _Step extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// The distance box on a claim measured by the kilometre.
+///
+/// Says what it comes to as the number is typed. The database computes
+/// the figure that is stored — two numbers that should agree and are
+/// stored separately are two numbers that will not — and this is the
+/// same arithmetic for the one thing a form has to do: tell somebody
+/// what they are about to claim before they send it.
+class _MileageField extends StatefulWidget {
+  const _MileageField({required this.controller, required this.claimType});
+
+  final TextEditingController controller;
+  final Map<String, dynamic>? claimType;
+
+  @override
+  State<_MileageField> createState() => _MileageFieldState();
+}
+
+class _MileageFieldState extends State<_MileageField> {
+  @override
+  Widget build(BuildContext context) {
+    final comes = mileageAmount(
+      claimType: widget.claimType,
+      quantity: widget.controller.text,
+    );
+    final rate = (widget.claimType?['rate_per_unit'] as num?)?.toDouble() ?? 0;
+    final unit = (widget.claimType?['unit_label'] as String?)?.trim();
+
+    return TextFormField(
+      controller: widget.controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        labelText: claimQuantityLabel(widget.claimType),
+        suffixText: unit == null || unit.isEmpty ? null : unit,
+        helperText: comes != null
+            ? 'Comes to ${Fmt.money(comes)}'
+            : rate > 0
+            ? 'At ${Fmt.money(rate)} each'
+            : null,
+      ),
+      validator: (v) => mileageBlockedBecause(
+        claimType: widget.claimType,
+        quantity: v ?? '',
+      ),
     );
   }
 }

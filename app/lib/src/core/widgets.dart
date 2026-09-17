@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/repository.dart';
+import 'denials.dart';
 import 'format.dart';
 import 'providers.dart';
 import 'theme.dart';
@@ -626,11 +628,17 @@ class PageBody extends StatelessWidget {
   }
 }
 
-/// Shows a snackbar for a Future, surfacing errors rather than swallowing
-/// them. Returns true when the action completed.
+/// Shows a snackbar for a Future, surfacing errors rather than
+/// swallowing them. Returns true when the action completed.
+///
+/// It is also where a refusal gets written down. [doing] names what was
+/// being attempted, for the security log, because the sentence coming
+/// back says what the database thought rather than what the person was
+/// trying to do.
 Future<bool> runWithFeedback(
   BuildContext context, {
   required Future<void> Function() action,
+  String? doing,
   // Nullable so an action whose own result is the confirmation can stay
   // quiet. Sending a chat message is the case that forced it: a snackbar
   // saying "Sent" after every line, above a message that is visibly
@@ -667,6 +675,21 @@ Future<bool> runWithFeedback(
   // messenger captured above outlives it.
   final success = context.colors.success;
   final danger = context.colors.danger;
+  // Read before awaiting, for the same reason as the colours: the
+  // widget that supplied this context may be gone by the time the
+  // action returns.
+  //
+  // Guarded, because `containerOf` throws where there is no scope
+  // above the context. Every screen in this app has one — but this is
+  // the function every screen shows its errors through, and turning
+  // "the server said no" into a crash to record that the server said
+  // no would be the worst possible trade.
+  Repo? repo;
+  try {
+    repo = ProviderScope.containerOf(context, listen: false).read(repoProvider);
+  } catch (_) {
+    repo = null;
+  }
 
   try {
     await action();
@@ -687,7 +710,26 @@ Future<bool> runWithFeedback(
           duration: const Duration(seconds: 6),
         ),
       );
+    // 0235: a refusal cannot record itself, because the exception that
+    // carries it unwinds the transaction the record would be written
+    // in. So the client reports it back. Not awaited, and it swallows
+    // its own failures — a log write that made somebody wait, or that
+    // replaced the server's sentence with one about logging, would be
+    // worse than the gap it closes.
+    if (looksLikeARefusal(err)) unawaited(_writeDown(repo, err, doing));
     return false;
+  }
+}
+
+Future<void> _writeDown(Repo? repo, Object err, String? doing) async {
+  if (repo == null) return;
+  try {
+    await repo.reportDenied(
+      deniedAction(err, doing: doing),
+      deniedDetail(err),
+    );
+  } catch (_) {
+    // Rate-limited on the server, and nobody is waiting on it.
   }
 }
 
@@ -719,6 +761,109 @@ Future<bool> confirm(
     ),
   );
   return result ?? false;
+}
+
+/// Asks for a sentence, and will not take an empty one.
+///
+/// The counterpart to [confirm] for the actions where "are you sure" is
+/// the wrong question. A lost deal, a lost lead, a voided bill: what the
+/// record needs is not consent, it is the reason, captured at the moment
+/// it is known — a week later nobody remembers.
+///
+/// Returns null when cancelled, and never returns blank: the button is
+/// disabled until something has been typed, because an optional reason
+/// is a reason nobody gives and a report built on it stays empty.
+Future<String?> promptForText(
+  BuildContext context, {
+  required String title,
+  required String label,
+  String confirmLabel = 'Save',
+  List<String> suggestions = const [],
+}) =>
+    showDialog<String>(
+      context: context,
+      builder: (ctx) => _TextPrompt(
+        title: title,
+        label: label,
+        confirmLabel: confirmLabel,
+        suggestions: suggestions,
+      ),
+    );
+
+class _TextPrompt extends StatefulWidget {
+  const _TextPrompt({
+    required this.title,
+    required this.label,
+    required this.confirmLabel,
+    required this.suggestions,
+  });
+
+  final String title;
+  final String label;
+  final String confirmLabel;
+  final List<String> suggestions;
+
+  @override
+  State<_TextPrompt> createState() => _TextPromptState();
+}
+
+class _TextPromptState extends State<_TextPrompt> {
+  final _c = TextEditingController();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.suggestions.isNotEmpty) ...[
+              Wrap(
+                spacing: Space.xs,
+                children: [
+                  for (final s in widget.suggestions)
+                    ChoiceChip(
+                      label: Text(s),
+                      selected: _c.text == s,
+                      onSelected: (_) => setState(() => _c.text = s),
+                    ),
+                ],
+              ),
+              const SizedBox(height: Space.md),
+            ],
+            TextField(
+              controller: _c,
+              autofocus: true,
+              decoration: InputDecoration(labelText: widget.label),
+              maxLines: 2,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _c.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, _c.text.trim()),
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
 }
 
 /// A label beside a value, for the read-only halves of settings cards.

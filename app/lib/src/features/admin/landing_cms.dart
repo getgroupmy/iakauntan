@@ -6,6 +6,8 @@ import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
+import '../landing/landing_content.dart';
+import '../landing/landing_screen.dart';
 
 /// The corporate landing page, edited rather than deployed.
 ///
@@ -27,6 +29,38 @@ import '../../data/landing_repository.dart';
 /// `landing_page()` gives a visitor nothing — the site falls back to
 /// the copy the product was built with. Drafting in the open is the
 /// point; publishing a draft by accident is what the switch prevents.
+/// Why the Order box will not take "1O".
+///
+/// Every one of the five dialogs on this page reads its order with
+/// `int.tryParse`, and every one sends the result to a function whose
+/// SQL is `sort_order = coalesce(p_sort_order, s.sort_order)`. So an
+/// unreadable box is not an error anywhere: it is null on the way out,
+/// "leave it as it was" on the way in, and "Saved" on the screen.
+///
+/// An administrator retypes an order to move a block, fat-fingers a
+/// letter O for a nought, is told it saved, and the page is exactly as
+/// it was. Nothing anywhere says otherwise. `keyboardType` does not
+/// help — it is a hint to a phone keyboard and does nothing at all in
+/// a browser, which is where this screen is used.
+///
+/// BLANK STAYS ALLOWED, and that is the whole reason this is a
+/// function rather than a validator that demands a number. The helper
+/// text under the box says "Leave blank to put it last", and it means
+/// it: a null order on an insert becomes `max(sort_order) + 10`. Empty
+/// is an instruction. Unreadable is a mistake.
+///
+/// Returns null when the box is fine, or the words to show when it is
+/// not. Public and pure so the rule can be asserted directly, and
+/// shared so the five dialogs cannot drift apart.
+String? landingSortProblem(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  if (int.tryParse(text) == null) {
+    return 'The order has to be a whole number, or blank to put it last.';
+  }
+  return null;
+}
+
 class LandingCmsTab extends ConsumerWidget {
   const LandingCmsTab({super.key});
 
@@ -39,12 +73,131 @@ class LandingCmsTab extends ConsumerWidget {
       builder: (row) => ListView(
         padding: const EdgeInsets.all(Space.md),
         children: [
+          _PreviewBar(published: row?['is_published'] == true),
+          const SizedBox(height: Space.lg),
           _PageForm(existing: row),
           const SizedBox(height: Space.lg),
-          const _SectionsCard(),
+          const LandingSectionsCard(),
+          const SizedBox(height: Space.lg),
+          const LandingSectionsCard(kind: 'reason'),
+          const SizedBox(height: Space.lg),
+          const LandingSectionsCard(kind: 'badge'),
+          const SizedBox(height: Space.lg),
+          const _StatsCard(),
+          const SizedBox(height: Space.lg),
+          const _TestimonialsCard(),
+          const SizedBox(height: Space.lg),
+          const _LogosCard(),
           const SizedBox(height: Space.lg),
           const _AppLinksCard(),
         ],
+      ),
+    );
+  }
+}
+
+/// Look at the draft without publishing it.
+///
+/// `0290` gated everything the page returns on `is_published`, which is
+/// right — a CMS whose half-written sentence is on the internet the
+/// moment it is typed is worse than no CMS. What it left out was any
+/// state in which the person writing the draft could see it: between
+/// typing a testimonial and publishing the site there was nothing to
+/// look at. The two ways to see a band were to publish invented copy to
+/// the open internet or to unpublish and see nothing.
+///
+/// So `0318` added `platform_landing_preview`, which returns the same
+/// payload `landing_page()` will return once published, refused to
+/// anybody who is not a platform administrator. This draws it with the
+/// page's own widgets.
+class _PreviewBar extends ConsumerWidget {
+  const _PreviewBar({required this.published});
+
+  final bool published;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Row(
+          children: [
+            Icon(
+              published ? Icons.public : Icons.visibility_off_outlined,
+              size: 20,
+              color: published ? scheme.primary : scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: Space.sm),
+            Expanded(
+              child: Text(
+                published
+                    ? 'This page is live. Anybody who visits the address '
+                          'sees what is below.'
+                    : 'This page is a draft. Visitors see the copy the '
+                          'product ships with, not yours.',
+                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(width: Space.sm),
+            FilledButton.icon(
+              onPressed: () => _open(context, ref),
+              icon: const Icon(Icons.visibility, size: 16),
+              label: const Text('Preview'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context, WidgetRef ref) {
+    // Invalidated first, so pressing Preview after an edit shows the
+    // edit. The provider is a future that would otherwise hold whatever
+    // the draft looked like when the tab was opened.
+    ref.invalidate(landingPreviewProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => const _PreviewScreen(),
+      ),
+    );
+  }
+}
+
+class _PreviewScreen extends ConsumerWidget {
+  const _PreviewScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preview = ref.watch(landingPreviewProvider);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Preview'),
+        // Said on the screen itself rather than only in the tab behind
+        // it: somebody looking at a finished-looking front page should
+        // not have to remember whether they published it.
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(28),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: Space.sm),
+            child: Text(
+              'The draft, as it will look once published.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: AsyncView<LandingContent>(
+        value: preview,
+        onRetry: () => ref.invalidate(landingPreviewProvider),
+        // The page's own widgets, with the ways in inert. A preview
+        // built from a second set of widgets would drift from the page
+        // it claims to preview.
+        builder: (content) => LandingPage(content: content, preview: true),
       ),
     );
   }
@@ -67,8 +220,16 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'brand_colour_dark': 'Brand colour on a dark background (#RRGGBB)',
     'hero_headline': 'Headline',
     'hero_subhead': 'Sub-heading',
+    // Present on the table since 0290 and read by nothing until the
+    // hero became two columns. A dead column in a CMS is a field an
+    // operator fills in and then cannot find on the page.
+    'hero_image_url': 'Hero image URL',
     'pricing_heading': 'Pricing heading',
     'pricing_note': 'Pricing note',
+    'cta_headline': 'Call to action headline',
+    'cta_body': 'Call to action sub-line',
+    'cta_label': 'Call to action button',
+    'cta_url': 'Call to action link',
     'sign_in_label': 'Sign-in button',
     'register_label': 'Register button',
     'logo_url': 'Logo URL',
@@ -84,6 +245,29 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'meta_description': 'Link preview description',
   };
 
+  /// The twelve switches, in the order somebody reads the page: the
+  /// top bar, then the headline, then the footer.
+  ///
+  /// Keyed by column so the form, the patch and the database cannot
+  /// drift: adding a switch is adding a line here.
+  ///
+  /// `0578` added the footer four. They ship on, like the other eight,
+  /// so a platform that never opens this card sees no change.
+  static const _wayIn = <String, String>{
+    'bar_sign_in_desktop': 'Sign in — top bar, desktop',
+    'bar_register_desktop': 'Create an account — top bar, desktop',
+    'bar_sign_in_mobile': 'Sign in — top bar and menu, phone',
+    'bar_register_mobile': 'Create an account — top bar and menu, phone',
+    'hero_sign_in_desktop': 'Sign in — under the headline, desktop',
+    'hero_register_desktop': 'Create an account — under the headline, desktop',
+    'hero_sign_in_mobile': 'Sign in — under the headline, phone',
+    'hero_register_mobile': 'Create an account — under the headline, phone',
+    'footer_sign_in_desktop': 'Sign in — footer, desktop',
+    'footer_register_desktop': 'Create an account — footer, desktop',
+    'footer_sign_in_mobile': 'Sign in — footer, phone',
+    'footer_register_mobile': 'Create an account — footer, phone',
+  };
+
   late final Map<String, TextEditingController> _c = {
     for (final key in _fields.keys)
       key: TextEditingController(text: '${widget.existing?[key] ?? ''}'),
@@ -91,6 +275,11 @@ class _PageFormState extends ConsumerState<_PageForm> {
   late bool _published = widget.existing?['is_published'] == true;
   late bool _register = widget.existing?['register_enabled'] != false;
   late bool _pricing = widget.existing?['show_pricing'] == true;
+  // Absent reads as on, the same way `register_enabled` does: a payload
+  // saved before the columns existed must not hide the way in.
+  late final Map<String, bool> _ways = {
+    for (final key in _wayIn.keys) key: widget.existing?[key] != false,
+  };
   bool _busy = false;
 
   @override
@@ -118,6 +307,11 @@ class _PageFormState extends ConsumerState<_PageForm> {
     }
     if (_pricing != (widget.existing?['show_pricing'] == true)) {
       patch['show_pricing'] = _pricing;
+    }
+    for (final entry in _ways.entries) {
+      if (entry.value != (widget.existing?[entry.key] != false)) {
+        patch[entry.key] = entry.value;
+      }
     }
     return patch;
   }
@@ -248,6 +442,35 @@ class _PageFormState extends ConsumerState<_PageForm> {
               ),
             ),
             const Divider(height: Space.lg),
+            Text(
+              'Where each way in is drawn',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'One switch per button, by place and by screen width. The '
+              'links in the footer stay whatever is set here, so a '
+              'visitor who reads to the bottom can always get in.',
+            ),
+            for (final entry in _wayIn.entries)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _ways[entry.key]!,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _ways[entry.key] = v),
+                title: Text(entry.value),
+                // Registration closed means there is no account to
+                // create, so the four register switches have nothing to
+                // act on until it is open again. Said here rather than
+                // by hiding them: an operator who turns registration
+                // back on should find their choices where they left
+                // them.
+                subtitle: !_register && entry.key.contains('_register_')
+                    ? const Text('Waiting on Offer Create an account')
+                    : null,
+              ),
+            const Divider(height: Space.lg),
             for (final entry in _fields.entries) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -255,8 +478,10 @@ class _PageFormState extends ConsumerState<_PageForm> {
                   Expanded(
                     child: TextField(
                       controller: _c[entry.key],
-                      maxLines: entry.key == 'address' ||
+                      maxLines:
+                          entry.key == 'address' ||
                               entry.key == 'hero_subhead' ||
+                              entry.key == 'cta_body' ||
                               entry.key == 'meta_description'
                           ? 3
                           : 1,
@@ -291,12 +516,37 @@ class _PageFormState extends ConsumerState<_PageForm> {
   }
 }
 
-class _SectionsCard extends ConsumerWidget {
-  const _SectionsCard();
+/// The blocks of copy, of one kind.
+///
+/// Features and reasons are the same rows in `landing_sections` split
+/// by `kind`, so this is one card shown twice rather than two cards to
+/// keep in step. The saver defaults `kind` to `feature`, which is what
+/// every row written before 0317 is.
+/// A list of `landing_sections` rows of one kind, with an editor.
+///
+/// Public since `0336`, which put a fourth kind — the bullets beside
+/// the sign-in form — on a different console screen. Same table, same
+/// saver, same dialog: a second copy of this card would be a second
+/// place for the ordering and the on/off switch to drift.
+class LandingSectionsCard extends ConsumerWidget {
+  const LandingSectionsCard({super.key, this.kind = 'feature'});
+
+  final String kind;
+
+  bool get _reasons => kind == 'reason';
+  bool get _badges => kind == 'badge';
+  bool get _signin => kind == 'signin';
+  bool get _login => kind == 'login';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sections = ref.watch(landingSectionsAdminProvider);
+    final sections = ref.watch(switch (kind) {
+      'reason' => landingReasonsAdminProvider,
+      'badge' => landingBadgesAdminProvider,
+      'signin' => landingSigninPointsAdminProvider,
+      'login' => landingLoginPointsAdminProvider,
+      _ => landingSectionsAdminProvider,
+    });
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.md),
@@ -305,10 +555,21 @@ class _SectionsCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'What the page says',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    _login
+                        ? 'The points beside a company\'s own form'
+                        : _signin
+                        ? 'The points beside the form'
+                        : _badges
+                        ? 'What it files under'
+                        : _reasons
+                        ? 'Why choose it'
+                        : 'What the page says',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 TextButton.icon(
@@ -328,10 +589,30 @@ class _SectionsCard extends ConsumerWidget {
                   );
                 }
                 if (rows.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.article_outlined,
-                    title: 'No blocks of copy yet',
-                    message: 'The page shows its hero and nothing under it.',
+                  return EmptyState(
+                    icon: _signin || _login
+                        ? Icons.checklist_outlined
+                        : _badges
+                        ? Icons.verified_outlined
+                        : _reasons
+                        ? Icons.thumb_up_outlined
+                        : Icons.article_outlined,
+                    title: _signin || _login
+                        ? 'No points beside the form'
+                        : _badges
+                        ? 'No badges written yet'
+                        : _reasons
+                        ? 'No reasons written yet'
+                        : 'No blocks of copy yet',
+                    // The landing page's bands fall back to the copy
+                    // the product ships with. The sign-in panel does
+                    // not: nothing there is drawn unless somebody put
+                    // it there, which is what 0336 is about.
+                    message: _signin || _login
+                        ? 'Nothing is shown beside the sign-in form '
+                              'unless you add it and switch it on.'
+                        : 'The page shows the copy iAkauntan ships '
+                              'with until you write your own.',
                   );
                 }
                 return Column(
@@ -375,16 +656,21 @@ class _SectionsCard extends ConsumerWidget {
   ) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _SectionDialog(existing: existing),
+      builder: (_) => _SectionDialog(existing: existing, kind: kind),
     );
     if (saved == true) invalidatePlatformTable(ref, 'landing_sections');
   }
 }
 
 class _SectionDialog extends ConsumerStatefulWidget {
-  const _SectionDialog({required this.existing});
+  const _SectionDialog({required this.existing, required this.kind});
 
   final Map<String, dynamic>? existing;
+
+  /// `feature` or `reason`. Sent on every save, including an edit, so
+  /// a block cannot be moved between the two bands by accident and can
+  /// be moved deliberately by editing it from the other tab.
+  final String kind;
 
   @override
   ConsumerState<_SectionDialog> createState() => _SectionDialogState();
@@ -412,6 +698,7 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
   static const _icons = [
     'check',
     'receipt',
+    'expenses',
     'payments',
     'people',
     'inventory',
@@ -419,6 +706,16 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
     'insights',
     'shield',
     'cloud',
+    'gavel',
+    'calculate',
+    'lock',
+    'devices',
+    'sync_alt',
+    'support',
+    'schedule',
+    'star',
+    'trending_up',
+    'handshake',
   ];
 
   @override
@@ -436,18 +733,28 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
       ).showSnackBar(const SnackBar(content: Text('A block needs a title.')));
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingSection(
-        id: widget.existing?['id'] as String?,
-        title: _title.text.trim(),
-        body: _body.text.trim(),
-        icon: _icon,
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingSection(
+            id: widget.existing?['id'] as String?,
+            title: _title.text.trim(),
+            body: _body.text.trim(),
+            icon: _icon,
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+            kind: widget.kind,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -471,7 +778,14 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.existing == null ? 'Add a block' : 'Edit the block'),
+      title: Text(switch ((widget.existing == null, widget.kind)) {
+        (true, 'reason') => 'Add a reason',
+        (true, 'badge') => 'Add a badge',
+        (true, _) => 'Add a block',
+        (false, 'reason') => 'Edit the reason',
+        (false, 'badge') => 'Edit the badge',
+        (false, _) => 'Edit the block',
+      }),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -487,10 +801,19 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
               TextField(
                 controller: _body,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Body'),
+                decoration: InputDecoration(
+                  labelText: 'Body',
+                  // The strip draws an icon and a line and nothing
+                  // else. A field that is stored and never rendered is
+                  // worse than an absent one.
+                  helperText: widget.kind == 'badge'
+                      ? 'Not shown on the badge strip.'
+                      : null,
+                ),
               ),
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _icon,
                 decoration: const InputDecoration(labelText: 'Icon'),
                 items: [
@@ -501,7 +824,11 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Order',
@@ -674,17 +1001,26 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
       );
       return;
     }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingAppLink(
-        storeCode: _code.text.trim(),
-        label: _label.text.trim(),
-        url: url,
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingAppLink(
+            storeCode: _code.text.trim(),
+            label: _label.text.trim(),
+            url: url,
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -740,7 +1076,11 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
               ),
               const SizedBox(height: Space.sm),
               TextField(
+                key: const ValueKey('landing-order'),
                 controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Order'),
               ),
@@ -756,6 +1096,794 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
       ),
       actions: [
         if (!isNew)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The band of figures on the front page.
+///
+/// Ships empty and the page skips the band entirely until somebody
+/// writes rows. That is deliberate: a number like "8,000 businesses" is
+/// a claim about the world, and the only person in a position to make
+/// it is the operator who can stand behind it. Nothing here seeds an
+/// example, because an example left in is a false claim on a page that
+/// asks people for money.
+class _StatsCard extends ConsumerWidget {
+  const _StatsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(landingStatsAdminProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'The numbers',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _edit(context, ref, null),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final rows = stats.valueOrNull ?? const [];
+                if (stats.isLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Space.md),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.trending_up,
+                    title: 'No figures yet',
+                    message:
+                        'The page shows no band of numbers. Add one only '
+                        'for a figure you can stand behind.',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Text('${r['sort_order']}'),
+                        title: Row(
+                          children: [
+                            Flexible(child: Text('${r['value']}')),
+                            if (r['is_active'] != true) ...[
+                              const SizedBox(width: Space.sm),
+                              const StatusChip('off', compact: true),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text('${r['label']}'),
+                        onTap: () => _edit(context, ref, r),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? existing,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _StatDialog(existing: existing),
+    );
+    if (saved == true) invalidatePlatformTable(ref, 'landing_stats');
+  }
+}
+
+class _StatDialog extends ConsumerStatefulWidget {
+  const _StatDialog({required this.existing});
+
+  final Map<String, dynamic>? existing;
+
+  @override
+  ConsumerState<_StatDialog> createState() => _StatDialogState();
+}
+
+class _StatDialogState extends ConsumerState<_StatDialog> {
+  late final _value = TextEditingController(
+    text: '${widget.existing?['value'] ?? ''}',
+  );
+  late final _label = TextEditingController(
+    text: '${widget.existing?['label'] ?? ''}',
+  );
+  late final _order = TextEditingController(
+    text: '${widget.existing?['sort_order'] ?? ''}',
+  );
+  late String _icon = '${widget.existing?['icon'] ?? 'trending_up'}';
+  late bool _active = widget.existing?['is_active'] != false;
+  bool _busy = false;
+
+  static const _icons = [
+    'trending_up',
+    'people',
+    'store',
+    'schedule',
+    'star',
+    'handshake',
+    'insights',
+    'check',
+  ];
+
+  @override
+  void dispose() {
+    _value.dispose();
+    _label.dispose();
+    _order.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_value.text.trim().isEmpty || _label.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A figure needs both the number and what it counts.'),
+        ),
+      );
+      return;
+    }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingStat(
+            id: widget.existing?['id'] as String?,
+            value: _value.text.trim(),
+            label: _label.text.trim(),
+            icon: _icon,
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () => ref
+          .read(landingAdminProvider)
+          .deleteLandingStat(widget.existing!['id'] as String),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add a figure' : 'Edit the figure'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _value,
+                decoration: const InputDecoration(
+                  labelText: 'The number',
+                  // Text, not a number field: the page prints this
+                  // exactly as typed and nothing ever adds it up.
+                  helperText:
+                      'Shown exactly as you type it — 240,000, '
+                      '1,200+, RM4b.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _label,
+                decoration: const InputDecoration(
+                  labelText: 'What it counts',
+                  helperText: 'Businesses, outlets, years.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _icons.contains(_icon) ? _icon : 'trending_up',
+                decoration: const InputDecoration(labelText: 'Icon'),
+                items: [
+                  for (final i in _icons)
+                    DropdownMenuItem(value: i, child: Text(i)),
+                ],
+                onChanged: (v) => setState(() => _icon = v ?? 'trending_up'),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                key: const ValueKey('landing-order'),
+                controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Order',
+                  helperText: 'Lower comes first. Leave blank to put it last.',
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Show on the page'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.existing != null)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// What customers say.
+///
+/// Ships empty, and the database refuses a quote with nobody's name
+/// against it. An unattributed testimonial is exactly the shape an
+/// invented one takes, and the software cannot check that a person said
+/// a thing — only that somebody is named as having said it, and that
+/// the operator is the one who put the name there.
+class _TestimonialsCard extends ConsumerWidget {
+  const _TestimonialsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quotes = ref.watch(landingTestimonialsAdminProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'What customers say',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _edit(context, ref, null),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final rows = quotes.valueOrNull ?? const [];
+                if (quotes.isLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Space.md),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.format_quote,
+                    title: 'No testimonials yet',
+                    message:
+                        'The page shows none. Add only what a customer '
+                        'actually said, with their name against it.',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Text('${r['sort_order']}'),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                r['company'] == null
+                                    ? '${r['author']}'
+                                    : '${r['author']} — ${r['company']}',
+                              ),
+                            ),
+                            if (r['is_active'] != true) ...[
+                              const SizedBox(width: Space.sm),
+                              const StatusChip('off', compact: true),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(
+                          '${r['quote']}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _edit(context, ref, r),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? existing,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _TestimonialDialog(existing: existing),
+    );
+    if (saved == true) invalidatePlatformTable(ref, 'landing_testimonials');
+  }
+}
+
+class _TestimonialDialog extends ConsumerStatefulWidget {
+  const _TestimonialDialog({required this.existing});
+
+  final Map<String, dynamic>? existing;
+
+  @override
+  ConsumerState<_TestimonialDialog> createState() => _TestimonialDialogState();
+}
+
+class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
+  late final _quote = TextEditingController(
+    text: '${widget.existing?['quote'] ?? ''}',
+  );
+  late final _author = TextEditingController(
+    text: '${widget.existing?['author'] ?? ''}',
+  );
+  late final _company = TextEditingController(
+    text: '${widget.existing?['company'] ?? ''}',
+  );
+  late final _order = TextEditingController(
+    text: '${widget.existing?['sort_order'] ?? ''}',
+  );
+  late bool _active = widget.existing?['is_active'] != false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _quote.dispose();
+    _author.dispose();
+    _company.dispose();
+    _order.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_quote.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A testimonial needs a quote.')),
+      );
+      return;
+    }
+    // Said here as well as in the database, so somebody typing it finds
+    // out before they press Save rather than after.
+    if (_author.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A quote needs the name of whoever said it.'),
+        ),
+      );
+      return;
+    }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingTestimonial(
+            id: widget.existing?['id'] as String?,
+            quote: _quote.text.trim(),
+            author: _author.text.trim(),
+            company: _company.text.trim(),
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () => ref
+          .read(landingAdminProvider)
+          .deleteLandingTestimonial(widget.existing!['id'] as String),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.existing == null ? 'Add a testimonial' : 'Edit the testimonial',
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _quote,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'What they said'),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _author,
+                decoration: const InputDecoration(
+                  labelText: 'Who said it',
+                  helperText:
+                      'Required. A quote with no name against it is '
+                      'not something to put on a front page.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _company,
+                decoration: const InputDecoration(
+                  labelText: 'Their company',
+                  helperText: 'Optional.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                key: const ValueKey('landing-order'),
+                controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Order',
+                  helperText: 'Lower comes first. Leave blank to put it last.',
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Show on the page'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.existing != null)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The wall of customer logos.
+///
+/// Ships empty. Putting a company's mark on a page says they are a
+/// customer, which is theirs to agree to.
+class _LogosCard extends ConsumerWidget {
+  const _LogosCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logos = ref.watch(landingLogosAdminProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Customer logos',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _edit(context, ref, null),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final rows = logos.valueOrNull ?? const [];
+                if (logos.isLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Space.md),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.workspaces_outline,
+                    title: 'No customer logos yet',
+                    message:
+                        'The page shows no logo wall. Add a mark only '
+                        'with that company\'s agreement.',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Text('${r['sort_order']}'),
+                        title: Row(
+                          children: [
+                            Flexible(child: Text('${r['name']}')),
+                            if (r['is_active'] != true) ...[
+                              const SizedBox(width: Space.sm),
+                              const StatusChip('off', compact: true),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(
+                          '${r['logo_url']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _edit(context, ref, r),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? existing,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _LogoDialog(existing: existing),
+    );
+    if (saved == true) invalidatePlatformTable(ref, 'landing_logos');
+  }
+}
+
+class _LogoDialog extends ConsumerStatefulWidget {
+  const _LogoDialog({required this.existing});
+
+  final Map<String, dynamic>? existing;
+
+  @override
+  ConsumerState<_LogoDialog> createState() => _LogoDialogState();
+}
+
+class _LogoDialogState extends ConsumerState<_LogoDialog> {
+  late final _name = TextEditingController(
+    text: '${widget.existing?['name'] ?? ''}',
+  );
+  late final _url = TextEditingController(
+    text: '${widget.existing?['logo_url'] ?? ''}',
+  );
+  late final _order = TextEditingController(
+    text: '${widget.existing?['sort_order'] ?? ''}',
+  );
+  late bool _active = widget.existing?['is_active'] != false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _url.dispose();
+    _order.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_name.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A logo needs the name of whose it is.')),
+      );
+      return;
+    }
+    if (!_url.text.trim().startsWith('http')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A logo needs a full https address.')),
+      );
+      return;
+    }
+    final orderProblem = landingSortProblem(_order.text);
+    if (orderProblem != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(orderProblem)));
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingLogo(
+            id: widget.existing?['id'] as String?,
+            name: _name.text.trim(),
+            logoUrl: _url.text.trim(),
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () => ref
+          .read(landingAdminProvider)
+          .deleteLandingLogo(widget.existing!['id'] as String),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add a logo' : 'Edit the logo'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: 'Whose logo it is',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _url,
+                decoration: const InputDecoration(
+                  labelText: 'Image address',
+                  helperText:
+                      'A full https address. Shown as their name if '
+                      'the image will not load.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                key: const ValueKey('landing-order'),
+                controller: _order,
+                // A hint to a phone keyboard and nothing at all in a
+                // browser, which is where this screen is used. The
+                // refusal in `_save` is what actually holds.
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Order',
+                  helperText: 'Lower comes first. Leave blank to put it last.',
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Show on the page'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.existing != null)
           TextButton(
             onPressed: _busy ? null : _delete,
             child: const Text('Remove'),

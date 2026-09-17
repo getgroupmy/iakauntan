@@ -168,6 +168,350 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- What the PCB deduction actually turns on
+--
+-- Added after a mutation sweep of `app.calc_pcb` killed only 19 of 41
+-- one-line mutants. The three worked examples above pin the arithmetic
+-- for three people; almost every BRANCH between them was invisible. A
+-- deduction that quietly ignored a disability, a working spouse, a
+-- child's share, or the PCB somebody had already paid this year would
+-- have passed the suite unchanged.
+--
+-- Every figure below is the one the engine produces today, and every
+-- one of them differs from the RM108.25 baseline in a direction the
+-- Rules require. A test that only asserted "it is different" would die
+-- to a mutant that changed it in the wrong direction.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_e   uuid;
+  r     record;
+begin
+  v_org := pg_temp.test_org('Branches Co');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B1', 'Single, 5000', date '2020-01-01', 5000,
+          date '1990-01-01', 'single', 'citizen')
+  returning id into v_e;
+
+  -- The baseline everything below is measured against, restated here
+  -- so this block stands on its own.
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('the baseline for this block', r.pcb, 108.25);
+
+  -- -----------------------------------------------------------------
+  -- Somebody PCB does not apply to
+  --
+  -- `pcb_eligible` is a column an admin can clear -- for somebody
+  -- taxed under a different arrangement -- and nothing asserted that
+  -- clearing it did anything at all.
+  -- -----------------------------------------------------------------
+  update public.employees set pcb_eligible = false where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('nobody ineligible is deducted', r.pcb, 0);
+  perform pg_temp.check_true('and no schedule is claimed for it',
+    r.schedule_id is null);
+  perform pg_temp.check_true('nor is it reported as verified',
+    not r.is_verified);
+  update public.employees set pcb_eligible = true where id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- A foreign worker is a non-resident
+  --
+  -- The flat rate applies to BOTH non-resident statuses. Only
+  -- `expatriate` was ever exercised, so a foreign worker being taxed as
+  -- a resident -- with a full year's reliefs they are not entitled to --
+  -- was invisible.
+  -- -----------------------------------------------------------------
+  update public.employees set residency_status = 'foreign_worker'
+   where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 0, 0, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a foreign worker is deducted the flat rate',
+    r.pcb, 1500.00);
+
+  -- And a bonus is part of the month's pay at the flat rate: there is
+  -- no projection to distort, so nothing is set aside for it.
+  select * into r from app.calc_pcb(
+    v_e, 5000, 0, 0, 0, date '2026-01-31', 2000, 0);
+  perform pg_temp.check_eq(
+    'a non-resident bonus is taxed at the same flat rate',
+    r.pcb, 2100.00);
+  update public.employees set residency_status = 'citizen' where id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- The spouse
+  -- -----------------------------------------------------------------
+  update public.employees
+     set marital_status = 'married', spouse_is_working = true
+   where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a working spouse earns no spouse relief', r.pcb, 108.25);
+
+  update public.employees set spouse_is_working = false where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a spouse who is not working earns RM4,000 of relief',
+    r.pcb, 88.25);
+
+  -- -----------------------------------------------------------------
+  -- Disability
+  -- -----------------------------------------------------------------
+  update public.employees set is_disabled = true where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a disabled employee earns RM6,000 more relief',
+    r.pcb, 58.25);
+
+  update public.employees
+     set is_disabled = false, spouse_is_disabled = true
+   where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a disabled spouse earns RM5,000 more',
+    r.pcb, 63.25);
+
+  update public.employees
+     set spouse_is_disabled = false, marital_status = 'single',
+         spouse_is_working = false
+   where id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- Children
+  --
+  -- Four branches of one CASE, and only the RM2,000 one was ever
+  -- reached. The higher-education figure is the one that moves money.
+  -- -----------------------------------------------------------------
+  insert into public.employee_dependants
+    (org_id, employee_id, name, relationship, date_of_birth)
+  values (v_org, v_e, 'Anak', 'child', date '2015-01-01');
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a child is worth RM2,000 of relief',
+    r.pcb, 98.25);
+
+  update public.employee_dependants set in_higher_education = true
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a child in higher education is worth RM8,000', r.pcb, 68.25);
+
+  -- 0530. A disabled child is RM6,000, and a disabled child in higher
+  -- education is that PLUS the RM8,000 for the education -- section 48
+  -- makes the two cumulative. The engine gave RM8,000 flat, which is
+  -- what a child who is NOT disabled gets: the disability was read and
+  -- then thrown away for exactly the children entitled to most. Found
+  -- by a mutation sweep, which is also why both arms are pinned here
+  -- rather than one.
+  update public.employee_dependants
+     set in_higher_education = false, is_disabled = true
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a disabled child is worth RM6,000',
+    r.pcb, 78.25);
+
+  update public.employee_dependants set in_higher_education = true
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a disabled child in higher education is worth RM14,000, not RM8,000',
+    r.pcb, 10.80);
+
+  update public.employee_dependants
+     set is_disabled = false, in_higher_education = false
+   where employee_id = v_e;
+
+  -- The share, which decides how two separated parents split one
+  -- child's relief between them.
+  update public.employee_dependants
+     set in_higher_education = false, relief_claim_percent = 50
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('half a child claimed is half the relief',
+    r.pcb, 103.25);
+
+  -- Two ways a dependant does not count, each of which the query has a
+  -- clause for and neither of which was exercised.
+  update public.employee_dependants
+     set relief_claim_percent = 100, is_tax_dependant = false
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a dependant not claimed for tax earns nothing', r.pcb, 108.25);
+
+  update public.employee_dependants
+     set is_tax_dependant = true, relationship = 'parent'
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a parent is not a child, whatever else they are', r.pcb, 108.25);
+  delete from public.employee_dependants where employee_id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- The floors
+  --
+  -- Three `greatest(..., 0)` in the function, and not one of them was
+  -- ever reached. Each of them is the difference between a deduction
+  -- of nothing and a NEGATIVE deduction -- money paid to an employee
+  -- out of LHDN's account.
+  -- -----------------------------------------------------------------
+  select * into r from app.calc_pcb(v_e, 1200, 132, 12, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'reliefs beyond a year of pay leave nothing to deduct, not a refund',
+    r.pcb, 0);
+
+  select * into r from app.calc_pcb(
+    v_e, 5000, 550, 35, 5000, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'zakat beyond the tax leaves nothing to deduct, not a refund',
+    r.pcb, 0);
+
+  -- -----------------------------------------------------------------
+  -- What has already been deducted this year
+  --
+  -- PCB is a running settlement: what is taken this month is the
+  -- year's tax LESS what has already gone. Both halves of that -- this
+  -- employer's own deductions and a previous employer's -- could have
+  -- been dropped without a test noticing.
+  -- -----------------------------------------------------------------
+  insert into public.payroll_ytd
+    (org_id, employee_id, tax_year, taxable_income, epf_employee, pcb)
+  values (v_org, v_e, 2026, 30000, 3300, 0);
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq('July, with nothing deducted yet', r.pcb, 217.90);
+
+  update public.payroll_ytd set pcb = 900 where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq(
+    'RM900 already deducted is spread over the six months left',
+    r.pcb, 67.90);
+
+  -- Over-deducted: the year is already settled and more, and the
+  -- answer is nothing, not a refund through the payslip.
+  update public.payroll_ytd set pcb = 100000 where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq(
+    'having over-deducted, this month deducts nothing', r.pcb, 0);
+
+  -- The same money, paid by a previous employer, has to count the same.
+  update public.payroll_ytd set pcb = 0 where employee_id = v_e;
+  insert into public.employee_ytd_opening
+    (org_id, employee_id, tax_year, pcb_paid)
+  values (v_org, v_e, 2026, 900);
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq(
+    'and PCB paid by a previous employer counts the same', r.pcb, 67.90);
+
+  delete from public.employee_ytd_opening where employee_id = v_e;
+  delete from public.payroll_ytd where employee_id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- The EPF deducted from a bonus
+  --
+  -- It is relieved, up to the same cap as ordinary EPF. This needs a
+  -- LOW earner to see: on RM5,000 a month the cap is already binding,
+  -- which is why the mutant that dropped this relief altogether
+  -- survived the sweep.
+  -- -----------------------------------------------------------------
+  select * into r from app.calc_pcb(
+    v_e, 3000, 330, 25, 0, date '2026-01-31');
+  perform pg_temp.check_eq('on RM3,000 a month there is nothing to deduct',
+    r.pcb, 0);
+
+  select * into r from app.calc_pcb(
+    v_e, 3000, 330, 25, 0, date '2026-01-31', 40000, 0);
+  perform pg_temp.check_eq('a RM40,000 bonus is taxed once, in full',
+    r.pcb, 2901.40);
+
+  select * into r from app.calc_pcb(
+    v_e, 3000, 330, 25, 0, date '2026-01-31', 40000, 4400);
+  perform pg_temp.check_eq(
+    'and the EPF deducted from it is relieved, under the cap',
+    r.pcb, 2897.00);
+
+  -- A bonus too small to move the band still moves the deduction by
+  -- its own tax and no more -- five sen, which is the rounding step.
+  select * into r from app.calc_pcb(
+    v_e, 5000, 550, 35, 0, date '2026-01-31', 1, 0);
+  perform pg_temp.check_eq('a bonus of one ringgit adds five sen',
+    r.pcb, 108.30);
+
+  -- The third floor, and the least obvious. A bonus RAISES the year's
+  -- income by its own amount and the year's relief by twelve times the
+  -- EPF taken from it, so a small bonus with a large EPF deduction
+  -- makes the year's tax go DOWN. Left unfloored the engine would hand
+  -- the difference back through the payslip; the deduction for the
+  -- bonus is nothing, and the relief is settled at assessment.
+  select * into r from app.calc_pcb(
+    v_e, 8000, 100, 25, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'on RM8,000 with barely any EPF, before any bonus', r.pcb, 553.75);
+
+  select * into r from app.calc_pcb(
+    v_e, 8000, 100, 25, 0, date '2026-01-31', 100, 2000);
+  perform pg_temp.check_eq(
+    'a bonus whose own EPF relieves more than it earns adds nothing, '
+    'and takes nothing back',
+    r.pcb, 553.75);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What every PCB schedule has to carry
+--
+-- `app.calc_pcb` reaches for four rows on the schedule and falls back
+-- to a hard-coded number when each is missing: a non-resident rate, the
+-- EPF relief cap, the SOCSO relief cap, the spouse relief. Every one of
+-- those fallbacks is UNREACHABLE against the seeded data, which is why
+-- a mutation sweep could change three of them freely without a test
+-- noticing -- and it is unreachable only for as long as the seed keeps
+-- its side of the bargain.
+--
+-- So the bargain is asserted here rather than the dead branch. A
+-- schedule seeded without a non-resident rate would silently deduct
+-- NOTHING from every expatriate on it, which is the failure that
+-- carries a penalty rather than a refund.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_bad text;
+begin
+  select string_agg(s.name, ', ') into v_bad
+    from public.statutory_schedules s
+   where s.body = 'pcb'
+     and not exists (select 1 from public.statutory_rates r
+                      where r.schedule_id = s.id
+                        and r.category = 'nonresident');
+  perform pg_temp.check_true(
+    'every PCB schedule carries a non-resident rate' ||
+    coalesce(' -- but not ' || v_bad, ''),
+    v_bad is null);
+
+  for v_bad in
+    select code from (values ('individual'), ('epf'), ('socso_eis'),
+                             ('spouse')) as t(code)
+  loop
+    perform pg_temp.check_eq(
+      format('every PCB schedule carries the %s relief', v_bad),
+      (select count(*)::numeric from public.statutory_schedules s
+        where s.body = 'pcb'
+          and not exists (select 1 from public.tax_reliefs t
+                           where t.schedule_id = s.id and t.code = v_bad)),
+      0);
+  end loop;
+
+  -- And the two caps are the numbers the fallbacks assume, so a change
+  -- to either has to be a deliberate one.
+  perform pg_temp.check_eq('the EPF relief cap is RM4,000',
+    (select max(t.max_amount) from public.tax_reliefs t
+      join public.statutory_schedules s on s.id = t.schedule_id
+     where s.body = 'pcb' and t.code = 'epf'), 4000);
+  perform pg_temp.check_eq('the SOCSO and EIS relief cap is RM350',
+    (select max(t.max_amount) from public.tax_reliefs t
+      join public.statutory_schedules s on s.id = t.schedule_id
+     where s.body = 'pcb' and t.code = 'socso_eis'), 350);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The tax year an employee brings with them
 --
 -- PCB projects the year from the month in hand, so a mid-year joiner
@@ -260,8 +604,9 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Eight functions are deliberately open to an unauthenticated caller,
-  -- and each earned its place by someone who has no account needing to
+  -- Nineteen functions are deliberately open to an unauthenticated
+  -- caller, and each earned its place by someone who has no account
+  -- needing to
   -- do exactly one thing: a director signing one resolution, a customer
   -- reading one invoice they were sent a link to, and — since 0262 — a
   -- customer at a table reading the menu on the QR sticker in front of
@@ -269,10 +614,18 @@ begin
   --
   -- The allowlist is the point. Deleting this check would be easier and
   -- would stop it doing its job — it caught `open_shared_document` on
-  -- the commit that added it, which is what an allowlist is for. Adding
-  -- a name here should feel like a decision, and anybody doing it should
-  -- be able to say which stranger needs the function and why nothing
-  -- else in the database is reachable through it.
+  -- the commit that added it, and `open_customer_portal` on `0493`,
+  -- which is what an allowlist is for. Adding a name here should feel
+  -- like a decision, and anybody doing it should be able to say which
+  -- stranger needs the function and why nothing else in the database is
+  -- reachable through it.
+  --
+  -- The count in the sentence above had drifted to five behind the list
+  -- by `0493` — it said ten against fifteen names. The assertion never
+  -- cared, because it is written against the list rather than the
+  -- number, which is why nothing caught it; but a comment that
+  -- undercounts the open doors by a third is worse than no count, so
+  -- it is worth correcting whenever a name goes in.
   perform pg_temp.check_true('nothing new is exposed to anon',
     not exists (
       select 1
@@ -284,10 +637,106 @@ begin
          and p.proname not in (
            'corp_open_signing_link',
            'corp_sign_with_link',
+           -- 0378, and it is the pair of the one above rather than a
+           -- new door. `app.signature_status` has had `declined` since
+           -- `0069` and nothing could produce it, so a director reading
+           -- a resolution on a link could sign it or close the tab —
+           -- and a line that stays pending for ever reads at the other
+           -- end as an email nobody opened.
+           --
+           -- It reaches exactly what signing reaches and no more: the
+           -- token resolves the one signature line, the same checks
+           -- apply (a valid, unused, unexpired link on a pending line
+           -- of a request that has not been withdrawn), and the link is
+           -- spent either way so it cannot be used to sign after
+           -- refusing. It writes a status and a reason on one row.
+           -- `supabase/tests/decline_and_lodge.sql` asserts the refusal
+           -- and what it does not do.
+           'corp_decline_with_link',
            -- Takes a share token and returns one sales document, with
            -- internal notes and line cost deliberately left out.
            -- `supabase/tests/document_share.sql` asserts both absences.
            'open_shared_document',
+           -- 0413, and the smallest thing that could be added beside
+           -- the one above: the customer reading an invoice on a link
+           -- has to be told how they may pay it, and they are not
+           -- signed in.
+           --
+           -- It takes the same token, applies the same checks (a valid,
+           -- unrevoked, unexpired link on a document that has not been
+           -- withdrawn), and answers with acquirer codes and names for
+           -- gateways this company has switched on and can actually
+           -- settle through. Nothing about a gateway crosses to an
+           -- unauthenticated caller except what is already printed on
+           -- the button they are about to press: no key, no collection
+           -- reference, no mode. It writes nothing.
+           --
+           -- Its siblings are deliberately *not* here.
+           -- `begin_shared_payment` and `settle_shared_payment` are
+           -- revoked from anon and authenticated alike, and
+           -- `app.shared_payment_intent` -- which hands back an
+           -- acquirer key -- from every client role. Only the service
+           -- role reaches those, which is to say the edge function.
+           -- `supabase/tests/shared_invoice_payment.sql` asserts all
+           -- three refusals under `set local role anon`.
+           'shared_payment_options',
+           -- 0493, and the pair of them widen `open_shared_document`
+           -- by exactly one step: from the document to the contact
+           -- that owes it. A customer with three invoices held three
+           -- links and had nowhere to see what they owed altogether.
+           --
+           -- `open_customer_portal` takes a portal token and answers
+           -- with one contact's outstanding invoices: number, dates,
+           -- currency, what is still owed on each, and the total.
+           -- Every clause that keeps it to one account is asserted in
+           -- `supabase/tests/customer_portal.sql` -- another
+           -- customer's invoice, a draft, a settled one, an expired
+           -- token and a revoked one all produce nothing. No lines, no
+           -- costs, no internal notes: those stay behind
+           -- `open_shared_document`, which the customer reaches only
+           -- through the function below.
+           'open_customer_portal',
+           -- The one that mints a credential, and so the more
+           -- dangerous of the two. It hands a portal holder a normal
+           -- document share token for one of *their own* invoices, so
+           -- everything from there is 0067's and 0414's code
+           -- unchanged. Without the clause that checks the document
+           -- belongs to this account, a portal token would be a key to
+           -- every invoice in the tenant -- which is the assertion
+           -- "a portal cannot open somebody else's invoice", and the
+           -- reason the migration's self-check also greps for that
+           -- clause by name.
+           --
+           -- It revokes nothing, deliberately: a customer clicking
+           -- through their own account has sent nobody anything, and
+           -- killing the link the tenant emailed them last week would
+           -- be a bug wearing a rule's clothes.
+           'portal_document_token',
+           -- 0390, and the pair of them are the reader and the writer
+           -- of one conversation. `ticket_comments.author_contact_id`
+           -- has existed since `0192` with a check constraint demanding
+           -- exactly one author, and nothing ever wrote it — so the
+           -- customer who raised a ticket could not say anything on it.
+           --
+           -- `open_shared_ticket` takes a token and returns one ticket
+           -- and the comments on it that are not internal. That filter
+           -- is the reason the function exists: `is_internal` defaults
+           -- to true and `0192` calls it the most dangerous boolean in
+           -- a helpdesk. No assignee, no SLA deadline, no agent named,
+           -- nothing about any other ticket or any other customer.
+           'open_shared_ticket',
+           -- The writer. It appends one comment as the ticket's own
+           -- requester contact, always visible, and lifts the ticket
+           -- off `pending` so the clock that was paused while the
+           -- company waited runs again. It deliberately does not touch
+           -- `first_response_at`: that target is a promise about how
+           -- quickly the company would answer, and stopping it on the
+           -- customer's own message would report a target met that
+           -- nobody met. It writes nothing else and reads nothing else.
+           -- `supabase/tests/ticket_share.sql` asserts the internal
+           -- note never leaves, the response clock is untouched, and an
+           -- expired or revoked link takes no reply.
+           'reply_to_shared_ticket',
            -- 0235. Reachable before anybody has signed in, because the
            -- only moment a rejected password can be reported is before
            -- there is a session. It is built to be safe rather than
@@ -300,6 +749,52 @@ begin
            -- the rate limit; the rest is the signature, which takes an
            -- address and nothing else.
            'report_failed_sign_in',
+           -- 0347, and the one entry on this list that makes the
+           -- platform easier to enumerate rather than harder. Read it
+           -- as a decision, because it is one.
+           --
+           -- A company's door and an address pointed at a module are
+           -- both for a known set of people, and taking a password from
+           -- somebody who was never going to be let in is a round trip
+           -- that ends in a refusal it could have started with. So the
+           -- form asks the email first and this answers whether it has
+           -- any business there — which means anyone who can reach
+           -- `sinar.iakauntan.com` can ask whether an address is on
+           -- Sinar's team without knowing a password. Before this they
+           -- had to know one.
+           --
+           -- What bounds it: it answers a bare yes or no and nothing
+           -- else; an address that exists nowhere and one belonging to
+           -- another company are the same answer; and every host that
+           -- is not for somebody in particular — the bare domain, a
+           -- name nobody holds, a parked name — answers true for
+           -- everybody, so the oracle reaches only addresses an
+           -- operator deliberately pointed at somebody.
+           -- `supabase/tests/email_before_password.sql` asserts each of
+           -- those, including the ones that are about what it does not
+           -- say.
+           'may_sign_in_here',
+           -- 0554. The registration form is the one screen in this
+           -- product with no session behind it, and it now offers two
+           -- lists: the dialling codes, so a mobile number can be
+           -- stored as something dialable, and the salutations, so
+           -- somebody can be addressed properly.
+           --
+           -- Neither table is granted to anon; this function is the
+           -- whole of what a stranger can see of them, and what it
+           -- returns is two lists of public facts -- country names,
+           -- dialling codes, honorifics. There is nothing in it about
+           -- any person, company or account, and no argument to probe
+           -- it with. `supabase/tests/signup_details.sql` asserts that
+           -- the tables stay shut and that this answers as anon.
+           'signup_reference',
+           -- 0564. The maintenance banner. What it exposes is that the
+           -- platform is about to be worked on, which is the one fact a
+           -- maintenance notice exists to publish -- and the person who
+           -- most needs it is the one at the sign-in page wondering why
+           -- their password stopped working. Nothing about any person,
+           -- company or account, and no argument to probe it with.
+           'maintenance_notice',
            -- 0262, and the three of them are one feature: a token on a
            -- sticker, the menu behind it, and an order placed from it.
            --
@@ -332,7 +827,71 @@ begin
            -- of the public surface rather than the polite route to it.
            -- `supabase/tests/landing_page.sql` asserts both, and that
            -- only a platform administrator can change what it says.
-           'landing_page')));
+           'landing_page',
+           -- 0327, and the same shape of thing as the landing page: a
+           -- question a browser has to be able to ask before anybody
+           -- has signed in.
+           --
+           -- It takes a host and answers whose door it is — a company's
+           -- name and its logo, so the sign-in page at
+           -- `sinar.iakauntan.com` can say Sinar on it. No identifier,
+           -- no contact, nothing about who works there, and a host
+           -- nobody has reserved comes back empty rather than as an
+           -- error, because "this name is free" is not a secret.
+           --
+           -- What it can be probed for is whether a given subdomain is
+           -- taken, which is what a browser typing the address finds
+           -- out anyway. `supabase/tests/workspace_address.sql` asserts
+           -- the rest: that a request is not a door, that the door
+           -- closes for a company that stops paying or stops trading,
+           -- and that anon may call this and nothing else here.
+           'workspace_by_host',
+           -- 0334, and the plainest one on the list: the terms
+           -- somebody is being asked to agree to, the privacy policy
+           -- that describes what happens to them, and the address to
+           -- write to if they want to ask about either. A policy only
+           -- members can read is not a policy.
+           --
+           -- It takes no argument, so there is nothing to vary and
+           -- nothing to probe with. What comes back is the wording on
+           -- five screens: the two that always draw — sign in and sign
+           -- up — and the three that are only returned once a platform
+           -- administrator has published them, so a half-written
+           -- privacy policy is not a published one.
+           -- `supabase/tests/site_pages.sql` asserts the gate, that
+           -- the table behind it is shut to anon, and that only a
+           -- platform administrator can change what it says.
+           'site_pages',
+           -- 0626, and the pair of them are the third token-shaped
+           -- door: a customer filling in their own TIN, because from
+           -- this year an e-Invoice will not clear MyInvois without it
+           -- and the only person who has it is them.
+           --
+           -- `open_tax_detail_request` answers with what the company
+           -- already holds about that one contact -- name, address,
+           -- identifiers -- so the customer corrects rather than
+           -- retypes. There is deliberately nothing about money on it:
+           -- no invoice, no balance, no total, which
+           -- `supabase/tests/tax_details.sql` asserts by name. It is a
+           -- disclosure of the contact's OWN details to somebody
+           -- holding a link the company emailed them, which is the same
+           -- bargain `open_customer_portal` strikes one step narrower.
+           'open_tax_detail_request',
+           -- The writer, and the one to read carefully, because it is
+           -- the only function on this list that writes into master
+           -- data an e-Invoice is built from.
+           --
+           -- What bounds it is a rule rather than a filter: a
+           -- submission FILLS A BLANK and never overwrites. A stranger
+           -- holding the link cannot change a TIN, an address or an SST
+           -- number the company already holds -- that takes
+           -- `apply_tax_submission`, which is `can_write` and is
+           -- deliberately not on this list. Every submission is
+           -- recorded in full either way, so the answer to "where did
+           -- this number come from" is a row. And a form submitted
+           -- empty is refused by a check constraint rather than queued
+           -- as an answer.
+           'submit_tax_details')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -347,7 +906,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the eight that need anon still have it',
+  perform pg_temp.check_eq('and the nineteen that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -356,6 +915,15 @@ begin
         and has_function_privilege('anon', p.oid, 'execute')
         and p.proname in ('corp_open_signing_link', 'corp_sign_with_link',
                           'open_shared_document', 'report_failed_sign_in',
+                          -- 0493. A portal link that has silently
+                          -- stopped working is found by a customer who
+                          -- thinks they are being chased for money
+                          -- they cannot see.
+                          'open_customer_portal', 'portal_document_token',
+                          -- A ticket link that has silently stopped
+                          -- working is found by a customer who thinks
+                          -- they are being ignored.
+                          'open_shared_ticket', 'reply_to_shared_ticket',
                           -- A QR sticker that has silently stopped
                           -- working is found by a customer holding a
                           -- phone at a table, which is worse than being
@@ -365,15 +933,170 @@ begin
                           -- A landing page that has silently stopped
                           -- loading is found by somebody deciding not to
                           -- buy the product.
-                          'landing_page')),
-    8);
+                          'landing_page',
+                          -- And a company's own door that has stopped
+                          -- opening is found by their staff, who see
+                          -- our mark where theirs should be and wonder
+                          -- what they have signed into.
+                          'workspace_by_host',
+                          -- And a terms page that has silently stopped
+                          -- loading is found by somebody who was asked
+                          -- to agree to it and could not read it.
+                          'site_pages',
+                          -- And a door that has stopped asking the
+                          -- email first is found by a shift standing at
+                          -- a till typing a password nobody will take.
+                          'may_sign_in_here',
+                          -- And a registration form whose two
+                          -- dropdowns have silently stopped filling is
+                          -- found by somebody trying to sign up, who
+                          -- cannot, because both of them are now
+                          -- required.
+                          'signup_reference',
+                          -- And a platform that has quietly stopped
+                          -- saying it is closed is found by somebody
+                          -- whose password appears to have stopped
+                          -- working.
+                          'maintenance_notice',
+                          -- 0626. A tax-details link that has silently
+                          -- stopped working is found by a customer who
+                          -- was asked for their TIN, went to give it,
+                          -- and could not -- and then by the company,
+                          -- months later, as an e-Invoice MyInvois will
+                          -- not take.
+                          'open_tax_detail_request',
+                          'submit_tax_details')),
+    19);
+
+  -- And every one of them says what it hands to a stranger.
+  --
+  -- `docs/api/` made this countable: of the 662 functions a tenant's
+  -- token reaches, 436 carry no `comment on function`, and the
+  -- description generated from the catalog prints their name and
+  -- argument list and nothing else. Split by who can reach them, the
+  -- open doors were the worst of it -- 12 of these 19 undocumented --
+  -- which is the wrong way round. A function anybody on the internet
+  -- may call is the one whose bargain most needs writing down: what it
+  -- hands over, what it deliberately does not, and what it writes.
+  --
+  -- `0569` wrote the twelve. This is what stops the thirteenth door
+  -- being opened without one. It is deliberately not a count: a
+  -- count-based version of the allowlist above sat wrong by a third
+  -- for months, because nothing makes somebody update a number.
+  perform pg_temp.check_true(
+    'and every open door says what it hands over',
+    not exists (
+      select 1
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        left join pg_description d on d.objoid = p.oid and d.objsubid = 0
+       where n.nspname = 'public'
+         and p.prokind = 'f'
+         and p.prosecdef
+         and has_function_privilege('anon', p.oid, 'execute')
+         -- `citext`, `btree_gist` and `pg_trgm` install into `public`
+         -- and carry EXECUTE to PUBLIC, which anon inherits. They are
+         -- reachable and they are not ours to document.
+         and not exists (select 1 from pg_depend dp
+                          where dp.objid = p.oid and dp.deptype = 'e')
+         and coalesce(btrim(d.description), '') = ''));
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
       select 1 from information_schema.role_table_grants
        where grantee = 'anon'
          and table_name in ('corp_signing_links', 'corp_signatures',
-                            'corp_signature_requests', 'corp_documents')));
+                            'corp_signature_requests', 'corp_documents',
+                            -- `document_share_links` and, since `0390`,
+                            -- `ticket_share_links`. Both hold a column
+                            -- of token hashes, and Supabase's default
+                            -- privileges grant `anon` every table
+                            -- privilege — so the revoke in the
+                            -- migration is the only thing between an
+                            -- anonymous request and every live link in
+                            -- the system.
+                            'document_share_links',
+                            'ticket_share_links',
+                            -- 0493, and the same shape as the two
+                            -- above: a column of token hashes, each
+                            -- one a live door into a customer's whole
+                            -- account rather than a single document.
+                            'customer_portal_links')));
+
+  -- 0498, and the reason the assertion above needed a list at all: a
+  -- table carries an `anon` grant from the moment it is created, so
+  -- until 0498 the only tables shut to a stranger were the ones whose
+  -- migration remembered. Two hundred and sixty-seven did not.
+  --
+  -- Not an open door even then -- row level security is on everywhere
+  -- and every guard is false for somebody not signed in -- but the
+  -- grant is what makes a `using (true)` typed in a hurry reachable
+  -- rather than inert, which is the whole point of a second line.
+  perform pg_temp.check_true('nothing in public is readable by a stranger',
+    not exists (
+      select 1 from pg_class c
+       where c.relnamespace = 'public'::regnamespace
+         and c.relkind in ('r', 'p', 'v', 'm')
+         and not (c.relname = any(app.anon_readable_tables()))
+         and has_table_privilege('anon', c.oid, 'select')));
+
+  -- The four that are meant to be: the front page's three and the
+  -- statutory remittance calendar, each with an unguarded policy to
+  -- match. A sweep that took these would empty the front page quietly.
+  perform pg_temp.check_eq(
+    'except the four the front page and the calendar need',
+    (select count(*)::integer from unnest(app.anon_readable_tables()) t
+      where has_table_privilege('anon', 'public.' || quote_ident(t),
+                                'select')), 4);
+
+  -- And the half that stops it coming back. Without the default
+  -- privilege revoked, the next table added is exposed again and the
+  -- assertion above passes until somebody adds one.
+  create table if not exists public.zz_anon_probe (id integer);
+  perform pg_temp.check_true('and a table made after this one is shut too',
+    not has_table_privilege('anon', 'public.zz_anon_probe', 'select'));
+  drop table public.zz_anon_probe;
+
+  -- 0499, and the same shape one role along: a table privilege that no
+  -- policy permits cannot do anything, and is one policy typed wrong
+  -- away from being able to do everything. `payslip_access_log` is the
+  -- one that made this visible -- an authenticated DELETE against the
+  -- record of who read whose payslip was allowed to run and stopped by
+  -- row level security matching no rows, rather than refused.
+  perform pg_temp.check_true(
+    'no write privilege outlives the policy that would permit it',
+    not exists (
+      select 1 from pg_class c
+      cross join unnest(array['insert', 'update', 'delete']) cmd
+       where c.relnamespace = 'public'::regnamespace
+         and c.relkind in ('r', 'p')
+         and has_table_privilege('authenticated', c.oid, cmd)
+         and not app.policy_permits(c.relname::text, cmd)));
+
+  -- The other half. A sweep with an off-by-one in it would take the
+  -- privileges the product runs on, and the first thing anybody would
+  -- notice is an invoice that cannot be saved.
+  -- `corp_officers` is the one that matters most here: its writes come
+  -- from a single `for all` policy rather than a policy per command, so
+  -- a sweep that read only the per-command policies would take it and
+  -- leave the two obvious tables standing.
+  perform pg_temp.check_true('an invoice can still be raised from the API',
+    has_table_privilege('authenticated', 'public.sales_documents', 'insert')
+    and has_table_privilege('authenticated', 'public.contacts', 'update')
+    and has_table_privilege('authenticated', 'public.corp_officers',
+                            'insert'));
+
+  -- A module gate is restrictive: it narrows what a permissive policy
+  -- allows and grants nothing by itself. Counting one as permission
+  -- would keep exactly the privileges that have no way to be used, so
+  -- the predicate is asked about a table that has nothing but a gate.
+  create table if not exists public.zz_gate_probe (org_id uuid);
+  alter table public.zz_gate_probe enable row level security;
+  create policy zz_gate on public.zz_gate_probe
+    as restrictive for insert to authenticated with check (true);
+  perform pg_temp.check_true('a module gate is not a permission',
+    not app.policy_permits('zz_gate_probe', 'insert'));
+  drop table public.zz_gate_probe;
 
   -- The whole permission layer hangs off this one predicate, and the
   -- twenty-six guards written as `if not app.can_x(...) then raise` only

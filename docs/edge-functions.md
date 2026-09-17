@@ -12,6 +12,9 @@ must reach neither:
 | `ocr` | whichever reader the company has chosen | the app, when a receipt is scanned |
 | `call-token` | nobody — it signs | the app, once somebody has joined a call |
 | `send-push` | Firebase Cloud Messaging | the sender's app, right after a message or a call |
+| `places` | Google Places | the address box, on every screen that has one |
+| `ssm-search` | SSM's register, through whichever provider `SSM_PROVIDER` names | the contact editor and the scanned-bill supplier dialog |
+| `ssm-api` | SSM's own Search API (CIDP), all thirteen endpoints | nothing yet — the key is still under SSM's review |
 
 They live in `supabase/functions/`. `_shared/` is not a function — it is
 what they import, and the underscore is what tells both the CLI and the
@@ -118,6 +121,42 @@ service account JSON. Until it is set the function returns 503 and says
 so, rather than accepting requests and silently sending nothing.
 [push-notifications.md](push-notifications.md) covers what else Firebase
 needs and what is not built yet.
+
+## Cross-origin headers come from one place
+
+Every function is served through `serveFunction` in
+`_shared/cors.ts`. It answers the preflight, catches whatever escapes
+the handler, honours `ALLOWED_ORIGINS`, and stamps the headers onto
+every response on the way out. **Do not write a header map in a
+function.**
+
+That is a rule with a scar on it. `ssm-search` shipped with three
+lines of its own:
+
+```ts
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "authorization, content-type",
+  ...
+};
+```
+
+supabase-js sends `x-client-info` on every call, and `apikey` when the
+client carries one. Neither was on that list, so the browser's
+preflight was refused, and what reached the screen was
+
+```
+ClientException: Load failed, uri=.../functions/v1/ssm-search
+```
+
+with no status, no body, and nothing in the function's log — because
+the request never arrived. `deno check` is perfectly happy with a
+hand-written header map; so is every other gate. It is wrong only in a
+browser.
+
+`scripts/check_edge_cors.py` now refuses both halves of that: a
+function that does not go through `serveFunction`, and a function that
+names an `access-control-*` header itself. It runs in the `edge` job.
 
 ## Deploying one by hand
 

@@ -26,10 +26,18 @@
 -- obligation to pay it. Neither shows up as an error. Both show up as
 -- an invoice.
 --
--- The other two filters sit behind the trigger in 0162, which refuses a
--- chargeable parcel with no share units at insert and refuses a shop on
--- a strata site outright, so the fixture cannot even build those rows.
+-- The share units filter sits behind the trigger in 0162, which refuses
+-- a chargeable parcel with no share units and refuses a shop on a
+-- strata site outright, so the fixture cannot even build those rows.
 -- They are asserted in property.sql where the trigger is.
+--
+-- That filter is therefore unreachable rather than untested, and a
+-- mutation sweep reports it as a survivor. It was checked rather than
+-- assumed: the trigger is `before insert or update`, and all three
+-- routes to a zero-share chargeable parcel -- inserting one, updating
+-- an allocated parcel's share to zero, and updating it to null -- are
+-- refused with the same message. It stays in the preview as a second
+-- line of defence and there is no assertion that could kill it.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -251,6 +259,105 @@ begin
   end;
   update public.org_modules set is_enabled = true
    where org_id = v_org and module_code = 'property_strata';
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- =====================================================================
+-- Two blocks, and an AGM that raised the rate
+--
+-- The fixture above is one scheme with one resolution, which leaves two
+-- of the preview's decisions unmade.
+--
+--   * `app.strata_rate_on` takes the newest rate in force, not the
+--     oldest. A management corporation resolves a new rate at each
+--     AGM and the old resolutions stay on file, so from the second AGM
+--     onwards there is always more than one row to choose between. With
+--     only ever one, reading them in the wrong order changed nothing.
+--   * the preview is scoped to the scheme's own site. One managing
+--     agent holds several blocks in one company and `is_org_member`
+--     passes for all of them, so the site_id in the where clause is the
+--     only thing keeping one block's parcels off another block's
+--     demand.
+-- =====================================================================
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_site_a uuid; v_site_b uuid;
+  v_sch_a  uuid; v_sch_b  uuid;
+  v_ca uuid; v_cb uuid;
+  r       record;
+  v_n     integer;
+begin
+  v_org := pg_temp.test_org('Harta Dua MC', array['property_strata']);
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'property_strata', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'HD1', 'Harta One', 'strata') returning id into v_site_a;
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'HD2', 'Harta Two', 'strata') returning id into v_site_b;
+
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_site_a, 'mc', 1000) returning id into v_sch_a;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_site_b, 'mc', 1000) returning id into v_sch_b;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'OWNA', 'Owner in Harta One', 'customer') returning id into v_ca;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'OWNB', 'Owner in Harta Two', 'customer') returning id into v_cb;
+
+  insert into public.property_units
+    (org_id, site_id, unit_no, unit_type, share_units, owner_contact_id)
+  values (v_org, v_site_a, 'A-1-1', 'parcel', 200, v_ca);
+  insert into public.property_units
+    (org_id, site_id, unit_no, unit_type, share_units, owner_contact_id)
+  values (v_org, v_site_b, 'B-1-1', 'parcel', 400, v_cb);
+
+  -- Harta One: 50 sen a share unit from January, raised to 80 sen by
+  -- the AGM in June. Both resolutions stay on file, which is the point.
+  insert into public.strata_charge_rates
+    (org_id, scheme_id, effective_from, rate_per_share_unit,
+     sinking_fund_percent, late_interest_percent)
+  values (v_org, v_sch_a, date '2026-01-01', 0.50, 10, 10),
+         (v_org, v_sch_a, date '2026-07-01', 0.80, 10, 10),
+         (v_org, v_sch_b, date '2026-01-01', 0.20, 10, 10);
+
+  -- ------------------------------------------------------------------
+  -- Which resolution governs
+  -- ------------------------------------------------------------------
+  select * into r from public.strata_charge_preview(
+    v_sch_a, date '2026-01-01', date '2026-01-31');
+  perform pg_temp.check_eq('January is charged at the rate January had',
+    r.maintenance_amount, 100.00);
+
+  select * into r from public.strata_charge_preview(
+    v_sch_a, date '2026-07-01', date '2026-07-31');
+  perform pg_temp.check_eq('and July at the one the AGM resolved in June',
+    r.maintenance_amount, 160.00);
+  perform pg_temp.check_eq('with the sinking fund following it up',
+    r.sinking_amount, 16.00);
+
+  -- ------------------------------------------------------------------
+  -- Whose parcels
+  -- ------------------------------------------------------------------
+  select count(*) into v_n from public.strata_charge_preview(
+    v_sch_a, date '2026-01-01', date '2026-01-31');
+  perform pg_temp.check_eq('one block''s demand holds one block''s parcels',
+                           v_n, 1);
+  select * into r from public.strata_charge_preview(
+    v_sch_a, date '2026-01-01', date '2026-01-31');
+  perform pg_temp.check_eq('and it is this block''s', r.unit_no, 'A-1-1');
+
+  select * into r from public.strata_charge_preview(
+    v_sch_b, date '2026-01-01', date '2026-01-31');
+  perform pg_temp.check_eq('the other block is charged its own rate',
+                           r.maintenance_amount, 80.00);
+  perform pg_temp.check_eq('against its own parcel', r.unit_no, 'B-1-1');
 
   perform pg_temp.sign_out();
 end $$;

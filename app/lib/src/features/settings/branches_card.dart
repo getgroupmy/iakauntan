@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/places_repository.dart';
 
 /// The places a company trades from.
 ///
@@ -41,7 +43,8 @@ class BranchesCard extends ConsumerWidget {
           children: [
             SectionHeader(
               'Branches',
-              subtitle: 'Places this company trades from, under one '
+              subtitle:
+                  'Places this company trades from, under one '
                   'registration',
               action: canEdit
                   ? TextButton.icon(
@@ -73,8 +76,7 @@ class BranchesCard extends ConsumerWidget {
                             key: ValueKey('branch-${b['code']}'),
                             onTap: canEdit ? () => edit(b) : null,
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 6),
+                              padding: const EdgeInsets.symmetric(vertical: 6),
                               child: Row(
                                 children: [
                                   SizedBox(
@@ -82,7 +84,8 @@ class BranchesCard extends ConsumerWidget {
                                     child: Text(
                                       b['code']?.toString() ?? '',
                                       style: const TextStyle(
-                                          fontWeight: FontWeight.w600),
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                   Expanded(
@@ -98,7 +101,8 @@ class BranchesCard extends ConsumerWidget {
                                             'Own registration '
                                             '${b['registration_no']}',
                                             style: const TextStyle(
-                                                fontSize: 11),
+                                              fontSize: 11,
+                                            ),
                                           ),
                                       ],
                                     ),
@@ -106,8 +110,10 @@ class BranchesCard extends ConsumerWidget {
                                   if (b['is_default'] == true)
                                     const Padding(
                                       padding: EdgeInsets.only(right: 8),
-                                      child:
-                                          StatusChip('default', compact: true),
+                                      child: StatusChip(
+                                        'default',
+                                        compact: true,
+                                      ),
                                     ),
                                   if (canEdit)
                                     const Icon(Icons.chevron_right, size: 18),
@@ -172,8 +178,17 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
   @override
   void dispose() {
     for (final c in [
-      _code, _name, _regNo, _tin, _sst, _line1, _postcode, _city, _state,
-      _phone, _email,
+      _code,
+      _name,
+      _regNo,
+      _tin,
+      _sst,
+      _line1,
+      _postcode,
+      _city,
+      _state,
+      _phone,
+      _email,
     ]) {
       c.dispose();
     }
@@ -225,6 +240,11 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Watched rather than read, so the reference list is on its
+    // way before anybody picks a suggestion.
+    final states = ref.watch(refStatesProvider).valueOrNull ?? const [];
+    final country = ref.watch(orgCountryAlpha2Provider);
+
     return AlertDialog(
       title: Text(_isNew ? 'New branch' : 'Edit ${_code.text}'),
       content: SizedBox(
@@ -261,60 +281,73 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
+              AddressField(
                 controller: _line1,
                 enabled: !_saving,
-                decoration: const InputDecoration(labelText: 'Address'),
+                country: country,
+                onChosen: (a) => fillAddressBoxes(
+                  a,
+                  states,
+                  postcode: _postcode,
+                  city: _city,
+                  stateCode: _state,
+                ),
               ),
               const SizedBox(height: 8),
-              Row(children: [
-                SizedBox(
-                  width: 110,
-                  child: TextField(
-                    controller: _postcode,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Postcode'),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 110,
+                    child: TextField(
+                      controller: _postcode,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'Postcode'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _city,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'City'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _city,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'City'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 90,
-                  child: TextField(
-                    controller: _state,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'State'),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 90,
+                    child: TextField(
+                      controller: _state,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'State'),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const SizedBox(height: 8),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: _phone,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Phone'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _phone,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _email,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Email'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _email,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const Divider(height: Space.xl),
-              Text('Its own numbers',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                'Its own numbers',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const Text(
                 'Only where this branch is registered in its own right. '
                 'Left empty it uses the company\'s. A branch with a '
@@ -326,27 +359,32 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
               TextField(
                 controller: _regNo,
                 enabled: !_saving,
-                decoration:
-                    const InputDecoration(labelText: 'Branch registration'),
+                decoration: const InputDecoration(
+                  labelText: 'Branch registration',
+                ),
               ),
               const SizedBox(height: 8),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: _tin,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'TIN'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tin,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'TIN'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _sst,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'SST number'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _sst,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'SST number',
+                      ),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               if (!_isNew) ...[
                 const Divider(height: Space.xl),
                 Row(
@@ -359,8 +397,10 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
                     const Spacer(),
                     TextButton(
                       onPressed: _saving ? null : _retire,
-                      child: Text('Close',
-                          style: TextStyle(color: context.colors.danger)),
+                      child: Text(
+                        'Close',
+                        style: TextStyle(color: context.colors.danger),
+                      ),
                     ),
                   ],
                 ),
@@ -398,7 +438,8 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
     final sure = await confirm(
       context,
       title: 'Close ${_code.text}?',
-      message: 'It stops being offered on new documents. Everything already '
+      message:
+          'It stops being offered on new documents. Everything already '
           'filed against it is kept, so last year still explains itself.',
       confirmLabel: 'Close',
       destructive: true,

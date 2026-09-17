@@ -158,6 +158,7 @@ class Contact {
     this.legalName,
     this.tin,
     this.registrationNo,
+    this.oldRegistrationNo,
     this.idType,
     this.idValue,
     this.sstRegistrationNo,
@@ -180,8 +181,12 @@ class Contact {
     this.countryCode = 'MYS',
     this.currency = 'MYR',
     this.creditLimit = 0,
+    this.creditHold = false,
+    this.receivableAccountId,
+    this.payableAccountId,
     this.paymentTermId,
     this.priceLevelId,
+    this.customFields = const {},
     this.isActive = true,
     this.entityType = 'sdn_bhd',
   });
@@ -193,6 +198,15 @@ class Contact {
   final String? legalName;
   final String? tin;
   final String? registrationNo;
+
+  /// The number the register issued before 2019 -- `571389-H`,
+  /// `JM0167410-V`. A company or business registered before the
+  /// numbering changed carries both, and a counterparty searching for
+  /// one will not find the other. `set_contact_ssm_entity` has written
+  /// this column since 0589 and nothing in the app could show it, so a
+  /// lookup filled a field nobody could read or correct.
+  final String? oldRegistrationNo;
+
   final String? idType;
   final String? idValue;
   final String? sstRegistrationNo;
@@ -225,11 +239,29 @@ class Contact {
   final String countryCode;
   final String currency;
   final double creditLimit;
+
+  /// No further credit until somebody takes it off. Unlike the limit,
+  /// which the organization's `credit_control` mode decides whether to
+  /// enforce, a hold refuses an invoice either way: it is a person's
+  /// instruction rather than arithmetic. Credit notes still post.
+  final bool creditHold;
+
+  /// Where this contact's balance sits, when it is not the company's
+  /// usual control account. 0013 reads both in four places — the
+  /// invoice, the bill, the receipt and the payment — and falls back to
+  /// 1210 and 2110 only when the contact names nothing.
+  final String? receivableAccountId;
+  final String? payableAccountId;
   final String? paymentTermId;
 
   /// Which price list this customer buys on. Null falls back to the
   /// organization's default level, and then to the item's list price.
   final String? priceLevelId;
+
+  /// The fields this company added for itself, keyed as
+  /// `custom_fields_def.key`. 0542 gives them definitions and a guard;
+  /// what arrives here has already been held to them.
+  final Map<String, dynamic> customFields;
   final bool isActive;
   final String entityType;
 
@@ -248,6 +280,7 @@ class Contact {
     legalName: j['legal_name'] as String?,
     tin: j['tin'] as String?,
     registrationNo: j['registration_no'] as String?,
+    oldRegistrationNo: j['old_registration_no'] as String?,
     idType: j['id_type'] as String?,
     idValue: j['id_value'] as String?,
     sstRegistrationNo: j['sst_registration_no'] as String?,
@@ -263,8 +296,14 @@ class Contact {
     countryCode: j['country_code']?.toString() ?? 'MYS',
     currency: j['currency']?.toString() ?? 'MYR',
     creditLimit: Fmt.toDouble(j['credit_limit']),
+    creditHold: j['credit_hold'] == true,
+    receivableAccountId: j['receivable_account_id'] as String?,
+    payableAccountId: j['payable_account_id'] as String?,
     paymentTermId: j['payment_term_id'] as String?,
     priceLevelId: j['price_level_id'] as String?,
+    customFields: Map<String, dynamic>.from(
+      (j['custom_fields'] as Map?) ?? const {},
+    ),
     isActive: j['is_active'] != false,
     entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
   );
@@ -280,6 +319,7 @@ class Contact {
     legalName: legalName,
     tin: tin,
     registrationNo: registrationNo,
+    oldRegistrationNo: oldRegistrationNo,
     idType: idType,
     idValue: idValue,
     sstRegistrationNo: sstRegistrationNo,
@@ -295,8 +335,12 @@ class Contact {
     countryCode: countryCode,
     currency: currency,
     creditLimit: creditLimit,
+    creditHold: creditHold,
+    receivableAccountId: receivableAccountId,
+    payableAccountId: payableAccountId,
     paymentTermId: paymentTermId,
     priceLevelId: priceLevelId,
+    customFields: customFields,
     isActive: isActive,
     entityType: entityType,
   );
@@ -308,6 +352,7 @@ class Contact {
     'legal_name': legalName,
     'tin': tin,
     'registration_no': registrationNo,
+    'old_registration_no': oldRegistrationNo,
     'id_type': idType,
     'id_value': idValue,
     'sst_registration_no': sstRegistrationNo,
@@ -322,7 +367,11 @@ class Contact {
     'country_code': countryCode,
     'currency': currency,
     'credit_limit': creditLimit,
+    'credit_hold': creditHold,
+    'receivable_account_id': receivableAccountId,
+    'payable_account_id': payableAccountId,
     'price_level_id': priceLevelId,
+    'custom_fields': customFields,
     'is_active': isActive,
     'entity_type': entityType,
   };
@@ -471,6 +520,10 @@ class FixedAsset {
     this.disposalDate,
     this.disposalProceeds,
     this.notes,
+    this.purchaseDocumentId,
+    this.purchaseDocNo,
+    this.supplierId,
+    this.supplierName,
   });
 
   final String id;
@@ -500,6 +553,19 @@ class FixedAsset {
   final DateTime? disposalDate;
   final double? disposalProceeds;
   final String? notes;
+
+  /// The bill this came from, and who it was bought from. Both were
+  /// columns nothing wrote until `0382`, so the register and the fixed
+  /// asset accounts in the ledger had no way to be compared — the
+  /// reconciliation an auditor opens with.
+  final String? purchaseDocumentId;
+  final String? purchaseDocNo;
+  final String? supplierId;
+  final String? supplierName;
+
+  /// Whether the cost in the register can be traced to a posted bill.
+  /// A typed-in asset is not wrong, but nothing can check it.
+  bool get isTraceable => purchaseDocumentId != null;
 
   double get netBookValue => cost - accumulatedDepreciation;
   bool get isDisposed => status == 'disposed';
@@ -537,8 +603,20 @@ class FixedAsset {
         ? null
         : Fmt.toDouble(j['disposal_proceeds']),
     notes: j['notes'] as String?,
+    purchaseDocumentId: j['purchase_document_id'] as String?,
+    purchaseDocNo: j['purchase_documents'] is Map
+        ? j['purchase_documents']['doc_no']?.toString()
+        : null,
+    supplierId: j['supplier_id'] as String?,
+    supplierName:
+        j['contacts'] is Map ? j['contacts']['name']?.toString() : null,
   );
 
+  // `purchase_document_id`, `purchase_line_id` and `supplier_id` are
+  // deliberately not sent. They are written once, by
+  // `capitalise_bill_line`, out of the row the asset came from; an
+  // editor that could change them afterwards could point an asset at a
+  // bill it did not come from, which is worse than pointing at none.
   Map<String, dynamic> toJson() => {
     'asset_no': assetNo,
     'name': name,
@@ -600,6 +678,8 @@ class Item {
     this.description,
     this.uomCode = 'C62',
     this.classificationCode = '022',
+    this.tariffCode,
+    this.countryOfOrigin,
     this.unitPrice = 0,
     this.costPrice = 0,
     this.quantityOnHand = 0,
@@ -612,6 +692,7 @@ class Item {
     this.purchaseTaxCodeId,
     this.categoryId,
     this.barcode,
+    this.customFields = const {},
   });
 
   final String id;
@@ -621,6 +702,15 @@ class Item {
   final String? description;
   final String uomCode;
   final String classificationCode;
+
+  /// The customs tariff / HS code, carried onto an e-Invoice line. NOT
+  /// [classificationCode], which is LHDN's list of what a purchase is
+  /// for relief purposes -- the two are constantly confused. 0636.
+  final String? tariffCode;
+
+  /// Where the goods were made. Null is unstated, and the UBL builder
+  /// then sends MYS as it always has.
+  final String? countryOfOrigin;
   final double unitPrice;
   final double costPrice;
   final double quantityOnHand;
@@ -638,6 +728,10 @@ class Item {
   final String? categoryId;
   final String? barcode;
 
+  /// The fields this company added for itself. 0542 gives them
+  /// definitions and a guard; what arrives here has been held to them.
+  final Map<String, dynamic> customFields;
+
   bool get isLowStock =>
       trackInventory && reorderLevel > 0 && quantityOnHand <= reorderLevel;
 
@@ -649,6 +743,8 @@ class Item {
     description: j['description'] as String?,
     uomCode: j['uom_code']?.toString() ?? 'C62',
     classificationCode: j['classification_code']?.toString() ?? '022',
+    tariffCode: j['tariff_code'] as String?,
+    countryOfOrigin: j['country_of_origin'] as String?,
     unitPrice: Fmt.toDouble(j['unit_price']),
     costPrice: Fmt.toDouble(j['cost_price']),
     quantityOnHand: Fmt.toDouble(j['quantity_on_hand']),
@@ -661,6 +757,9 @@ class Item {
     purchaseTaxCodeId: j['purchase_tax_code_id'] as String?,
     categoryId: j['category_id'] as String?,
     barcode: j['barcode'] as String?,
+    customFields: Map<String, dynamic>.from(
+      (j['custom_fields'] as Map?) ?? const {},
+    ),
   );
 
   Map<String, dynamic> toJson() => {
@@ -670,6 +769,8 @@ class Item {
     'description': description,
     'uom_code': uomCode,
     'classification_code': classificationCode,
+    'tariff_code': tariffCode,
+    'country_of_origin': countryOfOrigin,
     'unit_price': unitPrice,
     'cost_price': costPrice,
     'reorder_level': reorderLevel,
@@ -680,6 +781,7 @@ class Item {
     'purchase_tax_code_id': purchaseTaxCodeId,
     'category_id': categoryId,
     'barcode': barcode,
+    'custom_fields': customFields,
   };
 }
 
@@ -762,6 +864,7 @@ class TaxCode {
     required this.taxTypeCode,
     this.isDefault = false,
     this.isExempt = false,
+    this.exemptionReason,
   });
 
   final String id;
@@ -772,6 +875,11 @@ class TaxCode {
   final bool isDefault;
   final bool isExempt;
 
+  /// Why it is exempt, as a `ref_exemption_reasons` code. LHDN puts it
+  /// on the exempt line; `0015_einvoice_prepare` carries it through as
+  /// `tax_exemption_reason`.
+  final String? exemptionReason;
+
   factory TaxCode.fromJson(Map<String, dynamic> j) => TaxCode(
     id: j['id'] as String,
     code: j['code']?.toString() ?? '',
@@ -780,6 +888,7 @@ class TaxCode {
     taxTypeCode: j['tax_type_code']?.toString() ?? '06',
     isDefault: j['is_default'] == true,
     isExempt: j['is_exempt'] == true,
+    exemptionReason: j['exemption_reason'] as String?,
   );
 }
 
@@ -828,6 +937,29 @@ extension DocKindX on DocKind {
   String get lineTable =>
       isSales ? 'sales_document_lines' : 'purchase_document_lines';
 
+  /// The named embed for this kind's customer or supplier.
+  ///
+  /// Both document tables reach `contacts` twice: by `contact_id`, and by
+  /// the composite `(org_id, contact_id)` key 0512 added to hold every
+  /// document to its own company's contacts. PostgREST will not guess
+  /// between two relationships — it answers PGRST201 and refuses the
+  /// whole request — so the constraint is named here rather than at each
+  /// call site, which is how one of them was missed.
+  String get contactEmbed => isSales
+      ? 'contacts!sales_documents_contact_id_fkey'
+      : 'contacts!purchase_documents_contact_id_fkey';
+
+  /// The named embed for this kind's LINES.
+  ///
+  /// Same trap as [contactEmbed] and found the same way — in production,
+  /// on a screen. A line table reaches its document twice: by
+  /// `document_id`, and by the composite `(org_id, document_id)` key.
+  /// `${kind.lineTable}(*)` reads as an ordinary embed and is one
+  /// PostgREST refuses.
+  String get lineEmbed => isSales
+      ? 'sales_document_lines!sales_document_lines_document_id_fkey'
+      : 'purchase_document_lines!purchase_document_lines_document_id_fkey';
+
   /// Which contacts may be chosen on this kind of document.
   String get contactType => isSales ? 'customer' : 'supplier';
   String get contactLabel => isSales ? 'Customer' : 'Supplier';
@@ -849,6 +981,8 @@ class BusinessDocument {
     required this.contactId,
     this.contactName,
     this.dueDate,
+    this.validUntil,
+    this.deliveryDate,
     this.reference,
     this.supplierDocNo,
     this.currency = 'MYR',
@@ -857,6 +991,7 @@ class BusinessDocument {
     this.discountAmount = 0,
     this.taxAmount = 0,
     this.shippingAmount = 0,
+    this.serviceChargeAmount = 0,
     this.roundingAmount = 0,
     this.totalAmount = 0,
     this.paidAmount = 0,
@@ -864,6 +999,7 @@ class BusinessDocument {
     this.status = 'draft',
     this.fulfilmentStatus = 'pending',
     this.einvoiceStatus = 'not_applicable',
+    this.requiresSelfBilled = false,
     this.einvoiceId,
     this.glEntryId,
     this.notes,
@@ -871,6 +1007,7 @@ class BusinessDocument {
     this.paymentTermId,
     this.salespersonId,
     this.lines = const [],
+    this.customFields = const {},
   });
 
   final String id;
@@ -880,6 +1017,15 @@ class BusinessDocument {
   final String contactId;
   final String? contactName;
   final DateTime? dueDate;
+
+  /// The day a quotation's or proforma's price stops holding. `0374`
+  /// refuses to transfer an offer past it, which is why it is on the
+  /// model at all: a column since `0005` that nothing read.
+  final DateTime? validUntil;
+
+  /// The day delivery was promised, carried forward from the quotation
+  /// through the order to the delivery order.
+  final DateTime? deliveryDate;
   final String? reference;
 
   /// The supplier's own invoice number. Purchase documents only.
@@ -895,6 +1041,11 @@ class BusinessDocument {
   final double discountAmount;
   final double taxAmount;
   final double shippingAmount;
+
+  /// Ten per cent for the table. `0410` put it on `sales_documents` and
+  /// on the POS sale; it is a header amount like shipping, it is taxed,
+  /// and it posts to 4250 rather than to sales.
+  final double serviceChargeAmount;
   final double roundingAmount;
   final double totalAmount;
   final double paidAmount;
@@ -906,6 +1057,15 @@ class BusinessDocument {
   /// by the database from the lines that were transferred out of it.
   final String fulfilmentStatus;
   final String einvoiceStatus;
+
+  /// Whether this bill owes LHDN an e-Invoice that WE have to file.
+  ///
+  /// Where the seller cannot — a foreign supplier outside MyInvois, an
+  /// individual who is not registered — the buyer files one on their
+  /// behalf. `0611` sets it from the supplier's country on insert and
+  /// `set_requires_self_billed` lets somebody say otherwise. Meaningless
+  /// on a sales document, which is why nothing reads it there.
+  final bool requiresSelfBilled;
   final String? einvoiceId;
   final String? glEntryId;
   final String? notes;
@@ -919,11 +1079,30 @@ class BusinessDocument {
   final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
-  bool get isOverdue =>
-      balanceAmount > 0 &&
-      dueDate != null &&
-      dueDate!.isBefore(DateTime.now()) &&
-      status != 'void';
+  /// Overdue is STRICTLY before today, on the date and not the moment.
+  ///
+  /// This has to mean what `v_ar_aging` means, because that view is
+  /// what the aging report, the collections worklist and every
+  /// statement are built from:
+  ///
+  ///     when d.due_date is null or current_date <= d.due_date
+  ///       then 'current'
+  ///
+  /// `dueDate` comes from a date column and so is MIDNIGHT. Comparing
+  /// it to `DateTime.now()` made every invoice overdue from 00:01 on
+  /// the day it fell due, while the report beside it still said
+  /// current -- one day wide, every invoice, every day of the year.
+  /// `Todo.isOverdue` had it right and this did not.
+  bool get isOverdue {
+    final due = dueDate;
+    if (due == null || balanceAmount <= 0 || status == 'void') return false;
+    final today = DateTime.now();
+    return DateTime(due.year, due.month, due.day)
+        .isBefore(DateTime(today.year, today.month, today.day));
+  }
+
+  /// The fields this company added to a document.
+  final Map<String, dynamic> customFields;
 
   factory BusinessDocument.fromJson(Map<String, dynamic> j) {
     final contact = j['contacts'];
@@ -931,6 +1110,9 @@ class BusinessDocument {
     final rawLines =
         (j['sales_document_lines'] ?? j['purchase_document_lines']) as List?;
     return BusinessDocument(
+      customFields: Map<String, dynamic>.from(
+        (j['custom_fields'] as Map?) ?? const {},
+      ),
       id: j['id'] as String,
       docType: j['doc_type']?.toString() ?? 'invoice',
       docNo: j['doc_no']?.toString() ?? '',
@@ -938,6 +1120,8 @@ class BusinessDocument {
       contactId: j['contact_id']?.toString() ?? '',
       contactName: contact is Map ? contact['name'] as String? : null,
       dueDate: Fmt.parseDate(j['due_date']),
+      validUntil: Fmt.parseDate(j['valid_until']),
+      deliveryDate: Fmt.parseDate(j['delivery_date']),
       reference: j['reference'] as String?,
       supplierDocNo: j['supplier_doc_no'] as String?,
       currency: j['currency']?.toString() ?? 'MYR',
@@ -948,6 +1132,7 @@ class BusinessDocument {
       discountAmount: Fmt.toDouble(j['discount_amount']),
       taxAmount: Fmt.toDouble(j['tax_amount']),
       shippingAmount: Fmt.toDouble(j['shipping_amount']),
+      serviceChargeAmount: Fmt.toDouble(j['service_charge_amount']),
       roundingAmount: Fmt.toDouble(j['rounding_amount']),
       totalAmount: Fmt.toDouble(j['total_amount']),
       paidAmount: Fmt.toDouble(j['paid_amount']),
@@ -955,6 +1140,7 @@ class BusinessDocument {
       status: j['status']?.toString() ?? 'draft',
       fulfilmentStatus: j['fulfilment_status']?.toString() ?? 'pending',
       einvoiceStatus: j['einvoice_status']?.toString() ?? 'not_applicable',
+      requiresSelfBilled: j['requires_self_billed'] == true,
       einvoiceId: j['einvoice_id'] as String?,
       glEntryId: j['gl_entry_id'] as String?,
       notes: j['notes'] as String?,
@@ -994,6 +1180,7 @@ class DocumentLine {
     this.departmentCode,
     this.serviceStart,
     this.serviceEnd,
+    this.customFields = const {},
   });
 
   final String? id;
@@ -1039,7 +1226,13 @@ class DocumentLine {
   /// one without the other — so either answers the question.
   bool get isDeferred => serviceStart != null;
 
+  /// The fields this company added to a document line.
+  final Map<String, dynamic> customFields;
+
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
+    customFields: Map<String, dynamic>.from(
+      (j['custom_fields'] as Map?) ?? const {},
+    ),
     id: j['id'] as String?,
     lineNo: Fmt.toInt(j['line_no']),
     itemId: j['item_id'] as String?,
@@ -1139,6 +1332,8 @@ class Opportunity {
     this.status = 'open',
     this.expectedCloseDate,
     this.currency = 'MYR',
+    this.quotationId,
+    this.quotationNo,
   });
 
   final String id;
@@ -1154,6 +1349,15 @@ class Opportunity {
   final String status;
   final DateTime? expectedCloseDate;
   final String currency;
+
+  /// The quotation this deal was priced on. A column since `0008` with
+  /// a comment saying it is set when the deal is converted, and nothing
+  /// set it — so the forecast came off `amount` and the invoice off the
+  /// quotation, and the two never met.
+  final String? quotationId;
+  final String? quotationNo;
+
+  bool get isQuoted => quotationId != null;
 
   factory Opportunity.fromJson(Map<String, dynamic> j) {
     final contact = j['contacts'];
@@ -1171,6 +1375,10 @@ class Opportunity {
       status: j['status']?.toString() ?? 'open',
       expectedCloseDate: Fmt.parseDate(j['expected_close_date']),
       currency: j['currency']?.toString() ?? 'MYR',
+      quotationId: j['quotation_id'] as String?,
+      quotationNo: j['sales_documents'] is Map
+          ? j['sales_documents']['doc_no']?.toString()
+          : null,
     );
   }
 }
@@ -1225,6 +1433,140 @@ class DashboardSummary {
   int get lowStock => Fmt.toInt(_raw['low_stock']);
 }
 
+/// One item on the list a bookkeeper keeps beside the books.
+///
+/// 0526. Personal: a to-do belongs to one person at one company, and
+/// nothing here can name anybody else — the row is written with the
+/// signed-in user's own id and row level security refuses any other.
+class Todo {
+  Todo({
+    required this.id,
+    required this.title,
+    this.notes,
+    this.dueDate,
+    this.priority = 'normal',
+    this.doneAt,
+    this.link,
+  });
+
+  factory Todo.fromJson(Map<String, dynamic> json) => Todo(
+    id: json['id'] as String,
+    title: json['title'] as String? ?? '',
+    notes: json['notes'] as String?,
+    dueDate: json['due_date'] == null
+        ? null
+        : DateTime.parse(json['due_date'] as String),
+    priority: json['priority'] as String? ?? 'normal',
+    doneAt: json['done_at'] == null
+        ? null
+        : DateTime.parse(json['done_at'] as String),
+    link: json['link'] as String?,
+  );
+
+  final String id;
+  final String title;
+  final String? notes;
+  final DateTime? dueDate;
+
+  /// `low`, `normal` or `high`.
+  final String priority;
+
+  /// When it was cleared, or null while it is still open. A time rather
+  /// than a flag, so "what did I finish yesterday" has an answer.
+  final DateTime? doneAt;
+
+  /// Where in the app this is about, if anywhere.
+  final String? link;
+
+  bool get isDone => doneAt != null;
+
+  /// Overdue is STRICTLY before today. An item due today is due, not
+  /// late, and colouring it red at one minute past midnight is how a
+  /// list trains somebody to ignore the colour.
+  bool isOverdue(DateTime today) {
+    final due = dueDate;
+    if (due == null || isDone) return false;
+    return DateTime(
+      due.year,
+      due.month,
+      due.day,
+    ).isBefore(DateTime(today.year, today.month, today.day));
+  }
+}
+
+/// Where somebody lands when they sign in, and what they want on the
+/// dashboard. 0527. One row per person, not per company.
+class UserPreferences {
+  const UserPreferences({
+    this.landingRoute = '/dashboard',
+    this.dashboardCards = defaultDashboardCards,
+  });
+
+  factory UserPreferences.fromJson(Map<String, dynamic> json) =>
+      UserPreferences(
+        landingRoute: json['landing_route'] as String? ?? '/dashboard',
+        dashboardCards: [
+          for (final c in (json['dashboard_cards'] as List? ?? const []))
+            c as String,
+        ],
+      );
+
+  final String landingRoute;
+  final List<String> dashboardCards;
+
+  /// What a person who has never opened the settings screen gets.
+  /// Mirrors the column default in 0527; the two are asserted against
+  /// each other in `supabase/tests/user_preferences.sql` and
+  /// `app/test/landing_preference_test.dart`.
+  static const defaultDashboardCards = <String>[
+    'todos',
+    'ticker',
+    'metrics',
+    'trend',
+    'receivables',
+  ];
+
+  bool shows(String card) => dashboardCards.contains(card);
+}
+
+/// The pages somebody may choose to land on, and what to call them.
+///
+/// Deliberately a short list rather than every route in the app: a
+/// landing page is a place to START, and an editor for one document or
+/// a screen that needs an id is not one. Each is checked against the
+/// modules the company holds before it is offered.
+const landingChoices = <({String route, String label, String? module})>[
+  (route: '/dashboard', label: 'Dashboard', module: null),
+  (route: '/todos', label: 'To-do list', module: null),
+  (route: '/sales/invoice', label: 'Invoices', module: null),
+  (route: '/purchases/bill', label: 'Bills', module: 'purchases'),
+  (route: '/customers', label: 'Customers', module: null),
+  (route: '/expenses', label: 'Expenses', module: null),
+  (route: '/reports', label: 'Reports', module: null),
+  (route: '/pos', label: 'Point of sale', module: 'pos'),
+];
+
+/// The panels the dashboard can show, in the order they are offered.
+const dashboardCardChoices = <({String code, String label, String hint})>[
+  (
+    code: 'todos',
+    label: 'To-do list',
+    hint: 'What you have told yourself to do, soonest first',
+  ),
+  (
+    code: 'ticker',
+    label: 'Ticker',
+    hint: 'The day\'s figures, running across the top',
+  ),
+  (code: 'metrics', label: 'Key figures', hint: 'Revenue, profit, cash, debt'),
+  (code: 'trend', label: 'Revenue trend', hint: 'The last twelve months'),
+  (
+    code: 'receivables',
+    label: 'Who owes you',
+    hint: 'The oldest debts, and what is overdue',
+  ),
+];
+
 // =====================================================================
 // Access control
 // =====================================================================
@@ -1245,6 +1587,17 @@ const memberRoles = <String, ({String label, String description})>{
     label: 'Accountant',
     description: 'Prepares and posts to the ledger, closes periods',
   ),
+  // The role three migrations of HRMS assume exists and nothing could
+  // assign. `app.can_manage_hr` and `app.can_run_payroll` name it, 0119
+  // and 0121 route expense claims to it, and 0285 was written for
+  // exactly this person — "an owner running their own company, or an
+  // outsourced HR administrator". Without it here, payroll and leave
+  // approval could only ever be done by a company admin, which is the
+  // opposite of what a delegable HR role is for.
+  'hr_manager': (
+    label: 'HR Manager',
+    description: 'Employees, payroll, leave and claims; cannot open the ledger',
+  ),
   'accounts_clerk': (
     label: 'Accounts Clerk',
     description: 'Prepares documents but cannot post to the ledger',
@@ -1263,6 +1616,48 @@ const memberRoles = <String, ({String label, String description})>{
 };
 
 String roleLabel(String? role) => memberRoles[role]?.label ?? Fmt.label(role);
+
+/// The roles a company may hand to somebody, which is every role except
+/// ownership: that is transferred rather than granted, and offering it
+/// in a dropdown would make "make Siti the owner" a thing an admin
+/// could do to a company they do not own.
+///
+/// Stated once because it was stated twice — the invite dialog and the
+/// row's own dropdown each carried their own `e.key != 'owner'`, and two
+/// copies of a rule are two places for it to stop being true.
+///
+/// Deliberately *not* what an approval rule offers. `rule_editor` names
+/// a role that may approve, and an owner approving their own company's
+/// invoices is the ordinary case rather than a privilege escalation.
+Iterable<MapEntry<String, ({String label, String description})>>
+get assignableRoles => memberRoles.entries.where((e) => e.key != 'owner');
+
+/// Whether this row of the team list may be edited from it.
+///
+/// Three conditions, and each one prevents something different. Written
+/// out here rather than inside the row so that all three can be
+/// asserted, because a rule about who may change whose access is not
+/// one to discover was wrong.
+///
+///   * [canAdmin] — only an owner or a company admin changes anybody's
+///     access at all.
+///   * not [isSelf] — nobody edits their own row. An admin who demotes
+///     themselves by accident has locked the company out of its own
+///     administration, and there may be no one else who can undo it.
+///   * [role] is not `owner` — ownership is transferred deliberately
+///     and is not a line in a dropdown. Note that `assignableRoles`
+///     already withholds `owner` as a DESTINATION; this is the other
+///     direction, the owner as a subject.
+///
+/// The server refuses all three as well, and is the authority. This is
+/// what stops the screen offering a control whose only outcome is an
+/// error message.
+bool memberIsEditable({
+  required bool canAdmin,
+  required bool isSelf,
+  required String role,
+}) =>
+    canAdmin && !isSelf && role != 'owner';
 
 /// What an approval rule covers, in words. A null `docType` means every
 /// document of that kind, which is what the column's null means.
@@ -1412,16 +1807,49 @@ class ModuleSurface {
     required this.hidden,
     required this.visible,
     this.description,
+    this.promoPrice,
+    this.promotion,
+    this.promoKind,
+    this.promoDays,
+    this.promoUntil,
   });
 
   final String code;
   final String name;
   final String? description;
   final bool isCore;
+
+  /// What the price list says. Not necessarily what this company pays.
   final double monthlyPrice;
   final bool entitled;
   final bool hidden;
   final bool visible;
+
+  /// What this company would pay for it today, which is the list price
+  /// unless a promotion (0548) says otherwise. Null only for a surface
+  /// built by hand in a test.
+  final double? promoPrice;
+
+  /// The promotion's name, or null when the price is the list price.
+  /// Set together with [promoPrice] by the server, so `promotion !=
+  /// null` is the one test for "this is not the ordinary price".
+  final String? promotion;
+
+  /// `trial`, `free`, `percent_off` or `fixed_price`.
+  final String? promoKind;
+
+  /// How long a trial runs, in days. Null for every other kind.
+  final int? promoDays;
+
+  /// The day the promotion stops, when it has an end.
+  final DateTime? promoUntil;
+
+  /// What this company pays a month, promotion and all.
+  double get price => promotion == null ? monthlyPrice : (promoPrice ?? 0);
+
+  /// True when holding it costs nothing today -- either because it was
+  /// never priced, or because a promotion has taken the price off.
+  bool get isFreeNow => price <= 0;
 
   factory ModuleSurface.fromMap(Map<String, dynamic> j) => ModuleSurface(
     code: j['module_code'] as String,
@@ -1432,7 +1860,84 @@ class ModuleSurface {
     entitled: j['entitled'] == true,
     hidden: j['hidden'] == true,
     visible: j['visible'] == true,
+    promoPrice: j['promo_price'] == null
+        ? null
+        : Fmt.toDouble(j['promo_price']),
+    promotion: j['promotion'] as String?,
+    promoKind: j['promo_kind'] as String?,
+    promoDays: (j['promo_days'] as num?)?.toInt(),
+    promoUntil: DateTime.tryParse('${j['promo_until'] ?? ''}'),
   );
+}
+
+/// One add-on's share of the month, as the server pro-rated it.
+class ModuleCharge {
+  const ModuleCharge({
+    required this.code,
+    required this.name,
+    required this.days,
+    required this.daysInMonth,
+    required this.amount,
+    this.listAmount,
+    this.promotion,
+  });
+
+  factory ModuleCharge.fromMap(Map<String, dynamic> m) => ModuleCharge(
+    code: m['module_code'] as String? ?? '',
+    name: m['name'] as String? ?? '',
+    days: (m['days'] as num?)?.toInt() ?? 0,
+    daysInMonth: (m['days_in_month'] as num?)?.toInt() ?? 0,
+    amount: (m['amount'] as num?)?.toDouble() ?? 0,
+    listAmount: (m['list_amount'] as num?)?.toDouble(),
+    promotion: m['promotion'] as String?,
+  );
+
+  final String code;
+  final String name;
+  final int days;
+  final int daysInMonth;
+  final double amount;
+
+  /// What the same days would have come to at the price list, and the
+  /// name of the promotion that made them come to less (0548). A line
+  /// cheaper than the published price with nothing saying why is a
+  /// support ticket.
+  final double? listAmount;
+  final String? promotion;
+
+  /// True for a module that was not on for the whole month — the only
+  /// case where the days are worth showing. "31/31 days" beside a full
+  /// month's price is noise.
+  bool get isPartial => daysInMonth > 0 && days < daysInMonth;
+}
+
+/// The month in progress: what is on, and what it has cost so far.
+class SubscriptionMonth {
+  const SubscriptionMonth({
+    required this.month,
+    required this.lines,
+    required this.subtotal,
+    this.saved = 0,
+  });
+
+  factory SubscriptionMonth.fromMap(Map<String, dynamic> m) =>
+      SubscriptionMonth(
+        month: DateTime.tryParse(m['month'] as String? ?? ''),
+        lines: [
+          for (final l in (m['lines'] as List? ?? const []))
+            ModuleCharge.fromMap(Map<String, dynamic>.from(l as Map)),
+        ],
+        subtotal: (m['subtotal'] as num?)?.toDouble() ?? 0,
+        saved: (m['saved'] as num?)?.toDouble() ?? 0,
+      );
+
+  final DateTime? month;
+  final List<ModuleCharge> lines;
+  final double subtotal;
+
+  /// What the promotions came to this month: the price list less what
+  /// is actually being charged (0548).
+  final double saved;
 }
 
 class PlatformOrg {
@@ -1499,6 +2004,9 @@ class Matter {
     this.depositRequired = 0,
     this.openedDate,
     this.currency = 'MYR',
+    this.opposingParty,
+    this.feeEarner,
+    this.agreedFee,
   });
 
   final String id;
@@ -1516,6 +2024,19 @@ class Matter {
   final DateTime? openedDate;
   final String currency;
 
+  /// Who is on the other side. The column a conflict check reads, and
+  /// nothing wrote it before `0383` — so "do we act for the people this
+  /// file is against" had no answer in the data.
+  final String? opposingParty;
+
+  /// Who does the work, as against the responsible solicitor who
+  /// supervises it. An open file has one, because time is recorded by
+  /// whoever is signed in.
+  final String? feeEarner;
+
+  /// What a fixed-fee client was told it would cost.
+  final double? agreedFee;
+
   factory Matter.fromJson(Map<String, dynamic> j) {
     final client = j['contacts'];
     return Matter(
@@ -1528,6 +2049,10 @@ class Matter {
       matterType: j['matter_type'] as String?,
       practiceArea: j['practice_area'] as String?,
       courtReference: j['court_reference'] as String?,
+      opposingParty: j['opposing_party'] as String?,
+      feeEarner: j['fee_earner'] as String?,
+      agreedFee:
+          j['agreed_fee'] == null ? null : Fmt.toDouble(j['agreed_fee']),
       hourlyRate: Fmt.toDouble(j['hourly_rate']),
       estimatedFees: Fmt.toDouble(j['estimated_fees']),
       depositRequired: Fmt.toDouble(j['deposit_required']),
@@ -1677,17 +2202,26 @@ class Employee {
     this.employmentStatus = 'active',
     this.employmentType = 'full_time',
     this.hireDate,
+    this.lastWorkingDate,
     this.basicSalary = 0,
     this.nric,
     this.epfNo,
     this.socsoNo,
     this.incomeTaxNo,
+    this.cp38Monthly = 0,
+    this.zakatMonthly = 0,
+    this.epfVoluntaryEmployeeRate = 0,
+    this.epfVoluntaryEmployerRate = 0,
     this.bankName,
     this.bankAccountNo,
+    this.emergencyContactName,
+    this.emergencyContactPhone,
+    this.emergencyContactRelation,
     this.maritalStatus = 'single',
     this.residencyStatus = 'citizen',
     this.dateOfBirth,
     this.userId,
+    this.customFields = const {},
   });
 
   final String id;
@@ -1702,13 +2236,44 @@ class Employee {
   final String employmentStatus;
   final String employmentType;
   final DateTime? hireDate;
+
+  /// The day they last worked, and the only thing the payroll run reads
+  /// when deciding whether to pay somebody. `employment_status` is not
+  /// consulted by `calculate_payroll_run` at all, which is why `0371`
+  /// refuses to let the two say different things.
+  final DateTime? lastWorkingDate;
   final double basicSalary;
   final String? nric;
   final String? epfNo;
   final String? socsoNo;
   final String? incomeTaxNo;
+
+  /// What LHDN has directed be deducted on top of the month's PCB.
+  /// `calculate_payroll_run` deducts it and `post_payroll_run` remits
+  /// `pcb + cp38` together, and until this reached the editor there was
+  /// nowhere to put a CP38 direction when one arrived.
+  final double cp38Monthly;
+
+  /// Zakat deducted monthly, which is a rebate against PCB rather than
+  /// another deduction: the engine passes it into the PCB calculation.
+  /// Left at zero, a Muslim employee paying zakat over-pays PCB every
+  /// month of the year.
+  final double zakatMonthly;
+
+  /// Contributions above the statutory rate, as percentages of the EPF
+  /// wage. An employer contributing 15% rather than 13% enters 2 here,
+  /// not 0.02 — `epf_voluntary_employer_rate` is divided by 100.
+  final double epfVoluntaryEmployeeRate;
+  final double epfVoluntaryEmployerRate;
   final String? bankName;
   final String? bankAccountNo;
+
+  /// Who to call. Columns since `0025` that nothing wrote and nothing
+  /// read, so the register an employer is expected to keep had a hole
+  /// in it exactly where it is needed.
+  final String? emergencyContactName;
+  final String? emergencyContactPhone;
+  final String? emergencyContactRelation;
   final String maritalStatus;
   final String residencyStatus;
   final DateTime? dateOfBirth;
@@ -1718,10 +2283,16 @@ class Employee {
   /// no pay data — used to hide salary rather than show a false zero.
   bool get isDirectoryOnly => basicSalary == 0 && nric == null;
 
+  /// The fields this company added for itself.
+  final Map<String, dynamic> customFields;
+
   factory Employee.fromJson(Map<String, dynamic> j) {
     final dept = j['departments'];
     final pos = j['positions'];
     return Employee(
+      customFields: Map<String, dynamic>.from(
+        (j['custom_fields'] as Map?) ?? const {},
+      ),
       id: j['id'] as String,
       employeeNo: j['employee_no']?.toString() ?? '',
       fullName: j['full_name']?.toString() ?? '',
@@ -1738,13 +2309,24 @@ class Employee {
       employmentStatus: j['employment_status']?.toString() ?? 'active',
       employmentType: j['employment_type']?.toString() ?? 'full_time',
       hireDate: Fmt.parseDate(j['hire_date']),
+      lastWorkingDate: Fmt.parseDate(j['last_working_date']),
       basicSalary: Fmt.toDouble(j['basic_salary']),
       nric: j['nric']?.toString(),
       epfNo: j['epf_no']?.toString(),
       socsoNo: j['socso_no']?.toString(),
       incomeTaxNo: j['income_tax_no']?.toString(),
+      cp38Monthly: Fmt.toDouble(j['cp38_monthly']),
+      zakatMonthly: Fmt.toDouble(j['zakat_monthly']),
+      epfVoluntaryEmployeeRate:
+          Fmt.toDouble(j['epf_voluntary_employee_rate']),
+      epfVoluntaryEmployerRate:
+          Fmt.toDouble(j['epf_voluntary_employer_rate']),
       bankName: j['bank_name']?.toString(),
       bankAccountNo: j['bank_account_no']?.toString(),
+      emergencyContactName: j['emergency_contact_name']?.toString(),
+      emergencyContactPhone: j['emergency_contact_phone']?.toString(),
+      emergencyContactRelation:
+          j['emergency_contact_relation']?.toString(),
       maritalStatus: j['marital_status']?.toString() ?? 'single',
       residencyStatus: j['residency_status']?.toString() ?? 'citizen',
       dateOfBirth: Fmt.parseDate(j['date_of_birth']),
@@ -1766,6 +2348,8 @@ class AttendanceRecord {
     this.otMinutes = 0,
     this.clockInMethod,
     this.clockInAddress,
+    this.isAdjusted = false,
+    this.adjustmentReason,
   });
 
   final String id;
@@ -1779,6 +2363,12 @@ class AttendanceRecord {
   final int otMinutes;
   final String? clockInMethod;
   final String? clockInAddress;
+
+  /// Somebody in HR changed these times, and said why. 0363. The
+  /// question anybody asks about a corrected timesheet is not what it
+  /// says now.
+  final bool isAdjusted;
+  final String? adjustmentReason;
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
@@ -1797,6 +2387,8 @@ class AttendanceRecord {
           Fmt.toInt(j['ot_holiday_minutes']),
       clockInMethod: j['clock_in_method']?.toString(),
       clockInAddress: j['clock_in_address']?.toString(),
+      isAdjusted: j['is_adjusted'] == true,
+      adjustmentReason: j['adjustment_reason']?.toString(),
     );
   }
 }
@@ -1808,6 +2400,7 @@ class LeaveType {
     required this.name,
     this.isPaid = true,
     this.defaultDays = 0,
+    this.allowHalfDay = true,
   });
 
   final String id;
@@ -1816,12 +2409,20 @@ class LeaveType {
   final bool isPaid;
   final double defaultDays;
 
+  /// Whether this leave may be taken in half days. `0365` built the rule
+  /// and `0397` measured that nothing had ever set the flag it guards,
+  /// so the rule had never once been reached. Read here so the form can
+  /// stop offering what the database would refuse.
+  final bool allowHalfDay;
+
   factory LeaveType.fromJson(Map<String, dynamic> j) => LeaveType(
     id: j['id'] as String,
     code: j['code']?.toString() ?? '',
     name: j['name']?.toString() ?? '',
     isPaid: j['is_paid'] == true,
     defaultDays: Fmt.toDouble(j['default_days']),
+    // Absent means allowed, matching the column's own default.
+    allowHalfDay: j['allow_half_day'] != false,
   );
 }
 
@@ -1873,6 +2474,7 @@ class LeaveRequest {
     this.leaveTypeName,
     this.reason,
     this.decisionNote,
+    this.contactWhileAway,
   });
 
   final String id;
@@ -1885,6 +2487,13 @@ class LeaveRequest {
   final String? leaveTypeName;
   final String? reason;
   final String? decisionNote;
+
+  /// Where to reach this person while they are away. Unlike the dates,
+  /// this can change after the request is approved — the number given a
+  /// fortnight before departure is a hotel they have since left — so
+  /// `0395` gives it its own update path rather than widening the RLS
+  /// policy that rightly freezes everything else.
+  final String? contactWhileAway;
 
   factory LeaveRequest.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
@@ -1900,6 +2509,7 @@ class LeaveRequest {
       leaveTypeName: lt is Map ? lt['name'] as String? : null,
       reason: j['reason']?.toString(),
       decisionNote: j['decision_note']?.toString(),
+      contactWhileAway: j['contact_while_away']?.toString(),
     );
   }
 }
@@ -2379,6 +2989,7 @@ class Payslip {
     this.pcb = 0,
     this.zakat = 0,
     this.hrdf = 0,
+    this.hrdfWage = 0,
     this.otHours = 0,
     this.schedulesVerified = false,
     this.lines = const [],
@@ -2407,6 +3018,7 @@ class Payslip {
   final double pcb;
   final double zakat;
   final double hrdf;
+  final double hrdfWage;
   final double otHours;
   final bool schedulesVerified;
   final List<PayslipLine> lines;
@@ -2439,6 +3051,7 @@ class Payslip {
       pcb: Fmt.toDouble(j['pcb']) + Fmt.toDouble(j['cp38']),
       zakat: Fmt.toDouble(j['zakat']),
       hrdf: Fmt.toDouble(j['hrdf']),
+      hrdfWage: Fmt.toDouble(j['hrdf_wage']),
       otHours: Fmt.toDouble(j['ot_hours']),
       schedulesVerified: j['schedules_verified'] == true,
       lines: raw is List
@@ -2489,6 +3102,7 @@ class JobRequisition {
     this.salaryMin,
     this.salaryMax,
     this.applicantCount = 0,
+    this.raw = const {},
   });
 
   final String id;
@@ -2501,6 +3115,15 @@ class JobRequisition {
   final double? salaryMin;
   final double? salaryMax;
   final int applicantCount;
+
+  /// The row as it came back.
+  ///
+  /// The editor needs the columns this class does not model —
+  /// `hiring_manager_id`, `requirements`, `target_start_date`,
+  /// `opened_date` — and adding a field for each would grow the model
+  /// for one screen's benefit. Kept as the row so the editor reads what
+  /// it needs and the list goes on using the named fields.
+  final Map<String, dynamic> raw;
 
   factory JobRequisition.fromJson(Map<String, dynamic> j) {
     final dept = j['departments'];
@@ -2518,6 +3141,7 @@ class JobRequisition {
       applicantCount: apps is List && apps.isNotEmpty && apps.first is Map
           ? Fmt.toInt((apps.first as Map)['count'])
           : 0,
+      raw: j,
     );
   }
 }
@@ -2533,8 +3157,16 @@ class Applicant {
     this.expectedSalary,
     this.source,
     this.rating,
+    this.requisitionId,
     this.requisitionTitle,
     this.appliedAt,
+    this.nric,
+    this.currentEmployer,
+    this.noticePeriodDays,
+    this.referredBy,
+    this.referrerName,
+    this.hiredEmployeeId,
+    this.notes,
   });
 
   final String id;
@@ -2546,8 +3178,34 @@ class Applicant {
   final double? expectedSalary;
   final String? source;
   final int? rating;
+  final String? requisitionId;
   final String? requisitionTitle;
   final DateTime? appliedAt;
+  final String? nric;
+  final String? currentEmployer;
+
+  /// What they owe their current employer. A start date inside it is a
+  /// date they cannot make, which `hire_applicant` refuses unless
+  /// somebody says the notice has been waived.
+  final int? noticePeriodDays;
+
+  /// Who introduced them. A reference nothing wrote until `0381`, which
+  /// made an employee referral scheme unpayable from the data.
+  final String? referredBy;
+  final String? referrerName;
+
+  /// Set by `hire_applicant`, and the thing that stops the same person
+  /// being typed into the employee editor from the record beside it.
+  final String? hiredEmployeeId;
+  final String? notes;
+
+  bool get isHired => hiredEmployeeId != null;
+
+  /// The earliest day they could start, given the notice they owe.
+  DateTime? earliestStart(DateTime today) => noticePeriodDays == null ||
+          noticePeriodDays! <= 0
+      ? null
+      : DateTime(today.year, today.month, today.day + noticePeriodDays!);
 
   factory Applicant.fromJson(Map<String, dynamic> j) {
     final req = j['job_requisitions'];
@@ -2563,8 +3221,20 @@ class Applicant {
           : Fmt.toDouble(j['expected_salary']),
       source: j['source']?.toString(),
       rating: j['rating'] == null ? null : Fmt.toInt(j['rating']),
+      requisitionId: j['requisition_id'] as String?,
       requisitionTitle: req is Map ? req['title'] as String? : null,
       appliedAt: Fmt.parseDate(j['applied_at']),
+      nric: j['nric']?.toString(),
+      currentEmployer: j['current_employer']?.toString(),
+      noticePeriodDays: j['notice_period_days'] == null
+          ? null
+          : Fmt.toInt(j['notice_period_days']),
+      referredBy: j['referred_by'] as String?,
+      referrerName: j['referrer'] is Map
+          ? j['referrer']['full_name']?.toString()
+          : null,
+      hiredEmployeeId: j['hired_employee_id'] as String?,
+      notes: j['notes']?.toString(),
     );
   }
 }
@@ -2573,47 +3243,188 @@ class Appraisal {
   Appraisal({
     required this.id,
     required this.status,
+    required this.employeeId,
+    this.reviewerId,
+    this.cycleId,
     this.employeeName,
     this.reviewerName,
     this.cycleName,
+    this.ratingScaleMax = 5,
+    this.selfReviewDue,
+    this.managerReviewDue,
     this.selfRating,
+    this.selfComments,
+    this.selfSubmittedAt,
     this.managerRating,
+    this.managerComments,
+    this.managerSubmittedAt,
     this.finalRating,
+    this.calibrationNote,
+    this.completedAt,
     this.recommendedIncrement,
+    this.recommendedBonus,
+    this.promotionRecommended = false,
+    this.developmentPlan,
   });
 
   final String id;
   final String status;
+
+  /// Who is being appraised, and who writes the manager half. Both are
+  /// needed to work out which part the person reading this holds — see
+  /// `features/hr/appraisal_part.dart`, and `0379` for the rule the
+  /// database enforces.
+  final String employeeId;
+  final String? reviewerId;
+  final String? cycleId;
   final String? employeeName;
   final String? reviewerName;
   final String? cycleName;
+
+  /// The cycle's own scale. A 1-5 cycle and a 1-10 cycle coexist, and a
+  /// rating outside its own scale means nothing to whoever reads it
+  /// next year.
+  final int ratingScaleMax;
+  final DateTime? selfReviewDue;
+  final DateTime? managerReviewDue;
+
   final double? selfRating;
+  final String? selfComments;
+  final DateTime? selfSubmittedAt;
   final double? managerRating;
+  final String? managerComments;
+  final DateTime? managerSubmittedAt;
   final double? finalRating;
+  final String? calibrationNote;
+  final DateTime? completedAt;
+
   final double? recommendedIncrement;
+  final double? recommendedBonus;
+  final bool promotionRecommended;
+  final String? developmentPlan;
+
+  bool get selfSubmitted => selfSubmittedAt != null;
+  bool get managerSubmitted => managerSubmittedAt != null;
+  bool get isComplete => completedAt != null;
 
   factory Appraisal.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
+    final rev = j['reviewer'];
     final cyc = j['appraisal_cycles'];
+    double? num_(String key) =>
+        j[key] == null ? null : Fmt.toDouble(j[key]);
+    DateTime? when(Map? m, String key) {
+      final raw = (m ?? j)[key];
+      return raw == null ? null : DateTime.tryParse(raw.toString());
+    }
+
     return Appraisal(
       id: j['id'] as String,
       status: j['status']?.toString() ?? 'draft',
+      employeeId: j['employee_id'] as String,
+      reviewerId: j['reviewer_id'] as String?,
+      cycleId: j['cycle_id'] as String?,
       employeeName: emp is Map ? emp['full_name'] as String? : null,
+      reviewerName: rev is Map ? rev['full_name'] as String? : null,
       cycleName: cyc is Map ? cyc['name'] as String? : null,
-      selfRating: j['self_rating'] == null
-          ? null
-          : Fmt.toDouble(j['self_rating']),
-      managerRating: j['manager_rating'] == null
-          ? null
-          : Fmt.toDouble(j['manager_rating']),
-      finalRating: j['final_rating'] == null
-          ? null
-          : Fmt.toDouble(j['final_rating']),
-      recommendedIncrement: j['recommended_increment_percent'] == null
-          ? null
-          : Fmt.toDouble(j['recommended_increment_percent']),
+      ratingScaleMax:
+          cyc is Map ? (cyc['rating_scale_max'] as num?)?.toInt() ?? 5 : 5,
+      selfReviewDue: cyc is Map ? when(cyc, 'self_review_due') : null,
+      managerReviewDue: cyc is Map ? when(cyc, 'manager_review_due') : null,
+      selfRating: num_('self_rating'),
+      selfComments: j['self_comments'] as String?,
+      selfSubmittedAt: when(null, 'self_submitted_at'),
+      managerRating: num_('manager_rating'),
+      managerComments: j['manager_comments'] as String?,
+      managerSubmittedAt: when(null, 'manager_submitted_at'),
+      finalRating: num_('final_rating'),
+      calibrationNote: j['calibration_note'] as String?,
+      completedAt: when(null, 'completed_at'),
+      recommendedIncrement: num_('recommended_increment_percent'),
+      recommendedBonus: num_('recommended_bonus'),
+      promotionRecommended: j['promotion_recommended'] == true,
+      developmentPlan: j['development_plan'] as String?,
     );
   }
+}
+
+/// A round of appraisals: the period reviewed, the scale it is scored
+/// out of, and the two days the halves are due.
+class AppraisalCycle {
+  AppraisalCycle({
+    required this.id,
+    required this.name,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.status,
+    required this.ratingScaleMax,
+    this.selfReviewDue,
+    this.managerReviewDue,
+    this.opened = 0,
+  });
+
+  final String id;
+  final String name;
+  final DateTime periodStart;
+  final DateTime periodEnd;
+  final String status;
+  final int ratingScaleMax;
+  final DateTime? selfReviewDue;
+  final DateTime? managerReviewDue;
+
+  /// How many appraisals the cycle has open, so the button can say
+  /// whether opening it would do anything.
+  final int opened;
+
+  factory AppraisalCycle.fromJson(Map<String, dynamic> j) {
+    DateTime? when(String key) =>
+        j[key] == null ? null : DateTime.tryParse(j[key].toString());
+    final counted = j['appraisals'];
+    return AppraisalCycle(
+      id: j['id'] as String,
+      name: j['name']?.toString() ?? '',
+      periodStart: when('period_start') ?? DateTime.now(),
+      periodEnd: when('period_end') ?? DateTime.now(),
+      status: j['status']?.toString() ?? 'draft',
+      ratingScaleMax: (j['rating_scale_max'] as num?)?.toInt() ?? 5,
+      selfReviewDue: when('self_review_due'),
+      managerReviewDue: when('manager_review_due'),
+      opened: counted is List && counted.isNotEmpty
+          ? (counted.first['count'] as num?)?.toInt() ?? 0
+          : 0,
+    );
+  }
+}
+
+/// A row of `report_appraisals_due`: who is late, on which half.
+class AppraisalDue {
+  AppraisalDue({
+    required this.appraisalId,
+    required this.cycleName,
+    required this.employeeName,
+    required this.waitingOn,
+    required this.dueOn,
+    required this.daysLate,
+    this.reviewerName,
+  });
+
+  final String appraisalId;
+  final String cycleName;
+  final String employeeName;
+  final String? reviewerName;
+  final String waitingOn;
+  final DateTime dueOn;
+  final int daysLate;
+
+  factory AppraisalDue.fromJson(Map<String, dynamic> j) => AppraisalDue(
+        appraisalId: j['appraisal_id'] as String,
+        cycleName: j['cycle_name']?.toString() ?? '',
+        employeeName: j['employee_name']?.toString() ?? '',
+        reviewerName: j['reviewer_name'] as String?,
+        waitingOn: j['waiting_on']?.toString() ?? '',
+        dueOn: DateTime.parse(j['due_on'].toString()),
+        daysLate: (j['days_late'] as num?)?.toInt() ?? 0,
+      );
 }
 
 /// An auditor's request to read payslips, and the admin decision on it.
@@ -2733,4 +3544,106 @@ class PayslipAccessLogEntry {
       ipAddress: j['ip_address']?.toString(),
     );
   }
+}
+
+
+/// The short lists `Repo.createQuickRow` may add a row to.
+///
+/// An enum rather than a table name, so a typo is a compile error and
+/// not a 404 at the moment somebody is mid-invoice. Every one of these
+/// tables requires exactly `org_id`, `code` and `name` — `pipelines`
+/// requires no code — and nothing else, which is what makes one writer
+/// honest for all of them.
+enum QuickAddList {
+  project,
+  department,
+  priceLevel,
+  leaveType,
+  claimType,
+  ticketCategory,
+  outlet,
+  pipeline,
+}
+
+const quickAddTables = <QuickAddList, String>{
+  QuickAddList.project: 'projects',
+  QuickAddList.department: 'departments',
+  QuickAddList.priceLevel: 'price_levels',
+  QuickAddList.leaveType: 'leave_types',
+  QuickAddList.claimType: 'claim_types',
+  QuickAddList.ticketCategory: 'ticket_categories',
+  QuickAddList.outlet: 'pos_outlets',
+  QuickAddList.pipeline: 'pipelines',
+};
+
+/// Which of them have a code column. `pipelines` does not.
+const quickAddHasCode = <QuickAddList, bool>{
+  QuickAddList.project: true,
+  QuickAddList.department: true,
+  QuickAddList.priceLevel: true,
+  QuickAddList.leaveType: true,
+  QuickAddList.claimType: true,
+  QuickAddList.ticketCategory: true,
+  QuickAddList.outlet: true,
+  QuickAddList.pipeline: false,
+};
+
+/// One of a company's own payment methods.
+///
+/// `0635`. Not to be confused with `ref_payment_modes`, which holds
+/// LHDN's eight codes and is platform-wide. This is "Maybank cheque",
+/// "Stripe", "Cash at the counter" — several of which report as the
+/// same LHDN code, and which differ in the two things LHDN does not
+/// ask about and the ledger does: where the money lands, and what the
+/// provider keeps.
+class PaymentMethod {
+  PaymentMethod({
+    required this.id,
+    required this.name,
+    this.paymentModeCode,
+    this.bankAccountId,
+    this.chargeAccountId,
+    this.chargePercent = 0,
+    this.chargeFixed = 0,
+    this.isDefault = false,
+    this.isActive = true,
+    this.sortOrder = 0,
+    this.notes,
+  });
+
+  final String id;
+  final String name;
+
+  /// The `ref_payment_modes` code an e-Invoice reports this as. Null
+  /// for a company not yet on e-Invoice, which has no reason to be
+  /// asked.
+  final String? paymentModeCode;
+
+  final String? bankAccountId;
+
+  /// Where this method's bank charge is debited. Null is not a gap to
+  /// be filled: it means "use the company's", and the database
+  /// resolves it to the default method's account and then to 6300.
+  final String? chargeAccountId;
+
+  final double chargePercent;
+  final double chargeFixed;
+  final bool isDefault;
+  final bool isActive;
+  final int sortOrder;
+  final String? notes;
+
+  factory PaymentMethod.fromJson(Map<String, dynamic> j) => PaymentMethod(
+    id: j['id'] as String,
+    name: j['name']?.toString() ?? '',
+    paymentModeCode: j['payment_mode_code'] as String?,
+    bankAccountId: j['bank_account_id'] as String?,
+    chargeAccountId: j['charge_account_id'] as String?,
+    chargePercent: Fmt.toDouble(j['charge_percent']),
+    chargeFixed: Fmt.toDouble(j['charge_fixed']),
+    isDefault: j['is_default'] == true,
+    isActive: j['is_active'] != false,
+    sortOrder: (j['sort_order'] as num?)?.toInt() ?? 0,
+    notes: j['notes'] as String?,
+  );
 }

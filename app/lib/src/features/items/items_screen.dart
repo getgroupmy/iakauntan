@@ -1,16 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/quick_add_dialog.dart';
+import '../../core/row_actions.dart';
+import '../../core/searchable_picker.dart';
+
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../data/repository.dart';
+import '../settings/tax_code_dialog.dart';
+import 'item_categories.dart';
+import 'item_categories_dialog.dart';
 import 'item_prices_dialog.dart';
+import 'item_packs_dialog.dart';
 import 'item_variants_dialog.dart';
 import 'modifier_groups_dialog.dart';
+import '../../data/places_repository.dart';
 import 'stock_card_dialog.dart';
+import 'tariff_code.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
@@ -26,7 +37,13 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   Widget build(BuildContext context) {
     final items = ref.watch(itemsProvider(_search));
     final canWrite = ref.watch(canWriteProvider);
-    final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
+    // `valueOrNull` throughout this file. `?? const <String>{}` is
+    // "no modules", which is the right answer while the list loads
+    // AND if it failed -- the screen simply offers less. `.value`
+    // threw instead, taking the Items screen down over a module list
+    // that only decides which buttons are in the app bar.
+    final modules =
+        ref.watch(enabledModulesProvider).valueOrNull ?? const <String>{};
 
     return Scaffold(
       appBar: AppBar(
@@ -40,6 +57,12 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
               tooltip: 'Questions a dish comes with',
               icon: const Icon(Icons.help_outline, size: 20),
               onPressed: () => showModifierGroups(context),
+            ),
+          if (canWrite)
+            IconButton(
+              tooltip: 'Categories',
+              icon: const Icon(Icons.folder_outlined, size: 20),
+              onPressed: () => showItemCategories(context),
             ),
           if (canWrite)
             IconButton(
@@ -122,46 +145,16 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                 subtitle: Text(
                   '${item.code} · ${Fmt.label(item.itemType)}'
                   '${item.trackInventory ? ' · ${Fmt.qty(item.quantityOnHand)} ${item.uomCode} on hand' : ''}',
+                  // Belt and braces beside the narrow layout below. A
+                  // subtitle with no line limit, given a column two
+                  // pixels wide, wraps ONE CHARACTER AT A TIME — which
+                  // is exactly what was reported. Capped, the worst a
+                  // future trailing can do is an ellipsis.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
                 ),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Money(item.unitPrice, bold: true),
-                  // Not gated on canWrite: the card changes nothing, and
-                  // the person who has to answer for what is on the shelf
-                  // is often not the person who may edit prices.
-                  if (item.trackInventory) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      key: ValueKey('stock-card-${item.id}'),
-                      onPressed: () => showStockCard(context, item),
-                      child: const Text('Stock card'),
-                    ),
-                  ],
-                  if (canWrite) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      onPressed: () => showItemPrices(context, item),
-                      child: const Text('Prices'),
-                    ),
-                  ],
-                  // Offered on things that sit on a shelf. A variant is
-                  // an item of its own — 0211's whole point — so this is
-                  // where "the same shirt in six sizes" becomes six
-                  // rows that stock and costing can actually see.
-                  //
-                  // Not hidden for an item that is already a variant of
-                  // something: the model does not carry the parent, and
-                  // the server refuses that case by name rather than
-                  // leaving somebody to guess why a button did nothing.
-                  if (canWrite && item.trackInventory) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      key: ValueKey('variants-${item.id}'),
-                      onPressed: () => showItemVariants(context, item),
-                      child: const Text('Variants'),
-                    ),
-                  ],
-                ]),
+                trailing: itemRowTrailing(context, item, canWrite: canWrite),
               );
             },
           );
@@ -177,6 +170,69 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
     );
   }
 }
+
+
+/// What a row offers to do with the item beside it.
+///
+/// Pure and separate from the widget so the SET can be asserted, and
+/// so the wide layout and the narrow one cannot drift apart — they are
+/// two renderings of one list, not two lists.
+///
+///   * The STOCK CARD is not gated on `canWrite`: it changes nothing,
+///     and the person who has to answer for what is on the shelf is
+///     often not the person who may edit prices.
+///   * VARIANTS and PACKS are offered on things that sit on a shelf. A
+///     variant is an item of its own — 0211's whole point — so that is
+///     where "the same shirt in six sizes" becomes six rows stock and
+///     costing can see. Neither is hidden for an item that is already
+///     a variant: the model does not carry the parent, and the server
+///     refuses that case by name rather than leaving somebody to guess
+///     why a button did nothing.
+///   * PACKS is how big a carton is. The reference table leaves
+///     packaging units out on purpose, so until a shop says, a quantity
+///     written in cartons has nothing to convert by.
+List<RowAction> itemRowActions(
+  BuildContext context,
+  Item item, {
+  required bool canWrite,
+}) => [
+  if (item.trackInventory)
+    RowAction(
+      actionKey: 'stock-card-${item.id}',
+      label: 'Stock card',
+      onTap: () => showStockCard(context, item),
+    ),
+  if (canWrite)
+    RowAction(
+      actionKey: 'prices-${item.id}',
+      label: 'Prices',
+      onTap: () => showItemPrices(context, item),
+    ),
+  if (canWrite && item.trackInventory) ...[
+    RowAction(
+      actionKey: 'variants-${item.id}',
+      label: 'Variants',
+      onTap: () => showItemVariants(context, item),
+    ),
+    RowAction(
+      actionKey: 'packs-${item.id}',
+      label: 'Packs',
+      onTap: () => showItemPacks(context, item),
+    ),
+  ],
+];
+
+/// The price and the row's actions, for a caller that has its own
+/// `ListTile` — the items list, and the test that pins the layout.
+Widget itemRowTrailing(
+  BuildContext context,
+  Item item, {
+  required bool canWrite,
+}) => RowActions(
+  menuKey: 'item-actions-${item.id}',
+  leading: Money(item.unitPrice, bold: true),
+  actions: itemRowActions(context, item, canWrite: canWrite),
+);
 
 class _ItemDialog extends ConsumerStatefulWidget {
   const _ItemDialog({this.item});
@@ -198,7 +254,11 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   late String _itemType;
   late String _uom;
   late String _classification;
+  late final TextEditingController _tariff = TextEditingController();
+  String? _countryOfOrigin;
   String? _salesTaxCodeId;
+  String? _categoryId;
+  Map<String, dynamic> _customFields = const {};
   bool _trackInventory = true;
   String _tracking = 'none';
   bool _saving = false;
@@ -221,7 +281,11 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     _itemType = i?.itemType ?? 'stock';
     _uom = i?.uomCode ?? 'C62';
     _classification = i?.classificationCode ?? '022';
+    _tariff.text = i?.tariffCode ?? '';
+    _countryOfOrigin = i?.countryOfOrigin;
     _salesTaxCodeId = i?.salesTaxCodeId;
+    _categoryId = i?.categoryId;
+    _customFields = i?.customFields ?? const {};
     _trackInventory = i?.trackInventory ?? true;
     _tracking = i?.tracking ?? 'none';
     if (i == null) _suggestCode();
@@ -253,7 +317,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
 
   @override
   void dispose() {
-    for (final c in [_code, _name, _price, _cost, _reorder]) {
+    for (final c in [_code, _name, _price, _cost, _reorder, _tariff]) {
       c.dispose();
     }
     super.dispose();
@@ -264,7 +328,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     setState(() => _saving = true);
 
     final posOn =
-        (ref.read(enabledModulesProvider).value ?? const <String>{})
+        (ref.read(enabledModulesProvider).valueOrNull ?? const <String>{})
             .contains('pos');
 
     final ok = await runWithFeedback(
@@ -279,12 +343,18 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
             itemType: _itemType,
             uomCode: _uom,
             classificationCode: _classification,
+            tariffCode: _tariff.text.trim().isEmpty
+                ? null
+                : _tariff.text.trim(),
+            countryOfOrigin: _countryOfOrigin,
             unitPrice: double.tryParse(_price.text) ?? 0,
             costPrice: double.tryParse(_cost.text) ?? 0,
             reorderLevel: double.tryParse(_reorder.text) ?? 0,
             trackInventory: _itemType == 'stock' && _trackInventory,
             tracking: _trackInventory ? _tracking : 'none',
             salesTaxCodeId: _salesTaxCodeId,
+            categoryId: _categoryId,
+            customFields: _customFields,
           ),
           id: widget.item?.id,
         );
@@ -307,11 +377,12 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final taxCodes = ref.watch(taxCodesProvider).value ?? const <TaxCode>[];
-    final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
-    final uoms = ref.watch(_uomProvider).value ?? const [];
+    final modules =
+        ref.watch(enabledModulesProvider).valueOrNull ?? const <String>{};
+    final uoms = ref.watch(_uomProvider).valueOrNull ?? const [];
     final classifications =
-        ref.watch(classificationCodesProvider).value ?? const [];
+        ref.watch(classificationCodesProvider).valueOrNull ?? const [];
+    final countries = ref.watch(countriesProvider).valueOrNull ?? const [];
 
     return AlertDialog(
       title: Text(widget.item == null ? 'New item' : 'Edit item'),
@@ -335,6 +406,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _itemType,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: const [
@@ -378,53 +450,144 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   ),
                 ]),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _salesTaxCodeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Sales tax code'),
-                  items: [
-                    for (final t in taxCodes)
-                      DropdownMenuItem(
-                        value: t.id,
-                        child: Text('${t.code} — ${t.name}'),
+                // Filed under. `items.category_id` has been on the
+                // table since 0003 and this is the first field that
+                // ever set it — until now every item anybody typed was
+                // filed under nothing.
+                Consumer(
+                  builder: (context, ref, _) {
+                    final all =
+                        ref.watch(itemCategoriesProvider).valueOrNull ??
+                        const <Map<String, dynamic>>[];
+                    return SearchablePicker<String>(
+                      options: [
+                        for (final c in all)
+                          PickerOption<String>(
+                            value: c['id'] as String,
+                            label: categoryPath(all, c['id'] as String?),
+                          ),
+                      ],
+                      value: all.any((c) => c['id'] == _categoryId)
+                          ? _categoryId
+                          : null,
+                      label: 'Filed under',
+                      helperText: 'How a kitchen sends every drink to one '
+                          'counter without naming them one at a time.',
+                      allowEmpty: true,
+                      emptyLabel: 'Nothing in particular',
+                      createLabel: 'Add category',
+                      onCreate: (typed) => quickAdd(
+                        context,
+                        title: 'New category',
+                        blurb: 'Not on the list yet. It will be a '
+                            'top-level category; move it under another '
+                            'on the Categories screen.',
+                        nameHint: 'Drinks',
+                        codeLabel: 'Code',
+                        seed: typed,
+                        save: ({required name, code}) async {
+                          final id = await ref
+                              .read(repoProvider)!
+                              .saveItemCategory(code: code!, name: name);
+                          ref.invalidate(itemCategoriesProvider);
+                          return id;
+                        },
                       ),
-                  ],
+                      onChanged: (v) => setState(() => _categoryId = v),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                TaxCodePicker(
+                  value: _salesTaxCodeId,
+                  label: 'Sales tax code',
+                  allowEmpty: true,
+                  emptyLabel: 'The company default',
                   onChanged: (v) => setState(() => _salesTaxCodeId = v),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _uom,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Unit of measure'),
-                  items: [
+                // A hundred-odd UN/CEFACT codes. Somebody looking for
+                // "kilogram" should type it rather than hunt for KGM.
+                // Reference data, so no offer to add one.
+                SearchablePicker<String>(
+                  options: [
                     for (final u in uoms)
-                      DropdownMenuItem(
+                      PickerOption(
                         value: u['code'] as String,
-                        child: Text('${u['code']} — ${u['name']}'),
+                        label: '${u['code']} — ${u['name']}',
+                        keywords: ['${u['code']}', '${u['name']}'],
                       ),
                   ],
+                  value: _uom,
+                  label: 'Unit of measure',
                   onChanged: (v) => setState(() => _uom = v ?? 'C62'),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _classification,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'e-Invoice classification',
-                    helperText: 'LHDN requires this on every invoice line',
-                  ),
-                  items: [
+                // LHDN's classification list, which is long and which
+                // nobody remembers by number. Searchable on the
+                // DESCRIPTION as well, because "software" is what
+                // somebody knows and 022 is what the invoice needs.
+                SearchablePicker<String>(
+                  options: [
                     for (final c in classifications)
-                      DropdownMenuItem(
+                      PickerOption(
                         value: c['code'] as String,
-                        child: Text(
-                          '${c['code']} — ${c['description']}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: '${c['code']} — ${c['description']}',
+                        keywords: ['${c['code']}', '${c['description']}'],
                       ),
                   ],
+                  value: _classification,
+                  label: 'e-Invoice classification',
+                  helperText: 'LHDN requires this on every invoice line',
                   onChanged: (v) => setState(() => _classification = v ?? '022'),
                 ),
+                const SizedBox(height: 12),
+                // Right under the classification, because the two are
+                // adjacent in meaning and are constantly taken for each
+                // other -- our own gap analysis conflated them. The
+                // classification says what a purchase IS for relief
+                // purposes; this says what it is to customs. Optional,
+                // and blank is the honest answer for a service.
+                Row(children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      key: const ValueKey('item-tariff-code'),
+                      controller: _tariff,
+                      decoration: const InputDecoration(
+                        labelText: 'Tariff / HS code',
+                        hintText: '4001.10.10',
+                        helperText: 'Customs, not the classification above',
+                      ),
+                      validator: (v) => tariffCodeProblem(v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SearchablePicker<String>(
+                      key: const ValueKey('item-country-of-origin'),
+                      options: [
+                        for (final c in countries)
+                          PickerOption(
+                            value: c['code'] as String,
+                            label: c['name']?.toString() ?? '',
+                            keywords: [
+                              '${c['code']}',
+                              '${c['name']}',
+                            ],
+                          ),
+                      ],
+                      value: _countryOfOrigin,
+                      label: 'Made in',
+                      allowEmpty: true,
+                      // Not "None". An unstated origin is not a claim
+                      // that the goods have none, and ubl.ts sends MYS
+                      // when this is blank.
+                      emptyLabel: 'Not stated',
+                      onChanged: (v) => setState(() => _countryOfOrigin = v),
+                    ),
+                  ),
+                ]),
                 // Only for a company that runs a till. A question a
                 // plate comes with is a POS idea, and an accounting-only
                 // company has nothing to attach.
@@ -435,6 +598,11 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                     onChanged: (v) => setState(() => _modifierGroups = v),
                   ),
                 ],
+                CustomFieldsSection(
+                  entity: 'item',
+                  values: _customFields,
+                  onChanged: (v) => setState(() => _customFields = v),
+                ),
                 if (_itemType == 'stock') ...[
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -447,6 +615,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   if (_trackInventory) ...[
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _tracking,
                       decoration: const InputDecoration(
                         labelText: 'Identify each unit',

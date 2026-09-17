@@ -18,6 +18,54 @@ import '../../data/models.dart';
 /// [mode] can leave the top of the page clear for pre-printed stationery.
 /// The registration numbers move down the page rather than disappearing,
 /// because the Act asks for them on the invoice and not on the paper.
+/// One row per figure between the line table and the Total, in the
+/// order a Malaysian bill puts them.
+///
+/// A function rather than a block of widgets so that the thing the paper
+/// claims can be asserted: **these rows, added up, are `totalAmount`**.
+/// `invoice_totals_add_up_test.dart` checks exactly that, on a document
+/// with every one of these fields set at once.
+///
+/// It is written that way because the other kind of test does not catch
+/// the failure that happens. `0410` added `service_charge_amount` to
+/// `sales_documents` -- taxed it, posted it to 4250, put it in the
+/// total -- and this block was not told. A restaurant's invoice then
+/// printed
+///
+///     Subtotal   100.00
+///     Tax          8.80
+///     Total      118.80
+///
+/// which is a tax invoice a customer's accounts department cannot
+/// reconcile and an auditor will ask about. Nothing failed: the PDF
+/// still rendered, and the tests on it assert that it is a PDF.
+///
+/// So the next money column added to the header fails the identity here
+/// whether or not anybody remembers this file.
+///
+/// A zero row is dropped, because a bill listing "Shipping 0.00" is
+/// noise -- except `Subtotal`, which is always shown, and `Discount`,
+/// which is shown as the negative it is.
+List<({String label, double amount})> invoiceTotalRows(BusinessDocument doc) {
+  return [
+    (label: 'Subtotal', amount: doc.subtotal),
+    if (doc.discountAmount != 0)
+      (label: 'Discount', amount: -doc.discountAmount),
+    if (doc.shippingAmount != 0)
+      (label: 'Shipping', amount: doc.shippingAmount),
+    // Above the tax, because the tax is charged on it: service tax is
+    // eight per cent of the food *plus* the charge, and a bill that
+    // prints the charge below the tax states the opposite.
+    if (doc.serviceChargeAmount != 0)
+      (label: 'Service charge', amount: doc.serviceChargeAmount),
+    if (doc.taxAmount != 0) (label: 'Tax', amount: doc.taxAmount),
+    // Malaysia rounds cash settlement to the nearest 5 sen and the
+    // adjustment is shown, not folded into the total.
+    if (doc.roundingAmount != 0)
+      (label: 'Rounding', amount: doc.roundingAmount),
+  ];
+}
+
 Future<Uint8List> buildInvoicePdf({
   required Organization org,
   required BusinessDocument doc,
@@ -116,20 +164,8 @@ Future<Uint8List> buildInvoicePdf({
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                kit.amountRow('Subtotal', doc.subtotal,
-                    currency: doc.currency),
-                if (doc.discountAmount != 0)
-                  kit.amountRow('Discount', -doc.discountAmount,
-                      currency: doc.currency),
-                if (doc.shippingAmount != 0)
-                  kit.amountRow('Shipping', doc.shippingAmount,
-                      currency: doc.currency),
-                if (doc.taxAmount != 0)
-                  kit.amountRow('Tax', doc.taxAmount, currency: doc.currency),
-                // Malaysia rounds cash settlement to the nearest 5 sen and
-                // the adjustment is shown, not folded into the total.
-                if (doc.roundingAmount != 0)
-                  kit.amountRow('Rounding', doc.roundingAmount,
+                for (final row in invoiceTotalRows(doc))
+                  kit.amountRow(row.label, row.amount,
                       currency: doc.currency),
                 pw.Container(
                   width: 190,

@@ -374,4 +374,106 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- What the shelf remembers
+-- ---------------------------------------------------------------------
+-- Three properties of `app.apply_stock_movement` that the fixture above
+-- cannot reach, because every average in it changes on every movement
+-- and nothing ever empties.
+--
+--   * `average_cost_after` is the average AFTER the movement. On a
+--     receipt at a new price the two differ, and the stock card is the
+--     only record of what a thing was worth at the moment it moved. A
+--     card that stamps the previous average reads plausibly and is
+--     wrong on every line that matters.
+--   * a shelf that empties keeps the average it was carrying. Value
+--     goes to zero because there is nothing there, but the cost is not
+--     forgotten -- zero is a price, and the next issue priced at it
+--     would take goods out at nothing.
+--   * and the item-level rollup keeps it too, for the same reason: a
+--     count of zero across every warehouse means there is nothing to
+--     average, not that the thing is free.
+--
+-- One mutant here is equivalent and is left alone: `round(quantity *
+-- unit_cost, 2)` on an inbound movement. `v_cost` is declared
+-- numeric(18,2), so the assignment rounds whether or not `round` is
+-- written. Checked rather than reasoned about -- the round was removed
+-- and a receipt of 3 at 1.005 still stored 3.02, with the same average
+-- to six places.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid;
+  v_item uuid;
+  v_wh   uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Kos Purata Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+                            uom_code, unit_price, cost_price)
+  values (v_org, 'AVG-1', 'Bearing', 'stock', true, 'C62', 30, 10)
+  returning id into v_item;
+  v_wh := app.default_warehouse(v_org);
+
+  -- Ten at ten, then ten at twenty: twenty on the shelf worth 300, an
+  -- average of fifteen. The second movement is the one where the
+  -- average before and the average after are different numbers.
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'KP-0001', date '2026-05-01', 'purchase_receipt',
+          v_item, v_wh, 10, 10),
+         (v_org, 'KP-0002', date '2026-05-02', 'purchase_receipt',
+          v_item, v_wh, 10, 20);
+
+  perform pg_temp.check_eq('ten at ten leaves the average at ten',
+    (select average_cost_after from public.stock_movements
+      where org_id = v_org and movement_no = 'KP-0001'), 10.000000);
+  perform pg_temp.check_eq(
+    'and ten at twenty on top of it leaves fifteen, not ten',
+    (select average_cost_after from public.stock_movements
+      where org_id = v_org and movement_no = 'KP-0002'), 15.000000);
+  perform pg_temp.check_eq('on twenty pieces worth three hundred',
+    (select balance_value from public.stock_movements
+      where org_id = v_org and movement_no = 'KP-0002'), 300.00);
+
+  -- Everything goes out at the average, and the shelf is empty.
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'KP-0003', date '2026-05-10', 'sales_delivery',
+          v_item, v_wh, -20, 0);
+
+  perform pg_temp.check_eq('twenty out at fifteen is three hundred',
+    (select total_cost from public.stock_movements
+      where org_id = v_org and movement_no = 'KP-0003'), -300.00);
+  perform pg_temp.check_eq('an empty shelf is worth nothing',
+    (select balance_value from public.stock_movements
+      where org_id = v_org and movement_no = 'KP-0003'), 0.00);
+
+  -- Worth nothing is not the same as costing nothing.
+  perform pg_temp.check_eq('but it still remembers what it cost',
+    (select average_cost from public.stock_levels
+      where item_id = v_item and warehouse_id = v_wh), 15.000000);
+  perform pg_temp.check_eq('and so does the item',
+    (select average_cost from public.items where id = v_item), 15.000000);
+  perform pg_temp.check_eq('which holds nothing',
+    (select quantity_on_hand from public.items where id = v_item), 0);
+
+  -- And the remembered average does not follow the next delivery in.
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'KP-0004', date '2026-05-20', 'purchase_receipt',
+          v_item, v_wh, 5, 12);
+  perform pg_temp.check_eq('five at twelve onto an empty shelf is twelve',
+    (select average_cost_after from public.stock_movements
+      where org_id = v_org and movement_no = 'KP-0004'), 12.000000);
+end;
+$$;
+
 rollback;

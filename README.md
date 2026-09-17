@@ -15,10 +15,18 @@ than a bolt-on.
 ```
 app/                  Flutter client (web + mobile)
 supabase/
-  migrations/         Schema, RLS, business logic, reports  (0001 … 0221)
+  migrations/         Schema, RLS, business logic, reports  (numbered, append-only)
   tests/              SQL assertions, run in CI on a throwaway stack
   functions/          Deno edge functions (MyInvois, email, OCR, push, …)
+docs/api/             The HTTP surface, generated from the catalog
 ```
+
+**The API is described in `docs/api/`.** `openapi.json` and `llms.txt`
+cover every function and table a tenant's own token can reach — 662 and
+329 of them — and both are generated from `pg_proc` by
+`scripts/generate_api_description.py` and checked against the schema in
+CI, so neither can drift from what the database will actually do.
+Do not edit them by hand.
 
 **Supabase project:** `ewwcgtnniwqndrzukksm` (`iakauntan`, ap-northeast-2)
 All migrations and the edge function are already deployed there.
@@ -155,6 +163,8 @@ The `myinvois` edge function then handles the API side, routing on an
 | `status` | Polls validation, stores the long ID and QR validation link |
 | `cancel` | Cancels within LHDN's 72-hour window; refuses after it closes |
 | `validate-tin` | Confirms a TIN matches a BRN/NRIC, cached 30 days |
+| `certificate` | Reads a signing certificate, proves the key matches it, files it |
+| `file-consolidations` | The scheduler's: files every consolidated e-Invoice coming due, for every company |
 
 Supported document types: 01 Invoice, 02 Credit Note, 03 Debit Note,
 04 Refund Note, and the 11–14 self-billed equivalents. Item lines carry
@@ -172,24 +182,111 @@ Every API call is written to `einvoice_logs` for the 7-year audit trail.
    policies** — only the edge function's service role can read it.
 3. Start in `sandbox`, switch to `production` when you are satisfied.
 
-**Digital signature.** Documents are submitted as version `1.0`
-(unsigned). Version 1.1 requires an XAdES signature from a Malaysian
-certificate authority; `einvoice_credentials` has the columns to hold that
-material, but the signing step itself is not implemented — you will need
-your organisation's certificate before enabling it.
+### Signing, and version 1.1
+
+A version `1.0` document is submitted as it stands. A version `1.1` one
+carries a **XAdES signature** made with a certificate issued to the
+taxpayer by a Malaysian certification authority, and LHDN recomputes
+both digests and the signature before it will validate anything.
+`0615` built it.
+
+The key goes in `einvoice_credentials`, in the columns `0107` created
+for it — the same table with no policies and no grants, whose only
+reader is the edge function's service role. Nothing an organization can
+call returns it: the status function says who ISSUED the certificate,
+its serial number and when it expires, and a test asserts that its
+declared output columns contain no certificate, no private key and no
+client secret.
+
+Deno has WebCrypto and no certificate parser, so
+`_shared/der.ts` reads the four fields a signature needs off the DER —
+serial, issuer as RFC 4514, validity, public key — and every expected
+value in its tests was printed by `openssl x509 -nameopt RFC2253` rather
+than reasoned out. A distinguished name written least-specific-first, or
+a serial handed over in hex where LHDN wants decimal, is a string that
+looks entirely plausible and matches nothing at the other end.
+
+The order to set it up in is **credentials, then certificate, then
+version**, and the database enforces each step: a certificate with no
+credentials behind it is refused naming what to do first, and version
+1.1 is refused without a certificate on the environment the company
+submits to — a sandbox certificate does not make a production company
+ready. A 1.1 document that cannot be signed is a submit button that
+stops working, and that refusal belongs on the screen that caused it
+rather than arriving later from LHDN.
+
+**Press Check before Save.** A key that does not match its certificate
+produces a structurally perfect document that LHDN rejects at
+validation, hours later, with a code naming neither half; checked at
+upload it is a sentence on the screen of the person holding both files.
+
+**It is built and unproven.** The structure is written to LHDN's
+published JSON binding and agrees with two independent implementations
+of it, and it has never been submitted to MyInvois from this repository
+— there is no sandbox credential here and `sdk.myinvois.hasil.gov.my` is
+unreachable from the network this is built on. What the tests prove is
+the arithmetic LHDN checks: both digests recompute from the emitted
+document, the signature verifies against the certificate in it, the
+version is raised before the digest is taken, the properties digest
+covers the `Target` wrapper, and a tampered figure breaks exactly the
+document digest while a back-dated signing time breaks exactly the
+properties digest. What they cannot prove is that LHDN agrees about the
+shape. `docs/einvoice-signing.md` names the two places the reference
+implementations disagree, and says what closing the gap takes: a preprod
+credential and one submission, not more code. **Leave production at
+1.0 until somebody has made that submission.**
 
 ---
 
-## Reading receipts and bills
+## AI SmartScan
 
-Photograph a receipt and the supplier, the date, the number and the
+Photograph a paper and the supplier, the date, the number and the
 figures come back filled in. It reaches a bill through **Supplier
 paperwork** in the document editor, and an expense through **Record
 expense**, where the capture happens before the expense exists and the
 file is moved onto it once it does.
 
+**It knows what the paper is.** `0614` gave the reading a second
+question beside "what does it say": *what is it*. The answer comes from
+`scan_document_kinds` — a table, not an enum, edited in the console
+under **Document scanning → Kinds of document** — and it shipped with
+nine: a supplier's bill, a receipt, a quotation, a delivery order, a
+bank statement, a name card, an SSM certificate, a statement of account,
+and *something else*. Each one names where that kind of paper goes, and
+three of them deliberately name nowhere: a statement of account is worth
+filing even where nothing here turns one into a record.
+
+The kind is offered on the scan result as a picker with the guess
+already chosen, and the reason beside it in words — "Says TAX INVOICE"
+rather than a percentage, because a percentage reads as a machine being
+certain about something it cannot be certain about. It is written onto
+`ocr_scans.document_kind` by `set_scan_document_kind`, so the question a
+bookkeeper asks three months later — *what did it think this was* — has
+an answer that outlived the dialog. That call is keyed on the
+attachment, not the scan: the app has the file in its hand and the
+scan's own id never leaves the database. It lands on the most recent
+reading of that file, takes a kind that was switched off while somebody
+was looking at it — refusing would lose the answer to a race nobody can
+see — and answers null rather than raising where nothing was read.
+
+**The rules that choose are in Dart, on purpose.**
+`features/shared/document_classifier.dart` is a pure function over the
+text the reader returned. They are string matching against letterheads,
+they change every time a bank rewords its statement, and in SQL each of
+those rewordings would be a migration. So a kind added in the console is
+a kind somebody can PICK; it will not be suggested until the words to
+look for are written. The console page says so on the page, because an
+administrator who adds "Payslip" and waits for payslips to recognise
+themselves has been misled by a screen.
+
+What the classifier is careful about is the two documents that share a
+word: a **bank statement** and a **statement of account** are not each
+other, and each rules the other out. A name on the paper beats any
+number of supporting words; several supporting words are as good as a
+name; one is a guess and says so.
+
 **It is off until an administrator turns it on**, per organization, under
-Settings → *Read receipts and bills*. There is no settings row until
+Settings → *AI SmartScan*. There is no settings row until
 somebody creates one and no row means off. A receipt carries a supplier,
 an amount and sometimes a person's movements; sending that to a third
 party is a decision, not a default to discover afterwards.
@@ -300,6 +397,17 @@ refuses before the provider is called, that a failed scan returns exactly
 what it took and does so once however often the callback arrives, that
 the ledger and the balance agree after every move, and that a signed-in
 user reaches neither the key table nor the function that refunds.
+
+`supabase/tests/scan_document_kinds.sql` asserts the list: that an
+absent argument leaves a field alone and an empty one clears it — the
+difference between correcting a name and taking a destination away,
+which a plain `coalesce` gets wrong while still reporting "Saved" —
+that a kind this shipped with cannot be deleted and one a scan is filed
+under is refused by a count rather than silently unfiled, that a kind
+which IS removed leaves its scans standing, and that only a platform
+administrator writes any of it.
+`app/test/document_classifier_test.dart` asserts the choosing, in both
+languages, and a nine-mutant sweep over it killed all nine.
 
 ---
 
@@ -557,6 +665,30 @@ PERKESO also gazette contribution *tables* whose band amounts differ
 from a straight percentage by a few sen. Load the authority's own table
 and mark the schedule verified before submitting real returns. A payslip
 produced from an unverified schedule says so on its face.
+
+**Loading one is a paste now, not an afternoon.** `statutory_rates` has
+held `employee_amount` and `employer_amount` since `0025` and the
+console has had a band editor with gap and overlap checks — and no
+gazetted table had ever been loaded, because KWSP's Third Schedule runs
+to about ninety bands and PERKESO's to about seventy and typing them
+four boxes at a time is why. **Paste a table** in the rates console
+reads the authority's own printing: `RM`, thousands commas, en dashes,
+*Melebihi* for the top band.
+
+It supplies no figures. Every number comes from what was pasted, a line
+it cannot read is listed in full rather than guessed at — a band quietly
+dropped from the middle is a wage that lands in no band and a deduction
+of nothing — and **which amount column comes first is chosen, never
+inferred**. KWSP prints *Majikan* before *Pekerja* and most English
+reproductions print the employee first; read the wrong way round, every
+employee is deducted the employer's share, on every payslip, and nothing
+downstream can tell because both figures are plausible. Where the pasted
+headings contradict the choice, the preview says so and says what it
+would cost.
+
+What this does not do is make the figures right. Somebody still has to
+compare them with the gazette and mark the schedule verified, which is
+deliberately a second act by a second person.
 
 ### PCB
 
@@ -894,9 +1026,11 @@ All the same, before this deployment carries real books:
 
 - **Rotate the demo password and delete the demo users.** It is
   `Demo!Akaun2026` in the history and in every built bundle.
-- **Do not set `DEMO_MODE`.** It now defaults to off, so a build that
-  forgets the flag ships a closed door; `--dart-define=DEMO_MODE=true` is
-  what puts the one-tap logins back on the sign-in page.
+- **Do not set `DEMO_MODE`.** It defaults to off, so a build that forgets
+  the flag ships a closed door — the demo password is not in the bundle at
+  all. Since `0335` it is the outer of two gates: the sign-in screen also
+  needs **Platform console → Sign in page → Offer the demo logins**, which
+  is off until somebody turns it on. Leave both off.
 - **Rotate any secret you believe may have been pasted anywhere** — a
   chat window, a ticket, a screenshot. Rotation is cheap; the assumption
   that it never leaked is not.
@@ -950,21 +1084,40 @@ through a real call, so this cannot come back quietly.
 `.github/workflows/ci.yml` analyzes and tests the Flutter app, then
 starts a throwaway Supabase stack and runs every file in
 `supabase/tests/` against the migrations *in that commit* rather than
-against the hosted project. A third job, `edge`, runs `deno test` over
-the one piece of edge-function logic worth asserting — the check that
-decides whether a caller may act for every organization at once, where a
-mistake in the permissive direction does not fail but hands the outbox to
+against the hosted project. A third job, `edge`, type-checks every
+function and runs seventeen `deno test` files over the logic worth
+asserting: the whole LHDN path — the UBL document, the MyInvois client
+and the credentials it picks — the CORS preflight, the VAPID keygen
+checked against the code that consumes it, and the check that decides
+whether a caller may act for every organization at once, where a mistake
+in the permissive direction does not fail but hands the outbox to
 whoever asks.
+
+The Flutter side is held to the same standard, which is harder than it
+sounds: a widget test can pass while asserting nothing at all, and
+[docs/widget-tests.md](docs/widget-tests.md) lists ten specific ways it
+does. `scripts/mutate.py` is how they were found — break the screen on
+purpose and watch the test fail.
 
 Two more jobs publish what those have passed, and wait on them: `deploy`
 builds the web bundle and hands it to Vercel — see the Vercel pipeline
-below for why that gate is there — and `functions` pushes the three edge
-functions to Supabase. `functions` additionally runs on the default
+below for why that gate is there — and `functions` pushes every edge
+function to Supabase. Every one, not a list: the job discovers them by
+walking `supabase/functions` for a directory with an `index.ts` that is
+not `_`-prefixed, which is sixteen today and was three when this
+sentence first said three. `functions` additionally runs on the default
 branch only, since there is one Supabase project and no such thing as a
 preview of it; [docs/edge-functions.md](docs/edge-functions.md) has the
 rest, including the drift it was written to end, and
-[docs/schedulers.md](docs/schedulers.md) covers the two timers and the
+[docs/schedulers.md](docs/schedulers.md) covers the three timers and the
 credential they share.
+
+Two things this pipeline cannot do are the DNS a company's own
+subdomain and mailbox need — a wildcard certificate and a set of MX
+records, neither of which a migration can arrange.
+[docs/custom-domains.md](docs/custom-domains.md) is what to do about
+that, in the order to do it, and the three settings that are invisible
+until somebody tries to sign in at their own address.
 
 `migrate` sits between the two, on the default branch only and before
 either deploys, because a function or a screen that expects a column the
@@ -976,6 +1129,14 @@ variable `MIGRATIONS_AUTOPUSH` is `true` as well —
 separate switches, and records the reconciliation of the hosted
 project's migration history that had to happen before any of this could
 be turned on.
+
+[docs/ruflo.md](docs/ruflo.md) is a separate question about the same
+machinery: what it would take to add [Ruflo](https://github.com/ruvnet/ruflo),
+the agent harness, to the way this repository is worked on -- the two
+install paths, which one writes over `CLAUDE.md`, and the three things
+about this project (it deploys on green, its migrations are
+append-only, it already has a knowledge graph) that decide which of
+them is safe here. Nothing depends on it and nothing installs it.
 
 That second job had been failing, unnoticed, since the suite grew a
 second fixture organization. `app.seed_chart_of_accounts` creates a temp
@@ -1176,9 +1337,12 @@ uv tool install "graphifyy[sql]"   # the [sql] extra is not optional here
 graphify claude install --project  # your machine's hooks (git-ignored)
 ```
 
-The `[sql]` extra matters: without `tree-sitter-sql` all 74 migrations
-contribute nothing, and in this codebase the migrations *are* the
-business logic — the graph goes from 2,212 nodes to 2,946 with it.
+The `[sql]` extra matters: without `tree-sitter-sql` every one of the
+six hundred-odd migrations contributes nothing, and in this codebase the
+migrations *are* the business logic — the graph goes from 25,212 nodes
+to 30,688 with it. Those two figures are the ones `CLAUDE.md` carries,
+and this paragraph is where they are kept in step; the pair it used to
+quote were measured when there were seventy-four migrations.
 
 ```bash
 graphify explain "public.corp_sign_with_link"  # a symbol and its neighbours
@@ -1248,6 +1412,48 @@ All eight logins share the password `Demo!Akaun2026`:
 | `salon@iakauntan.com` | Salon owner — two chairs, a day of bookings, a monthly package |
 | `stall@iakauntan.com` | Stall owner — one phone, and sales that landed offline |
 
+### A practice on a real account
+
+The demo companies above stand on their own. A practice does not: an
+accounting or company secretarial firm holds *other people's* books, and
+`0450`'s firm layer sat unused because no seed had ever built one.
+
+`app.demo_practice_rebuild('someone@example.com')` does, on a login that
+already exists:
+
+```
+select app.demo_practice_rebuild('accountant@iakauntan.com');
+```
+
+It makes the firm **Accountant & Co.**, puts the real account in it as a
+partner, and builds four demo companies into its portfolio — the
+practice's own books (with the statutory registers of three client
+companies on them) and those same three companies as tenants of their
+own, each with a year of invoices, the older ones settled and the last
+two months still owed.
+
+The real account owns none of it. It holds a `firm_members` row and
+reaches all four companies through `firm_id`, which is what a practice
+actually is, and what lets the whole portfolio be removed again.
+
+Three things to know before running it:
+
+- **The address must already have signed up.** It refuses one that has
+  not, and creates nothing. A practice whose only partner is an
+  unaccepted invitation is a practice nobody can open.
+- **Run it after `app.demo_rebuild()`, not before.** The global rebuild
+  removes every company marked demo, and these are marked demo so that
+  they can be removed at all.
+- **It only tears down its own.** A second run replaces the four
+  companies attached to that firm and the `@geswant.demo` logins it made,
+  and touches nothing else — including a company the practice keeps that
+  is *not* flagged demo, which it refuses to delete and says so.
+
+A practice built under the earlier name is renamed rather than joined by
+a second firm; see `0468`.
+
+See `0463`, and `supabase/tests/demo_practice.sql` for what is asserted.
+
 **None of that needs typing.** The sign-in page lists those eight accounts
 under *or look around a demo*, each described by what it will show rather
 than by the name of its role, and a tap signs straight in.
@@ -1279,12 +1485,25 @@ the demo password inside the bundle, which is harmless only while those
 eight accounts are the only thing it opens. Two things to do, together:
 
 - set the repository variable `DEMO_MODE` to `false` (or build with
-  `--dart-define=DEMO_MODE=false`), which removes the panel; and
+  `--dart-define=DEMO_MODE=false`), which takes the demo password out of
+  the bundle; and
 - delete the demo users and every demo organization — `app.demo_teardown()`
   does both, and is what `app.demo_rebuild()` calls first.
 
-The switch is compile-time on purpose. A door that can be reopened by
-editing a row is not closed.
+**There are two gates, and they are different kinds of thing.** `0335`
+added the second: `demo_accounts_enabled` on `landing_page`, switched
+from **Platform console → Sign in page**, and off by default. It decides
+whether the sign-in screen *offers* the list, which is a decision about
+what the platform is doing this week and belongs where the operator is
+looking.
+
+It does not replace the compile-time flag, and could not: a row cannot
+un-ship a password that is already in the JavaScript. So the flag stays
+the outer gate and stays the one that matters for the paragraph above —
+turning the console switch off hides the panel, but only a build without
+`DEMO_MODE` stops shipping the credential. A door that can be reopened by
+editing a row is not closed; a door that is only ever opened by a rebuild
+is one nobody can close on a Tuesday afternoon. Hence both.
 
 **The demo credentials are frozen in the database.** Handing a stranger a
 session on a shared account means handing them the ability to change its
@@ -1493,29 +1712,116 @@ will copy.
 
 Stated plainly so nothing here is mistaken for finished:
 
-- XAdES digital signature for e-Invoice version 1.1 (see above)
-- Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
+- ~~XAdES digital signature for e-Invoice version 1.1.~~ Built, `0615`,
+  and **unproven**: the signature is made, both digests are asserted to
+  recompute and the certificate's key is proved to match it before
+  anything is stored, but nothing here has ever been submitted to
+  MyInvois. `docs/einvoice-signing.md` says what is unverified and what
+  closing it takes — a preprod credential and one submission, not code.
+- ~~Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
   7-day clock, but **submitting** the consolidation is still manual — the
-  scheduler does not hold MyInvois credentials
-- Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
-- Goods Received and Purchase Request screens (the types exist in the
-  schema; only PO, Bill and Purchase Credit Note are exposed in the app)
+  scheduler does not hold MyInvois credentials.~~ Built, `0616`. That line
+  was too kind to itself: submitting was not manual, it was impossible.
+  `einvoice_consolidations.einvoice_id` has been nullable and null since
+  `0007` and nothing in this product ever wrote it, so the clock started
+  and ran out against nothing.
+  `prepare_consolidated_einvoice` builds the document LHDN asks for —
+  general public buyer, one line per receipt, classification `004` — and
+  `.github/workflows/file-consolidations.yml` files every company's,
+  daily, through the same `SCHEDULER_SECRET` the other timers use. A
+  company that cannot submit is **reported rather than attempted**, with
+  the setup step it is missing named
+- ~~Self-billed e-Invoice for foreign suppliers: schema supports it, no
+  UI.~~ Built, `0611`. The schema half was real — codes 11 to 14 in
+  `ref_einvoice_types` since `0011`, `requires_self_billed` since `0006`
+  — and unreachable, because the only thing that ever built an
+  `einvoice_documents` row took a SALES document. A bill from a supplier
+  outside Malaysia is now marked as owing one when it is created,
+  `prepare_self_billed_einvoice` builds it, and the same MyInvois
+  submission sends it. The one thing worth knowing: the supplier block
+  still holds the supplier. On a self-billed invoice we are the buyer,
+  so our company goes in the BUYER block — the opposite way round from
+  a sale, and a document with it backwards validates, balances and
+  reports us as the vendor of a supply we bought
+- ~~Goods Received and Purchase Request screens.~~ Both are reachable —
+  they are rows in `docTypes` and the router builds their addresses from
+  the same table. What that made reachable was a defect: a goods received
+  note received no goods. Ten units bought through one arrived nowhere,
+  silently, because the bill skipped receiving on the grounds that the
+  note had already done it and nothing ever had. `0609` makes the note
+  post — Dr Inventory, Cr 2118 Goods Received Not Invoiced, cleared by
+  the bill — and **does not backfill**: a company that has used that path
+  has a stock count to do, and `docs/goods-received.md` has the query
+  that says how much is at stake
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
   account, two secrets and a DNS record. See `docs/email-setup.md`
-- Bank statement import and auto-matching
-- Statutory submission files: CP39, Borang A, Lampiran 1 and the EA form
-  are all computable from what is stored, but no exporter is written
-- The gazetted KWSP and PERKESO contribution tables (see HRMS above)
-- Biometric terminal integration: attendance records carry a terminal
-  identifier, but nothing pushes punches in from a device yet
-- Sign-in with anything other than a password: no OAuth, no magic link,
-  no two-factor
+- ~~Bank statement import and auto-matching.~~ Built, and the line was
+  stale: `import_bank_transactions`, `suggest_bank_matches`,
+  `match_bank_transaction` and a reconciliation screen have all been
+  there, with a CSV parser that reads columns by header name and checks
+  the balance chain so a clipped paste fails on the line after the hole
+  rather than a month later. What was genuinely missing is **MT940** —
+  the SWIFT format a corporate account gets and no amount of CSV parsing
+  will read — and opening a file rather than pasting one. Both are in
+  now; `parseStatement` works out which format arrived from the content,
+  because the extension is `.csv`, `.txt`, `.sta` or `.940` depending on
+  the bank and is missing entirely from a paste
+- Statutory submission files. The **EA form is built** — `0608` computes
+  C.P.8A from this employer's posted payslips, by the year of the pay
+  date, with what a previous employer paid reported separately and in no
+  total; Payroll → EA forms produces one per employee and names what is
+  missing before it does. CP39, KWSP's Form A and PERKESO's Lampiran 1
+  are **not**, and are a different kind of problem: all three are
+  fixed-width files uploaded to a portal, right or rejected, and the
+  layouts are published by the bodies themselves in documents the build
+  machine cannot reach. Writing one from memory produces a file that
+  looks correct in a diff and is refused at the counter. What is needed
+  is the layout specification for each, not more code
+- The gazetted KWSP and PERKESO contribution tables. This is a **data**
+  gap and not a code one: the schema has held band amounts since `0025`,
+  the console can now read a table off a paste (see HRMS above), and
+  nothing here will invent a contribution figure. Somebody has to paste
+  the authority's own schedule and mark it verified
+- ~~Biometric terminal integration: attendance records carry a terminal
+  identifier, but nothing pushes punches in from a device yet.~~ Built,
+  `0612`. A terminal registers under HR, gets a secret once (bcrypt on
+  the way in, unreadable afterwards) and posts batches to the `punch`
+  edge function. The point of the exercise is that **the punch carries
+  its own time**: `clock_in` stamps `now()`, and a terminal that lost
+  its network at 08:55 and reconnected at 17:30 would have every one of
+  the morning's punches filed at half past five. Enrolment numbers are
+  per terminal, because the front door's user 1 and the warehouse's are
+  two different people. A reconnecting device's replay writes nothing,
+  and out of order the earliest in and the latest out win
+- Sign-in with anything other than a password. **Passkeys** have been
+  built since `0579` — console switch, WebAuthn on the web, saving and
+  revoking under Settings — and `0613` adds a **sign-in link by email**:
+  Platform console → Site pages → "Offer a link by email", with
+  `docs/magic-link.md` for what the Supabase dashboard needs first. Both
+  ship OFF and for the same kind of reason: a button that fails silently
+  is worse than no button. `0613` also adds **two-factor**: a TOTP
+  authenticator under Settings → Your account, challenged at sign-in
+  inside the vetting hold so the app never opens on a session that has
+  not finished proving itself. Read `docs/two-factor.md` before relying
+  on it — the database does not require `aal2` on anything, so it stops
+  somebody with the password and not the phone and would not stop a
+  client that never drew the dialog, and that page says what closing
+  the gap would take. What is still missing is **OAuth**, which needs a
+  provider's credentials in the dashboard
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
-  plans one from AutoCount Cloud and names what has to be built first —
-  chiefly that **no table records where a row came from**, so no import
-  can be re-run, reconciled or rolled back until it does
+  plans one from AutoCount Cloud and named what had to be built first —
+  that **no table recorded where a row came from**, so no import could be
+  re-run, reconciled or rolled back. `0610` built it: `import_source`,
+  `import_ref`, `import_batch_id` and `imported_at` on all nineteen
+  tables an import can write to, unique per company so a second run
+  collides on exactly the rows it already wrote; staging tables that keep
+  the raw payload a disputed figure is settled against; and a rollback
+  that refuses rather than cascades. **The importer itself is still
+  unbuilt** — no AutoCount client, no mapping, no reconciliation report —
+  and those are stages two and three of that document, which now have
+  somewhere to stand
 
 ### Built, but not reachable from the app
 

@@ -224,6 +224,173 @@ class OutletChannels extends ConsumerWidget {
   }
 }
 
+/// The kinds of order this outlet accepts, in the order it lists them.
+///
+/// A till cannot assume a channel the shop does not take: the outlet's
+/// list is what `set_pos_sale_channel` checks, and a default outside it
+/// would put a row in the day's report that can only be a mistake.
+List<String> choosableChannels(Iterable<Map<String, dynamic>> outletChannels) =>
+    [
+      for (final c in outletChannels)
+        if (c['is_active'] == true) '${c['channel']}',
+    ];
+
+/// The outlet's own default, or nothing.
+String? outletDefaultChannel(Iterable<Map<String, dynamic>> outletChannels) {
+  for (final c in outletChannels) {
+    if (c['is_default'] == true && c['is_active'] == true) {
+      return '${c['channel']}';
+    }
+  }
+  return null;
+}
+
+/// What a sale opened on this till will actually be.
+///
+/// The same three steps `app.pos_sale_channel_default` takes on insert:
+/// whatever the register is for, else whatever the outlet's default is,
+/// else `walk_in`. Written out here so the screen can show the answer
+/// rather than the setting — a blank field on a till is not "no
+/// channel", it is the outlet's channel, and a shop cannot check its
+/// own assumption from a blank.
+String registerAssumption(
+  Map<String, dynamic> register,
+  Iterable<Map<String, dynamic>> outletChannels,
+) {
+  final own = register['default_channel'];
+  if (own != null) return '$own';
+  return outletDefaultChannel(outletChannels) ?? 'walk_in';
+}
+
+/// Whether this till says something the shop does not.
+bool registerOverrides(Map<String, dynamic> register) =>
+    register['default_channel'] != null;
+
+/// What a till's row says under its name.
+String registerChannelLine(
+  Map<String, dynamic> register,
+  Iterable<Map<String, dynamic>> outletChannels,
+) {
+  final resolved = channelLabel(registerAssumption(register, outletChannels));
+  return registerOverrides(register)
+      ? '$resolved — set on this till'
+      : '$resolved — whatever the shop says';
+}
+
+/// The tills standing in one outlet.
+List<Map<String, dynamic>> registersAt(
+  Iterable<Map<String, dynamic>> registers,
+  String outletId,
+) => [
+  for (final r in registers)
+    if ((r['pos_outlets'] as Map?)?['id'] == outletId) r,
+];
+
+/// What each till on this outlet assumes an order is.
+///
+/// `pos_registers.default_channel` was added by 0229 with the reason
+/// written on it — "a kiosk is takeaway, a waiter's tablet is dine-in,
+/// so nobody has to say so on every sale" — and
+/// `setRegisterDefaultChannel` had no caller. The screen above says
+/// twice that a sale is the outlet's default "unless the till says
+/// otherwise", and there was nowhere to make a till say otherwise.
+class RegisterChannels extends ConsumerWidget {
+  const RegisterChannels({super.key, required this.outletId});
+
+  final String outletId;
+
+  Future<void> _set(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> register,
+    List<Map<String, dynamic>> accepted,
+  ) async {
+    final choices = choosableChannels(accepted);
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('What is ${register['name']} usually for?'),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.storefront_outlined),
+              title: const Text('Whatever the shop says'),
+              subtitle: Text(
+                channelLabel(outletDefaultChannel(accepted) ?? 'walk_in'),
+              ),
+              selected: !registerOverrides(register),
+              onTap: () => Navigator.of(ctx).pop(''),
+            ),
+            const Divider(height: 1),
+            for (final c in choices)
+              ListTile(
+                leading: Icon(channelIcon(c)),
+                title: Text(channelLabel(c)),
+                selected: register['default_channel'] == c,
+                onTap: () => Navigator.of(ctx).pop(c),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () => repo.setRegisterDefaultChannel(
+        register['id'] as String,
+        picked.isEmpty ? null : picked,
+      ),
+    );
+    if (ok) ref.invalidate(posRegistersProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final registers = ref.watch(posRegistersProvider);
+    final accepted =
+        ref.watch(posOutletChannelsProvider(outletId)).valueOrNull ??
+        const <Map<String, dynamic>>[];
+
+    return AsyncView<List<Map<String, dynamic>>>(
+      value: registers,
+      builder: (all) {
+        final here = registersAt(all, outletId);
+        if (here.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('No tills in this shop yet.'),
+          );
+        }
+        return Column(
+          children: [
+            for (final r in here)
+              ListTile(
+                dense: true,
+                leading: Icon(
+                  channelIcon(registerAssumption(r, accepted)),
+                ),
+                title: Text('${r['name']}'),
+                subtitle: Text(registerChannelLine(r, accepted)),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () => _set(context, ref, r, accepted),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// The last thirty days, split by how the orders came in.
 ///
 /// Beside the switches on purpose: "is this channel worth keeping on"

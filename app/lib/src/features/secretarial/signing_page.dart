@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/env.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/widgets.dart';
 
 /// What the holder of a signing link sees.
 ///
@@ -208,6 +209,16 @@ class _SigningPageState extends ConsumerState<SigningPage> {
                     style: muted,
                   ),
                 ),
+                // Both answers, side by side. Offering only "Sign"
+                // leaves somebody who will not sign with nothing to do
+                // but close the tab, and a line that stays pending for
+                // ever reads at the other end as unopened.
+                TextButton(
+                  key: const ValueKey('decline-with-link'),
+                  onPressed: _signing ? null : _decline,
+                  child: const Text('I will not sign'),
+                ),
+                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: _signing ? null : _sign,
                   icon: _signing
@@ -244,7 +255,41 @@ class _SigningPageState extends ConsumerState<SigningPage> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_readable(e))));
         // Whatever went wrong, the link's state may have moved on.
-        setState(() => _link = _open());
+        setState(() {
+          _link = _open();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _signing = false);
+    }
+  }
+
+  /// The other answer, on the same screen.
+  ///
+  /// Somebody who reads the document on a link and will not sign it has
+  /// to be able to say so here, or they simply do not reply — and a line
+  /// that stays pending for ever reads as unopened.
+  Future<void> _decline() async {
+    final why = await promptForText(
+      context,
+      title: 'Why are you not signing?',
+      label: 'Reason',
+      confirmLabel: 'Send this instead',
+    );
+    if (why == null || !mounted) return;
+
+    setState(() => _signing = true);
+    try {
+      await _client.rpc('corp_decline_with_link',
+          params: {'p_token': widget.token, 'p_reason': why});
+      if (mounted) setState(() => _done = true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_readable(e))));
+        setState(() {
+          _link = _open();
+        });
       }
     } finally {
       if (mounted) setState(() => _signing = false);

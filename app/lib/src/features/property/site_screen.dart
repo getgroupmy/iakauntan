@@ -6,6 +6,11 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'charge_run_sheet.dart';
+import 'statutory_charge_payment.dart';
+import 'statutory_charge_sheet.dart';
+import 'strata_sheet.dart';
+import 'tenancy_sheet.dart';
+import 'unit_sheet.dart';
 
 /// One site, and the half of the module that applies to it.
 ///
@@ -52,12 +57,15 @@ class PropertySiteScreen extends ConsumerWidget {
             body: TabBarView(
               children: strata
                   ? [
-                      _UnitList(siteId: siteId, strata: true),
+                      _UnitList(siteId: siteId, tenure: 'strata'),
                       _StrataCharges(siteId: siteId, site: row),
                       _Arrears(siteId: siteId),
                     ]
                   : [
-                      _UnitList(siteId: siteId, strata: false),
+                      _UnitList(
+                        siteId: siteId,
+                        tenure: row['tenure'] as String? ?? 'freehold',
+                      ),
                       _TenancyList(siteId: siteId),
                       _StatutoryList(siteId: siteId),
                     ],
@@ -70,15 +78,38 @@ class PropertySiteScreen extends ConsumerWidget {
 }
 
 class _UnitList extends ConsumerWidget {
-  const _UnitList({required this.siteId, required this.strata});
+  const _UnitList({required this.siteId, required this.tenure});
 
   final String siteId;
-  final bool strata;
+  final String tenure;
+
+  bool get strata => tenure == 'strata';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final units = ref.watch(propertyUnitsProvider(siteId));
+    final canWrite = ref.watch(canWriteProvider);
 
+    return Scaffold(
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              key: const ValueKey('add-unit'),
+              onPressed: () =>
+                  showUnitSheet(context, siteId: siteId, tenure: tenure),
+              icon: const Icon(Icons.add),
+              label: Text(strata ? 'Add a parcel' : 'Add a unit'),
+            )
+          : null,
+      body: _body(context, ref, units, canWrite),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> units,
+    bool canWrite,
+  ) {
     return AsyncView(
       value: units,
       onRetry: () => ref.invalidate(propertyUnitsProvider(siteId)),
@@ -141,6 +172,14 @@ class _UnitList extends ConsumerWidget {
                     trailing: u['is_chargeable'] == false
                         ? const StatusChip('not charged', compact: true)
                         : null,
+                    onTap: canWrite
+                        ? () => showUnitSheet(
+                              context,
+                              siteId: siteId,
+                              tenure: tenure,
+                              unit: u,
+                            )
+                        : null,
                   );
                 },
               ),
@@ -161,19 +200,29 @@ class _StrataCharges extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = ref.watch(strataSchemeProvider(siteId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return AsyncView(
       value: scheme,
       onRetry: () => ref.invalidate(strataSchemeProvider(siteId)),
       builder: (s) {
         if (s == null) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.gavel_outlined,
             title: 'No management body recorded',
             message:
                 'Say whether the scheme is run by the developer, a joint '
                 'management body or a management corporation, and what the '
                 'AGM resolved the rate per share unit to be.',
+            action: canWrite
+                ? FilledButton.icon(
+                    key: const ValueKey('set-up-scheme'),
+                    onPressed: () =>
+                        showStrataSchemeSheet(context, siteId: siteId),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Set up the scheme'),
+                  )
+                : null,
           );
         }
 
@@ -221,17 +270,48 @@ class _StrataCharges extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: current == null
-                          ? null
-                          : () => showChargeRunSheet(
+                    Wrap(
+                      spacing: Space.sm,
+                      runSpacing: Space.sm,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: current == null
+                              ? null
+                              : () => showChargeRunSheet(
+                                  context,
+                                  ref,
+                                  strata: true,
+                                  id: s['id'] as String,
+                                ),
+                          icon: const Icon(Icons.receipt_long, size: 18),
+                          label: const Text('Raise charges'),
+                        ),
+                        if (canWrite)
+                          OutlinedButton.icon(
+                            key: const ValueKey('record-rate'),
+                            onPressed: () => showChargeRateSheet(
                               context,
-                              ref,
-                              strata: true,
-                              id: s['id'] as String,
+                              siteId: siteId,
+                              schemeId: s['id'] as String,
                             ),
-                      icon: const Icon(Icons.receipt_long, size: 18),
-                      label: const Text('Raise charges'),
+                            icon: const Icon(Icons.how_to_vote_outlined,
+                                size: 18),
+                            label: Text(current == null
+                                ? 'Record the rate resolved'
+                                : 'New rate'),
+                          ),
+                        if (canWrite)
+                          TextButton.icon(
+                            key: const ValueKey('amend-scheme'),
+                            onPressed: () => showStrataSchemeSheet(
+                              context,
+                              siteId: siteId,
+                              scheme: s,
+                            ),
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            label: const Text('Particulars'),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -367,13 +447,34 @@ class _TenancyList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tenancies = ref.watch(tenanciesProvider(siteId));
 
+    final canWrite = ref.watch(canWriteProvider);
+
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () =>
-            showChargeRunSheet(context, ref, strata: false, id: siteId),
-        icon: const Icon(Icons.receipt_long),
-        label: const Text('Raise rent'),
-      ),
+      floatingActionButton: !canWrite
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Raising rent needs something to raise it against, so
+                // the letting comes first and reads as the primary act.
+                FloatingActionButton.small(
+                  heroTag: 'raise-rent',
+                  onPressed: () =>
+                      showChargeRunSheet(context, ref, strata: false, id: siteId),
+                  tooltip: 'Raise rent',
+                  child: const Icon(Icons.receipt_long),
+                ),
+                const SizedBox(height: Space.sm),
+                FloatingActionButton.extended(
+                  key: const ValueKey('let-a-unit'),
+                  heroTag: 'let-a-unit',
+                  onPressed: () => showTenancySheet(context, siteId: siteId),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Let a unit'),
+                ),
+              ],
+            ),
       body: AsyncView(
         value: tenancies,
         onRetry: () => ref.invalidate(tenanciesProvider(siteId)),
@@ -393,13 +494,20 @@ class _TenancyList extends ConsumerWidget {
               final unit = t['property_units'] as Map<String, dynamic>?;
               final tenant = t['contacts'] as Map<String, dynamic>?;
               return ListTile(
-                title: Row(
+                // A `Wrap`, not a `Row`. The line holds a unit number,
+                // the tenant's NAME and a chip, with the rent at the
+                // other end -- and a Row lays all of that out at its
+                // natural size whatever box it is given, so the chip
+                // went 480 pixels off the right edge of a phone.
+                title: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 2,
                   children: [
                     Text(
                       '${unit?['unit_no'] ?? '—'} · ${tenant?['name'] ?? '—'}',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(width: 8),
                     StatusChip(t['status'] as String? ?? '', compact: true),
                   ],
                 ),
@@ -411,6 +519,13 @@ class _TenancyList extends ConsumerWidget {
                   style: const TextStyle(fontSize: 12),
                 ),
                 trailing: Money(t['monthly_rent'] as num?, bold: true),
+                onTap: canWrite
+                    ? () => showTenancySheet(
+                          context,
+                          siteId: siteId,
+                          tenancy: t,
+                        )
+                    : null,
               );
             },
           );
@@ -428,7 +543,28 @@ class _StatutoryList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final charges = ref.watch(propertyStatutoryChargesProvider(siteId));
+    final canWrite = ref.watch(canWriteProvider);
 
+    return Scaffold(
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              key: const ValueKey('add-statutory-charge'),
+              onPressed: () =>
+                  showStatutoryChargeSheet(context, siteId: siteId),
+              icon: const Icon(Icons.add),
+              label: const Text('Record a charge'),
+            )
+          : null,
+      body: _body(context, ref, charges, canWrite),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> charges,
+    bool canWrite,
+  ) {
     return AsyncView(
       value: charges,
       onRetry: () => ref.invalidate(propertyStatutoryChargesProvider(siteId)),
@@ -451,6 +587,14 @@ class _StatutoryList extends ConsumerWidget {
             final paid = c['paid_on'] != null;
             final due = DateTime.parse(c['due_date'] as String);
             final overdue = !paid && due.isBefore(DateTime.now());
+            // What is behind the date, not only that there is one. A
+            // charge on a bill and a charge somebody typed a date into
+            // used to read identically here, which is how the second
+            // one passed for the first.
+            final behind = describeSettlement({
+              ...c,
+              'bill_no': (c['purchase_documents'] as Map?)?['doc_no'],
+            });
             return ListTile(
               leading: Icon(
                 c['kind'] == 'quit_rent'
@@ -468,13 +612,21 @@ class _StatutoryList extends ConsumerWidget {
                 '${c['period_year']}'
                 '${c['period_half'] == null ? '' : ' H${c['period_half']}'} · '
                 '${c['authority'] ?? '—'} · '
-                '${paid ? 'paid ${Fmt.date(DateTime.parse(c['paid_on'] as String))}' : 'due ${Fmt.date(due)}'}',
+                '${paid ? 'paid ${Fmt.date(DateTime.parse(c['paid_on'] as String))}' : 'due ${Fmt.date(due)}'} · '
+                '$behind',
                 style: TextStyle(
                   fontSize: 12,
                   color: overdue ? context.colors.danger : null,
                 ),
               ),
               trailing: Money(c['amount'] as num?, bold: true),
+              onTap: canWrite
+                  ? () => showStatutoryChargeSheet(
+                        context,
+                        siteId: siteId,
+                        charge: c,
+                      )
+                  : null,
             );
           },
         );

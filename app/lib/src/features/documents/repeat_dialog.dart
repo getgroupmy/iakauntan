@@ -116,6 +116,7 @@ class _RepeatDialogState extends ConsumerState<_RepeatDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _frequency,
                     decoration: const InputDecoration(labelText: 'Period'),
                     items: const [

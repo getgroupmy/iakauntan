@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../items/new_item_dialog.dart';
 
 /// What a bundle's row says under its name.
 String bundleSummary(Map<String, dynamic> row) {
@@ -36,13 +38,22 @@ String marginLabel(Map<String, dynamic>? margin) {
       : '${Fmt.money(m)} margin · ${pct.toStringAsFixed(1)}%';
 }
 
-/// Red when a bundle is priced under its own parts.
-Color? marginColour(BuildContext context, Map<String, dynamic>? margin) {
+/// Bad news when a bundle is priced under its own parts, and worth
+/// looking at when it is priced at exactly what they cost.
+///
+/// Selling at cost is not a mistake and is not a healthy price either,
+/// so it is amber rather than red or nothing — and the boundary is
+/// exact, because a bundle a sen under cost and one a sen over are
+/// different statements about the same shelf.
+Tone? marginTone(Map<String, dynamic>? margin) {
   if (margin == null) return null;
   final m = num.tryParse('${margin['margin'] ?? 0}') ?? 0;
-  if (m < 0) return context.colors.danger;
-  return m == 0 ? context.colors.warning : null;
+  if (m < 0) return Tone.bad;
+  return m == 0 ? Tone.warn : null;
 }
+
+Color? marginColour(BuildContext context, Map<String, dynamic>? margin) =>
+    context.toneColour(marginTone(margin));
 
 /// How many can be sold out of what is on the shelf.
 String availabilityLabel(Map<String, dynamic>? a) {
@@ -285,22 +296,17 @@ class _BundleDialogState extends ConsumerState<_BundleDialog> {
               // A bundle holds no stock of its own — the server refuses
               // one on an item that does, so the list only offers the
               // items that can be one.
-              DropdownButtonFormField<String>(
-                value: _item,
-                decoration: const InputDecoration(
-                  labelText: 'Which item is the bundle',
-                  helperText: 'A bundle keeps no stock of its own; its parts do',
+              SearchablePicker<String>(
+                options: itemPickerOptions(
+                  items.where((i) => !i.trackInventory).toList(),
                 ),
-                items: [
-                  for (final i in items.where((i) => !i.trackInventory))
-                    DropdownMenuItem(
-                      value: i.id,
-                      child: Text('${i.code} ${i.name}'),
-                    ),
-                ],
-                onChanged: widget.itemId != null
-                    ? null
-                    : (v) => setState(() => _item = v),
+                value: _item,
+                label: 'Which item is the bundle',
+                helperText:
+                    'A bundle keeps no stock of its own; its parts do',
+                hint: 'Type a name or a number',
+                enabled: widget.itemId == null,
+                onChanged: (v) => setState(() => _item = v),
               ),
               const SizedBox(height: Space.md),
               SectionHeader(
@@ -317,20 +323,15 @@ class _BundleDialogState extends ConsumerState<_BundleDialog> {
                   children: [
                     Expanded(
                       flex: 3,
-                      child: DropdownButtonFormField<String>(
+                      child: SearchablePicker<String>(
+                        // A bundle cannot contain itself, so it is not
+                        // offered rather than refused after the fact.
+                        options: itemPickerOptions(
+                          items.where((x) => x.id != _item).toList(),
+                        ),
                         value: _parts[i].itemId,
-                        isDense: true,
-                        decoration: const InputDecoration(isDense: true),
-                        items: [
-                          for (final it in items.where((x) => x.id != _item))
-                            DropdownMenuItem(
-                              value: it.id,
-                              child: Text(
-                                '${it.code} ${it.name}',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
+                        label: 'Part',
+                        hint: 'Type a name or a number',
                         onChanged: (v) => setState(() => _parts[i].itemId = v),
                       ),
                     ),

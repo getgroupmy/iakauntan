@@ -12,9 +12,12 @@ import '../../data/repository.dart';
 import 'assign_table.dart';
 import 'channels.dart';
 import 'delivery_sheet.dart';
+import 'sold_out_dialog.dart';
+import 'take_it_off.dart';
 import 'discount_sheet.dart';
 import 'receipt_view.dart';
 import 'modifier_sheet.dart';
+import 'serial_sheet.dart';
 import 'offline_controller.dart';
 import 'offline_till.dart';
 import 'split_sheet.dart';
@@ -105,14 +108,47 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// expected one is shown, which is the whole point of a cash-up: a
   /// count taken after seeing the answer is not a count.
   Future<void> _closeShift(String shiftId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    // Stopped before the figure is asked for, not after. A cash-up is
+    // only meaningful if the count and the expected figure describe the
+    // same drawer, and a sale rung up while somebody counts makes them
+    // describe two different ones — with the difference recorded
+    // against the person who counted. 0361.
+    final stopped = await runWithFeedback(
+      context,
+      pendingMessage: 'Stopping the till…',
+      successMessage: null,
+      action: () => repo.beginPosCount(shiftId),
+    );
+    if (!stopped || !mounted) return;
+    final stoppedOn = _registerId;
+    if (stoppedOn != null) ref.invalidate(currentPosShiftProvider(stoppedOn));
+
     final declared = await _askAmount(
       context,
       title: 'Count the drawer',
       hint: 'What is actually in it',
     );
-    if (declared == null || !mounted) return;
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
+    if (declared == null) {
+      // Changed their mind at the prompt. Putting the till back is the
+      // whole reason `resume_pos_shift` exists: a stopped till nobody
+      // can restart is how a shift gets closed early to take one
+      // customer.
+      if (!mounted) return;
+      await runWithFeedback(
+        context,
+        successMessage: 'Back in service',
+        action: () => repo.resumePosShift(shiftId),
+      );
+      final back = _registerId;
+      if (mounted && back != null) {
+        ref.invalidate(currentPosShiftProvider(back));
+      }
+      return;
+    }
+    if (!mounted) return;
     Map<String, dynamic>? result;
     final ok = await runWithFeedback(
       context,
@@ -412,7 +448,18 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     // taken rather than from an empty form.
     final existing = await ref.read(posDeliveryForProvider(id).future);
     if (!mounted) return;
-    final answer = await showDeliverySheet(context, existing: existing);
+    final saleStatus =
+        ref.read(posSaleProvider(id)).valueOrNull?['status'] as String?;
+    final canClear = existing.isNotEmpty &&
+        deliveryCanBeCleared(
+          saleStatus: saleStatus,
+          deliveryStatus: existing['status'] as String?,
+        );
+    final answer = await showDeliverySheet(
+      context,
+      existing: existing,
+      onRemove: canClear ? () => _clearDelivery(id) : null,
+    );
     if (answer == null || !mounted) return;
 
     Map<String, dynamic> got = const {};
@@ -498,6 +545,42 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       context,
       successMessage: 'Voucher applied',
       action: () => repo.applyPosCoupon(id, code),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posSalePromotionsProvider(id));
+  }
+
+  /// Take the run back off the bill.
+  ///
+  /// `clear_pos_delivery` will only do it while the bill is parked and
+  /// no driver has it — after that "the run happened", and the way to
+  /// record what went wrong is to mark it failed.
+  Future<void> _clearDelivery(String id) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Taken off — nothing is being delivered',
+      action: () => repo.clearPosDelivery(id),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posDeliveryForProvider(id));
+  }
+
+  /// Take a voucher back off. Deleting the row is the whole of it: no
+  /// line was ever rewritten, so there is no price to put back.
+  Future<void> _removePromotion(Map<String, dynamic> promo) async {
+    final id = _saleId;
+    final repo = ref.read(repoProvider);
+    if (id == null || repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Taken off',
+      action: () => repo.removePosSalePromotion('${promo['id']}'),
     );
     if (!ok || !mounted) return;
     ref
@@ -1083,6 +1166,45 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       ..invalidate(posSaleLinesProvider(saleId));
   }
 
+  /// Whether this line is for something that leaves the shop by serial
+  /// number. Read off the embed rather than fetched: the decision is
+  /// made while a sheet is being built, and a round trip there is a
+  /// sheet that opens with the answer missing.
+  static bool _serialTracked(Map<String, dynamic> line) =>
+      (line['items'] as Map?)?['tracking'] == 'serial';
+
+  static List<String> _serialsOn(Map<String, dynamic> line) =>
+      ((line['serial_refs'] as List?) ?? const [])
+          .map((e) => '$e')
+          .toList(growable: false);
+
+  /// The scan field `0540` said a till needed.
+  ///
+  /// Every scan goes to the server as it happens, which is the whole
+  /// design: a list kept locally and sent at payment is a list that
+  /// refuses six scans deep, in front of a queue. The lines are
+  /// refreshed on the way out because scanning sets the quantity, and
+  /// the quantity is on the bill.
+  Future<void> _scanSerials(String id, Map<String, dynamic> line) async {
+    final repo = ref.read(repoProvider);
+    final lineId = line['id'] as String?;
+    if (repo == null || lineId == null) return;
+    await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SerialSheet(
+        description: '${line['description']}',
+        serials: _serialsOn(line),
+        onScan: (s) => repo.posScanSerial(lineId, s),
+        onRemove: (s) => repo.posUnscanSerial(lineId, s),
+      ),
+    );
+    if (!mounted) return;
+    ref
+      ..invalidate(posSaleLinesProvider(id))
+      ..invalidate(posSaleProvider(id));
+  }
+
   Future<void> _lineAction(Map<String, dynamic> line) async {
     final id = _saleId;
     final lineId = line['id'] as String?;
@@ -1129,6 +1251,22 @@ class _TillScreenState extends ConsumerState<TillScreen> {
                   title: const Text('Take a modifier off'),
                   onTap: () => Navigator.of(ctx).pop('modifier'),
                 ),
+              // FIRST, AND ONLY WHERE THERE IS ONE TO SCAN. A serial
+              // is not an adjustment to the line -- it is what the
+              // line is for, and a bill that reaches the tender sheet
+              // unscanned is refused there with a queue behind it.
+              // `posSaleLines` embeds the item's tracking for exactly
+              // this decision.
+              if (_serialTracked(line))
+                ListTile(
+                  key: const ValueKey('line-serials'),
+                  leading: const Icon(Icons.qr_code_scanner),
+                  title: const Text('Serial numbers'),
+                  subtitle: Text(_serialsOn(line).isEmpty
+                      ? 'None scanned yet'
+                      : '${_serialsOn(line).length} scanned'),
+                  onTap: () => Navigator.of(ctx).pop('serials'),
+                ),
               ListTile(
                 leading: const Icon(Icons.percent),
                 title: const Text('Take money off'),
@@ -1150,6 +1288,10 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       }
       if (go == 'modifier') {
         await _removeModifier(id, lineId);
+        return;
+      }
+      if (go == 'serials') {
+        await _scanSerials(id, line);
         return;
       }
       if (go == 'discount') {
@@ -1289,6 +1431,17 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       appBar: AppBar(
         title: const Text('Till'),
         actions: [
+          // The 86 list, whole. Stopping and resuming a dish have been
+          // reachable from a long press on the menu; the list of what
+          // is off — and who took it off — was not, so it existed only
+          // as greyed tiles scattered through a menu.
+          if (_outletId != null)
+            IconButton(
+              key: const ValueKey('sold-out'),
+              tooltip: 'Sold out today',
+              icon: const Icon(Icons.no_food_outlined),
+              onPressed: () => showSoldOut(context, _outletId!),
+            ),
           registers.maybeWhen(
             data: (rows) => PosRegisterPicker(
               registers: rows,
@@ -1373,6 +1526,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
+            onRemovePromotion: _removePromotion,
           );
         },
       );
@@ -1405,6 +1559,7 @@ class _Register extends ConsumerWidget {
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
+    required this.onRemovePromotion,
   });
 
   final String registerId;
@@ -1438,6 +1593,11 @@ class _Register extends ConsumerWidget {
   /// the shop printed is not a cashier's decision, and the two are
   /// granted differently.
   final VoidCallback onCoupon;
+
+  /// Taking one back off. A code typed against the wrong bill is the
+  /// ordinary reason, and until this reached the screen the only way
+  /// out was to void the bill and start it again.
+  final ValueChanged<Map<String, dynamic>> onRemovePromotion;
 
   /// Taking the address a bill is going to. On the same menu as the
   /// voucher and the discount, because all three are things done to a
@@ -1515,6 +1675,7 @@ class _Register extends ConsumerWidget {
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
+          onRemovePromotion: onRemovePromotion,
           compact: compact,
         );
         final finder = _Finder(
@@ -1724,6 +1885,7 @@ class _Basket extends ConsumerWidget {
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
+    required this.onRemovePromotion,
     required this.compact,
   });
 
@@ -1746,6 +1908,11 @@ class _Basket extends ConsumerWidget {
   /// the shop printed is not a cashier's decision, and the two are
   /// granted differently.
   final VoidCallback onCoupon;
+
+  /// Taking one back off. A code typed against the wrong bill is the
+  /// ordinary reason, and until this reached the screen the only way
+  /// out was to void the bill and start it again.
+  final ValueChanged<Map<String, dynamic>> onRemovePromotion;
 
   /// Taking the address a bill is going to. On the same menu as the
   /// voucher and the discount, because all three are things done to a
@@ -1852,6 +2019,10 @@ class _Basket extends ConsumerWidget {
     );
     final billDiscountReason = sale.maybeWhen(
       data: (row) => row?['bill_discount_reason'] as String?,
+      orElse: () => null,
+    );
+    final saleStatus = sale.maybeWhen(
+      data: (row) => row?['status'] as String?,
       orElse: () => null,
     );
     // What the shop's own rules took off, one row each. Read as a list
@@ -2110,23 +2281,35 @@ class _Basket extends ConsumerWidget {
                 // still shown, with the reason, because it was typed in
                 // and a cashier who cannot see it cannot explain it.
                 for (final p in promos) ...[
-                  if (posNum(p['amount']) > 0)
-                    _AmountRow('${p['name']}', -posNum(p['amount']))
-                  else
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${p['name']} · ${p['blocked_reason'] ?? ''}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.colors.warning,
-                            ),
-                          ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: posNum(p['amount']) > 0
+                            ? _AmountRow(
+                                '${p['name']}',
+                                -posNum(p['amount']),
+                              )
+                            : Text(
+                                '${p['name']} · ${p['blocked_reason'] ?? ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.colors.warning,
+                                ),
+                              ),
+                      ),
+                      // A blocked voucher is still a row somebody typed
+                      // in, so it comes off the same way a live one
+                      // does: taking it back is how they undo it.
+                      if (promotionCanBeRemoved(saleStatus))
+                        IconButton(
+                          key: ValueKey('remove-promo-${p['id']}'),
+                          tooltip: 'Take it off',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.close, size: 16),
+                          onPressed: () => onRemovePromotion(p),
                         ),
-                      ],
-                    ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                 ],
                 // The ride, on its own row above the total. It is added
@@ -2611,9 +2794,29 @@ class _WeightDialogState extends State<_WeightDialog> {
 /// to it.
 String weighedLine(num weight, num unitPrice) {
   if (weight <= 0) return '—';
-  return Fmt.money(
-    (weight * unitPrice * 100).round() / 100,
+  // The line's own two-stage rounding, not a single round of the raw
+  // product. `app.calc_document_line` holds the gross as
+  // `numeric(18, 4)` and rounds THAT to the sen, and the difference is
+  // not theoretical: 50 grams at RM 2.90 is a gross of 0.1450, which
+  // charges 15 sen. `(0.05 * 2.90 * 100).round() / 100` is 14 — 0.145
+  // is 0.14499999999999999 in binary and the multiply-back lands just
+  // under the half.
+  //
+  // Measured over every weight from 50 g to 5 kg against every price
+  // from RM 1 to RM 50: 123,093 combinations where the cashier read out
+  // one figure and the receipt charged another. This function exists to
+  // say "the number a cashier reads out is the number the customer is
+  // charged rather than one that is close to it", so that is the whole
+  // of its job.
+  // Two stages, as the database has them. A weight is kept to the gram
+  // and a price to the sen, so their product has at most five decimals
+  // and taking it at that scale is exact.
+  final gross = Fmt.reround(
+    weight.toDouble() * unitPrice.toDouble(),
+    from: 5,
+    to: 4,
   );
+  return Fmt.money(Fmt.reround(gross, from: 4, to: 2));
 }
 
 /// What goes under a dish's name on the grid.
@@ -3023,6 +3226,13 @@ class _BasketLines extends StatelessWidget {
               if (posNum(l['discount_amount']) > 0)
                 'less ${Fmt.money(posNum(l['discount_amount']))}'
                     '${l['discount_reason'] == null ? '' : ' · ${l['discount_reason']}'}',
+              // WHICH MACHINES. On the row, because the answer to "is
+              // this one scanned?" has to be readable without opening
+              // anything -- a cashier holding two identical boxes is
+              // asking exactly that, and a bill that looks finished
+              // and is not is how a queue forms at the tender sheet.
+              if (((l['serial_refs'] as List?) ?? const []).isNotEmpty)
+                (l['serial_refs'] as List).join(', '),
             ].join('\n'),
           ),
           trailing: Text(Fmt.money(posNum(l['line_total']))),

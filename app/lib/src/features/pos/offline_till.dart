@@ -104,7 +104,7 @@ class _OfflineTillState extends ConsumerState<OfflineTill> {
     final result = await showModalBottomSheet<({String type, num given})>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _OfflinePaySheet(total: _total, tenders: tenders),
+      builder: (_) => OfflinePaySheet(total: _total, tenders: tenders),
     );
     if (result == null || !mounted) return;
 
@@ -268,17 +268,25 @@ class _OfflineTillState extends ConsumerState<OfflineTill> {
 /// `app.pos_cash_due`. It has to be: a cashier cannot wait for a server
 /// to say what coins to hand back. The server computes it again when
 /// the batch lands and that answer is the one that posts.
-class _OfflinePaySheet extends StatefulWidget {
-  const _OfflinePaySheet({required this.total, required this.tenders});
+///
+/// Public so the change line and the Take-it button can be asserted
+/// without a till behind them. It takes plain data and no providers,
+/// which is what makes that worth doing.
+class OfflinePaySheet extends StatefulWidget {
+  const OfflinePaySheet({
+    super.key,
+    required this.total,
+    required this.tenders,
+  });
 
   final num total;
   final List<Map<String, dynamic>> tenders;
 
   @override
-  State<_OfflinePaySheet> createState() => _OfflinePaySheetState();
+  State<OfflinePaySheet> createState() => _OfflinePaySheetState();
 }
 
-class _OfflinePaySheetState extends State<_OfflinePaySheet> {
+class _OfflinePaySheetState extends State<OfflinePaySheet> {
   final _amount = TextEditingController();
   String? _type;
 
@@ -294,7 +302,12 @@ class _OfflinePaySheetState extends State<_OfflinePaySheet> {
         ? null
         : widget.tenders.first['id'] as String?;
     final due = cashDue(widget.total);
-    final given = num.tryParse(_amount.text) ?? due;
+    // Null where the box holds something that is not a figure. An empty
+    // box is exact money and comes back as `due`; a mistyped one used
+    // to come back as `due` as well, and the change on the screen went
+    // to nought with the customer still owed it. See `tenderTyped`.
+    final typed = tenderTyped(_amount.text, exact: due.toDouble());
+    final given = typed ?? due;
     final change = given - due;
 
     return SafeArea(
@@ -362,12 +375,20 @@ class _OfflinePaySheetState extends State<_OfflinePaySheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              change > 0 ? 'Change ${Fmt.money(change)}' : 'No change',
+              // Said plainly rather than shown as "No change", which is
+              // what an unreadable box used to produce and is
+              // indistinguishable from exact money.
+              typed == null
+                  ? 'That is not an amount'
+                  : change > 0
+                      ? 'Change ${Fmt.money(change)}'
+                      : 'No change',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _type == null || change < 0
+              // And the sale cannot be taken on a figure nobody read.
+              onPressed: _type == null || typed == null || change < 0
                   ? null
                   : () => Navigator.of(context).pop(
                       (type: _type!, given: given),

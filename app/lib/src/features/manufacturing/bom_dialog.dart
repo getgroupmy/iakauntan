@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -344,27 +346,48 @@ class _BomDialogState extends ConsumerState<BomDialog> {
                           children: [
                             SizedBox(
                               width: 180,
-                              child: DropdownButtonFormField<String>(
-                                value: _steps[i].workCentreId,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Where',
-                                ),
-                                items: [
+                              child: SearchablePicker<String>(
+                                options: [
                                   for (final w in centres)
-                                    DropdownMenuItem(
+                                    PickerOption<String>(
                                       value: w['id'] as String,
-                                      child: Text(
-                                        w['code']?.toString() ?? '',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                      label: w['code']?.toString() ?? '',
+                                      // The NAME as well: the dropdown
+                                      // showed only the code, which is
+                                      // fine for whoever set the centres
+                                      // up and opaque to everyone else.
+                                      sublabel: w['name']?.toString(),
+                                      keywords: [w['name']?.toString() ?? ''],
                                     ),
                                 ],
-                                onChanged: _saving
-                                    ? null
-                                    : (v) => setState(
-                                        () => _steps[i].workCentreId = v,
-                                      ),
+                                value: _steps[i].workCentreId,
+                                label: 'Where',
+                                enabled: !_saving,
+                                createLabel: 'Add work centre',
+                                onCreate: (typed) => quickAdd(
+                                  context,
+                                  title: 'New work centre',
+                                  blurb: 'Not on the list yet. Its cost '
+                                      'per hour and daily capacity '
+                                      'start at nothing and eight; set '
+                                      'them on the Work centres screen.',
+                                  nameHint: 'Assembly line 2',
+                                  codeLabel: 'Code',
+                                  seed: typed,
+                                  save: ({required name, code}) async {
+                                    final id = await ref
+                                        .read(repoProvider)!
+                                        .saveWorkCentre(
+                                          code: code!,
+                                          name: name,
+                                        );
+                                    ref.invalidate(workCentresProvider);
+                                    return id;
+                                  },
+                                ),
+                                onChanged: (v) => setState(
+                                  () => _steps[i].workCentreId = v,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),

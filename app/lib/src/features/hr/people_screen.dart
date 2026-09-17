@@ -7,6 +7,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'attendance_month.dart';
+import 'expiring_documents.dart';
 
 /// The company directory. Everyone can see who works here; only HR and
 /// the person themselves get the full record behind it, which is why
@@ -25,18 +27,45 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
   Widget build(BuildContext context) {
     final people = ref.watch(directoryProvider);
     final canManageHr = ref.watch(canManageHrProvider);
+    final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('People'),
         actions: [
+          // Everybody's month. `attendance_records` has carried the
+          // lateness and the overtime all along and nothing listed
+          // them, so who was late was a question the HR module could
+          // not answer.
+          if (canManageHr)
+            IconButton(
+              key: const ValueKey('attendance-month'),
+              tooltip: 'Attendance this month',
+              icon: const Icon(Icons.fingerprint),
+              onPressed: () => showAttendanceMonth(context),
+            ),
+          // The list `0025` built an index for and never wrote. Without
+          // it a lapsing work permit is only findable by opening every
+          // employee — and an expired pass is the company's offence.
+          if (canManageHr)
+            IconButton(
+              key: const ValueKey('expiring-documents'),
+              tooltip: 'Documents expiring',
+              icon: const Icon(Icons.event_busy_outlined),
+              onPressed: () => showExpiringDocuments(context),
+            ),
           if (canManageHr)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
               child: FilledButton.icon(
                 onPressed: () => context.go('/hr/people/new'),
                 icon: const Icon(Icons.person_add_alt, size: 18),
-                label: const Text('Add employee'),
+                // The noun goes on the narrowest phones. Measured: the
+                // bar was two pixels over at 360 with both icon buttons
+                // showing, and Flutter CLIPS a toolbar in a release
+                // build rather than reporting it. The list behind the
+                // button says who is being added.
+                label: Text(narrow ? 'Add' : 'Add employee'),
               ),
             ),
         ],

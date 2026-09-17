@@ -67,10 +67,14 @@ begin
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL2', 'Encik Rajan', 'customer') returning id into v_rajan;
 
-  insert into public.matters (org_id, matter_no, name, client_id)
-  values (v_org, 'M-1', 'Sale of a house', v_aminah) returning id into v_m1;
-  insert into public.matters (org_id, matter_no, name, client_id)
-  values (v_org, 'M-2', 'A tenancy dispute', v_rajan) returning id into v_m2;
+  insert into public.matters
+    (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-1', 'Sale of a house', v_aminah, pg_temp.test_user())
+  returning id into v_m1;
+  insert into public.matters
+    (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-2', 'A tenancy dispute', v_rajan, pg_temp.test_user())
+  returning id into v_m2;
 
   insert into public.billing_rates
     (org_id, user_id, effective_from, hourly_rate)

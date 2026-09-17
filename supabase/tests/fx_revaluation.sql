@@ -8,6 +8,13 @@
 -- system looks at it, so these assert the arithmetic and, just as
 -- importantly, that running the revaluation twice does not double it.
 --
+-- Most blocks below hold one open item, which is the shape that lets a
+-- mistake through: a run with one item can be netted, cannot get a
+-- payable's sign wrong on the preview, and never has a ringgit balance
+-- or a later month's invoice to leave alone. The last block before the
+-- reachability checks is the ordinary case -- a book with both sides
+-- open, in two currencies, closed a fortnight into the next month.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 
@@ -308,6 +315,124 @@ begin
     (select coalesce(sum(l.debit) - sum(l.credit), 0)
        from public.gl_lines l join public.accounts a on a.id = l.account_id
       where l.entry_id = v_entry and a.code = '6500'), 5000);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A gain and a loss in the same run, and what is not in it
+--
+-- Every block above puts one open item in front of the revaluation, so
+-- four things it does went unasserted:
+--
+--   * a run that produces both a gain and a loss states them
+--     separately. The function does this deliberately -- "a year with
+--     RM 80,000 of each is not the same year as one with neither" --
+--     and no fixture ever had both, so netting them would have passed;
+--   * the preview signs a payable the other way from a receivable. The
+--     preview block above is a receivable, so previewing a supplier
+--     balance as if it were a customer one changed nothing;
+--   * the preview leaves ringgit balances alone. Every fixture book was
+--     either wholly foreign or wholly ringgit;
+--   * neither touches a document dated after the as-at date. Closing
+--     March in April, with April's invoices already raised, is the
+--     normal way this function is used, and revaluing them at March's
+--     rate would have gone unnoticed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.fx_org('Both Ways Sdn Bhd');
+  v_supp uuid; v_cust uuid; v_bill uuid; v_myr uuid;
+  v_entry uuid;
+  r record;
+  v_rows integer;
+begin
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_org,'USD','MYR',4.70, date '2026-03-01','manual'),
+         (v_org,'USD','MYR',4.20, date '2026-03-31','manual');
+
+  -- USD 10,000 owed to us at 4.70. At 4.20 it is worth RM 5,000 less.
+  perform pg_temp.posted_usd_invoice(v_org, 10000, 4.70, date '2026-03-01');
+
+  -- USD 6,000 owed by us at 4.70. The same fall in the dollar makes the
+  -- debt RM 3,000 cheaper to settle, which is a gain. One movement,
+  -- opposite signs, which is the whole reason both accounts exist.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org,'S-001','US Supplier','supplier') returning id into v_supp;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'bill','BILL-001', date '2026-03-01', v_supp,'USD',4.70,
+          6000, 6000, 6000, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'Imported goods', 1, 6000);
+  perform public.post_purchase_document(v_bill);
+
+  -- A ringgit invoice sitting open beside them. There is nothing to
+  -- restate about a balance already in the reporting currency.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org,'C-MYR','Local Buyer','customer') returning id into v_cust;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'invoice','INV-MYR', date '2026-03-01', v_cust,'MYR',1,
+          20000, 20000, 20000, 'draft')
+  returning id into v_myr;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_myr, 1, 'Local sale', 1, 20000);
+  perform public.post_sales_document(v_myr);
+
+  -- And an April invoice, raised before anybody got round to closing
+  -- March. It is not a March balance and has no business in a March
+  -- revaluation.
+  perform pg_temp.posted_usd_invoice(v_org, 8000, 4.30, date '2026-04-15');
+
+  -- ------------------------------------------------------------------
+  -- The preview
+  -- ------------------------------------------------------------------
+  select count(*)::integer into v_rows
+    from public.fx_revaluation_preview(v_org, date '2026-03-31');
+  perform pg_temp.check_eq('the preview has one line per foreign currency, '
+                        || 'and the ringgit is not one', v_rows, 1);
+
+  select * into r from public.fx_revaluation_preview(v_org, date '2026-03-31');
+  perform pg_temp.check_eq('it counts the March documents and not April''s',
+                           r.documents, 2);
+  -- RM 47,000 owed to us less RM 28,200 owed by us is RM 18,800 booked;
+  -- at 4.20 the same two are RM 42,000 and RM 25,200, or RM 16,800.
+  perform pg_temp.check_eq('the booked position nets the payable off',
+                           r.booked, 18800);
+  perform pg_temp.check_eq('and so does the restated one', r.restated, 16800);
+  perform pg_temp.check_eq('leaving RM 2,000 against the book',
+                           r.difference, -2000);
+
+  -- ------------------------------------------------------------------
+  -- The posting
+  -- ------------------------------------------------------------------
+  v_entry := public.revalue_foreign_balances(v_org, date '2026-03-31');
+
+  perform pg_temp.check_eq('the loss on the receivable is stated in full',
+    (select coalesce(sum(l.debit) - sum(l.credit), 0)
+       from public.gl_lines l join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '6500'), 5000);
+  perform pg_temp.check_eq('and the gain on the payable in full beside it',
+    (select coalesce(sum(l.credit) - sum(l.debit), 0)
+       from public.gl_lines l join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '4920'), 3000);
+  -- Netting would leave RM 2,000 in one account and nothing in the
+  -- other, which is the same balance sheet and a different story.
+  perform pg_temp.check_true('neither is netted into the other',
+    (select count(*) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code in ('4920','6500')) = 2);
+
+  perform pg_temp.check_eq('and nothing was restated against the ringgit sale',
+    (select coalesce(sum(l.debit + l.credit), 0)
+       from public.gl_lines l
+      where l.entry_id = v_entry and l.contact_id = v_cust), 0);
 end $$;
 
 -- ---------------------------------------------------------------------

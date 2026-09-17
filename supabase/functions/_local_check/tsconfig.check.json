@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+        "moduleResolution": "Bundler",
+    // Deno treats every file as a module; tsc decides by whether the file
+    // has an import. `web_push_keygen.ts` has neither, and its top-level
+    // await is legal under Deno and an error here without this.
+    "moduleDetection": "force",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "types": [],
+    "paths": {
+      "jsr:@supabase/supabase-js@2": ["./supabase_js_stub.ts"],
+      "jsr:@supabase/supabase-js": ["./supabase_js_stub.ts"],
+      "jsr:@std/assert@1": ["./std_assert_stub.ts"],
+      "jsr:@std/assert": ["./std_assert_stub.ts"]
+    }
+  }
+}

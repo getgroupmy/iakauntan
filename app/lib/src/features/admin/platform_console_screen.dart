@@ -7,61 +7,335 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'entity_types_admin.dart';
+import 'search_registers_admin.dart';
+import 'ai_providers_admin.dart';
 import 'branding_admin.dart';
+import 'closed_accounts_admin.dart';
 import 'credit_admin.dart';
 import 'landing_cms.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
+import 'scan_kinds_admin.dart';
 import 'payment_gateways_admin.dart';
+import 'promotions_admin.dart';
+import 'feedback_admin.dart';
+import 'platform_trail_admin.dart';
+import 'reservations_admin.dart';
+import 'site_pages_admin.dart';
+import 'ssm_lookup_admin.dart';
 import 'statutory_rates_admin.dart';
 
-/// Platform operator console. Everything here goes through SECURITY
-/// DEFINER functions that re-check platform admin rights, so a tenant
-/// user who guesses the route sees errors rather than data.
-class PlatformConsoleScreen extends ConsumerStatefulWidget {
-  const PlatformConsoleScreen({super.key});
+/// One section of the platform console.
+///
+/// Public, because the console has no menu of its own: these are real
+/// routes, and the app's own side menu is what opens them. The shell
+/// builds a destination from each of these the same way it builds one
+/// from a module.
+typedef ConsoleSection = ({
+  /// The heading this section sits under when the menu is grouped. Used
+  /// as the heading text directly — `groupByModule` falls back to the
+  /// code when there is no module by that name, and there is no module
+  /// by any of these names.
+  String group,
+  String label,
+  IconData icon,
+  IconData selectedIcon,
+  String path,
+
+  /// Gets a slot in the phone's bottom bar rather than living behind
+  /// "More". Two of the ten, because the bar has room for a few and
+  /// Material refuses to draw one with fewer than two slots.
+  bool primary,
+  Widget page,
+});
+
+/// The console's sections, in the order the menu offers them.
+///
+/// Grouped in runs rather than sorted into groups, so the order stays
+/// the same whether or not the platform has asked for a grouped menu.
+const platformConsoleSections = <ConsoleSection>[
+  (
+    group: 'Platform',
+    label: 'Overview',
+    icon: Icons.insights_outlined,
+    selectedIcon: Icons.insights,
+    path: '/admin',
+    primary: true,
+    page: _OverviewTab(),
+  ),
+  (
+    group: 'Platform',
+    label: 'Organizations',
+    icon: Icons.business_outlined,
+    selectedIcon: Icons.business,
+    path: '/admin/organizations',
+    primary: true,
+    page: _OrganizationsTab(),
+  ),
+  (
+    group: 'Platform',
+    label: 'Closed accounts',
+    icon: Icons.inventory_2_outlined,
+    selectedIcon: Icons.inventory_2,
+    path: '/admin/closed',
+    primary: false,
+    page: ClosedAccountsAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    label: 'Scanning credit',
+    icon: Icons.credit_score_outlined,
+    selectedIcon: Icons.credit_score,
+    path: '/admin/credit',
+    primary: false,
+    page: CreditAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    label: 'Readers',
+    icon: Icons.document_scanner_outlined,
+    selectedIcon: Icons.document_scanner,
+    path: '/admin/readers',
+    primary: false,
+    page: OcrCatalogAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    label: 'Kinds of document',
+    icon: Icons.rule_folder_outlined,
+    selectedIcon: Icons.rule_folder,
+    path: '/admin/scan-kinds',
+    primary: false,
+    page: ScanKindsAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'AI providers',
+    icon: Icons.smart_toy_outlined,
+    selectedIcon: Icons.smart_toy,
+    path: '/admin/ai',
+    primary: false,
+    page: AiProvidersAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Kinds of business',
+    icon: Icons.category_outlined,
+    selectedIcon: Icons.category,
+    path: '/admin/entity-types',
+    primary: false,
+    page: EntityTypesAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Entity Search',
+    icon: Icons.travel_explore_outlined,
+    selectedIcon: Icons.travel_explore,
+    path: '/admin/registers',
+    primary: false,
+    page: SearchRegistersAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'SSM register',
+    icon: Icons.travel_explore_outlined,
+    selectedIcon: Icons.travel_explore,
+    path: '/admin/ssm',
+    primary: false,
+    page: SsmLookupAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Service settings',
+    icon: Icons.tune_outlined,
+    selectedIcon: Icons.tune,
+    path: '/admin/service',
+    primary: false,
+    page: _SettingsTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Statutory rates',
+    icon: Icons.gavel_outlined,
+    selectedIcon: Icons.gavel,
+    path: '/admin/rates',
+    primary: false,
+    page: StatutoryRatesAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'What people told us',
+    icon: Icons.bug_report_outlined,
+    selectedIcon: Icons.bug_report,
+    path: '/admin/feedback',
+    primary: false,
+    page: FeedbackAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'The platform\u2019s trail',
+    icon: Icons.fact_check_outlined,
+    selectedIcon: Icons.fact_check,
+    path: '/admin/trail',
+    primary: false,
+    page: PlatformTrailAdminTab(),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Names on our domain',
+    icon: Icons.alternate_email_outlined,
+    selectedIcon: Icons.alternate_email,
+    path: '/admin/names',
+    primary: false,
+    page: ReservationsAdminTab(),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Landing page',
+    icon: Icons.web_outlined,
+    selectedIcon: Icons.web,
+    path: '/admin/landing',
+    primary: false,
+    page: LandingCmsTab(),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Sign in page',
+    icon: Icons.login_outlined,
+    selectedIcon: Icons.login,
+    path: '/admin/page/signin',
+    primary: false,
+    page: SitePageTab(slug: 'signin'),
+  ),
+  // `0348`. The sign-in form at a company's own address, which is a
+  // different room with the same furniture: nobody arriving at
+  // `sinar.iakauntan.com` is wondering what the product is. Its own
+  // row of copy, edited here exactly as the platform's own is.
+  (
+    group: 'Website & brand',
+    label: 'Login page',
+    icon: Icons.meeting_room_outlined,
+    selectedIcon: Icons.meeting_room,
+    path: '/admin/page/login',
+    primary: false,
+    page: SitePageTab(slug: 'login'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Sign up page',
+    icon: Icons.person_add_alt_outlined,
+    selectedIcon: Icons.person_add_alt_1,
+    path: '/admin/page/signup',
+    primary: false,
+    page: SitePageTab(slug: 'signup'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Terms of Use',
+    icon: Icons.gavel_outlined,
+    selectedIcon: Icons.gavel,
+    path: '/admin/page/terms',
+    primary: false,
+    page: SitePageTab(slug: 'terms'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Privacy Policy',
+    icon: Icons.privacy_tip_outlined,
+    selectedIcon: Icons.privacy_tip,
+    path: '/admin/page/privacy',
+    primary: false,
+    page: SitePageTab(slug: 'privacy'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Contact us',
+    icon: Icons.contact_support_outlined,
+    selectedIcon: Icons.contact_support,
+    path: '/admin/page/contact',
+    primary: false,
+    page: SitePageTab(slug: 'contact'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Branding',
+    icon: Icons.palette_outlined,
+    selectedIcon: Icons.palette,
+    path: '/admin/branding',
+    primary: false,
+    page: BrandingAdminTab(),
+  ),
+  (
+    group: 'Billing',
+    label: 'Modules & pricing',
+    icon: Icons.widgets_outlined,
+    selectedIcon: Icons.widgets,
+    path: '/admin/modules',
+    primary: false,
+    page: ModulesAdminTab(),
+  ),
+  (
+    group: 'Billing',
+    label: 'Promotions',
+    icon: Icons.local_offer_outlined,
+    selectedIcon: Icons.local_offer,
+    path: '/admin/promotions',
+    primary: false,
+    page: PromotionsAdminTab(),
+  ),
+  (
+    group: 'Billing',
+    label: 'Payment gateways',
+    icon: Icons.payments_outlined,
+    selectedIcon: Icons.payments,
+    path: '/admin/gateways',
+    primary: false,
+    page: PaymentGatewaysAdminTab(),
+  ),
+];
+
+/// One section of the platform operator console.
+///
+/// Everything here goes through SECURITY DEFINER functions that
+/// re-check platform admin rights, so a tenant user who guesses the
+/// route sees errors rather than data. The check below is what stops
+/// them seeing the furniture.
+///
+/// ## Why there is no menu in this file
+///
+/// There was one, twice: first a strip of tabs across the top, then a
+/// column down the side. Both were a second menu, drawn beside the
+/// app's own, in a window that then had two of them — a thin strip of
+/// icons on the far left and a list of sections next to it.
+///
+/// The sections are routes now. The shell's side menu opens them, the
+/// same menu that opens Sales and Payroll, with the same header above
+/// it and the same account button under it. One menu, and this screen
+/// is what sits to the right of it.
+class PlatformConsoleScreen extends ConsumerWidget {
+  const PlatformConsoleScreen({super.key, required this.path});
+
+  /// Which of `platformConsoleSections` to show.
+  final String path;
+
+  ConsoleSection get _section => platformConsoleSections.firstWhere(
+    (s) => s.path == path,
+    orElse: () => platformConsoleSections.first,
+  );
 
   @override
-  ConsumerState<PlatformConsoleScreen> createState() =>
-      _PlatformConsoleScreenState();
-}
-
-class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 10, vsync: this);
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin = ref.watch(isPlatformAdminProvider);
+    final section = _section;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.shield_outlined, size: 20),
-          SizedBox(width: 10),
-          Text('Platform console'),
-        ]),
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Overview'),
-            Tab(text: 'Organizations'),
-            Tab(text: 'Scanning credit'),
-            Tab(text: 'Readers'),
-            Tab(text: 'Service settings'),
-            Tab(text: 'Statutory rates'),
-            Tab(text: 'Landing page'),
-            Tab(text: 'Branding'),
-            Tab(text: 'Modules & pricing'),
-            Tab(text: 'Payment gateways'),
+        title: Row(
+          children: [
+            const Icon(Icons.shield_outlined, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(section.label)),
           ],
         ),
       ),
@@ -75,21 +349,7 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
               message: 'This console is for platform staff only.',
             );
           }
-          return TabBarView(
-            controller: _tabs,
-            children: const [
-              _OverviewTab(),
-              _OrganizationsTab(),
-              CreditAdminTab(),
-              OcrCatalogAdminTab(),
-              _SettingsTab(),
-              StatutoryRatesAdminTab(),
-              LandingCmsTab(),
-              BrandingAdminTab(),
-              ModulesAdminTab(),
-              PaymentGatewaysAdminTab(),
-            ],
-          );
+          return section.page;
         },
       ),
     );
@@ -119,13 +379,24 @@ class _OverviewTab extends ConsumerWidget {
                   'Platform health',
                   subtitle: 'Across every tenant on this deployment',
                 ),
-                GridView.count(
-                  crossAxisCount: columns,
+                GridView(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: columns == 1 ? 3.2 : 1.75,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    // One column runs the full width of a phone, so an
+                    // aspect ratio ties the card's height to the width
+                    // of the screen — which has nothing to do with how
+                    // tall the three lines inside it are. At 412 pixels
+                    // that came out four short and clipped the caption
+                    // off "10 joined in 30 days"; narrower still, and
+                    // the caption wraps and it clips more. A height in
+                    // pixels is what a stack of text actually needs.
+                    childAspectRatio: columns == 1 ? 1 : 1.75,
+                    mainAxisExtent: columns == 1 ? 132 : null,
+                  ),
                   children: [
                     StatTile(
                       label: 'Organizations',
@@ -136,7 +407,8 @@ class _OverviewTab extends ConsumerWidget {
                     StatTile(
                       label: 'Users',
                       value: '${Fmt.toInt(s['users'])}',
-                      caption: '${Fmt.toInt(s['signups_30d'])} joined in 30 days',
+                      caption:
+                          '${Fmt.toInt(s['signups_30d'])} joined in 30 days',
                       icon: Icons.people_outline,
                       accent: context.colors.info,
                     ),
@@ -168,15 +440,20 @@ class _OverviewTab extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SectionHeader('e-Invoice adoption'),
-                        Row(children: [
-                          const Expanded(
-                              child: Text('Organizations with e-Invoice on')),
-                          Text(
-                            '${Fmt.toInt(s['einvoice_enabled_orgs'])}'
-                            ' of ${Fmt.toInt(s['organizations'])}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ]),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text('Organizations with e-Invoice on'),
+                            ),
+                            Text(
+                              '${Fmt.toInt(s['einvoice_enabled_orgs'])}'
+                              ' of ${Fmt.toInt(s['organizations'])}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -214,8 +491,7 @@ class _OrganizationsTab extends ConsumerWidget {
         return ListView.separated(
           itemCount: list.length,
           separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) =>
-              _OrgTile(org: list[i], modules: modules),
+          itemBuilder: (context, i) => _OrgTile(org: list[i], modules: modules),
         );
       },
     );
@@ -234,16 +510,20 @@ class _OrgTile extends ConsumerWidget {
 
     return ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: Space.lg),
-      title: Row(children: [
-        Flexible(
-          child: Text(org.name,
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              org.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        const SizedBox(width: 10),
-        StatusChip(org.status, compact: true),
-      ]),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 10),
+          StatusChip(org.status, compact: true),
+        ],
+      ),
       subtitle: Text(
         [
           if ((org.registrationNo ?? '').isNotEmpty) org.registrationNo,
@@ -263,7 +543,8 @@ class _OrgTile extends ConsumerWidget {
             children: [
               const SectionHeader(
                 'Add-on modules',
-                subtitle: 'Switching one off blocks new records but keeps history',
+                subtitle:
+                    'Switching one off blocks new records but keeps history',
               ),
               Wrap(
                 spacing: 8,
@@ -294,6 +575,26 @@ class _OrgTile extends ConsumerWidget {
                     ),
                 ],
               ),
+              const SizedBox(height: 16),
+              // The only route past `org_members`' own rules, which
+              // deliberately let nobody but an owner give up ownership.
+              // That is right until the owner stops answering, at which
+              // point the company cannot be handed to anyone and this is
+              // the way out. It writes down who did it and why.
+              const SectionHeader(
+                'Ownership',
+                subtitle:
+                    'For an owner who cannot be reached. Recorded '
+                    'permanently, with the reason given.',
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => _ForceHandoverDialog(org: org),
+                ),
+                icon: const Icon(Icons.gavel_outlined, size: 18),
+                label: const Text('Force a handover'),
+              ),
             ],
           ),
         ),
@@ -302,7 +603,11 @@ class _OrgTile extends ConsumerWidget {
   }
 
   Future<void> _toggleModule(
-      BuildContext context, WidgetRef ref, ModuleInfo m, bool on) async {
+    BuildContext context,
+    WidgetRef ref,
+    ModuleInfo m,
+    bool on,
+  ) async {
     await runWithFeedback(
       context,
       action: () =>
@@ -316,12 +621,16 @@ class _OrgTile extends ConsumerWidget {
   }
 
   Future<void> _setStatus(
-      BuildContext context, WidgetRef ref, String status) async {
+    BuildContext context,
+    WidgetRef ref,
+    String status,
+  ) async {
     if (status == 'suspended') {
       final ok = await confirm(
         context,
         title: 'Suspend ${org.name}?',
-        message: 'Members keep their sign-in but the account is flagged '
+        message:
+            'Members keep their sign-in but the account is flagged '
             'suspended. Use this for non-payment or abuse.',
         confirmLabel: 'Suspend',
         destructive: true,
@@ -385,18 +694,31 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
   late final TextEditingController _controller;
   bool _dirty = false;
 
+  /// `platform_settings.value` is jsonb and NOT every setting is an
+  /// object. `mail_domain` is stored as a bare JSON string, because
+  /// `app.mail_domain()` reads it with `#>> '{}'` — which only works on
+  /// a scalar. Casting this to a Map threw, and a throw in `build`
+  /// takes down the whole tab: in a release build Flutter paints the
+  /// grey `ErrorWidget` box and the seven settings that were fine
+  /// vanish along with the one that was not.
+  dynamic get _raw => widget.setting['value'];
+
+  bool get _isObject => _raw is Map;
+
   Map<String, dynamic> get _value =>
-      Map<String, dynamic>.from(widget.setting['value'] as Map? ?? {});
+      _isObject ? Map<String, dynamic>.from(_raw as Map) : <String, dynamic>{};
 
   /// Settings that are a single on/off get a switch; the rest are edited
   /// as raw JSON, which keeps the console honest about what is stored.
   bool get _isToggle =>
-      _value.length <= 2 && _value.containsKey('enabled');
+      _isObject && _value.length <= 2 && _value.containsKey('enabled');
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: _encode(_value));
+    _controller = TextEditingController(
+      text: _isObject ? _encode(_value) : '${_raw ?? ''}',
+    );
   }
 
   @override
@@ -408,7 +730,7 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
   static String _encode(Map<String, dynamic> v) =>
       v.entries.map((e) => '${e.key}: ${e.value}').join(', ');
 
-  Future<void> _save(Map<String, dynamic> value) async {
+  Future<void> _save(dynamic value) async {
     await runWithFeedback(
       context,
       action: () => ref
@@ -437,11 +759,15 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(Fmt.label(key),
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        Fmt.label(key),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       if (description != null)
-                        Text(description,
-                            style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          description,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                     ],
                   ),
                 ),
@@ -461,16 +787,28 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
                     child: TextField(
                       controller: _controller,
                       onChanged: (_) => setState(() => _dirty = true),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Value',
-                        helperText: 'key: value, comma separated',
+                        helperText: _isObject
+                            ? 'key: value, comma separated'
+                            : 'a single value, stored as it is typed',
                         isDense: true,
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   FilledButton(
-                    onPressed: _dirty ? () => _save(_parse(_controller.text)) : null,
+                    // A scalar setting goes back as a scalar. Parsed as
+                    // pairs it would become `{}`, and `app.mail_domain()`
+                    // would fall through to its hard-coded default with
+                    // nothing to say why.
+                    onPressed: _dirty
+                        ? () => _save(
+                            _isObject
+                                ? _parse(_controller.text)
+                                : _parseScalar(_controller.text),
+                          )
+                        : null,
                     child: const Text('Save'),
                   ),
                 ],
@@ -480,6 +818,15 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
         ),
       ),
     );
+  }
+
+  /// A setting that is stored as one jsonb value rather than an object.
+  /// Kept typed for the same reason `_parse` is: a number typed back as
+  /// a string changes what the setting means to whatever reads it.
+  static dynamic _parseScalar(String raw) {
+    final v = raw.trim();
+    if (v == 'true' || v == 'false') return v == 'true';
+    return num.tryParse(v) ?? v;
   }
 
   /// Parses "key: value, key: value" back into JSON, keeping numbers and
@@ -500,5 +847,117 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
       }
     }
     return out;
+  }
+}
+
+/// Taking a company off an owner who has gone.
+///
+/// `org_members`' own policies make an owner row undeletable and
+/// undemotable by anybody but its owner, which is right: it means a
+/// company can never be orphaned and a colleague cannot stage a coup.
+/// It also means that when the owner has left the firm, left the
+/// country or simply stopped answering, nobody can do anything at all.
+///
+/// This is the way out, and the reason is not optional — an escape
+/// hatch with no record is indistinguishable from a back door. The
+/// database refuses a blank one; this asks for it plainly rather than
+/// letting somebody find that out from a constraint name.
+class _ForceHandoverDialog extends ConsumerStatefulWidget {
+  const _ForceHandoverDialog({required this.org});
+
+  final PlatformOrg org;
+
+  @override
+  ConsumerState<_ForceHandoverDialog> createState() =>
+      _ForceHandoverDialogState();
+}
+
+class _ForceHandoverDialogState extends ConsumerState<_ForceHandoverDialog> {
+  final _email = TextEditingController();
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Force a handover of ${widget.org.name}'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'The person named below becomes the owner. Whoever holds '
+              'it now becomes an administrator rather than being removed, '
+              'so nothing is lost if this turns out to have been a '
+              'mistake. Any practice keeping the books loses its access.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _email,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'The new owner\'s e-mail',
+                helperText: 'They must already have an account.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reason,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Why',
+                helperText:
+                    'Kept permanently and shown to the company. Say who '
+                    'asked, and what was tried first.',
+                helperMaxLines: 3,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final email = _email.text.trim();
+            final reason = _reason.text.trim();
+            if (email.isEmpty || reason.isEmpty) return;
+            final ok = await confirm(
+              context,
+              title: 'Force the handover?',
+              message:
+                  'This overrides the company\'s own rules about who may '
+                  'give it away. It is recorded against your name.',
+              confirmLabel: 'Force it',
+              destructive: true,
+            );
+            if (!ok || !context.mounted) return;
+            final repo = ref.read(firmsRepoProvider);
+            final done = await runWithFeedback(
+              context,
+              doing: 'force a company handover',
+              successMessage: 'Handed over',
+              action: () => repo.forceTransfer(widget.org.id, email, reason),
+            );
+            ref.invalidate(platformOrgsProvider);
+            if (done && context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Force it'),
+        ),
+      ],
+    );
   }
 }

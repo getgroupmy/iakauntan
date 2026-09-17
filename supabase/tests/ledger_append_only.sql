@@ -96,63 +96,53 @@ set local role authenticated;
 do $$
 declare
   v_entry uuid := (select entry from pg_temp_ledger where step = 'entry');
-  v_failed boolean;
 begin
   perform pg_temp.check_true('this person may post',
     app.can_post((select entry from pg_temp_ledger where step = 'org')));
 
-  v_failed := false;
-  begin
-    update public.gl_entries set total_debit = 1 where id = v_entry;
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('a posted journal cannot be edited', v_failed);
+  -- Six refusals, each asserted on the message AND the sqlstate rather
+  -- than on "something went wrong".
+  --
+  -- These were `exception when others then v_failed := true`, which
+  -- passes whatever the reason. A column renamed out from under the
+  -- statement raises 42703 and reads as the ledger defending itself; so
+  -- does a typo. The point of this file is that the ledger is APPEND
+  -- ONLY, and "the statement failed" is not that claim -- `42501
+  -- permission denied for table gl_entries` is.
+  perform pg_temp.check_refused('a posted journal cannot be edited',
+    format('update public.gl_entries set total_debit = 1 where id = %L',
+           v_entry),
+    '%permission denied for table gl_entries%', '42501');
 
-  v_failed := false;
-  begin
-    update public.gl_lines set debit = 1 where entry_id = v_entry;
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('nor can its lines', v_failed);
+  perform pg_temp.check_refused('nor can its lines',
+    format('update public.gl_lines set debit = 1 where entry_id = %L',
+           v_entry),
+    '%permission denied for table gl_lines%', '42501');
 
-  v_failed := false;
-  begin
-    delete from public.gl_lines where entry_id = v_entry;
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('its lines cannot be deleted', v_failed);
+  perform pg_temp.check_refused('its lines cannot be deleted',
+    format('delete from public.gl_lines where entry_id = %L', v_entry),
+    '%permission denied for table gl_lines%', '42501');
 
-  v_failed := false;
-  begin
-    delete from public.gl_entries where id = v_entry;
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('and neither can the journal', v_failed);
+  perform pg_temp.check_refused('and neither can the journal',
+    format('delete from public.gl_entries where id = %L', v_entry),
+    '%permission denied for table gl_entries%', '42501');
 
   -- Truncation, which no policy in this schema can touch. Row level
   -- security filters rows; TRUNCATE does not look at rows, so every
   -- policy above is irrelevant to it and only the privilege stands in
   -- the way. Before 0239 this emptied the table: 10 rows to 0, measured
   -- on production with 0238 already applied.
-  v_failed := false;
-  begin
-    truncate public.gl_lines cascade;
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('and the ledger cannot be truncated', v_failed);
+  --
+  -- Which is exactly why the sqlstate is asserted here. A TRUNCATE
+  -- stopped by a policy would be the wrong defence working by accident,
+  -- and this says in as many words that it is the PRIVILEGE holding.
+  perform pg_temp.check_refused('and the ledger cannot be truncated',
+    'truncate public.gl_lines cascade',
+    '%permission denied for table gl_lines%', '42501');
 
-  v_failed := false;
-  begin
-    truncate public.gl_entries cascade;
-  exception when others then
-    v_failed := true;
-  end;
-  perform pg_temp.check_true('nor can the entries', v_failed);
+  perform pg_temp.check_refused('nor can the entries',
+    'truncate public.gl_entries cascade',
+    '%permission denied for table gl_entries%', '42501');
 
   -- The half that stops all of the above being satisfied by a ledger
   -- nobody can reach at all.

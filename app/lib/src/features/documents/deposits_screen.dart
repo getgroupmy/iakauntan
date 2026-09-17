@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../banking/new_bank_account_dialog.dart';
+import '../contacts/new_contact_dialog.dart';
+import 'deposit_apply_sheet.dart';
 
 /// Which way the money went, in the words a shop uses.
 String depositKind(String? kind) =>
@@ -45,6 +50,23 @@ String? depositOutcome(Map<String, dynamic> row) {
     if (forfeited > 0) '${Fmt.money(forfeited)} kept',
   ];
   return parts.isEmpty ? null : parts.join(', ');
+}
+
+/// Why this deposit cannot be undone, or null when it can be.
+///
+/// `void_deposit` will only take one nothing has been done with:
+/// "Deposit % has already been used: % applied, % given back, % kept.
+/// Undo those first." Once part of it has settled an invoice, the way
+/// back is to undo that -- a note vanishing from under a posted
+/// settlement would leave the settlement pointing at nothing.
+String? depositVoidBlockedBecause(Map<String, dynamic> row) {
+  if ('${row['status']}' == 'void') return 'This one is already void.';
+  final amount = num.tryParse('${row['amount'] ?? 0}') ?? 0;
+  final balance = num.tryParse('${row['balance'] ?? 0}') ?? 0;
+  if (balance != amount) {
+    return 'Part of it has been used. Undo that first.';
+  }
+  return null;
 }
 
 /// What one line of a deposit's history says.
@@ -248,15 +270,22 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
                 }),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contact,
-                decoration: InputDecoration(
-                  labelText: _kind == 'customer' ? 'From whom' : 'To whom',
+                label: _kind == 'customer' ? 'From whom' : 'To whom',
+                hint: 'Type a name or a code',
+                createLabel: _kind == 'customer'
+                    ? 'Add customer'
+                    : 'Add supplier',
+                // A deposit is often the FIRST thing a new customer
+                // does, before any invoice exists, so this is exactly
+                // the box where somebody is not on file yet.
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: _kind == 'customer' ? 'customer' : 'supplier',
+                  typed: typed,
                 ),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
                 onChanged: (v) => setState(() => _contact = v),
               ),
               TextField(
@@ -267,16 +296,17 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
                 decoration: const InputDecoration(labelText: 'How much'),
                 onChanged: (_) => setState(() {}),
               ),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: bankPickerOptions(banks),
+                createLabel: 'Add bank account',
+                // 0529 made this list writable for the first
+                // time. Until then a company that opened a
+                // second account had nowhere in the product to
+                // say so.
+                onCreate: (typed) =>
+                    createBankAccountFromPicker(context, typed: typed),
                 value: _bank,
-                decoration: const InputDecoration(labelText: 'In or out of'),
-                items: [
-                  for (final b in banks)
-                    DropdownMenuItem(
-                      value: '${b['id']}',
-                      child: Text('${b['name']}'),
-                    ),
-                ],
+                label: 'In or out of',
                 onChanged: (v) => setState(() => _bank = v),
               ),
               TextField(
@@ -396,17 +426,134 @@ class _DepositSheet extends ConsumerWidget {
                       child: const Text('Give it back'),
                     ),
                     const Spacer(),
-                    FilledButton.tonal(
+                    TextButton(
                       onPressed: () => _settle(context, ref, id, 'forfeit'),
                       child: const Text('Keep it'),
                     ),
+                    const SizedBox(width: Space.sm),
+                    // The ordinary outcome, and so the emphasised one:
+                    // the job got done, the invoice went out, and the
+                    // money already held pays part of it.
+                    FilledButton(
+                      key: const ValueKey('apply-deposit'),
+                      onPressed: () => _apply(context, ref, id, balance),
+                      child: const Text('Apply to a document'),
+                    ),
                   ],
+                ),
+              ),
+            // Undoing the note itself, as against settling it. Offered
+            // only while nothing has been done with it, which is the
+            // only state `void_deposit` takes.
+            if (depositVoidBlockedBecause(note) == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('void-deposit'),
+                  onPressed: () => _voidIt(context, ref, id),
+                  child: const Text('It was never taken — void it'),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  /// The contact and the currency come off the note itself: the list
+  /// this sheet was opened from names the party but not which contact
+  /// row it is, and `apply_deposit` refuses a document belonging to
+  /// anybody else.
+  Future<void> _apply(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    num balance,
+  ) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    Map<String, dynamic> full;
+    try {
+      full = await repo.depositNote(id);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final done = await showApplyDepositSheet(
+      context,
+      depositId: id,
+      kind: '${full['kind']}',
+      contactId: '${full['contact_id']}',
+      currency: '${full['currency']}',
+      balance: balance,
+    );
+    if (done && context.mounted) Navigator.of(context).pop(true);
+  }
+
+  /// Undo the note itself. `void_deposit` reverses the posting, puts
+  /// the bank balance back, and insists on a reason.
+  Future<void> _voidIt(BuildContext context, WidgetRef ref, String id) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Void ${note['deposit_no']}'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'The posting is reversed and the bank balance goes back '
+                'to where it was. Use this when the money never arrived, '
+                'not when it is being given back.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('void-deposit-reason'),
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Why',
+                  hintText: 'The cheque was never banked',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final r = controller.text.trim();
+              if (r.isNotEmpty) Navigator.of(ctx).pop(r);
+            },
+            child: const Text('Void it'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !context.mounted) return;
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Voided and reversed',
+      action: () => repo.voidDeposit(id, reason),
+    );
+    if (ok && context.mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _settle(

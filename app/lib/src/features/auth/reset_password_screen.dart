@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/env.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../landing/landing_content.dart';
+import '../../core/page_waiting.dart';
 
 /// Where a password reset link lands.
 ///
@@ -27,6 +29,9 @@ class ResetPasswordScreen extends ConsumerStatefulWidget {
 }
 
 class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
+  String get _wordmark =>
+      ref.watch(landingContentProvider).valueOrNull?.wordmark ?? Env.appName;
+
   final _formKey = GlobalKey<FormState>();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
@@ -50,9 +55,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     });
 
     try {
-      await ref.read(supabaseProvider).auth.updateUser(
-            UserAttributes(password: _password.text),
-          );
+      await ref
+          .read(supabaseProvider)
+          .auth
+          .updateUser(UserAttributes(password: _password.text));
       // Only now is the recovery over; until this call returned, the old
       // password was still the live one.
       ref.read(passwordRecoveryProvider.notifier).done();
@@ -60,7 +66,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Password changed. You are signed in.')),
         );
-        context.go('/');
+        context.go('/dashboard');
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -81,6 +87,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
 
+    // The wordmark is on this page twice, and `?? Env.appName` drew the
+    // name we ship with until the operator's landed.
+    if (!settled(ref.watch(landingContentProvider))) return const PageWaiting();
+
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -98,19 +108,20 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     children: [
                       Text(
                         'Choose a new password',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
+                        style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: Space.xs),
                       Text(
                         user?.email == null
-                            ? 'Set a new password for your ${Env.appName} account.'
+                            // The platform's own name, not the one the
+                            // product was compiled with. `Env.appName` is
+                            // a constant and cannot know it was rebranded.
+                            ? 'Set a new password for your $_wordmark account.'
                             : 'Set a new password for ${user!.email}.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: context.scheme.onSurfaceVariant,
-                            ),
+                          color: context.scheme.onSurfaceVariant,
+                        ),
                       ),
                       const SizedBox(height: Space.lg),
                       TextFormField(
@@ -121,9 +132,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                           labelText: 'New password',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscure
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
+                            icon: Icon(
+                              _obscure
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
                             onPressed: () =>
                                 setState(() => _obscure = !_obscure),
                           ),
@@ -157,8 +170,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Set password'),
                       ),

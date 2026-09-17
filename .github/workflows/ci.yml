@@ -48,6 +48,27 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+
+      # The `passkeys` plugin declares a WEB implementation, so adding
+      # it for a phone silently enrols `passkeys_web` into the web
+      # bundle -- whose registrant runs before `runApp` and calls a JS
+      # global this app does not load. That white-screened production,
+      # the landing page included, and nothing caught it: analyze is
+      # clean, `flutter build web` compiles it, and the failure is a
+      # missing global at runtime in a browser. Checked at the commit
+      # that ADDS the plugin rather than at the deploy that breaks.
+      #
+      # `working-directory: .` because this job DEFAULTS to `app`, and
+      # the script lives at the repository root. Without it the step is
+      # `python3 app/scripts/...`, which does not exist -- and nothing
+      # local catches that, because `run_locally.sh`'s `ci_guards`
+      # harvests these lines out of this file and runs them from the
+      # root, where they all work. A guard in a job with a non-root
+      # default passes here and fails in CI.
+      - name: Check the web bundle carries no passkeys_web
+        working-directory: .
+        run: python3 scripts/check_web_plugin_registrant.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
 
@@ -79,45 +100,154 @@ jobs:
         with:
           version: 2.114.0
 
+      # The list below is hand-kept, and a hand-kept list of tests goes
+      # stale in the one direction that is invisible: a file added to
+      # `supabase/tests/` and not added here is never run, and reads
+      # from outside exactly like a test that passes. This is the same
+      # bargain the `notOffered` and `notRaisable` constants in the Dart
+      # tests make — the list is the claim, and something checks it.
+      #
+      # Kept as a list rather than a `for f in supabase/tests/*.sql`
+      # because the order matters to nobody but the reasons do: several
+      # entries below were added with a commit explaining what they
+      # assert, and a glob would delete that history's anchor.
+      - name: Every assertion file is in the list below
+        run: |
+          set -euo pipefail
+          missing=()
+          for f in supabase/tests/*.sql; do
+            # `_helpers.sql` and `_local_stack.sql` are included by the
+            # others rather than run, the same underscore convention the
+            # function type-check step uses.
+            case "$(basename "$f")" in _*) continue ;; esac
+            grep -qF "$f" .github/workflows/ci.yml || missing+=("$f")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::%s is not run by CI. Add it to the list in the database job.\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "all $(ls supabase/tests/*.sql | grep -cv '/_') assertion files are run"
+
       # A throwaway local stack, so the assertions run against the
       # migrations in this commit rather than whatever the hosted project
       # happens to be at.
-      - run: supabase start
+      #
+      # Postgres and nothing else. This job runs SQL assertions: it has
+      # no use for the studio, the mail catcher, the image proxy or the
+      # edge runtime, and every one of them is a container to pull and a
+      # host port to bind.
+      #
+      # The mail catcher is the one that actually broke a build. `supabase
+      # start` hit an error, stopped the containers and retried, and the
+      # retry failed with `failed to bind host port for 0.0.0.0:54324:
+      # address already in use` — Docker had not finished releasing the
+      # port. A service this job never touches took a whole run down, and
+      # re-running it would have been treating a red build as weather.
+      #
+      # IT IS SPELLED `mailpit`, NOT `inbucket`. The container is still
+      # named `supabase_inbucket_<ref>` and the error above says so, but
+      # `supabase start -x` in 2.114.0 takes the service names
+      # gotrue, realtime, storage-api, imgproxy, kong, mailpit,
+      # postgrest, postgres-meta, studio, edge-runtime, logflare, vector
+      # and supavisor. Excluding "inbucket" would have left the mail
+      # catcher running and this change doing nothing at all.
+      #
+      # One line on purpose: a folded scalar joins its lines with a
+      # space, and a space inside a comma-separated argument makes the
+      # tail of the list a second argument. That was this change's own
+      # first draft.
+      - run: supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector
       - name: Run the database assertions
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           for f in supabase/tests/statutory.sql supabase/tests/ledger.sql \
+                   supabase/tests/control_accounts.sql \
+                   supabase/tests/activity_reminders.sql \
                    supabase/tests/payroll_run.sql \
+                   supabase/tests/terminal_punches.sql \
+                   supabase/tests/ea_form.sql \
+                   supabase/tests/payroll_engine_sweep.sql \
+                   supabase/tests/utc_is_not_today.sql \
+                   supabase/tests/payroll_shapes.sql \
+                   supabase/tests/payroll_voluntary_epf.sql \
+                   supabase/tests/sst_shapes.sql \
                    supabase/tests/sst_summary.sql \
                    supabase/tests/payroll_periods.sql \
                    supabase/tests/payslip_access.sql \
                    supabase/tests/strata_preview.sql \
                    supabase/tests/client_account.sql \
+                   supabase/tests/client_money_crossing.sql \
                    supabase/tests/matter_billing.sql \
                    supabase/tests/leave_requests.sql \
+                   supabase/tests/claim_caps.sql \
+                   supabase/tests/leave_type_rules.sql \
+                   supabase/tests/leave_year_shapes.sql \
+                   supabase/tests/hrdf_levy.sql \
+                   supabase/tests/departures.sql \
+                   supabase/tests/matter_closing.sql \
+                   supabase/tests/win_loss.sql \
+                   supabase/tests/document_dates.sql \
+                   supabase/tests/bill_credit.sql \
+                   supabase/tests/posting_a_bill.sql \
+                   supabase/tests/goods_received.sql \
+                   supabase/tests/appraisals.sql \
+                   supabase/tests/appraisal_guard_shapes.sql \
+                   supabase/tests/alternates_and_verification.sql \
+                   supabase/tests/hiring.sql \
+                   supabase/tests/capitalisation.sql \
+                   supabase/tests/matter_conflicts.sql \
+                   supabase/tests/pipeline_quotes.sql \
+                   supabase/tests/settlement_discount.sql \
+                   supabase/tests/statutory_charges.sql \
+                   supabase/tests/employee_documents.sql \
+                   supabase/tests/project_budget.sql \
+                   supabase/tests/ticket_share.sql \
+                   supabase/tests/fs_statutory_order.sql \
+                   supabase/tests/monthly_jobs.sql \
+                   supabase/tests/who_filed_it.sql \
+                   supabase/tests/vacancies.sql \
+                   supabase/tests/corp_particulars.sql \
+                   supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \
                    supabase/tests/platform_console.sql \
                    supabase/tests/landing_page.sql \
                    supabase/tests/branding.sql \
                    supabase/tests/platform_pricing_and_payment.sql \
                    supabase/tests/gateway_payments.sql \
+                   supabase/tests/tenant_gateway_credentials.sql \
+                   supabase/tests/shared_invoice_payment.sql \
                    supabase/tests/invitations.sql \
                    supabase/tests/clock_out.sql \
                    supabase/tests/bank_balance_resync.sql \
                    supabase/tests/pos_promotion_admin.sql \
                    supabase/tests/approval_state.sql \
                    supabase/tests/secretarial.sql supabase/tests/attendance.sql \
+                   supabase/tests/corp_deadlines.sql \
+                   supabase/tests/corp_filing_shapes.sql \
+                   supabase/tests/fs_deadlines.sql \
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/payroll_chart.sql \
                    supabase/tests/ticketing.sql \
+                   supabase/tests/scheduled_work.sql \
+                   supabase/tests/hr_manager_role.sql \
+                   supabase/tests/document_types.sql \
+                   supabase/tests/pos_on_account.sql \
+                   supabase/tests/matter_transfer.sql \
+                   supabase/tests/attendance_close.sql \
+                   supabase/tests/attendance_adjust.sql \
+                   supabase/tests/pos_counting.sql \
+                   supabase/tests/pos_drawer_shapes.sql \
                    supabase/tests/inventory_forecast.sql \
+                   supabase/tests/forecast_order_shapes.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \
                    supabase/tests/pos_loyalty.sql \
                    supabase/tests/pos_fnb.sql \
                    supabase/tests/pos_delivery.sql \
                    supabase/tests/pos_receipt.sql \
+                   supabase/tests/pos_service_charge.sql \
                    supabase/tests/pos_public_menu.sql \
+                   supabase/tests/pos_public_menu_shapes.sql \
                    supabase/tests/pos_reports.sql \
                    supabase/tests/pos_recipes.sql \
                    supabase/tests/pos_weighed.sql \
@@ -127,20 +257,71 @@ jobs:
                    supabase/tests/pos_offline.sql \
                    supabase/tests/pos_kiosk.sql \
                    supabase/tests/module_surface.sql \
+                   supabase/tests/attachments_module.sql \
+                   supabase/tests/workspace_address.sql \
+                   supabase/tests/mailbox.sql \
+                   supabase/tests/placeholder_copy.sql \
+                   supabase/tests/unknown_workspace_page.sql \
+                   supabase/tests/reservation_admin.sql \
+                   supabase/tests/site_pages.sql \
+                   supabase/tests/org_login_page.sql \
+                   supabase/tests/demo_accounts_switch.sql \
+                   supabase/tests/signin_page_copy.sql \
+                   supabase/tests/signin_page_words.sql \
+                   supabase/tests/login_page_words.sql \
+                   supabase/tests/company_country.sql \
+                   supabase/tests/held_and_pointed_names.sql \
+                   supabase/tests/scheme_roles.sql \
+                   supabase/tests/name_purposes.sql \
+                   supabase/tests/email_before_password.sql \
                    supabase/tests/security_audit.sql \
                    supabase/tests/audit_redaction.sql \
                    supabase/tests/ledger_append_only.sql \
                    supabase/tests/demo_teardown.sql \
                    supabase/tests/demo_rebuild.sql \
+                   supabase/tests/demo_modules.sql \
+                   supabase/tests/demo_rebuild_schedule.sql \
+                   supabase/tests/business_types.sql \
+                   supabase/tests/signup_details.sql \
+                   supabase/tests/registration_answers.sql \
+                   supabase/tests/delete_takes_more_than_it_says.sql \
+                   supabase/tests/personal_mailbox.sql \
+                   supabase/tests/mailbox_reply.sql \
+                   supabase/tests/mailbox_search.sql \
+                   supabase/tests/webmail_door.sql \
+                   supabase/tests/signup_door.sql \
+                   supabase/tests/maintenance_mode.sql \
+                   supabase/tests/bank_feed.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
+                   supabase/tests/fx_shapes.sql \
                    supabase/tests/fx_revaluation.sql \
+                   supabase/tests/depreciation_shapes.sql \
                    supabase/tests/fixed_assets.sql \
                    supabase/tests/depreciation_schedule.sql \
+                   supabase/tests/asset_disposal_shapes.sql \
+                   supabase/tests/account_revival.sql \
                    supabase/tests/bank_reconciliation.sql \
+                   supabase/tests/bank_rules.sql \
+                   supabase/tests/tax_details.sql \
+                   supabase/tests/duplicate_bills.sql \
+                   supabase/tests/credit_note_allocation.sql \
+                   supabase/tests/knock_off.sql \
+                   supabase/tests/import_transactions.sql \
+                   supabase/tests/import_purchase_transactions.sql \
+                   supabase/tests/import_journals.sql \
+                   supabase/tests/audit_trail_filters.sql \
+                   supabase/tests/payment_methods.sql \
+                   supabase/tests/tariff_code.sql \
                    supabase/tests/close_my_account.sql \
+                   supabase/tests/account_closure.sql \
+                   supabase/tests/trigger_reachable_grants.sql \
                    supabase/tests/search_path.sql \
                    supabase/tests/tenant_foreign_keys.sql \
+                   supabase/tests/import_provenance.sql \
+                   supabase/tests/two_companies_on_one_row.sql \
+                   supabase/tests/a_colleague_not_a_stranger.sql \
+                   supabase/tests/the_helpers_fail_loudly.sql \
                    supabase/tests/property.sql \
                    supabase/tests/months_between.sql \
                    supabase/tests/timesheets.sql \
@@ -157,26 +338,90 @@ jobs:
                    supabase/tests/pricing_and_dimensions.sql \
                    supabase/tests/manual_journal.sql \
                    supabase/tests/idempotency.sql \
+                   supabase/tests/ledger_is_written_only_by_functions.sql \
+                   supabase/tests/posted_payslip_is_frozen.sql \
+                   supabase/tests/posted_document_is_frozen.sql \
+                   supabase/tests/posting_an_invoice_refuses.sql \
+                   supabase/tests/posted_link_is_immutable.sql \
+                   supabase/tests/no_tenant_sees_another.sql \
+                   supabase/tests/firm_portfolio.sql \
+                   supabase/tests/firm_invitations.sql \
+                   supabase/tests/multi_company.sql \
+                   supabase/tests/demo_shop_and_factory.sql \
+                   supabase/tests/module_self_service.sql \
+                   supabase/tests/module_subscription.sql \
+                   supabase/tests/module_promotions.sql \
+                   supabase/tests/customer_portal.sql \
+                   supabase/tests/customer_portal_shapes.sql \
+                   supabase/tests/document_history.sql \
+                   supabase/tests/expense_split.sql \
+                   supabase/tests/notifications.sql \
+                   supabase/tests/bulk_actions.sql \
+                   supabase/tests/tax_bands.sql \
+                   supabase/tests/foreign_worker_payroll.sql \
+                   supabase/tests/pos_rounding.sql \
+                   supabase/tests/company_handover.sql \
+                   supabase/tests/company_export.sql \
+                   supabase/tests/sst_taxable_period.sql \
+                   supabase/tests/service_tax_on_payment.sql \
+                   supabase/tests/statutory_remittances.sql \
+                   supabase/tests/general_ledger.sql \
+                   supabase/tests/chart_of_accounts.sql \
+                   supabase/tests/feedback.sql \
+                   supabase/tests/group_payment.sql \
+                   supabase/tests/group_payment_shapes.sql \
+                   supabase/tests/demo_practice.sql \
+                   supabase/tests/over_allocation.sql \
+                   supabase/tests/allocation_party.sql \
+                   supabase/tests/opening_balance_credit.sql \
+                   supabase/tests/cash_is_not_credit.sql \
+                   supabase/tests/ai_assistant.sql \
+                   supabase/tests/ai_providers.sql \
+                   supabase/tests/ai_provider_catalogue.sql \
+                   supabase/tests/custom_fields.sql \
+                   supabase/tests/custom_fields_required.sql \
+                   supabase/tests/contact_types.sql \
+                   supabase/tests/credit_hold_is_visible.sql \
+                   supabase/tests/contact_records.sql \
+                   supabase/tests/prospect_quotation.sql \
+                   supabase/tests/contact_import_codes.sql \
+                   supabase/tests/document_numbering.sql \
+                   supabase/tests/contact_lookalikes.sql \
+                   supabase/tests/contact_duplicates.sql \
+                   supabase/tests/bucket_survives_a_bad_path.sql \
+                   supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \
                    supabase/tests/expense_claims.sql \
                    supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
                    supabase/tests/statutory_schedules.sql \
+                   supabase/tests/statutory_changeover.sql \
+                   supabase/tests/pcb_reliefs_and_defaults.sql \
+                   supabase/tests/declared_reliefs.sql \
                    supabase/tests/contact_extras.sql \
                    supabase/tests/leads_and_onboarding.sql \
                    supabase/tests/document_share.sql \
                    supabase/tests/outbound_email.sql \
                    supabase/tests/email_receipt.sql \
+                   supabase/tests/aging_shapes.sql \
                    supabase/tests/aged_balances.sql \
+                   supabase/tests/statement_of_account.sql \
                    supabase/tests/recurring_documents.sql \
+                   supabase/tests/recurring_shapes.sql \
+                   supabase/tests/withholding_shapes.sql \
                    supabase/tests/withholding.sql \
                    supabase/tests/financial_statements.sql \
                    supabase/tests/reversal.sql \
+                   supabase/tests/void_an_invoice.sql \
                    supabase/tests/bank_transfers.sql \
                    supabase/tests/csv_import.sql \
+                   supabase/tests/chart_import.sql \
                    supabase/tests/exchange_rate_feed.sql \
                    supabase/tests/salespeople.sql \
                    supabase/tests/serial_and_batch.sql \
+                   supabase/tests/lot_allocation_shapes.sql \
+                   supabase/tests/pos_tracked_item_sale.sql \
+                   supabase/tests/pos_serial_sale.sql \
                    supabase/tests/lots_across_the_new_sources.sql \
                    supabase/tests/credit_note_return.sql \
                    supabase/tests/multi_uom_documents.sql \
@@ -189,12 +434,31 @@ jobs:
                    supabase/tests/item_bundles.sql \
                    supabase/tests/einvoice_credentials.sql \
                    supabase/tests/einvoice_statutory.sql \
+                   supabase/tests/self_billed_einvoice.sql \
+                   supabase/tests/einvoice_payload_shapes.sql \
+                   supabase/tests/pos_einvoice_consolidation.sql \
+                   supabase/tests/einvoice_totals_reconcile.sql \
+                   supabase/tests/einvoice_signing_certificate.sql \
+                   supabase/tests/mia_credentials.sql \
+                   supabase/tests/ssm_register_lookup.sql \
+                   supabase/tests/ssm_api_tables.sql \
+                   supabase/tests/entity_types.sql \
+                   supabase/tests/entity_types_for_companies.sql \
+                   supabase/tests/search_registers.sql \
+                   supabase/tests/recurring_template_carries_the_document.sql \
+                   supabase/tests/transfer_carries_the_price_agreed.sql \
+                   supabase/tests/transfer_shapes.sql \
+                   supabase/tests/sst_return_declares_what_was_charged.sql \
+                   supabase/tests/stock_value_returns_to_zero.sql \
+                   supabase/tests/malaysian_clock.sql \
                    supabase/tests/ocr_credit.sql \
+                   supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
                    supabase/tests/claim_attachments.sql \
                    supabase/tests/claim_approval_chain.sql \
                    supabase/tests/table_grants.sql \
+                   supabase/tests/function_grants.sql \
                    supabase/tests/attachment_lifecycle.sql \
                    supabase/tests/logo_storage.sql \
                    supabase/tests/access_types.sql \
@@ -205,14 +469,122 @@ jobs:
                    supabase/tests/group_reporting.sql \
                    supabase/tests/sst_registration.sql \
                    supabase/tests/intercompany_billing.sql \
+                   supabase/tests/group_shapes.sql \
                    supabase/tests/group_consolidation.sql \
+                   supabase/tests/group_trial_balance_shapes.sql \
                    supabase/tests/open_item_import.sql \
                    supabase/tests/opening_trial_balance.sql \
+                   supabase/tests/opening_import_shapes.sql \
                    supabase/tests/opening_stock.sql \
-                   supabase/tests/migration_progress.sql; do
+                   supabase/tests/migration_progress.sql \
+                   supabase/tests/todos.sql \
+                   supabase/tests/user_preferences.sql \
+                   supabase/tests/bank_accounts.sql \
+                   supabase/tests/live_change_feed.sql \
+                   supabase/tests/quick_add_lists.sql \
+                   supabase/tests/statutory_bands.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done
+
+      # A list row whose buttons leave its own words nowhere to go.
+      # `ListTile` gives its trailing the width it asks for; nothing
+      # warns when that leaves the title two pixels, and the text wraps
+      # ONE LETTER PER LINE rather than overflowing. It shipped on the
+      # items list. The analyzer sees a valid tree, the widget tests
+      # pass because a test surface is 800 wide, and Flutter's overflow
+      # banner never fires because nothing overflowed.
+      - name: Check every list row leaves room for its own words
+        run: python3 scripts/check_narrow_rows.py
+
+      # An inline <script> in web/index.html is refused by the deployed
+      # Content-Security-Policy on every load, on every browser, and the
+      # only trace is a console entry nobody is reading. The
+      # service-worker rescue -- the block that clears the stale worker
+      # keeping old code alive on installed phones -- was inline for its
+      # whole life and never ran once in production. The symptom was
+      # Android Chrome still showing a version replaced weeks earlier,
+      # which reads as a deployment problem and is not one.
+      #
+      # Nothing else sees it: the analyzer does not read web/, the widget
+      # tests never load index.html, and a local run applies no CSP at
+      # all -- so it works right up until it is deployed.
+      - name: Check every script is one the CSP will run
+        run: python3 scripts/check_inline_scripts.py
+
+      # The same shape of silence, one layer down. The deploy config
+      # rewrites anything the filesystem handler missed to /index.html,
+      # so an asset that never made it into the bundle comes back as
+      # 200 OK with HTML in it. The browser then reports a CORRUPT file
+      # rather than a missing one -- an invalid WOFF2, a bad WebAssembly
+      # magic word -- and the real fault, that the file was not
+      # deployed, is in none of the messages.
+      - name: Check a missing asset 404s instead of returning the app
+        run: python3 scripts/check_spa_fallback.py
+
+      # `ref.watch(p).value ?? const []` reads as a fallback and is not
+      # one: riverpod's own doc says ".value will be throw during
+      # error", so the `??` never runs and a provider that failed takes
+      # the screen down instead. A ratchet -- the count may fall, never
+      # rise.
+      - name: Check nothing new reads .value on a provider
+        run: python3 scripts/check_async_value.py
+
+      # A test that catches `when others` and asserts nothing about the
+      # error passes when the guard it is aimed at is deleted, and passes
+      # when the statement under test has a typo in it. A sweep of
+      # `create_withholding` found that happening for real. Not all
+      # hundred of them are wrong, so this is a ratchet: the number may
+      # go down and must not go up.
+      - name: Check no new blind error catches
+        run: python3 scripts/check_blind_catches.py
+
+      # `.order('name')` in postgrest-dart is name DESC: `ascending`
+      # defaults to FALSE. Reported as a country picker opening on Viet
+      # Nam and the United States, and it was every alphabetical list in
+      # the application — plus `sort_order`, a column whose only purpose
+      # is that somebody chose the order, reversed in twenty-four
+      # places. Nothing fails and nothing logs; a list is simply in an
+      # order, and the wrong one reads as an odd one. The analyzer
+      # cannot see an omitted optional argument, so the rule is
+      # mechanical: every ordering says which way it goes.
+      - name: Check every ordering says which direction it means
+        run: python3 scripts/check_order_direction.py
+
+      # `docs/unreachable.md` described this sweep for months as a thing
+      # to run when you remember, and this is what that meant: `0559`
+      # built the personal-mailbox model and nothing could reach it,
+      # and `0567`'s bank feed shipped unreachable four hours after the
+      # lesson was written into that file. A procedure nobody is
+      # reminded of is a procedure that runs after the fact.
+      #
+      # No database needed: it reads the Dart.
+      - name: Check every repository method and provider is reached
+        run: python3 scripts/check_unreachable.py
+
+      # `0531`. STABLE is a promise that a function does not write, and
+      # PostgREST believes it: such a function runs in a READ ONLY
+      # transaction, so a write inside one fails with 25006 and takes
+      # the whole call with it. The SQL assertions cannot catch this on
+      # their own -- psql is not read-only -- so it is checked against
+      # the applied schema instead.
+      - name: Check no read that writes promises otherwise
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_stable_writers.py "$DB"
+
+      # Three rows in `platform_settings` said what they did and did
+      # nothing: `nav_grouping` worked for exactly one person on the
+      # platform, `signup_enabled` could be switched off while strangers
+      # went on registering, and `maintenance_mode` promised a banner
+      # and blocked writes and did neither. All three were seeded in the
+      # same migration and all three were found by reading the table
+      # rather than by anybody hitting them. A settings row is a promise
+      # that something reads it.
+      - name: Check every platform setting is read by something
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_settings_are_read.py "$DB"
 
       # The client's queries checked against the schema they will run
       # against. An ambiguous embed passes `flutter analyze`, passes the
@@ -223,6 +595,204 @@ jobs:
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_embeds.py "$DB"
+
+      # `docs/api/` describes 662 functions and 329 tables that Supabase
+      # has been serving to any holder of a tenant's token since the
+      # first migration. The API was never missing -- it was
+      # undescribed, which is worse, because it is reachable either way.
+      #
+      # A description maintained by hand is a description that drifts,
+      # and a drifted one is believed. So it is generated from `pg_proc`
+      # and checked here: add a function, change an argument's default,
+      # grant something to anon, and this fails until the description is
+      # regenerated and committed.
+      - name: Check the API description still matches the schema
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/generate_api_description.py "$DB" --check
+
+      # The description is only as good as what the catalog says, and
+      # for most of these functions the catalog says nothing -- so the
+      # published document prints a name and an argument list and has
+      # told a caller nothing about what the function refuses. For a
+      # write, the refusals are the rule: `void_sales_document` will
+      # not void an invoice with a payment against it, and
+      # `create_deposit` has an overload that takes the money twice on
+      # a retry.
+      #
+      # A ratchet, like the blind-catch budget beside it. Two hundred
+      # comments is a body of work rather than a commit, and a gate
+      # that failed until all of them existed would be switched off
+      # within the week. `0569`, `0570` and `0571` took it from 278.
+      - name: Check no new write goes undocumented
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_undocumented_writes.py "$DB"
+
+      # The seam `0618` came in through. A new function in `public` is
+      # executable by postgres and nobody else -- PostgreSQL grants
+      # PUBLIC on creation and 0165's event trigger revokes it -- so
+      # every caller needs an explicit grant in the migration, and
+      # forgetting one is invisible: PostgREST answers 42501, the edge
+      # function catches it with everything else, and the feature simply
+      # never happens.
+      #
+      # It cost months. 0618 found ten functions whose callers could not
+      # reach them, including both RPCs `send-push` needs, which means
+      # no push notification had ever been delivered, and both halves of
+      # a customer paying an invoice they were sent. Then the pattern
+      # spread by being copied: 0612 and 0616 repeated it.
+      #
+      # `function_grants.sql` asserts the other direction -- nothing in
+      # `public` callable by nobody -- and cannot see the more specific
+      # fault, a function granted to `authenticated` and called by the
+      # service role or the reverse. This reads the CALL, so it can.
+      #
+      # A client identifier the script does not know the role of is a
+      # FAILURE rather than a skip, because guessing would either
+      # report somebody's correct code as broken or go quiet exactly
+      # where a new pattern is being introduced.
+      #
+      # Both surfaces: 26 calls from the edge functions and 639 from
+      # the app. The app's rule is looser on purpose -- `authenticated`
+      # OR `anon`, because some of those calls happen before anybody
+      # has signed in -- and it is the half that would have caught
+      # `declarable_reliefs` and `set_org_payment_settlement`, two RPCs
+      # the app has called and been refused since 0408 and 0413.
+      - name: Check every RPC a caller names can be executed by it
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_rpc_grants.py "$DB"
+
+      # `docs/api/` files a function under ONE module, the first its
+      # body names, and twelve check more than one -- where the first
+      # name is at best half the answer. `create_contra` needs `sales`
+      # AND `purchases`, so a caller who switches on the one published
+      # still gets 42501; `pdc_list` needs EITHER, so a caller with
+      # only `purchases` reads "sales" and wrongly concludes it is shut
+      # to them. `not A or not B` and `not A and not B` are one
+      # character apart and mean opposite things, so the generator
+      # cannot tell them apart and the description has to. See 0602.
+      - name: Check a two-module gate says which modules
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_module_gates.py "$DB"
+
+      # `0601` was found by a variable, not by reading the function:
+      # `deposit_history` selected the deposit's kind into `v_kind` and
+      # never looked at it again, and that variable was the whole
+      # access check somebody meant to write. An unused variable is
+      # usually nothing; one holding a row's KIND, in a function
+      # deciding what a caller may see, is a missing `if`. Checked
+      # against the pre-0601 body: it names `v_kind`.
+      - name: Check nothing computes a value and throws it away
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_discarded_values.py "$DB"
+
+      # `Fmt.money` carries a copy of the currency decimals because it is
+      # a pure function called from four hundred places with nothing to
+      # await a lookup on. A copy that drifts from the seed is a figure
+      # written wrongly on an invoice that goes to somebody.
+      - name: Check the app's currency decimals match the seed
+        run: python3 scripts/check_currency_decimals.py
+
+      # One level below the embeds, and the same string literal. The
+      # screen that declares an employee's TP1 reliefs filtered
+      # `statutory_schedules` on `schedule_type`, which this schema has
+      # never had — a schedule's body is `body`. PostgREST answered
+      # 42703 and refused the whole request, the provider turned that
+      # into an empty list without a word, and the Add button was greyed
+      # out for the life of the feature. Nothing in the repository could
+      # see it: the analyzer cannot read inside a string, the widget
+      # tests have no database, and the SQL assertions do not know what
+      # the client asks for.
+      #
+      # Both halves are read. The edge functions ask PostgREST the same
+      # questions in the same string literals, hold the service role
+      # while doing it, and are further from anybody noticing: a
+      # MyInvois submission that stops working fails on a schedule
+      # rather than in front of a user.
+      - name: Check the column names are columns
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_query_columns.py "$DB"
+
+      # The other place the two halves meet. `0307` protects four money
+      # writes with overloads whose key parameter has no default, and
+      # the wrapper has no defaults on any parameter either — so a call
+      # that omits one merely-optional argument resolves to the
+      # *unprotected* original, silently, and returns a plausible id.
+      # Nothing on either side can see that alone, and the shipped
+      # client sent no key at all for the whole time between 0307 and
+      # the commit that added this step.
+      - name: Check the protected writes actually reach the protected overload
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_idempotent_calls.py "$DB"
+
+      # -----------------------------------------------------------------
+      # An edge function holding the service role is outside RLS
+      # entirely, so every policy in the schema and the whole of
+      # `no_tenant_sees_another.sql` are downstream of a client it
+      # builds for itself. One that builds only the service-role client
+      # and then trusts `body.org_id` writes wherever the body says, and
+      # nothing else in the repository can see it: `deno check`
+      # type-checks the file, the SQL assertions never reach it, and the
+      # Deno tests exercise the pure helpers rather than the handler.
+      #
+      # Needs no database, so it runs here rather than in its own job.
+      # -----------------------------------------------------------------
+      - name: Check the service role never writes without knowing the caller
+        run: python3 scripts/check_edge_authorization.py
+
+      # Asks a question none of the others do: will the BROWSER let the
+      # app do what it compiles to do. Turnstile shipped unable to draw
+      # because the policy said `script-src 'self'`, and nothing said so
+      # until nobody could sign in.
+      - name: Check the policy allows what the app loads
+        run: python3 scripts/check_csp_allows.py
+
+      # Three doors in one day sent no captcha token, and none of them
+      # is visible until the project setting is switched on -- at which
+      # point every door is shut at once.
+      - name: Check every way in carries the security check
+        run: python3 scripts/check_captcha_tokens.py
+
+      # A Spacer in `AlertDialog.actions` throws at layout, and a
+      # release build draws that as a featureless grey rectangle with
+      # no message. Analyze is happy, no test pumps the dialog, and the
+      # web build compiles it.
+      - name: Check no dialog action asks for a flex
+        run: python3 scripts/check_dialog_actions.py
+
+      # A setState whose arrow body assigns a Future returns that Future,
+      # and Flutter asserts against exactly that -- so the widget throws
+      # on every load and every refresh in any build with asserts on.
+      # That is every `flutter run`, every debug build and every widget
+      # test, and NOT a release build, so a screen can ship carrying it
+      # and only ever fail for the people developing it.
+      # `exchange_rates_screen.dart` did, until the screen got its first
+      # test and could not render at all.
+      #
+      # Only Future-typed FIELDS are reported: `setState(() => _busy =
+      # true)` is an arrow body too and is entirely correct.
+      - name: Check no setState returns a Future
+        run: python3 scripts/check_setstate_futures.py
+
+      # And its neighbour. `ref.invalidate` inside `initState` reaches
+      # for the ProviderScope, and depending on an inherited widget
+      # there is what Flutter asserts against -- the screen renders
+      # NOTHING in a debug build and perfectly in a release one, so it
+      # is broken only for the people developing it.
+      # `salespeople_screen.dart` carried it until the screen got its
+      # first test and could not render at all.
+      #
+      # A call inside a Timer or a post-frame callback has left
+      # initState long before it fires: four POS boards refresh
+      # themselves that way and none is a finding.
+      - name: Check no initState invalidates a provider
+        run: python3 scripts/check_initstate_ref.py
 
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
@@ -402,6 +972,29 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+
+      # The same guard the database job carries, for the same reason.
+      # The list below is hand-kept because each entry is worth a
+      # paragraph explaining what the test exists to catch, and a glob
+      # would take the paragraphs with it. This makes the list's
+      # completeness a thing that fails rather than a thing somebody
+      # notices — and the job's own comment further down records that a
+      # hand-kept list here already went stale once, when `call-token`
+      # was added and went un-type-checked for months.
+      - name: Every Deno test file is in the list below
+        run: |
+          set -euo pipefail
+          missing=()
+          while IFS= read -r f; do
+            grep -qF "$f" .github/workflows/ci.yml || missing+=("$f")
+          done < <(find supabase/functions cloudflare -name '*_test.ts' -o -name '*_test.js' | sort)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::%s is not run by CI. Add it to the list in the edge job.\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - run: deno check supabase/functions/_shared/origin_test.ts
+      - run: deno test supabase/functions/_shared/origin_test.ts
       - run: deno check supabase/functions/_shared/scheduler_test.ts
       # No permission flags: it touches no network, environment or disk,
       # and if it ever needs to, that is worth noticing.
@@ -430,6 +1023,323 @@ jobs:
       - run: deno check supabase/functions/_shared/billplz_test.ts
       - run: deno test supabase/functions/_shared/billplz_test.ts
 
+      # Two Google APIs, and the reading that tells them apart.
+      #
+      # `places` asks Places API (New) and falls back to the legacy
+      # Places API when a key is not permitted to use the new one. The
+      # two answer in different words — `longText` against `long_name`,
+      # an HTTP status against a `status` string inside a 200 body — and
+      # every way of confusing them is quiet: an address with every
+      # field null reads as a place Google knows nothing about, and a
+      # `REQUEST_DENIED` behind a 200 reads as "no such street". The
+      # fetching cannot be tested here; the reading can, and is.
+      - run: deno check supabase/functions/places/parse_test.ts
+      - run: deno test supabase/functions/places/parse_test.ts
+
+      # Reading an e-mail well enough to file what was in it.
+      #
+      # `0354`'s reason for existing: the router dropped every MIME part
+      # it did not recognise as text, so a supplier's PDF invoice
+      # reached the covering note and stopped, with nothing anywhere
+      # saying so. Every way of getting this wrong is quiet in the same
+      # direction — an attachment list that comes back empty looks
+      # exactly like a message that had none — which is why the parsing
+      # is a module of its own and is asserted here.
+      - run: deno check cloudflare/email-router/mime_test.js
+      - run: deno test cloudflare/email-router/mime_test.js
+
+      # Which company's credentials, and which environment's.
+      #
+      # `loadCredentials` takes the environment from the ORGANISATION
+      # and then filters the credentials on it. Since `0107` an
+      # organisation holds sandbox AND production at once, so the
+      # earlier version -- selecting on org_id alone -- matched two rows
+      # and maybeSingle() threw on the second set somebody configured.
+      # Getting it wrong now is quieter and worse: sandbox credentials
+      # against production is a rejected submission, and production
+      # credentials against a sandbox test is a real invoice filed with
+      # LHDN. An organisation with no setting must default to SANDBOX
+      # for the same reason.
+      #
+      # The Supabase client is faked rather than stubbed, so the tests
+      # assert WHICH FILTERS were applied rather than only what came
+      # back. `buildContext` is not covered -- it calls createClient and
+      # reads a real JWT.
+      - run: deno check supabase/functions/_shared/context_test.ts
+      - run: deno test supabase/functions/_shared/context_test.ts
+
+      # The preflight, and what a failure is allowed to say. Both have
+      # cost a working day.
+      #
+      # `ssm-search` shipped with its own CORS constant allowing
+      # `authorization, content-type`. supabase-js sends `x-client-info`
+      # on every call and `apikey` when the client carries one, so the
+      # browser refused the preflight BEFORE THE FUNCTION RAN -- no
+      # status, no body, nothing in the log, and on screen only
+      # "ClientException: Load failed". `check_edge_cors.py` refuses a
+      # function that writes its own headers; this asserts the shared
+      # list they all get is the right one.
+      #
+      # And `failUnexpected` must tell the caller nothing the error was
+      # holding. The test throws a Postgres unique-violation naming a
+      # constraint and a TIN, and asserts neither reaches the body --
+      # only a generic sentence and a reference that is useless to
+      # anyone but the person reading the log.
+      #
+      # --allow-env because the allowlist branch re-imports the module
+      # with ALLOWED_ORIGINS set; ALLOWED is read once at module load.
+      - run: deno check supabase/functions/_shared/cors_test.ts
+      - run: deno test --allow-env supabase/functions/_shared/cors_test.ts
+
+      # The last thing that runs before an invoice leaves for LHDN.
+      # `buildUblDocument` is pure, and everything it gets wrong is
+      # rejected at validation or -- worse -- accepted carrying the
+      # wrong number, neither of which the SQL suite can see: that
+      # stops at the `einvoice_documents` row this reads.
+      #
+      # The assertions are LHDN's rules rather than the function's
+      # habits. An absent identifier must be "NA" and not "", because
+      # MyInvois refuses the empty string and a company with no SST
+      # registration is the ordinary case. Every party carries four
+      # identifications in order, since schemeID is what names each and
+      # a reordering hands a reader the SST number as the TIN. Lines
+      # roll up one subtotal PER TAX TYPE, and a roll-up keyed on the
+      # wrong thing looks correct until a second rate appears.
+      # TaxCurrencyCode stays MYR on a foreign-currency invoice,
+      # because LHDN is owed ringgit whatever the invoice is written
+      # in. And the issue time goes in UTC: Malaysia is +08:00 with no
+      # DST, and MyInvois rejects a local time outright.
+      - run: deno check supabase/functions/_shared/ubl_test.ts
+      - run: deno test supabase/functions/_shared/ubl_test.ts
+
+      # And the client that carries it there. Nothing in this reaches
+      # the network -- `fetch` is replaced, which is the only way to see
+      # the request the client BUILDS rather than the reply it got, and
+      # a submission that quietly went to preprod is an invoice that was
+      # never filed.
+      #
+      # The hosts are asserted per environment, both of them, because
+      # the portal a buyer scans is not the API host and preprod has a
+      # near-identical name. The token cache is module scope and keyed
+      # on environment, client id AND onbehalfof: share a key across
+      # taxpayers and an intermediary files one client's invoice under
+      # another client's TIN. A rejected token must not be cached, or a
+      # wrong secret locks the org out until the instance recycles. The
+      # secret itself is asserted absent from the audit trail, which is
+      # persisted. And `documentHash` is the SHA-256 of the raw UBL
+      # while `document` is the base64 of that same string; hashing the
+      # base64 instead is rejected by LHDN with a message naming
+      # neither field.
+      - run: deno check supabase/functions/_shared/myinvois_test.ts
+      - run: deno test supabase/functions/_shared/myinvois_test.ts
+
+      # Reading a certificate, with no certificate library. Deno has
+      # WebCrypto and no X.509 parser, and the four fields a signature
+      # needs -- serial, issuer, validity, public key -- are all in the
+      # first hundred bytes of a 1988 structure.
+      #
+      # Every expected value was printed by `openssl x509 -nameopt
+      # RFC2253` rather than reasoned out, which is the point of the
+      # fixture. A distinguished name written least-specific-first, or
+      # a serial handed over in hex where LHDN wants decimal, produces
+      # a string that looks entirely plausible and matches nothing at
+      # the other end. The sample's organization carries a comma inside
+      # it, because that is the shape of a real Malaysian certification
+      # authority's name and it is the character RFC 4514 escapes.
+      #
+      # `testdata/sample_certificate.pem` is self-signed with a key
+      # that was discarded when it was made. A certificate is public;
+      # no private key is in this repository.
+      - run: deno check supabase/functions/_shared/der_test.ts
+      - run: deno test --allow-read supabase/functions/_shared/der_test.ts
+
+      # And the signature itself. A version 1.1 e-Invoice must carry a
+      # XAdES signature over the document, and LHDN recomputes both
+      # digests and the signature before it will validate anything.
+      #
+      # The key pair is generated in the test process every run and the
+      # certificate is the sample with that public key spliced in --
+      # both RSA-2048, so the SubjectPublicKeyInfo is the same length
+      # and the splice is byte for byte. That keeps a private key out
+      # of the repository while still giving the signer a pair that
+      # genuinely matches.
+      #
+      # What is asserted is the arithmetic: the version is raised
+      # BEFORE the digest is taken (a document hashed at 1.0 and
+      # relabelled 1.1 is rejected for its signature rather than its
+      # version), the properties digest covers the `Target` wrapper and
+      # not the bare properties, a tampered figure breaks exactly the
+      # document digest, a back-dated signing time breaks exactly the
+      # properties digest, and a mismatched pair is refused here rather
+      # than by LHDN hours later. What is NOT asserted, and cannot be
+      # from CI, is that LHDN agrees about the shape -- see
+      # docs/einvoice-signing.md.
+      - run: deno check supabase/functions/_shared/xades_test.ts
+      - run: deno test --allow-read supabase/functions/_shared/xades_test.ts
+
+      # Which companies the scheduler leaves alone when it files the
+      # month's consolidated e-Invoices, and what it says about them.
+      #
+      # Pure, and asserted here because the alternative is finding out
+      # from MyInvois: a company with no credentials attempted anyway
+      # spends a call to be told what the database already knew, and
+      # buries the real problem -- somebody never finished the setup --
+      # in a transport error. Each sentence names the setup step,
+      # because the person who reads the report is the one who has to
+      # do it, and that is asserted rather than hoped for.
+      #
+      # The controls matter as much as the skips: 1.0 does not need a
+      # certificate, so a check that forgot the version would stop
+      # every unsigned filing in the country.
+      - run: deno check supabase/functions/myinvois/consolidations_test.ts
+      - run: deno test supabase/functions/myinvois/consolidations_test.ts
+
+      # The forty lines that stand in for a Google SDK. A real RSA key
+      # is generated in the test process and the assertion the function
+      # builds is VERIFIED against the public half, because every
+      # mistake available in here -- base64url that left a `+` in, a
+      # signature over the wrong bytes, a PEM whose escaped newlines
+      # were never unescaped -- produces a well-formed string that
+      # Google rejects as `invalid_grant` and says nothing else about.
+      #
+      # The PEM cases are the ones that arrive from real customers: a
+      # key pasted through something that escaped its newlines, and one
+      # carrying a non-breaking space, which is not ASCII whitespace,
+      # which `atob` refuses, and which is what a key copied out of a
+      # rendered page or a PDF contains.
+      - run: deno check supabase/functions/_shared/google_auth_test.ts
+      - run: deno test supabase/functions/_shared/google_auth_test.ts
+
+      # The script an operator runs ONCE, checked against the code that
+      # consumes what it printed. `web_push_test.ts` already asserts the
+      # consumer end; nothing asserted that this end produces a pair
+      # that end accepts, and the two are as far apart in time as
+      # software gets -- a key printed in the wrong format surfaces
+      # weeks later as a browser refusing to subscribe, with no
+      # remaining connection to the afternoon somebody ran a keygen. So
+      # the test runs it for real and hands the output to
+      # `vapidAuthorization`, which does the pairing check itself.
+      #
+      # It also counts the private key's appearances in the output. One:
+      # in the secrets block. A second --dart-define carrying it would
+      # put the sending identity in a bundle anybody can read, and that
+      # mutant survived a check that only looked inside the public one.
+      - run: deno check supabase/functions/_shared/web_push_keygen_test.ts
+      - run: deno test supabase/functions/_shared/web_push_keygen_test.ts
+
+      # Six lines, and the one decision in them: `!value`, so a variable
+      # set to the empty string counts as missing. A secret set to "" in
+      # the dashboard is a secret that is not set, and it is the shape a
+      # mis-pasted value takes -- it would otherwise reach createClient
+      # and come back as a 401 from PostgREST, which reads as a
+      # permissions problem. With the control that "0" and "false" are
+      # ordinary values.
+      #
+      # --allow-env because it sets and clears its own variables.
+      - run: deno check supabase/functions/_shared/env_test.ts
+      - run: deno test --allow-env supabase/functions/_shared/env_test.ts
+
+      # And turning what it found into something storage will take. A
+      # name that cannot be a key and base64 that arrived wrapped are
+      # both "the file is skipped", which reads from outside as "there
+      # was no file".
+      - run: deno check supabase/functions/_shared/mail_files_test.ts
+      - run: deno test supabase/functions/_shared/mail_files_test.ts
+
+      # The two wire shapes the assistant speaks. 0536 made the provider
+      # a row, and the difference between the Anthropic Messages shape
+      # and the OpenAI chat-completions one is small enough to get wrong
+      # quietly. No permission flags and no remote imports: it asserts
+      # pure functions, and jsr.io is unreachable from some of the
+      # machines this gets worked on.
+      - run: deno check supabase/functions/ask/wire_test.ts
+      - run: deno test supabase/functions/ask/wire_test.ts
+
+      # Reading SSM's register. The network and the database halves are
+      # not testable here; `normalise` is, and it is the half that
+      # decides what somebody picks from — which becomes a registration
+      # number on an e-Invoice.
+      - run: deno check supabase/functions/ssm-search/provider_test.ts
+      - run: deno test supabase/functions/ssm-search/provider_test.ts
+
+      # SSM's OFFICIAL Search API, and the failures that arrive wearing
+      # a 200.
+      #
+      # CIDP puts its errors INSIDE the payload — `errorMsg` beside the
+      # data, under a normal success status — so a client reading only
+      # the HTTP status treats "no record found" as a company. Three of
+      # these assert exactly that, and one asserts the control: an empty
+      # `errorMsg` is what success looks like, and a truthiness check
+      # that took it for a failure would refuse every good answer.
+      #
+      # Every production call is CHARGED against a points balance the
+      # whole platform shares, so `fetch` is injected and nothing here
+      # reaches SSM. The paging assertions are part of the same
+      # argument: CIDP echoes `currentPage` in `nextPage` on the last
+      # page, which read literally is an endless "Load more" against a
+      # metered API.
+      - run: deno check supabase/functions/_shared/ssm_search_client_test.ts
+      - run: deno test supabase/functions/_shared/ssm_search_client_test.ts
+
+      # The seam between the interim lookup and the official one.
+      #
+      # `provider.ts` said what the second provider had to be — "the
+      # same two methods, chosen by SSM_PROVIDER" — and the risk is not
+      # that it fails. A failure is loud. It is that it SUCCEEDS while
+      # meaning something slightly different: a registration number
+      # under the wrong key, an entity type that comes back null, a page
+      # that claims to be the last when it is not. Each of those shows a
+      # plausible company carrying somebody else's number, which then
+      # goes on an e-Invoice.
+      - run: deno check supabase/functions/ssm-search/api_provider_test.ts
+      - run: deno test supabase/functions/ssm-search/api_provider_test.ts
+
+      # The Malaysian Bar's directory, read the way a browser reads it.
+      #
+      # These prove the READER and not the shape. Nobody has seen that
+      # site's markup from a machine that could also run this code --
+      # the network the repository is edited on refuses the host with a
+      # 403 from its own egress proxy -- so the fixtures are what a
+      # directory of this kind plausibly emits, not what this one does.
+      #
+      # Worth running anyway, because the failure being guarded against
+      # is the quiet one: a table heading read as a solicitor, or a
+      # postcode written into a contact's registration number. Two real
+      # defects in the parser were caught here before it ever ran: a
+      # nested-`<div>` match that dropped every field after the name,
+      # and a `\b` before an ampersand, which can never match, so every
+      # firm read as a person.
+      - run: deno check supabase/functions/ssm-search/bar_provider_test.ts
+      - run: deno test supabase/functions/ssm-search/bar_provider_test.ts
+
+      # The clock on the wall. `0612`. What is asserted here is the
+      # reading of the device's OWN timestamp, because that is the whole
+      # of whether this feature works: a terminal that lost its network
+      # at 08:55 and reconnected at 17:30 sends the morning's punches
+      # when it reconnects, and `clock_in` would file every one of them
+      # at half past five.
+      #
+      # A bare local time is read as Malaysian rather than as UTC. That
+      # one is not a preference: reading it as UTC files the morning
+      # shift as the night before, which is a whole day out rather than
+      # a plausible eight hours -- the difference between somebody
+      # noticing and nobody noticing.
+      - run: deno check supabase/functions/punch/punch_test.ts
+      - run: deno test supabase/functions/punch/punch_test.ts
+
+      # The workspace proxy, which is a Cloudflare worker rather than an
+      # edge function but runs here because it shares the toolchain and
+      # nothing else in this file would execute it.
+      #
+      # What it decides is which host a request is sent to, and all
+      # three ways of getting that wrong are quiet: proxying the apex
+      # through itself answers 508 after burning the subrequest budget;
+      # treating `www` as a company shows a sign-in page for a company
+      # that does not exist; rewriting every `Location` breaks the OAuth
+      # round trip and nothing else.
+      - run: deno check cloudflare/workspace-proxy/route_test.ts
+      - run: deno test cloudflare/workspace-proxy/route_test.ts
+
       # The functions themselves, type-checked but not run. They cannot
       # be unit tested here — every one of them exists to call somebody
       # else — but a typo in a field name is caught by the compiler, and
@@ -457,7 +1367,82 @@ jobs:
           printf 'checking %s\n' "${entries[@]}"
           deno check "${entries[@]}"
 
+      # A hand-written CORS header map is wrong only in a browser, and
+      # only as "Load failed" with no status and no body -- `deno check`
+      # above is perfectly happy with one. `ssm-search` shipped with a
+      # list missing `x-client-info`, which supabase-js sends on every
+      # call, so its preflight was refused and the console page it
+      # serves showed nothing but the exception.
+      - name: Check no function writes its own CORS headers
+        run: python3 scripts/check_edge_cors.py
+
   # -------------------------------------------------------------------
+  # -------------------------------------------------------------------
+  # What we depend on
+  #
+  # Nothing watched either dependency tree until this job. The ruflo
+  # security plugin was installed to close that gap and did not -- its
+  # CVE step runs `npm audit`, and this repository has no package.json,
+  # so it reported a clean tree by auditing nothing (docs/ruflo.md).
+  #
+  # Two trees, two halves:
+  #
+  #   * the PINS half is arithmetic on files in this repository -- every
+  #     edge-function import is on a frozen census, carries a version,
+  #     and uses jsr:/npm:/node: rather than fetching code from a host
+  #     at deploy time; every direct Dart dependency is resolved in the
+  #     committed lockfile. No network, cannot flake.
+  #   * the ADVISORIES half asks OSV about every resolved version. When
+  #     OSV cannot be reached it FAILS. "The advisory database was
+  #     unreachable" and "there are no advisories" are different
+  #     sentences, and a check whose green means the first while
+  #     reading as the second is worse than no check at all.
+  #
+  # Deliberately NOT in `migrate`'s `needs:` yet. The advisory path
+  # cannot be exercised from the environment this was written in --
+  # api.osv.dev is refused by that network -- so its first real run is
+  # here. Gating a deploy on a code path nobody has seen succeed is how
+  # a security check becomes the thing that gets switched off. Once this
+  # job has been green on its own, adding it to `needs:` is one line.
+  # -------------------------------------------------------------------
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The script's own assertions first. Its parsers are the kind of
+      # code that fails silently and reads as good news: an import
+      # scanner that matches nothing reports a clean tree, and so does a
+      # lockfile reader that parses nothing.
+      - name: The audit's own assertions
+        run: python3 scripts/dependency_audit_test.py
+
+      # The generator's output is published: it is what somebody
+      # building against this database will believe. A description that
+      # is merely absent costs an hour; one that is confidently wrong
+      # costs a day and is not doubted until late. Its parsers have
+      # already been wrong three times -- enums resolving to nothing,
+      # `numeric(12,2)` read as two columns, and an optional argument
+      # called required -- and each is pinned.
+      - name: The API description generator's own assertions
+        run: python3 scripts/generate_api_description_test.py
+
+      # `check_stable_writers.py` fails a build when the call graph
+      # says a STABLE function can reach a write, and a gate is only as
+      # honest as what it reads. Its scanner has been wrong twice, both
+      # times in the same direction -- a write it could not see, and so
+      # a gate that stayed quiet. A `--` inside a refusal message read
+      # as a comment and swallowed the rest of the function; a trailing
+      # `\b` across an alternation made every `update` in the schema
+      # invisible. Both are pinned.
+      - name: The call graph's own assertions
+        run: python3 scripts/sql_call_graph_test.py
+
+      - name: Pins, and every published advisory against them
+        run: python3 scripts/dependency_audit.py
+
   # The call server
   #
   # `server/sfu` is the media server behind in-app calling, and unlike
@@ -531,7 +1516,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [flutter, database, edge, sfu]
-    if: github.event_name != 'pull_request'
+    # The default branch only, for the same reason the functions job
+    # gives and with more force: there is one Supabase project, so a
+    # branch's migrations applied to it are applied to production. A
+    # function deploy is overwritten by the next one; an applied
+    # migration has changed the ledger's schema and left its row in
+    # `schema_migrations`, and undoing it means writing another
+    # migration. `docs/migrations.md` has described this job as running
+    # on the default branch since it was written — the condition did
+    # not, and any branch pushed here would have reached the live
+    # database.
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref_name == github.event.repository.default_branch
     concurrency:
       group: migrate-${{ github.ref }}
       cancel-in-progress: false
@@ -669,18 +1666,45 @@ jobs:
       # gating would buy nothing — and it would hand the parser above the
       # power to switch this off by going quiet. What the pending list is
       # used for here is saying out loud what is about to happen.
+      #
+      # `--include-all` because this repository numbers its migrations
+      # `0001`, `0002`, ... and the two highest versions on the hosted
+      # project are timestamps: `20260909090115` and `20260909090607`,
+      # written in the dashboard and adopted as files by `3329034`.
+      # Every migration this repository will ever write sorts BELOW
+      # those, and without the flag `db push` refuses anything that
+      # would be inserted before the remote's last version — which is
+      # not an occasional out-of-order push here, it is every push from
+      # now on. `0552` is the one that found it.
+      #
+      # What the flag gives up is the guard against a stale migration
+      # written against an older schema arriving late. This suite
+      # already has a stronger one: `supabase/tests/run_locally.sh` and
+      # the assertions job apply every migration in filename order to an
+      # empty database on every run, so a file that does not work in its
+      # own position never reaches this job.
       - name: Apply
         if: steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true'
+        # The pending list comes in through the environment rather than
+        # `${{ }}` inside the script. An expression is pasted in as text
+        # before bash reads the line, so a value carrying a backtick —
+        # which is what the CLI's table gave this step once — becomes a
+        # command substitution and runs. That printed
+        # "0320: command not found" and swallowed the name it was meant
+        # to announce. A shell variable is read as data and cannot do
+        # that, whatever the CLI decides to draw next.
+        env:
+          PENDING: ${{ steps.state.outputs.pending }}
         run: |
           set -euo pipefail
-          if [ -n "${{ steps.state.outputs.pending }}" ]; then
-            echo "::notice::Applying to the hosted project: ${{ steps.state.outputs.pending }}"
+          if [ -n "$PENDING" ]; then
+            echo "::notice::Applying to the hosted project: $PENDING"
           fi
-          scripts/ci/retry.sh supabase db push --linked
+          scripts/ci/retry.sh supabase db push --linked --include-all
           {
             echo
-            if [ -n "${{ steps.state.outputs.pending }}" ]; then
-              echo "**Applied:** \`${{ steps.state.outputs.pending }}\`"
+            if [ -n "$PENDING" ]; then
+              echo "**Applied:** \`$PENDING\`"
             else
               echo "**Nothing was pending**, so the push had nothing to do."
             fi
@@ -862,6 +1886,180 @@ jobs:
           done
 
   # -------------------------------------------------------------------
+  # The workspace proxy
+  #
+  # The Cloudflare worker that puts the app behind every company's own
+  # subdomain. Until now it was the last thing here deployed by hand,
+  # and the cost of that showed up as a visitor-facing failure:
+  # `pos.iakauntan.com` answered **525 SSL handshake failed** for as
+  # long as it took somebody to notice, because the worker existed in
+  # this repository and had never been uploaded.
+  #
+  # That failure is worth naming precisely, because it looks like a
+  # Cloudflare problem and is not. The wildcard DNS record is proxied,
+  # so Cloudflare terminates TLS for the browser and then opens its own
+  # connection to Vercel offering SNI `pos.iakauntan.com`. Vercel holds
+  # no certificate for that host — it issues a wildcard only through a
+  # DNS-01 challenge needing its own nameservers, which this zone
+  # cannot give it — so the origin leg never completes. The worker is
+  # what removes that leg: it fetches the apex, which Vercel can answer
+  # for, and returns it under the company's address.
+  #
+  # Default branch only, and for a sharper reason than the other deploy
+  # jobs have. There is one zone and one route pattern, so a feature
+  # branch deploying would not get a preview of anything — it would put
+  # unreviewed code in front of every tenant's sign-in page at once.
+  #
+  # `docs/custom-domains.md` step 6 is the same thing written for a
+  # person doing it by hand, and stays true; this job is what makes
+  # doing it by hand unnecessary.
+  # -------------------------------------------------------------------
+  worker:
+    name: Deploy the workspace proxy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # `edge` is the job that runs `route_test.ts`, which is the only
+    # thing asserting where this worker sends a request. The other three
+    # match the Vercel deploy's: what this worker serves is that bundle,
+    # so the conditions for putting it in front of a tenant should not
+    # be looser than the conditions for building it.
+    needs: [flutter, database, edge, migrate]
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref_name == github.event.repository.default_branch
+    # False, like the functions job. A cancelled upload is not obviously
+    # atomic, and the recovery from half a deploy is another deploy —
+    # which is exactly what cancelling prevented.
+    concurrency:
+      group: worker-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      # A Cloudflare API token with **Edit Cloudflare Workers** on this
+      # zone — dash.cloudflare.com → My Profile → API Tokens. Set it
+      # under Settings → Secrets and variables → Actions.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Only needed when the token can see more than one account, and
+      # then it is an identifier rather than a credential. Left empty by
+      # default because a single-account token does not need it and
+      # wrangler says so clearly when it does.
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the API token is present
+        id: creds
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # Warned rather than failed, for the reason the functions
+            # job gives: adding a secret should be possible later
+            # without every push in between going red. Named on the
+            # summary, though — this job silently doing nothing is how
+            # the 525 lasted as long as it did.
+            echo "::warning::The workspace proxy was not deployed. CLOUDFLARE_API_TOKEN is not set."
+            {
+              echo "### The workspace proxy was not deployed"
+              echo
+              echo "\`CLOUDFLARE_API_TOKEN\` is not set, so every company"
+              echo "subdomain answers with whatever was last uploaded by"
+              echo "hand — and if nothing ever was, with **525 SSL"
+              echo "handshake failed**."
+              echo
+              echo "Create a token with **Edit Cloudflare Workers** at"
+              echo "**dash.cloudflare.com → My Profile → API Tokens**, add"
+              echo "it under **Settings → Secrets and variables → Actions**,"
+              echo "then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          node-version: '22'
+
+      # Pinned for the same reason the Supabase CLI is: a deploy tool
+      # that changes under a job is a job that starts failing on a
+      # commit that changed nothing.
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: cloudflare/workspace-proxy
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.127.0 deploy
+          {
+            echo "### The workspace proxy"
+            echo
+            echo "Deployed to the route \`*.iakauntan.com/*\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The assertion the hand-deployed version never had.
+      #
+      # `route_test.ts` proves what the worker does with a URL; it
+      # cannot prove the worker is reachable, and unreachable is the
+      # state this whole job exists to end. So one real request over the
+      # wildcard, at a label no company will ever hold: the app draws
+      # its "nobody's name" page and answers 200, which is a pass —
+      # what is being asserted is that TLS completed and something
+      # served HTML, not which page it was.
+      #
+      # A failure here is not necessarily this job's fault, and the two
+      # causes call for different things, so they are reported apart.
+      - name: Confirm a subdomain answers
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          PROBE_HOST: ${{ vars.WORKSPACE_PROBE_HOST || 'ci-probe.iakauntan.com' }}
+        run: |
+          # A route takes a few seconds to attach, so this retries
+          # rather than calling a slow rollout a failed deploy.
+          code=""
+          for attempt in $(seq 1 8); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+                      "https://$PROBE_HOST/?cb=$GITHUB_RUN_ID-$attempt" \
+                    || echo "000")"
+            if [ "$code" = "200" ]; then
+              echo "https://$PROBE_HOST answered 200 (attempt $attempt)."
+              {
+                echo "- \`$PROBE_HOST\` answered 200."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "attempt $attempt: $code"
+            sleep 10
+          done
+
+          if [ "$code" = "525" ]; then
+            echo "::error::$PROBE_HOST still answers 525. The worker route is not firing."
+            {
+              echo "### A subdomain still fails its TLS handshake"
+              echo
+              echo "\`$PROBE_HOST\` answered **525**, which means Cloudflare"
+              echo "reached the origin and the handshake failed — so the"
+              echo "request went to Vercel rather than through this worker."
+              echo
+              echo "The usual cause is the wildcard DNS record being **DNS"
+              echo "only** (grey cloud). A worker route over a grey-clouded"
+              echo "record never fires. Cloudflare → DNS → the \`*\` record →"
+              echo "Proxied."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::$PROBE_HOST answered ${code:-nothing}, not 200."
+            {
+              echo "### A subdomain did not answer"
+              echo
+              echo "\`$PROBE_HOST\` answered \`${code:-nothing}\` after eight"
+              echo "attempts. The upload reported success, so look at whether"
+              echo "the wildcard \`*\` record exists in the zone at all, and"
+              echo "at whether the apex itself is serving — this worker"
+              echo "fetches the apex, so a broken apex breaks every"
+              echo "subdomain with it."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 1
+
+  # -------------------------------------------------------------------
   # Publishing
   #
   # This lived in its own workflow, and the separation was a mistake that
@@ -908,7 +2106,22 @@ jobs:
     needs: [flutter, database, migrate]
     # A pull request is somebody else's commit by definition; it gets the
     # checks and not the deploy credentials.
-    if: github.event_name != 'pull_request'
+    #
+    # `always()` is here because `migrate` is now skipped off the default
+    # branch, and a skipped dependency would otherwise skip this job too
+    # — taking preview deploys with it. So the three results are spelled
+    # out instead: the build has to have passed, and `migrate` has to
+    # have not failed. Skipped is fine and is the normal case for a
+    # preview, which by definition runs against a schema that does not
+    # have that branch's migrations. On the default branch the ordering
+    # is unchanged: this job still waits for `migrate` to succeed.
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      needs.flutter.result == 'success' &&
+      needs.database.result == 'success' &&
+      needs.migrate.result != 'failure' &&
+      needs.migrate.result != 'cancelled'
     # On the job rather than the workflow. A newer commit should supersede
     # an in-flight deploy of an older one — but not cancel the older
     # commit's tests, which are the record of whether that commit was
@@ -1000,11 +2213,17 @@ jobs:
           # the service role key must never reach a client bundle.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          # Set the repository variable DEMO_MODE to `true` to put the
-          # one-tap demo logins on the sign-in page. Unset means off,
-          # which is the safe way round: a build that forgets the flag
-          # ships a closed door rather than a working login to a seeded
-          # owner account. The demo deployment has to ask for them.
+          # Set the repository variable DEMO_MODE to `true` to let the
+          # build carry the one-tap demo logins. Unset means off, which
+          # is the safe way round: a build that forgets the flag ships a
+          # closed door rather than a working login to a seeded owner
+          # account.
+          #
+          # 0335: this is now the outer of two gates and no longer puts
+          # the list on the page by itself. It decides whether the demo
+          # password is in the bundle at all; whether the sign-in screen
+          # actually offers the list is `demo_accounts_enabled` in the
+          # platform console, which is off until somebody turns it on.
           DEMO_MODE: ${{ vars.DEMO_MODE }}
           # A repository *variable*, not a secret: this is the public
           # half of the VAPID pair and it is handed to every push service

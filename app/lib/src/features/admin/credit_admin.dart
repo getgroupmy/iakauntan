@@ -171,12 +171,18 @@ class _InvoiceRow extends ConsumerWidget {
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: Row(children: [
-        Text(invoice['invoice_no']?.toString() ?? '—',
-            style: const TextStyle(fontWeight: FontWeight.w500)),
-        const SizedBox(width: 10),
-        StatusChip(status, compact: true),
-      ]),
+      // `Wrap`, so the chip drops to a second line rather than off
+      // the right edge. See the header of check_narrow_rows.py.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
+        runSpacing: 2,
+        children: [
+          Text(invoice['invoice_no']?.toString() ?? '—',
+              style: const TextStyle(fontWeight: FontWeight.w500)),
+          StatusChip(status, compact: true),
+        ],
+      ),
       subtitle: Text(
         [
           invoice['bill_to_name'],

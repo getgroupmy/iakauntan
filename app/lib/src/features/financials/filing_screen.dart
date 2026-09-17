@@ -6,7 +6,10 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/corp_models.dart';
 import '../../data/repository.dart';
+import 'filing_details.dart';
+import 'fs_mapping.dart';
 import 'mtool_csv.dart';
 
 /// One set of accounts, from mapping to lodgement.
@@ -28,6 +31,22 @@ class FilingScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Financial statements'),
         actions: [
+          // What the export is built from. `fs_account_map` holds the
+          // deviations from the default mapping and nothing could read
+          // or write one, so a chart that does not match the default
+          // reported wrongly with no remedy in the product.
+          IconButton(
+            key: const ValueKey('fs-mapping'),
+            tooltip: 'How the chart reports',
+            icon: const Icon(Icons.account_tree_outlined),
+            onPressed: () async {
+              if (await showFsMapping(context)) {
+                // The statements on this screen are the export, so
+                // remapping an account moves what is shown here too.
+                ref.invalidate(fsExportProvider(filingId));
+              }
+            },
+          ),
           IconButton(
             tooltip: 'Export for mTool',
             icon: const Icon(Icons.download_outlined),
@@ -52,6 +71,12 @@ class FilingScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(Space.lg),
             children: [
               _MbrsBanner(status: status, reference: f['mbrs_reference']),
+              const SizedBox(height: Space.lg),
+              _EntityCard(
+                filingId: filingId,
+                entityId: f['corp_entity_id']?.toString(),
+                status: status,
+              ),
               const SizedBox(height: Space.lg),
               _BalanceCard(filingId: filingId),
               const SizedBox(height: Space.lg),
@@ -109,6 +134,140 @@ class FilingScreen extends ConsumerWidget {
 /// changes, and a screen with a "Lodge" button on it that never says
 /// where the lodging happens is a screen somebody will assume filed
 /// their client's accounts.
+/// What the card says about which company these accounts are for.
+///
+/// Three states, and the difference between the second and third is the
+/// whole point. Separated from the widget so it can be asserted.
+String fsEntityLine({
+  required CorpEntity? entity,
+  required bool anyEntities,
+}) {
+  if (entity != null) {
+    final reg = entity.registrationNo;
+    return reg == null || reg.isEmpty
+        ? entity.name
+        : '${entity.name} ($reg)';
+  }
+  // No companies on file at all: this organization keeps its own books
+  // and there is nothing to link to. Not a gap, and not worth nagging
+  // about -- `report_fs_deadlines` coalesces to the organization's own
+  // name for exactly this case.
+  if (!anyEntities) return 'This organization\'s own accounts';
+  // Companies exist and this filing names none, so the deadline list
+  // will show the practice's name against it rather than the client's.
+  return 'Not linked to a company';
+}
+
+/// Which company these accounts are for.
+///
+/// `fs_set_entity` was granted to `authenticated` by `0391` and called
+/// by nothing, so `corp_entity_id` was null on every filing and
+/// `report_fs_deadlines` named the practice rather than the client on
+/// every row of the list. It is above the figures because it is the
+/// first fact about a set of accounts, not the last.
+class _EntityCard extends ConsumerWidget {
+  const _EntityCard({
+    required this.filingId,
+    required this.entityId,
+    required this.status,
+  });
+
+  final String filingId;
+  final String? entityId;
+  final String status;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entities =
+        ref.watch(corpEntitiesProvider).valueOrNull ?? const <CorpEntity>[];
+    final entity = entityId == null
+        ? null
+        : entities.where((e) => e.id == entityId).firstOrNull;
+    final canWrite = ref.watch(canWriteProvider);
+    // Lodged accounts cannot change what they were filed for, and
+    // `fs_set_entity` refuses in those words. Not offering the button is
+    // kinder than offering it and refusing.
+    final mayEdit = canWrite && status != 'lodged';
+
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.domain_outlined),
+        title: Text(
+          fsEntityLine(entity: entity, anyEntities: entities.isNotEmpty),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: const Text(
+          'The company these accounts are for',
+          style: TextStyle(fontSize: 12),
+        ),
+        trailing: mayEdit
+            ? IconButton(
+                key: const ValueKey('filing-entity'),
+                tooltip: 'Which company',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () => _pick(context, ref, entities),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _pick(
+    BuildContext context,
+    WidgetRef ref,
+    List<CorpEntity> entities,
+  ) async {
+    if (entities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No companies on file. Add one under corporate secretarial '
+            'first.',
+          ),
+        ),
+      );
+      return;
+    }
+    final picked = await showDialog<({String? id})>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Which company?'),
+        children: [
+          // Unlinking is a real answer, not an escape from the dialog:
+          // a set of accounts can be attached to the wrong company and
+          // detaching it is the correction.
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, (id: null)),
+            child: const Text('Not linked to a company'),
+          ),
+          const Divider(height: 1),
+          for (final e in entities)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, (id: e.id)),
+              child: Text(
+                fsEntityLine(entity: e, anyEntities: true),
+                style: e.id == entityId
+                    ? const TextStyle(fontWeight: FontWeight.w700)
+                    : null,
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.fsSetEntity(filingId, picked.id),
+      successMessage: 'Saved',
+    );
+    ref.invalidate(fsFilingProvider(filingId));
+    // The list reads the same link for its company column.
+    ref.invalidate(fsDeadlinesDueProvider);
+    ref.invalidate(fsFilingsProvider);
+  }
+}
+
 class _MbrsBanner extends StatelessWidget {
   const _MbrsBanner({required this.status, this.reference});
 
@@ -373,6 +532,20 @@ class _Actions extends ConsumerWidget {
       spacing: Space.sm,
       runSpacing: Space.sm,
       children: [
+        // The auditor, the opinion, the headcount and the dates the
+        // directors approved and circulated them: everything a set of
+        // accounts says besides its figures, and none of it enterable
+        // until now.
+        OutlinedButton.icon(
+          key: const ValueKey('filing-details'),
+          onPressed: () async {
+            if (await showFilingDetails(context, filing: filing)) {
+              _refresh(ref);
+            }
+          },
+          icon: const Icon(Icons.edit_note_outlined, size: 18),
+          label: const Text('What they say'),
+        ),
         if (status == 'draft')
           FilledButton.icon(
             onPressed: () => _freeze(context, ref),

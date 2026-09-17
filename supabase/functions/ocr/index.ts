@@ -103,7 +103,7 @@ interface BeginResult {
   provider: string;
   provider_name: string;
   /** The protocol, which is the only thing this function switches on. */
-  kind: "anthropic" | "openai" | "google_docai" | "device";
+  kind: "anthropic" | "openai" | "google_docai" | "self_hosted" | "device";
   endpoint: string | null;
   model: string | null;
   key_source: "platform" | "own" | "device";
@@ -223,14 +223,26 @@ const SCHEMA = {
     lines: {
       type: "array",
       description:
-        "One entry per printed line. Empty if the document is a single " +
-        "undifferentiated total.",
+        "One entry per item charged — NOT one per printed line. A " +
+        "description that wraps onto a second or third printed line is " +
+        "one entry whose description keeps every line of it, joined " +
+        "with newlines, in the order printed. A continuation line, a " +
+        "part number, a serial number or a period covered belongs in " +
+        "the description of the item above it, never in an entry of " +
+        "its own. Empty if the document is a single undifferentiated " +
+        "total.",
       items: {
         type: "object",
         additionalProperties: false,
         required: ["description", "quantity", "unit_price", "amount"],
         properties: {
-          description: { type: ["string", "null"] },
+          description: {
+            type: ["string", "null"],
+            description:
+              "Everything printed about this item, newlines preserved. " +
+              "Two printed lines describing one charge is one " +
+              "description with a newline in it.",
+          },
           quantity: { type: ["number", "null"] },
           unit_price: { type: ["number", "null"] },
           amount: { type: ["number", "null"] },
@@ -254,6 +266,13 @@ const SYSTEM = [
   "present it as read — if the subtotal is not on the document, that",
   "field is null, and if the arithmetic on the document does not foot,",
   "say so in `note` and report the printed figures unchanged.",
+  "",
+  "A charge often takes more than one printed line: the item on the",
+  "first, the detail on the second — a part number, a period covered, a",
+  "site address, a serial. That is one entry, and the second line goes",
+  "in its description after a newline. Splitting it into a second entry",
+  "with no price puts a phantom line on somebody's bill; dropping it",
+  "loses what they are actually being charged for.",
   "",
   "Malaysian documents worth knowing: amounts are prefixed RM; service",
   "tax appears as SST, and older documents show GST; a tax-inclusive",
@@ -457,6 +476,172 @@ async function readOpenAiShaped(
  * the Expense and Invoice processors' own; an entity a processor does
  * not emit simply never appears, which is the null this wants anyway.
  */
+/**
+ * A reader somebody runs themselves.
+ *
+ * MinerU, PaddleOCR, OCRmyPDF, docTR — none of them is a hosted API and
+ * none can be embedded here: they are Python with model weights, and
+ * this function is Deno. What they CAN be is a container behind an
+ * endpoint, and that is all this asks for.
+ *
+ * One protocol rather than one branch per project, deliberately. The
+ * four differ in how they read a page and not in what this needs back,
+ * so a branch each would be four ways of saying the same thing and a
+ * fifth project would need a fifth. `docs/ocr-self-hosted.md` is the
+ * contract; anything that honours it is a catalog row.
+ *
+ * The request is `multipart/form-data` rather than base64 JSON, because
+ * these services already accept file uploads and a bill photographed at
+ * full resolution is several megabytes that base64 makes a third
+ * larger again.
+ *
+ * The key is optional and sent as a bearer token. A service on a
+ * private network may need none; one reachable from the internet
+ * certainly does, and the catalog row says which by `takes_key`.
+ */
+async function readSelfHosted(
+  apiKey: string,
+  endpoint: string,
+  model: string,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<Extraction> {
+  if (!endpoint) {
+    throw new Error(
+      "This reader has no address. Set its endpoint in the platform " +
+        "console before choosing it.",
+    );
+  }
+
+  const form = new FormData();
+  // `bytes.slice()` rather than `bytes`: a Uint8Array may be backed by
+  // a SharedArrayBuffer, which is not a BlobPart. The copy is the
+  // narrowing, and a receipt is small enough not to care.
+  form.append(
+    "file",
+    new Blob([bytes.slice().buffer as ArrayBuffer], { type: mime }),
+    "document",
+  );
+  // What the caller wants back, so one service can host several
+  // pipelines behind one address and choose by this.
+  if (model) form.append("model", model);
+  form.append("schema", "iakauntan.extraction.v1");
+
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: form,
+    // A self-hosted reader on a cold container can be slow, and slow is
+    // not broken. But it cannot be unbounded: the charge is already
+    // taken, and a request that never returns is a charge that is never
+    // refunded.
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    throw new Error(
+      `The reader at ${new URL(endpoint).host} answered ${res.status}. ` +
+        (detail || "It sent no explanation."),
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(
+      `The reader at ${new URL(endpoint).host} did not answer with JSON. ` +
+        "See docs/ocr-self-hosted.md for the shape this expects.",
+    );
+  }
+
+  if (typeof body !== "object" || body === null) {
+    throw new Error("The reader answered with something that is not a result.");
+  }
+
+  // `extraction` when the service wraps its answer, the body itself when
+  // it does not. Both are common and neither is worth refusing over.
+  const raw = (body as Record<string, unknown>).extraction ?? body;
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("The reader answered with no extraction in it.");
+  }
+
+  return normaliseExtraction(raw as Record<string, unknown>);
+}
+
+/**
+ * Every field present, and null where the reader had nothing.
+ *
+ * A self-hosted service is not going to honour a JSON schema the way a
+ * structured-output API does, so this fills the shape rather than
+ * trusting it. The alternative is an extraction with holes in it
+ * reaching `ocr_finish`, where a missing key and a null mean different
+ * things to everything downstream.
+ */
+function normaliseExtraction(raw: Record<string, unknown>): Extraction {
+  const str = (k: string): string | null => {
+    const v = raw[k];
+    if (typeof v === "string") return v.trim() === "" ? null : v.trim();
+    if (typeof v === "number") return String(v);
+    return null;
+  };
+  const num = (k: string): number | null => {
+    const v = raw[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string") {
+      // Same forgiveness the SQL importer gives: a reader that hands
+      // back "RM 1,234.50" has read the page correctly.
+      const cleaned = v.replace(/[,\s]/g, "").replace(/RM/gi, "");
+      const n = Number(cleaned);
+      if (Number.isFinite(n) && cleaned !== "") return n;
+    }
+    return null;
+  };
+
+  const lines = Array.isArray(raw.lines)
+    ? raw.lines.filter((l): l is Record<string, unknown> =>
+      typeof l === "object" && l !== null
+    ).map((l) => ({
+      description: typeof l.description === "string" ? l.description : null,
+      quantity: numberFrom(l.quantity),
+      unit_price: numberFrom(l.unit_price),
+      amount: numberFrom(l.amount),
+    }))
+    : [];
+
+  return {
+    supplier_name: str("supplier_name"),
+    supplier_tax_id: str("supplier_tax_id"),
+    supplier_registration_no: str("supplier_registration_no"),
+    supplier_email: str("supplier_email"),
+    supplier_phone: str("supplier_phone"),
+    supplier_address: str("supplier_address"),
+    document_no: str("document_no"),
+    document_date: str("document_date"),
+    currency: str("currency"),
+    subtotal: num("subtotal"),
+    tax_amount: num("tax_amount"),
+    total_amount: num("total_amount"),
+    lines,
+    note: str("note"),
+  } as Extraction;
+}
+
+/** The same number forgiveness, for a line. */
+function numberFrom(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const cleaned = v.replace(/[,\s]/g, "").replace(/RM/gi, "");
+    const n = Number(cleaned);
+    if (Number.isFinite(n) && cleaned !== "") return n;
+  }
+  return null;
+}
+
 async function readGoogle(
   credential: string,
   project: string,
@@ -736,6 +921,15 @@ serveFunction("ocr.failed", async (req: Request) => {
         break;
       case "openai":
         extraction = await readOpenAiShaped(
+          credential.api_key,
+          begin.endpoint ?? "",
+          begin.model ?? "",
+          bytes,
+          mime,
+        );
+        break;
+      case "self_hosted":
+        extraction = await readSelfHosted(
           credential.api_key,
           begin.endpoint ?? "",
           begin.model ?? "",

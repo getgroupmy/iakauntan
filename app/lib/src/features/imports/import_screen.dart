@@ -1,11 +1,16 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/csv.dart';
+import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'file_shape.dart';
+import 'import_file.dart';
+import 'import_template.dart';
 
 /// Bringing a company's books across from whatever was in use before.
 ///
@@ -31,7 +36,7 @@ class ImportScreen extends ConsumerStatefulWidget {
 /// A file exported from another system has its own names for things, so
 /// the common ones are listed rather than making somebody rename
 /// columns before they can start.
-const _contactAliases = <String, List<String>>{
+const contactColumns = <String, List<String>>{
   'code': ['customer code', 'supplier code', 'account code', 'no', 'id'],
   'name': ['customer name', 'supplier name', 'company', 'company name'],
   'contact_type': ['type', 'kind'],
@@ -55,7 +60,20 @@ const _contactAliases = <String, List<String>>{
   'notes': ['remarks'],
 };
 
-const _itemAliases = <String, List<String>>{
+/// A chart from another system calls these a dozen things. `type` and
+/// `subtype` are what most exports call them; `class` and `category`
+/// are what the Malaysian SME packages tend to use.
+const accountColumns = <String, List<String>>{
+  'code': ['account code', 'account no', 'gl code', 'no', 'id'],
+  'name': ['account name', 'description', 'title'],
+  'account_type': ['type', 'class', 'category'],
+  'account_subtype': ['subtype', 'sub type', 'sub-category', 'group type'],
+  'parent_code': ['parent', 'parent account', 'header', 'heading'],
+  'description': ['notes', 'remarks'],
+  'is_group': ['group', 'is header', 'header account'],
+};
+
+const itemColumns = <String, List<String>>{
   'code': ['item code', 'product code', 'sku', 'no', 'id'],
   'name': ['item name', 'product name', 'description short'],
   'description': ['long description', 'details'],
@@ -90,6 +108,69 @@ const openInvoiceColumns = <String, List<String>>{
   'exchange_rate': ['rate', 'fx rate'],
   'reference': ['your ref', 'po no', 'order no'],
   'description': ['particulars', 'remarks'],
+};
+
+/// 0631. One row per LINE, grouped by `doc_no`.
+///
+/// The aliases are the ones other packages actually print. `doc_type`
+/// has none worth guessing at: a column called "type" in an export is
+/// as likely to mean the item type or the tax type, and reading it as
+/// the document type would turn every row into a credit note without
+/// saying so.
+const salesTransactionColumns = <String, List<String>>{
+  'doc_no': ['invoice no', 'invoice number', 'document no', 'no'],
+  'doc_type': ['document type'],
+  'contact_code': ['customer code', 'customer', 'account code'],
+  'doc_date': ['invoice date', 'date'],
+  'due_date': ['due', 'payment due'],
+  'currency': ['ccy'],
+  'exchange_rate': ['rate', 'fx rate'],
+  'reference': ['your ref', 'po no', 'order no'],
+  'item_code': ['item', 'product code', 'stock code'],
+  'description': ['particulars', 'remarks', 'details'],
+  'quantity': ['qty', 'units'],
+  'unit_price': ['price', 'rate per unit', 'unit rate'],
+  'discount_percent': ['discount', 'disc %'],
+  'tax_code': ['tax', 'sst code'],
+};
+
+/// 0632. The purchase side of [salesTransactionColumns], and the one
+/// column that makes it different: `supplier_doc_no`, what is printed
+/// on the paper. `0628` reads it to decide whether the same bill has
+/// arrived twice, so a file that loses it loses the duplicate check.
+const purchaseTransactionColumns = <String, List<String>>{
+  'doc_no': ['bill no', 'our ref', 'document no', 'no'],
+  'supplier_doc_no': ['supplier invoice no', 'their ref', 'invoice no'],
+  'doc_type': ['document type'],
+  'contact_code': ['supplier code', 'supplier', 'account code'],
+  'doc_date': ['bill date', 'invoice date', 'date'],
+  'due_date': ['due', 'payment due'],
+  'currency': ['ccy'],
+  'exchange_rate': ['rate', 'fx rate'],
+  'reference': ['your ref', 'po no', 'order no'],
+  'item_code': ['item', 'product code', 'stock code'],
+  'description': ['particulars', 'remarks', 'details'],
+  'quantity': ['qty', 'units'],
+  'unit_price': ['price', 'rate per unit', 'unit rate'],
+  'discount_percent': ['discount', 'disc %'],
+  'tax_code': ['tax', 'sst code'],
+};
+
+/// 0633. One row per LINE, grouped by `entry_no`, with the debit and
+/// the credit in their own columns — which is how a general ledger
+/// prints and how every package exports one.
+///
+/// `debit` and `credit` have no aliases beyond the obvious: a column
+/// called "amount" in a journal export is unsigned as often as not, and
+/// reading it as a debit would put half a file on the wrong side.
+const journalColumns = <String, List<String>>{
+  'entry_no': ['journal no', 'jv no', 'voucher no', 'entry'],
+  'entry_date': ['journal date', 'date'],
+  'account_code': ['account', 'account no', 'gl code', 'ledger code'],
+  'description': ['particulars', 'narration', 'remarks', 'details'],
+  'debit': ['dr'],
+  'credit': ['cr'],
+  'contact_code': ['customer code', 'supplier code'],
 };
 
 const openBillColumns = <String, List<String>>{
@@ -137,11 +218,94 @@ const openingStockColumns = <String, List<String>>{
 enum ImportKind {
   contacts,
   items,
+  accounts,
   openInvoices,
   openBills,
   openingBalances,
   openingStock,
+  // 0631 and 0632, last in the order for the reason the comment below
+  // gives: the transactions name contacts, items and tax codes, so they
+  // are imported after everything they refer to.
+  salesTransactions,
+  purchaseTransactions,
+  journals,
 }
+
+/// What each importer is called on the button that selects it.
+///
+/// An exhaustive switch on purpose: adding a kind to the enum without
+/// naming it here is a compile error, which is the only way a list like
+/// this stays in step with what it lists.
+///
+/// The order is `ImportKind.values`' own, and that order is the order
+/// the job is done in: the master files first because the documents
+/// name their rows, and the chart before the opening balances because
+/// those name account numbers.
+/// The columns a file of this kind cannot import without.
+///
+/// A top-level function rather than a getter on the screen's State, so
+/// it can be asserted: which columns an importer REFUSES without is a
+/// decision, and it was reachable from nothing until the mutation sweep
+/// pointed out that deleting `doc_no` from the transaction importer's
+/// list changed no test.
+List<String> requiredColumnsFor(ImportKind kind) => switch (kind) {
+  // A contact file may leave the code blank: the database draws one
+  // from the row's series -- customer, supplier or prospect -- when
+  // the file is imported, and says so at preview. An item file may
+  // not, because the item code is what every later document line
+  // names the item by.
+  ImportKind.contacts => const ['name'],
+  ImportKind.items => const ['code', 'name'],
+  // The subtype and not the type: the subtype decides which line of
+  // which statement the account lands on, and the type follows from
+  // it (0550). A file naming only the type would leave every account
+  // needing a decision this screen cannot make.
+  ImportKind.accounts => const ['code', 'name', 'account_subtype'],
+  ImportKind.openInvoices || ImportKind.openBills => const [
+    'doc_no',
+    'contact_code',
+    'doc_date',
+    'outstanding_amount',
+  ],
+  ImportKind.openingBalances => const ['account_code'],
+  ImportKind.openingStock => const ['item_code', 'quantity', 'unit_cost'],
+  // One row per line, so the required set is what a LINE needs:
+  // which document it belongs to, whose it is, when, and what it
+  // costs.
+  ImportKind.salesTransactions => const [
+    'doc_no',
+    'contact_code',
+    'doc_date',
+    'unit_price',
+  ],
+  // The same four. `supplier_doc_no` is deliberately NOT required: a
+  // subscription receipt or a toll carries no number of the supplier's,
+  // and refusing the file over it would refuse the ordinary case to
+  // protect the duplicate check.
+  ImportKind.purchaseTransactions => const [
+    'doc_no',
+    'contact_code',
+    'doc_date',
+    'unit_price',
+  ],
+  // No `debit` or `credit` among them: a line carries ONE of the two,
+  // so requiring either would refuse every file. Which one is present
+  // is the importer's question, not the screen's.
+  ImportKind.journals => const ['entry_no', 'entry_date', 'account_code'],
+};
+
+String importKindLabel(ImportKind kind) => switch (kind) {
+  ImportKind.contacts => 'Contacts',
+  ImportKind.items => 'Items',
+  ImportKind.accounts => 'Chart of accounts',
+  ImportKind.openInvoices => 'Open invoices',
+  ImportKind.openBills => 'Open bills',
+  ImportKind.openingBalances => 'Opening balances',
+  ImportKind.openingStock => 'Opening stock',
+  ImportKind.salesTransactions => 'Sales transactions',
+  ImportKind.purchaseTransactions => 'Purchase transactions',
+  ImportKind.journals => 'Journals',
+};
 
 /// Whether this kind writes to the ledger.
 ///
@@ -153,6 +317,12 @@ enum ImportKind {
 /// that asked for write access throughout would offer an enabled button
 /// to an accounts clerk and collect a refusal.
 bool importNeedsPosting(ImportKind kind) =>
+    // 0550. A chart is master data like the other two, and it is the
+    // one piece of master data that decides what every future posting
+    // lands on -- so `import_accounts` asks for `can_post` and this has
+    // to ask for the same thing, or the screen offers an enabled button
+    // to somebody the database will refuse.
+    kind == ImportKind.accounts ||
     kind == ImportKind.openInvoices ||
     kind == ImportKind.openBills ||
     kind == ImportKind.openingBalances ||
@@ -170,6 +340,38 @@ bool importNeedsPosting(ImportKind kind) =>
 int importBlockingErrors(List<Map<String, dynamic>> verdict) =>
     verdict.where((r) => r['status'] == 'error').length;
 
+/// The rows the verdict lists, in the order it lists them.
+///
+/// Errors first, because with a hundred rows and two mistakes the two
+/// are what somebody came for. Then warnings, which do not stop the
+/// file but are the reason the control accounts are in it at all: a
+/// row saying the old system's receivables and the invoices actually
+/// brought across disagree is the single most useful line on the
+/// screen, and hiding it because it is not fatal would waste it.
+///
+/// Then the rows that are fine and still have something to say. A
+/// contact row that left the code blank is told at preview what shape
+/// the code it gets will take, and after the import, which code it
+/// got. Without these the preview of such a file reads 'all of them
+/// fine' and the drawn codes are on nobody's screen. A fine row with
+/// nothing to say is not listed: a hundred rows of 'ok' would bury the
+/// two that matter.
+List<Map<String, dynamic>> importRowsToList(
+  List<Map<String, dynamic>> verdict,
+) {
+  final bad = verdict.where((r) => r['status'] == 'error').toList();
+  final warned = verdict.where((r) => r['status'] == 'warning').toList();
+  final noted = verdict
+      .where(
+        (r) =>
+            r['status'] != 'error' &&
+            r['status'] != 'warning' &&
+            (r['message']?.toString() ?? '').isNotEmpty,
+      )
+      .toList();
+  return [...bad, ...warned, ...noted];
+}
+
 class _ImportScreenState extends ConsumerState<ImportScreen> {
   final _text = TextEditingController();
 
@@ -178,6 +380,20 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   CsvTable? _table;
   List<Map<String, dynamic>>? _verdict;
   String? _failure;
+
+  /// What was done to the file to make it readable, when anything was.
+  /// See `readImportFile`: a stray non-breaking space is swapped for an
+  /// ordinary one rather than refusing a whole export, and saying so is
+  /// the difference between that and changing somebody's file quietly.
+  String? _fileNote;
+
+  /// What the file in the box looks like, and to whom (0552).
+  ///
+  /// Null until something has been parsed. Held rather than recomputed
+  /// in `build` because the parse is what produces the headings, and a
+  /// screen that re-derived this on every frame would be answering a
+  /// question about a file it had not read.
+  FileShape? _shape;
 
   /// The day the ledger takes the opening balances on. Today by default,
   /// which is what somebody sitting down to migrate usually means.
@@ -191,37 +407,29 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   bool get _openItems => importNeedsPosting(_kind);
 
-  Map<String, List<String>> get _aliases => switch (_kind) {
-    ImportKind.contacts => _contactAliases,
-    ImportKind.items => _itemAliases,
-    ImportKind.openInvoices => openInvoiceColumns,
-    ImportKind.openBills => openBillColumns,
-    ImportKind.openingBalances => openingBalanceColumns,
-    ImportKind.openingStock => openingStockColumns,
-  };
+  Map<String, List<String>> get _aliases => importColumnsFor(_kind);
 
-  List<String> get _required => switch (_kind) {
-    ImportKind.contacts || ImportKind.items => const ['code', 'name'],
-    ImportKind.openInvoices || ImportKind.openBills => const [
-      'doc_no',
-      'contact_code',
-      'doc_date',
-      'outstanding_amount',
-    ],
-    ImportKind.openingBalances => const ['account_code'],
-    ImportKind.openingStock => const ['item_code', 'quantity', 'unit_cost'],
-  };
+  List<String> get _required => requiredColumnsFor(_kind);
 
   int get _errorCount => importBlockingErrors(_verdict ?? const []);
 
   Future<void> _run({required bool commit}) async {
     final table = parseCsvTable(_text.text, headerMapper(_aliases));
+    final shape = identifyFile(selected: _kind, headers: table.header);
     setState(() {
       _table = table;
+      _shape = shape;
       _verdict = null;
       _failure = null;
     });
     if (table.isEmpty) return;
+
+    // A file that belongs to another importer does not get as far as
+    // the database. It would be accepted there: the parse has already
+    // dropped the columns that prove where it belongs, so the server
+    // is handed two good columns and cannot know about the five it
+    // never saw. This is the last point at which anything can tell.
+    if (fileShapeBlocks(shape)) return;
 
     setState(() => _busy = true);
     final repo = ref.read(repoProvider)!;
@@ -229,6 +437,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       final rows = switch (_kind) {
         ImportKind.contacts || ImportKind.items => await repo.importRows(
           contacts: _kind == ImportKind.contacts,
+          rows: table.rows,
+          commit: commit,
+        ),
+        ImportKind.accounts => await repo.importAccounts(
           rows: table.rows,
           commit: commit,
         ),
@@ -247,6 +459,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         ImportKind.openingStock => await repo.importOpeningStock(
           rows: table.rows,
           asAt: _asAt,
+          commit: commit,
+        ),
+        // No `asAt`: these are not a changeover balance taken on one
+        // day, they are the documents themselves and each keeps its own
+        // date.
+        ImportKind.salesTransactions => await repo.importSalesTransactions(
+          rows: table.rows,
+          commit: commit,
+        ),
+        ImportKind.purchaseTransactions =>
+          await repo.importPurchaseTransactions(
+            rows: table.rows,
+            commit: commit,
+          ),
+        ImportKind.journals => await repo.importJournals(
+          rows: table.rows,
           commit: commit,
         ),
       };
@@ -270,13 +498,75 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     if (mounted) setState(() => _busy = false);
   }
 
+  /// Reads an uploaded file into the box.
+  ///
+  /// Into the box rather than straight into a preview, because the box
+  /// is what the person can then correct: a file with one bad heading
+  /// is fixed in place in ten seconds, and a screen that swallowed the
+  /// file and reported a verdict about it would send them back to the
+  /// spreadsheet.
+  /// Hand over a blank file with the right headings.
+  ///
+  /// Not `exportTextFile`: that records a security event, and this file
+  /// holds no company data at all. Writing "somebody exported" every
+  /// time a person downloads an empty template would put noise in the
+  /// one log that has to stay readable — `security_log` is where an
+  /// auditor looks for a copy that actually left.
+  Future<void> _downloadTemplate() async {
+    final saved = await saveTextFile(
+      importTemplateFilename(_kind),
+      'text/csv',
+      importTemplateCsv(_kind),
+    );
+    if (!mounted) return;
+    // A build that cannot hand over a file says so rather than doing
+    // nothing: the column chips above are the same information, and
+    // somebody who pressed a button deserves to know why nothing
+    // happened.
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This app cannot save a file here. The column names are '
+            'listed above.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _upload() async {
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'CSV', extensions: importFileExtensions),
+      ],
+    );
+    if (file == null) return;
+
+    final read = readImportFile(await file.readAsBytes(), name: file.name);
+    if (!mounted) return;
+    setState(() {
+      _failure = read.problem;
+      _fileNote = read.note;
+      _verdict = null;
+      _table = null;
+      _shape = null;
+      if (read.text != null) _text.text = read.text!;
+    });
+    if (read.text != null) await _run(commit: false);
+  }
+
   String _noun() => switch (_kind) {
     ImportKind.contacts => 'contacts',
     ImportKind.items => 'items',
+    ImportKind.accounts => 'accounts',
     ImportKind.openInvoices => 'open invoices',
     ImportKind.openBills => 'open bills',
     ImportKind.openingBalances => 'opening balances',
     ImportKind.openingStock => 'opening stock lines',
+    ImportKind.salesTransactions => 'transaction lines',
+    ImportKind.purchaseTransactions => 'purchase transaction lines',
+    ImportKind.journals => 'journal lines',
   };
 
   @override
@@ -298,35 +588,31 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.sm),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              // Built from `ImportKind.values`, not typed out.
+              //
+              // It was typed out, and 0550 added a seventh kind --
+              // the chart of accounts -- with its aliases, its
+              // required columns, its RPC and its section heading all
+              // wired up, and no button. Everything behind it worked
+              // and none of it was reachable. A hand-kept list beside
+              // an enum drifts the first time somebody adds to one and
+              // not the other; this cannot, and the label switch is
+              // exhaustive, so a new kind fails to compile until it
+              // has a name.
               child: SegmentedButton<ImportKind>(
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: ImportKind.contacts,
-                    label: Text('Contacts'),
-                  ),
-                  ButtonSegment(value: ImportKind.items, label: Text('Items')),
-                  ButtonSegment(
-                    value: ImportKind.openInvoices,
-                    label: Text('Open invoices'),
-                  ),
-                  ButtonSegment(
-                    value: ImportKind.openBills,
-                    label: Text('Open bills'),
-                  ),
-                  ButtonSegment(
-                    value: ImportKind.openingBalances,
-                    label: Text('Opening balances'),
-                  ),
-                  ButtonSegment(
-                    value: ImportKind.openingStock,
-                    label: Text('Opening stock'),
-                  ),
+                segments: [
+                  for (final kind in ImportKind.values)
+                    ButtonSegment(
+                      value: kind,
+                      label: Text(importKindLabel(kind)),
+                    ),
                 ],
                 selected: {_kind},
                 onSelectionChanged: (s) => setState(() {
                   _kind = s.first;
                   _table = null;
+                  _shape = null;
                   _verdict = null;
                   _failure = null;
                 }),
@@ -353,15 +639,28 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                         switch (_kind) {
                           ImportKind.contacts => 'Customers and suppliers',
                           ImportKind.items => 'Items',
+                          ImportKind.accounts => 'The chart of accounts',
                           ImportKind.openInvoices => 'Invoices still unpaid',
                           ImportKind.openBills => 'Bills still unpaid',
                           ImportKind.openingBalances =>
                             'The opening trial balance',
                           ImportKind.openingStock => 'Stock on hand',
+                          ImportKind.salesTransactions =>
+                            'Invoices and credit notes, in full',
+                          ImportKind.purchaseTransactions =>
+                            'Bills and supplier credit notes, in full',
+                          // Said here rather than only in the migration:
+                          // this is the one importer that posts, and
+                          // somebody about to run it over a year of
+                          // journals is entitled to know before they
+                          // press it.
+                          ImportKind.journals =>
+                            'Journals — these post to the ledger',
                         },
                         subtitle:
-                            'Paste the file with its header row. '
-                            'Nothing is written until every row is good.',
+                            'Upload the file, or paste it with its header '
+                            'row. Nothing is written until every row is '
+                            'good.',
                       ),
                       if (_openItems) ...[
                         const SizedBox(height: Space.sm),
@@ -420,6 +719,42 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       const SizedBox(height: Space.sm),
                       _Columns(aliases: _aliases, required: _required),
                       const SizedBox(height: Space.md),
+                      Wrap(
+                        spacing: Space.md,
+                        runSpacing: Space.sm,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            key: const ValueKey('import-upload'),
+                            onPressed: _busy ? null : _upload,
+                            icon: const Icon(Icons.upload_file, size: 18),
+                            label: const Text('Upload a file'),
+                          ),
+                          // Beside the upload button rather than buried
+                          // in help, because the moment somebody needs
+                          // it is the moment they are looking at this
+                          // row wondering what to upload.
+                          OutlinedButton.icon(
+                            key: const ValueKey('import-template'),
+                            onPressed: _busy ? null : _downloadTemplate,
+                            icon: const Icon(Icons.download, size: 18),
+                            label: const Text('Download template'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: Space.sm),
+                      Text(
+                        // The three formats worth stating. Dates lead
+                        // because they are the one that fails silently:
+                        // `31/01/2026` is not a date Postgres reads in
+                        // this order, so it becomes null and the row is
+                        // rejected for a missing date nobody left out.
+                        'CSV, saved as UTF-8. Or paste it below. Dates as '
+                        'YYYY-MM-DD. Numbers may carry RM and thousands '
+                        'separators. Yes/no columns take yes, y, true or 1.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: Space.sm),
                       TextField(
                         controller: _text,
                         maxLines: 10,
@@ -434,10 +769,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ImportKind.contacts =>
                               'code,name,contact_type,email\n'
                                   'C-001,Alpha Trading Sdn Bhd,customer,'
-                                  'ap@alpha.com',
+                                  'ap@alpha.com\n'
+                                  ',Beta Supplies Sdn Bhd,supplier,',
                             ImportKind.items =>
                               'code,name,unit_price,uom_code\n'
                                   'ITEM-1,Widget,12.50,C62',
+                            ImportKind.accounts =>
+                              'code,name,account_subtype,parent_code,'
+                                  'is_group\n'
+                                  '8000,Motor vehicle expenses,'
+                                  'operating_expense,,true\n'
+                                  '8010,Fuel,operating_expense,8000,',
                             ImportKind.openInvoices =>
                               'doc_no,contact_code,doc_date,due_date,'
                                   'outstanding_amount\n'
@@ -454,6 +796,37 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ImportKind.openingStock =>
                               'item_code,quantity,unit_cost\n'
                                   'WIDGET-1,100,10.00',
+                            // Two lines of ONE invoice, because that is
+                            // the shape people get wrong: the number
+                            // repeats down the file and the header
+                            // repeats with it.
+                            ImportKind.salesTransactions =>
+                              'doc_no,contact_code,doc_date,description,'
+                                  'quantity,unit_price\n'
+                                  'INV-2025-0912,C-001,2025-11-03,'
+                                  'Consulting,2,500.00\n'
+                                  'INV-2025-0912,C-001,2025-11-03,'
+                                  'Travel,1,250.00',
+                            // The supplier's number is on every line
+                            // because it belongs to the document, and a
+                            // file where it changes halfway is two bills
+                            // run together.
+                            ImportKind.purchaseTransactions =>
+                              'doc_no,supplier_doc_no,contact_code,'
+                                  'doc_date,description,quantity,'
+                                  'unit_price\n'
+                                  'BILL-77,ST-2026-4411,S-001,2026-05-02,'
+                                  'Paper,10,4.50',
+                            // Both sides of one entry, because a journal
+                            // that does not balance is the mistake this
+                            // importer exists to catch.
+                            ImportKind.journals =>
+                              'entry_no,entry_date,account_code,'
+                                  'description,debit,credit\n'
+                                  'JV-0088,2026-02-01,6900,Depreciation,'
+                                  '400.00,\n'
+                                  'JV-0088,2026-02-01,1800,Depreciation,'
+                                  ',400.00',
                           },
                         ),
                       ),
@@ -478,7 +851,16 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                                 _busy ||
                                     !allowed ||
                                     _verdict == null ||
-                                    _errorCount > 0
+                                    _errorCount > 0 ||
+                                    // Belt and braces. `_run` already
+                                    // returns before the database when
+                                    // the file belongs elsewhere, so
+                                    // there is no verdict to enable
+                                    // this -- but a button that can be
+                                    // pressed on a file the screen has
+                                    // just called wrong is a button
+                                    // somebody will press.
+                                    (_shape != null && fileShapeBlocks(_shape!))
                                 ? null
                                 : () => _run(commit: true),
                             icon: const Icon(Icons.upload, size: 18),
@@ -497,6 +879,78 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                   ),
                 ),
               ),
+              // 0552. The file belongs to another importer. Shown
+              // before anything about rows, because "this is the wrong
+              // list" makes every message under it beside the point.
+              if (_shape != null && fileShapeWarning(_shape!) != null) ...[
+                const SizedBox(height: Space.lg),
+                Card(
+                  key: const ValueKey('wrong-importer'),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.swap_horiz,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: Space.sm),
+                            Text(
+                              fileShapeBlocks(_shape!)
+                                  ? 'This file is for another importer'
+                                  : 'This file may be for another importer',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: Space.sm),
+                        Text(fileShapeWarning(_shape!)!),
+                        const SizedBox(height: Space.md),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton.icon(
+                            key: const ValueKey('switch-importer'),
+                            onPressed: () => setState(() {
+                              _kind = _shape!.looksLike!;
+                              _table = null;
+                              _shape = null;
+                              _verdict = null;
+                              _failure = null;
+                            }),
+                            icon: const Icon(Icons.arrow_forward, size: 18),
+                            label: Text(
+                              'Import it as '
+                              '${importKindLabel(_shape!.looksLike!).toLowerCase()}',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              // Not a warning, and deliberately not phrased as one. A
+              // chart exported from this product carries `is_active`
+              // and `current_balance`, which the importer does not
+              // read. The difference this makes is between a column
+              // being ignored and a column being ignored silently.
+              if (table != null &&
+                  _shape != null &&
+                  !fileShapeBlocks(_shape!) &&
+                  ignoredColumnsNote(_kind, table.header) != null) ...[
+                const SizedBox(height: Space.md),
+                Text(
+                  ignoredColumnsNote(_kind, table.header)!,
+                  key: const ValueKey('ignored-columns'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
               if (table != null && table.problems.isNotEmpty) ...[
                 const SizedBox(height: Space.lg),
                 _Panel(
@@ -511,6 +965,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                   danger: true,
                   title: 'Nothing was imported',
                   lines: [_failure!],
+                ),
+              ],
+              if (_fileNote != null) ...[
+                const SizedBox(height: Space.lg),
+                _Panel(
+                  title: 'About the file',
+                  lines: [_fileNote!],
                 ),
               ],
               if (_verdict != null) ...[
@@ -782,8 +1243,8 @@ String _label(Map<String, dynamic> row) {
   return v.isEmpty ? '' : ' · $v';
 }
 
-/// The per-row answer. Errors first, because with a hundred rows and two
-/// mistakes the two are what somebody came for.
+/// The per-row answer. What is listed, and in what order, is
+/// [importRowsToList]'s to say.
 class _Verdict extends StatelessWidget {
   const _Verdict({required this.rows, required this.errors});
 
@@ -793,13 +1254,6 @@ class _Verdict extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imported = rows.where((r) => r['status'] == 'imported').length;
-    final bad = rows.where((r) => r['status'] == 'error').toList();
-    // Not errors — they do not stop the file — but the reason the
-    // control accounts are in it at all. A row saying the old system's
-    // receivables and the invoices actually brought across disagree is
-    // the single most useful line on this screen, and hiding it because
-    // it is not fatal would waste it.
-    final warned = rows.where((r) => r['status'] == 'warning').toList();
 
     return Card(
       child: Padding(
@@ -819,18 +1273,25 @@ class _Verdict extends StatelessWidget {
                   ? 'Nothing has been written yet. Import writes them.'
                   : 'Nothing will be written until these are fixed.',
             ),
-            for (final r in [...bad, ...warned])
+            for (final r in importRowsToList(rows))
               ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
-                  r['status'] == 'error'
-                      ? Icons.error_outline
-                      : Icons.info_outline,
+                  switch (r['status']) {
+                    'error' => Icons.error_outline,
+                    'warning' => Icons.info_outline,
+                    // A fine row with a note: a code drawn, or about
+                    // to be. Not a danger colour, because there is
+                    // nothing to fix.
+                    _ => Icons.tag,
+                  },
                   size: 18,
-                  color: r['status'] == 'error'
-                      ? context.colors.danger
-                      : context.colors.warning,
+                  color: switch (r['status']) {
+                    'error' => context.colors.danger,
+                    'warning' => context.colors.warning,
+                    _ => context.colors.info,
+                  },
                 ),
                 title: Text(
                   // The master-file importers answer with `code` and

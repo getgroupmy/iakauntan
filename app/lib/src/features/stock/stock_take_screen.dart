@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'new_warehouse_dialog.dart';
 
 /// Counting the shelf and telling the books about it.
 ///
@@ -105,6 +107,20 @@ class _StockTakeScreenState extends ConsumerState<StockTakeScreen> {
                       _seeded = false;
                       _counted.clear();
                     }),
+                    onNewWarehouse: (typed) async {
+                      final created = await showDialog<Map<String, dynamic>>(
+                        context: context,
+                        builder: (_) => NewWarehouseDialog(seedName: typed),
+                      );
+                      if (created == null || !mounted) return null;
+                      // A shelf with nothing counted against it yet, so
+                      // the seeding starts again from an empty count.
+                      setState(() {
+                        _seeded = false;
+                        _counted.clear();
+                      });
+                      return '${created['id']}';
+                    },
                     onDate: (d) => setState(() => _date = d),
                   ),
                   const SizedBox(height: 16),
@@ -119,20 +135,22 @@ class _StockTakeScreenState extends ConsumerState<StockTakeScreen> {
                             subtitle: differences.isEmpty
                                 ? 'Nothing differs from the system yet'
                                 : '${differences.length} of ${items.length} '
-                                    'differ',
+                                      'differ',
                           ),
                           for (final item in items)
                             _CountRow(
                               item: item,
-                              counted:
-                                  _counted[item['item_id'] as String] ?? 0,
-                              onChanged: (v) => setState(() =>
-                                  _counted[item['item_id'] as String] = v),
+                              counted: _counted[item['item_id'] as String] ?? 0,
+                              onChanged: (v) => setState(
+                                () => _counted[item['item_id'] as String] = v,
+                              ),
                             ),
                         ],
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  _RecentCounts(warehouses: warehouses),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -158,17 +176,22 @@ class _StockTakeScreenState extends ConsumerState<StockTakeScreen> {
     final changed = lines.where((l) => l.counted != l.system).toList();
 
     if (changed.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Every line matches what the system holds — '
-            'there is nothing to post.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Every line matches what the system holds — '
+            'there is nothing to post.',
+          ),
+        ),
+      );
       return;
     }
 
     final ok = await confirm(
       context,
       title: 'Post the count?',
-      message: '${changed.length} item${changed.length == 1 ? '' : 's'} will '
+      message:
+          '${changed.length} item${changed.length == 1 ? '' : 's'} will '
           'be adjusted and a journal posted at the current average cost.',
       confirmLabel: 'Post',
     );
@@ -183,7 +206,9 @@ class _StockTakeScreenState extends ConsumerState<StockTakeScreen> {
         final id = await repo.saveStockAdjustment(
           warehouseId: warehouse,
           date: _date,
-          reason: _reason.text.trim().isEmpty ? 'Stock take' : _reason.text.trim(),
+          reason: _reason.text.trim().isEmpty
+              ? 'Stock take'
+              : _reason.text.trim(),
           lines: lines,
         );
         await repo.postStockAdjustment(id);
@@ -212,6 +237,7 @@ class _Header extends StatelessWidget {
     required this.date,
     required this.reason,
     required this.onWarehouse,
+    required this.onNewWarehouse,
     required this.onDate,
   });
 
@@ -220,6 +246,9 @@ class _Header extends StatelessWidget {
   final DateTime date;
   final TextEditingController reason;
   final ValueChanged<String> onWarehouse;
+
+  /// Add one from the box, and select it.
+  final Future<String?> Function(String typed) onNewWarehouse;
   final ValueChanged<DateTime> onDate;
 
   @override
@@ -227,17 +256,18 @@ class _Header extends StatelessWidget {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     final fields = <Widget>[
-      DropdownButtonFormField<String>(
+      SearchablePicker<String>(
+        options: warehouseOptions(warehouses),
         value: warehouseId,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Warehouse'),
-        items: [
-          for (final w in warehouses)
-            DropdownMenuItem(
-              value: w['id'] as String,
-              child: Text(w['name'] as String, overflow: TextOverflow.ellipsis),
-            ),
-        ],
+        label: 'Warehouse',
+        createLabel: 'Add warehouse',
+        // Reversing what this said an hour ago. I argued a count is of
+        // a shelf that already exists, so a warehouse created here
+        // would hold nothing. That is the wrong way round: a shop that
+        // opened last week has a shelf full of stock and no warehouse
+        // on file, and the FIRST thing anybody does with it is count
+        // it in.
+        onCreate: onNewWarehouse,
         onChanged: (v) => v == null ? null : onWarehouse(v),
       ),
       InkWell(
@@ -308,8 +338,9 @@ class _CountRow extends StatefulWidget {
 }
 
 class _CountRowState extends State<_CountRow> {
-  late final TextEditingController _controller =
-      TextEditingController(text: Fmt.qty(widget.counted));
+  late final TextEditingController _controller = TextEditingController(
+    text: Fmt.qty(widget.counted),
+  );
 
   @override
   void dispose() {
@@ -346,7 +377,9 @@ class _CountRowState extends State<_CountRow> {
             child: TextField(
               controller: _controller,
               textAlign: TextAlign.right,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(isDense: true),
               onChanged: (v) => widget.onChanged(double.tryParse(v) ?? 0),
             ),
@@ -365,13 +398,137 @@ class _CountRowState extends State<_CountRow> {
                   color: difference == 0
                       ? null
                       : (difference > 0
-                          ? context.colors.success
-                          : context.colors.danger),
+                            ? context.colors.success
+                            : context.colors.danger),
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// What a stock adjustment was for, in words rather than an enum.
+///
+/// The four values are the ones `stock_adjustments.adjustment_type`
+/// allows, from 0006. An unknown one falls back to "Adjustment" rather
+/// than to the raw code, because a screen that prints `write_off` to a
+/// shopkeeper has told them nothing.
+String adjustmentKind(String? type) => switch (type) {
+  'stock_take' => 'Count',
+  'write_off' => 'Written off',
+  'revaluation' => 'Revalued',
+  'opening' => 'Opening balance',
+  _ => 'Adjustment',
+};
+
+/// The line under a posted count: when, where, and why.
+///
+/// [warehouse] is resolved by the caller from the list this screen
+/// already holds, rather than by embedding `warehouses(name)` in the
+/// query. The screen has the names in hand; fetching them again to
+/// print one of them would be a second round trip for nothing.
+///
+/// The warehouse is omitted rather than shown as "—" when it cannot be
+/// resolved: a shelf this user cannot see is not a shelf with no name.
+String adjustmentSummary(Map<String, dynamic> row, {String? warehouse}) => [
+  Fmt.date(DateTime.tryParse('${row['adjustment_date']}')),
+  if (warehouse != null && warehouse.trim().isNotEmpty) warehouse,
+  if ('${row['reason'] ?? ''}'.trim().isNotEmpty) '${row['reason']}',
+].join(' · ');
+
+/// What was written off or found, most recent first.
+///
+/// `stockAdjustments` and `stockAdjustmentsProvider` both existed and
+/// the screen invalidated the provider after every posted count, and
+/// nothing drew it — so a count, once posted, left the app. The
+/// shopkeeper saw the shelf agree with the books and had no way to ask
+/// what the difference had been, or whether last month's count had
+/// been posted at all.
+///
+/// The draft case is the one worth showing: `saveStockAdjustment`
+/// writes a draft and `postStockAdjustment` posts it, and a draft left
+/// behind is a count somebody did and never told the books about. It
+/// appears here with its status, which is the only place it appears at
+/// all.
+class _RecentCounts extends ConsumerWidget {
+  const _RecentCounts({required this.warehouses});
+
+  final List<Map<String, dynamic>> warehouses;
+
+  /// Enough to answer "did last month's count go in?" without turning
+  /// the page into a register. The query already caps at fifty.
+  static const _shown = 10;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = ref.watch(stockAdjustmentsProvider);
+    final names = {for (final w in warehouses) '${w['id']}': '${w['name']}'};
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              'Recent counts',
+              subtitle: 'What was written off or found, most recent first',
+            ),
+            AsyncView(
+              value: rows,
+              onRetry: () => ref.invalidate(stockAdjustmentsProvider),
+              builder: (list) {
+                if (list.isEmpty) {
+                  return Text(
+                    'No count has been posted yet. The first one will '
+                    'appear here with what it changed.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  );
+                }
+                final shown = list.take(_shown).toList();
+                return Column(
+                  key: const ValueKey('stock-adjustment-history'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < shown.length; i++) ...[
+                      if (i > 0) const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          '${shown[i]['adjustment_no']} · '
+                          '${adjustmentKind('${shown[i]['adjustment_type']}')}',
+                        ),
+                        subtitle: Text(
+                          adjustmentSummary(
+                            shown[i],
+                            warehouse: names['${shown[i]['warehouse_id']}'],
+                          ),
+                        ),
+                        trailing: StatusChip(
+                          '${shown[i]['status']}',
+                          compact: true,
+                        ),
+                      ),
+                    ],
+                    if (list.length > _shown)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '${list.length - _shown} older '
+                          '${list.length - _shown == 1 ? 'count' : 'counts'} '
+                          'not shown.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

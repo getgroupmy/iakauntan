@@ -5,10 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/platform_catalog_repository.dart';
+import 'ticker.dart';
+import 'todo_card.dart';
 
 /// The dashboard a company gets is the one its modules make.
 ///
@@ -33,123 +36,184 @@ import '../../data/platform_catalog_repository.dart';
 /// Only ticketing, point of sale and the ledger report figures today.
 /// The rest get a tab and an honest sentence rather than a blank panel,
 /// because a blank panel under a module's name reads as broken.
-class DashboardScreen extends ConsumerWidget {
+/// The panels a person has asked for, from `Settings > Landing page`.
+///
+/// Unset means the defaults rather than nothing: a person who has never
+/// opened the settings screen must not be handed a bare dashboard.
+List<String> _cardsFor(WidgetRef ref) =>
+    ref.watch(userPreferencesProvider).valueOrNull?.dashboardCards ??
+    UserPreferences.defaultDashboardCards;
+
+/// The Overview is not a module and has no code of its own.
+///
+/// The empty string is it, so `_view` is never null and the picker
+/// never has to offer a "none" that means something different from
+/// every other "none" in the app.
+const String dashboardOverview = '';
+
+/// What the picker offers: the Overview, then every module dashboard
+/// this person reaches.
+///
+/// Pure, and separate from the screen, so the rule can be asserted:
+/// `app/test/dashboard_views_test.dart`. `nameOf` rather than the label
+/// map so the rule can be checked without the catalogue model.
+///
+/// The module CODE is a keyword as well as the name, because that is
+/// what somebody who knows the product types — "pos" finds Point of
+/// sale without them having to remember it is filed under P.
+List<PickerOption<String>> dashboardViews(
+  List<String> codes,
+  String Function(String code) nameOf,
+) =>
+    [
+      const PickerOption(
+        value: dashboardOverview,
+        label: 'Overview',
+        sublabel: 'The figures everybody sees',
+        keywords: ['general', 'summary', 'home', 'everything'],
+      ),
+      for (final code in codes)
+        PickerOption(
+          value: code,
+          label: nameOf(code),
+          sublabel: 'Module dashboard',
+          keywords: [code],
+        ),
+    ];
+
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  /// Deliberately NOT remembered between visits. The landing page is the
+  /// same for everybody every time; a dashboard that reopens on
+  /// whatever was last looked at is a dashboard nobody can be told how
+  /// to find their way around.
+  String _view = dashboardOverview;
+
+  Future<void> _refresh() async {
+    refreshLedgerData(ref);
+    ref.invalidate(moduleDashboardProvider);
+    await ref.read(moduleDashboardProvider.future);
+    if (_view == 'accounting') {
+      await ref.read(dashboardProvider.future);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final org = ref.watch(currentOrgProvider).value;
     final labels = ref.watch(moduleLabelsProvider).valueOrNull ?? const {};
 
-    // One tab per module this person actually reaches. `moduleEnabled`
-    // asks both halves — the company holds it, and their access type
-    // does not say `none` — which is the same pair `module_dashboard`
-    // applies on the server. Two people at the same company can open
-    // this screen and see different tabs, which is the point.
-    //
-    // Membership comes from the entitlements and the order from the
-    // catalogue, because the two reads land at different times and only
-    // one of them is allowed to empty the screen. Ordering by the
-    // platform's own `sort_order` keeps the tabs agreeing with the side
-    // menu, which is built from the same column.
+    // Which module dashboards this person actually reaches.
+    // `moduleEnabled` asks both halves — the company holds it, and their
+    // access type does not say `none` — which is the same pair
+    // `module_dashboard` applies on the server. Two people at the same
+    // company can open this screen and be offered different modules,
+    // which is the point.
+    final cards = _cardsFor(ref);
     final held = ref.watch(enabledModulesProvider);
     final codes = dashboardTabs(
       labels.keys,
       held.valueOrNull,
       (c) => moduleEnabled(ref, c),
     );
+    final views = dashboardViews(
+      codes,
+      (c) => labels[c]?.name ?? c,
+    );
 
-    if (codes.isEmpty) {
-      // Nothing to draw, and two quite different reasons for it. Saying
-      // "every module is switched off" to somebody whose entitlements
-      // simply have not arrived yet sends them to a settings screen to
-      // fix something that is not broken.
-      final settled = held.hasValue || held.hasError;
-      return Scaffold(
-        appBar: AppBar(title: const Text('Dashboard')),
-        body: PageBody(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _Greeting(orgName: org?.name ?? ''),
-              const SizedBox(height: 24),
-              if (!settled)
-                const Center(child: CircularProgressIndicator())
-              else
-                const EmptyState(
-                  icon: Icons.dashboard_customize_outlined,
-                  title: 'Nothing to show yet',
-                  message: 'Every module is switched off for this company, or '
-                      'none of them is yours to see. Turn one back on under '
-                      'Settings › Modules.',
-                ),
-            ],
-          ),
-        ),
-      );
-    }
+    // A module that was switched off, or an access type narrowed, while
+    // this screen was open. Falling back to the Overview beats showing
+    // a pane for something this person no longer reaches.
+    final view = views.any((v) => v.value == _view) ? _view : dashboardOverview;
 
-    return DefaultTabController(
-      // Keyed on the codes themselves: the list arrives after the first
-      // frame and grows, and a controller built for one length throws
-      // when handed another.
-      key: ValueKey(codes.join(',')),
-      length: codes.length,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Dashboard'),
-          actions: [
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: () {
-                refreshLedgerData(ref);
-                ref.invalidate(moduleDashboardProvider);
-              },
-              icon: const Icon(Icons.refresh),
-            ),
-            const SizedBox(width: 8),
-          ],
-          bottom: TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [
-              for (final code in codes)
-                Tab(text: labels[code]?.name ?? code),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Dashboard'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: () {
+              refreshLedgerData(ref);
+              ref.invalidate(moduleDashboardProvider);
+            },
+            icon: const Icon(Icons.refresh),
           ),
-        ),
-        body: TabBarView(
-          children: [
-            for (final code in codes)
-              RefreshIndicator(
-                onRefresh: () async {
-                  refreshLedgerData(ref);
-                  ref.invalidate(moduleDashboardProvider);
-                  await ref.read(moduleDashboardProvider.future);
-                  if (code == 'accounting') {
-                    await ref.read(dashboardProvider.future);
-                  }
-                },
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: PageBody(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Only on the first tab. Repeating the greeting
-                        // under every one turns it into furniture.
-                        if (code == codes.first) ...[
-                          _Greeting(orgName: org?.name ?? ''),
-                          const SizedBox(height: 20),
-                        ],
-                        ModuleDashboardPane(code: code),
-                        const SizedBox(height: 32),
-                      ],
-                    ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: PageBody(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Greeting(orgName: org?.name ?? ''),
+                const SizedBox(height: 16),
+
+                // The strip of tabs this replaced put whichever module
+                // sorted first in front of everybody, so a company
+                // signed in to its mail settings rather than to its
+                // figures. One box, the same landing view for everyone,
+                // and the modules a search away.
+                //
+                // Only when there is more than the Overview to choose
+                // between: a picker with one entry is furniture.
+                if (codes.isNotEmpty) ...[
+                  SearchablePicker<String>(
+                    key: const ValueKey('dashboard-view'),
+                    options: views,
+                    value: view,
+                    label: 'Showing',
+                    hint: 'Search a module by name',
+                    onChanged: (v) =>
+                        setState(() => _view = v ?? dashboardOverview),
                   ),
-                ),
-              ),
-          ],
+                  const SizedBox(height: 16),
+                ],
+
+                if (view == dashboardOverview) ...[
+                  if (cards.contains('ticker')) const DashboardTicker(),
+                  if (cards.contains('todos')) ...[
+                    const TodoCard(),
+                    const SizedBox(height: 16),
+                  ],
+                  // Somebody who has switched both panels off, and holds
+                  // no module either, would otherwise get a greeting and
+                  // white space.
+                  //
+                  // But only once the entitlements have landed. They are
+                  // a round trip, and telling somebody whose modules
+                  // simply have not arrived yet that there is nothing to
+                  // show sends them to a settings screen to fix
+                  // something that is not broken.
+                  if (!cards.contains('ticker') &&
+                      !cards.contains('todos') &&
+                      codes.isEmpty)
+                    if (held.hasValue || held.hasError)
+                      const EmptyState(
+                        icon: Icons.dashboard_customize_outlined,
+                        title: 'Nothing to show yet',
+                        message: 'Choose what belongs here under '
+                            'Settings \u203a Landing page, or turn a module '
+                            'on under Settings \u203a Modules.',
+                      )
+                    else
+                      const Center(child: CircularProgressIndicator()),
+                ] else
+                  ModuleDashboardPane(code: view),
+
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -167,25 +231,37 @@ class _Books extends ConsumerWidget {
     return AsyncView(
       value: summary,
       onRetry: () => ref.invalidate(dashboardProvider),
-      builder: (data) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _MetricGrid(data: data),
-          const SizedBox(height: 24),
-          if (moduleEnabled(ref, 'einvoice') &&
-              (data.einvoiceInvalid > 0 || data.einvoicePending > 0))
-            _EinvoiceBanner(data: data),
-          const _TrendCard(),
-          const SizedBox(height: 20),
-          if (moduleEnabled(ref, 'crm'))
-            const _TwoColumn(
-              left: _ReceivablesCard(),
-              right: _ActivitiesCard(),
-            )
-          else
-            const _ReceivablesCard(),
-        ],
-      ),
+      builder: (data) {
+        // What this person asked to see. The e-Invoice banner is not on
+        // the list on purpose: it is a REFUSAL waiting to be dealt with
+        // rather than a panel, and a rejected submission somebody has
+        // switched off is one LHDN is still waiting for.
+        final cards = _cardsFor(ref);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (cards.contains('metrics')) ...[
+              _MetricGrid(data: data),
+              const SizedBox(height: 24),
+            ],
+            if (moduleEnabled(ref, 'einvoice') &&
+                (data.einvoiceInvalid > 0 || data.einvoicePending > 0))
+              _EinvoiceBanner(data: data),
+            if (cards.contains('trend')) ...[
+              const _TrendCard(),
+              const SizedBox(height: 20),
+            ],
+            if (cards.contains('receivables'))
+              if (moduleEnabled(ref, 'crm'))
+                const _TwoColumn(
+                  left: _ReceivablesCard(),
+                  right: _ActivitiesCard(),
+                )
+              else
+                const _ReceivablesCard(),
+          ],
+        );
+      },
     );
   }
 }

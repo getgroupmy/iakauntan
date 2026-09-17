@@ -7,6 +7,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'ticket_routing_sheet.dart';
+import 'ticket_share_dialog.dart';
 
 /// One ticket: what was asked, what was said, and what may happen next.
 ///
@@ -80,6 +82,21 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
           data: (t) => Text((t['ticket_no'] ?? 'Ticket') as String),
           orElse: () => const Text('Ticket'),
         ),
+        actions: [
+          // The requester's own door. `0192` built the half of the
+          // conversation they write and nothing could reach it, so a
+          // customer could not answer a question about their own
+          // ticket.
+          ticket.maybeWhen(
+            data: (t) => IconButton(
+              key: const ValueKey('ticket-share'),
+              tooltip: 'Send the requester a link',
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () => showTicketShareDialog(context, t),
+            ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
       ),
       body: AsyncView(
         value: ticket,
@@ -94,6 +111,10 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                   ref.watch(ticketCategoriesProvider),
                   t['category_id'],
                 ),
+                assignee: assigneeLabel(
+                  ref.watch(teamProvider).valueOrNull ?? const [],
+                  t['assignee_id'] as String?,
+                ),
               ),
               const SizedBox(height: 16),
               _Sla(t),
@@ -104,6 +125,28 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                 onTransition: (to) => _run(
                   () => ref.read(repoProvider)!.transitionTicket(widget.id, to),
                 ),
+                onAssign: () async {
+                  final done = await showAssignTicketSheet(
+                    context,
+                    ticketId: widget.id,
+                    status: (t['status'] ?? '') as String,
+                    assigneeId: t['assignee_id'] as String?,
+                    // So the list offered is the set the server will
+                    // take: `0355` refuses somebody who is not on the
+                    // team the ticket is with, when that team has a
+                    // list at all.
+                    teamId: t['team_id'] as String?,
+                  );
+                  if (done) _refresh();
+                },
+                onEscalate: () async {
+                  final done = await showEscalateTicketSheet(
+                    context,
+                    ticketId: widget.id,
+                    status: (t['status'] ?? '') as String,
+                  );
+                  if (done) _refresh();
+                },
               ),
               const SizedBox(height: 24),
               const SectionHeader('Conversation'),
@@ -148,11 +191,16 @@ String? _nameOf(AsyncValue<List<Map<String, dynamic>>> v, Object? id) {
 }
 
 class _Header extends StatelessWidget {
-  const _Header(this.t, {this.team, this.category});
+  const _Header(this.t, {this.team, this.category, required this.assignee});
 
   final Map<String, dynamic> t;
   final String? team;
   final String? category;
+
+  /// Always shown, including when it is nobody: an unassigned ticket
+  /// is the one worth noticing, and a row that disappears when empty
+  /// is exactly the row nobody notices.
+  final String assignee;
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +246,7 @@ class _Header extends StatelessWidget {
               ? 'A customer'
               : 'Somebody in the company',
         ),
+        FieldRow(label: 'Assigned to', value: assignee),
         if ((t['escalation_level'] as int? ?? 0) > 0)
           FieldRow(
             label: 'Escalated',
@@ -307,11 +356,15 @@ class _Actions extends StatelessWidget {
     required this.ticket,
     required this.busy,
     required this.onTransition,
+    required this.onAssign,
+    required this.onEscalate,
   });
 
   final Map<String, dynamic> ticket;
   final bool busy;
   final ValueChanged<String> onTransition;
+  final VoidCallback onAssign;
+  final VoidCallback onEscalate;
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +386,24 @@ class _Actions extends StatelessWidget {
           FilledButton.tonal(
             onPressed: busy ? null : () => onTransition(to),
             child: Text(_label(to)),
+          ),
+        // Routing sits beside the state machine rather than under it:
+        // who holds a ticket and which queue it is in are separate
+        // questions from where it has got to.
+        OutlinedButton.icon(
+          key: const ValueKey('assign-ticket'),
+          onPressed: busy ? null : onAssign,
+          icon: const Icon(Icons.person_add_alt, size: 18),
+          label: Text(
+            ticket['assignee_id'] == null ? 'Assign' : 'Reassign',
+          ),
+        ),
+        if (escalationMakesSense(status))
+          OutlinedButton.icon(
+            key: const ValueKey('escalate-ticket'),
+            onPressed: busy ? null : onEscalate,
+            icon: const Icon(Icons.arrow_upward, size: 18),
+            label: const Text('Escalate'),
           ),
       ],
     );

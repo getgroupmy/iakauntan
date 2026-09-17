@@ -5,6 +5,76 @@ things need doing by a person, and none of them can be done from this
 repository because two of them are secrets and the third is a DNS
 record.
 
+## Two kinds of mail, and only one of them is this repository's
+
+This trips people up the first time they see a confirmation email
+arrive from `noreply@mail.app.supabase.io` with an "Opt out of these
+emails" footer on it, and go looking for the bug in here. There isn't
+one. There are two mail paths and they share nothing:
+
+| | **Application mail** | **Auth mail** |
+| --- | --- | --- |
+| Examples | invoices, share links, overdue chasers, the sales digest, the platform's own bills | confirm your email, password reset, magic link, email change |
+| Written by | the database, into `email_outbox` | GoTrue, inside Supabase, the moment `auth.signUp` is called |
+| Sent by | `supabase/functions/send-email`, through Resend | Supabase's own SMTP |
+| Sender | `MAIL_FROM` — `billing@iakauntan.com` | whatever Supabase Auth is configured with |
+| Configured | here, by the steps below | in the dashboard, NOT from this repository |
+
+`sign_in_screen.dart` calls `auth.signUp(...)`, and everything after
+that happens inside Supabase. The row never reaches `email_outbox`, the
+edge function never sees it, and `MAIL_FROM` has nothing to do with it.
+No amount of work in this repository changes that sender.
+
+### Making auth mail come from iakauntan.com
+
+**Authentication → Emails → SMTP Settings → Enable Custom SMTP**, in
+the dashboard. Resend is already set up for the application mail, so
+point it at the same place:
+
+| Field | Value |
+| --- | --- |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | the same `RESEND_API_KEY` |
+| Sender email | `no-reply@iakauntan.com` — any address on the domain already verified in Resend |
+| Sender name | iAkauntan |
+
+Then **Authentication → Emails → Templates** for the wording, and check
+**Authentication → URL Configuration** so the confirmation link lands
+on `iakauntan.com` rather than localhost.
+
+### When the sign-in page says the mail server refused it
+
+The confirmation button on the sign-in page (`Send the confirmation
+link again`) reports a mail failure in its own words rather than
+GoTrue's, because GoTrue answers a refused SMTP login with
+`unexpected_failure`, which says nothing about which setting is wrong.
+The name of the fault is in the project's auth logs:
+
+```
+"auth_event":{"action":"user_confirmation_requested"},
+"error":"535 \"Authentication credentials invalid\"",
+"error_code":"unexpected_failure","path":"/resend","status":500
+```
+
+`535` is the mail server rejecting the login, not Supabase rejecting
+the address. With the table above, it is almost always one of two
+things: the username is an email address rather than the literal word
+`resend`, or the password is something other than the `RESEND_API_KEY`
+value. Nothing about the person's address or the app's code changes
+this, and pressing the button again will not either — which is why the
+banner says so.
+
+### Why this is not only about branding
+
+Supabase's built-in auth SMTP is **for testing** and is rate limited to
+a handful of messages an hour across the whole project. It is not a
+sender that quietly looks unbranded in production; it is a sender that
+quietly stops. The first symptom is somebody signing up and never
+receiving the confirmation, with nothing in this repository to show for
+it — `email_outbox` will be empty, because the message was never ours.
+
 ## What is already in place
 
 - `email_settings` — per organization: on/off, from name, reply-to, and
@@ -17,6 +87,9 @@ record.
   link in it.
 - `app.queue_overdue_reminders(...)` — runs from the nightly job, once
   per invoice per configured day offset.
+- `public.send_from_mailbox(...)` — queues something a person wrote from
+  one of the company's own addresses, optionally threaded onto the
+  message it answers. `0560`.
 - `supabase/functions/send-email` — the only thing that can send, and
   the only thing that holds the key.
 
@@ -51,7 +124,8 @@ soon as it is configured; nothing is lost.
 
 The workflow also needs `SCHEDULER_SECRET` — one random string, set both
 on the function and as a repository secret. It shares that with the
-exchange rate feed, and [schedulers.md](schedulers.md) covers both.
+exchange rate feed and with the one that files consolidated e-Invoices,
+and [schedulers.md](schedulers.md) covers all three.
 
 The 503 reports `scheduler: true|false` alongside the complaint about
 mail, and the workflow fails on `false`. That matters more than it
@@ -81,11 +155,22 @@ GitHub bills every job run at a minimum of one minute, so a five-minute
 cron would consume a private repository's whole monthly allowance and
 then some. Half-hourly is about 510 runs a month.
 
-The cost is latency: pressing **Email** on an invoice can mean a wait of
-up to half an hour. The Send now button covers the impatient case. If
-that is not good enough, the answer is not a tighter cron — it is
-`pg_cron` firing `pg_net` every minute from inside the database, which
-costs nothing per run and needs the service role key pasted into Vault.
+The cost is latency, and it is worse than the cron says. Half-hourly is
+what is ASKED for; on a private repository GitHub treats a `schedule`
+trigger as best-effort and drops most of it. Measured on 16 September
+2026, this workflow ran five times in twenty-four hours against the
+twenty-three its crons ask for, at times matching none of them. So
+pressing **Email** can mean a wait of hours, not half an hour —
+[schedulers.md](schedulers.md) has the figures.
+
+Which makes the **Send now** button the way mail actually goes out
+promptly rather than a convenience for the impatient, and worth saying
+to whoever is trained on the screen. If that is not good enough, the
+answer is not a tighter cron — GitHub is not delivering the present one
+— it is `pg_cron` firing `pg_net` from inside the database, which runs
+on the database's own clock, costs nothing per run, and since
+`SCHEDULER_SECRET` exists no longer needs the service role key in
+Vault.
 
 ## 1. A Resend account and a verified domain
 
@@ -98,11 +183,24 @@ sent.
 
 ### Which domain, and why it is one decision not two
 
-`MAIL_FROM` is a single value on the function, so **every organization's
-mail leaves from the same address**. What varies per organization is the
-display name and the reply-to, both from `email_settings` — so a customer
-of Sinar Teknologi sees `Sinar Teknologi Sdn Bhd <billing@…>` and their
-reply reaches Sinar Teknologi, not this platform.
+`MAIL_FROM` is a single value on the function, and it is what **every
+document's mail leaves from** — an invoice, a reminder, a receipt. What
+varies per organization is the display name and the reply-to, both from
+`email_settings` — so a customer of Sinar Teknologi sees
+`Sinar Teknologi Sdn Bhd <billing@…>` and their reply reaches Sinar
+Teknologi, not this platform.
+
+One kind of message does not leave from `MAIL_FROM`: something a person
+wrote from one of the company's reserved addresses. `0328` added
+`email_outbox.from_email` for that and `0560` made the worker honour it,
+so a reply from `aisyah@iakauntan.com` arrives from `aisyah@iakauntan.com`
+and not from the platform's billing address. **That only works if the
+reserved addresses live at a domain Resend has verified.** The domain is
+the `mail_domain` platform setting, and Resend refuses a From address at
+a domain it does not hold — which surfaces as `failed` rows in the
+outbox with the provider's own words in `last_error`, not as silence.
+So: verify the domain in `mail_domain` too, or set `mail_domain` to the
+one already verified.
 
 That makes the sending domain shared infrastructure. One tenant's bounce
 rate is every tenant's reputation, which decides the choice:
@@ -199,7 +297,8 @@ Done — `.github/workflows/send-email.yml`, on the cadence above, holding
 
 The Outbox screen's **Send queued** button still works and drains only
 the signed-in user's own organization, which is the right answer for
-somebody who does not want to wait half an hour.
+somebody who does not want to wait on the scheduler — and, on the
+measured cadence above, for anybody who wants their mail to go today.
 
 ## 5. Switch it on per company
 

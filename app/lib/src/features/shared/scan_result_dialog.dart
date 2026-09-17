@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/scan_kinds_repository.dart';
+import 'document_classifier.dart';
 import 'scan_all_data.dart';
 
 /// What was read off a document, before anybody acts on it.
@@ -27,17 +30,17 @@ Future<OcrExtraction?> showScanResult(
       builder: (_) => _ScanResultDialog(read: read, canApply: canApply),
     );
 
-class _ScanResultDialog extends StatefulWidget {
+class _ScanResultDialog extends ConsumerStatefulWidget {
   const _ScanResultDialog({required this.read, required this.canApply});
 
   final OcrExtraction read;
   final bool canApply;
 
   @override
-  State<_ScanResultDialog> createState() => _ScanResultDialogState();
+  ConsumerState<_ScanResultDialog> createState() => _ScanResultDialogState();
 }
 
-class _ScanResultDialogState extends State<_ScanResultDialog> {
+class _ScanResultDialogState extends ConsumerState<_ScanResultDialog> {
   late final TextEditingController _supplier;
   late final TextEditingController _taxId;
   late final TextEditingController _registrationNo;
@@ -51,6 +54,14 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
   late final TextEditingController _total;
   late DateTime? _date;
   late final List<_EditableLine> _lines;
+
+  /// What the paper looks like, and whether anybody has said otherwise.
+  ///
+  /// `0614`. Worked out once, from the reading, and then held: a person
+  /// correcting a total should not watch the document's kind change
+  /// under them because a figure moved.
+  late final DocumentGuess _guess;
+  String? _kind;
 
   OcrExtraction get read => widget.read;
 
@@ -71,6 +82,17 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
     _total = TextEditingController(text: _money(read.totalAmount));
     _date = read.documentDate;
     _lines = [for (final line in read.lines) _EditableLine.from(line)];
+
+    // `0614`. From the reading, once. The fields below are what the
+    // reader MADE of the document; this is what kind of document it
+    // decided it was looking at.
+    _guess = classifyDocument(
+      text: read.rawText,
+      hasLines: read.lines.isNotEmpty,
+      hasTotal: read.totalAmount != null,
+      hasRegistrationNo: (read.supplierRegistrationNo ?? '').isNotEmpty,
+    );
+    _kind = _guess.kind;
   }
 
   @override
@@ -168,6 +190,11 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
         // dropping it would empty the All data screen on the second
         // visit.
         rawText: read.rawText,
+        // What the paper IS, as settled on rather than as guessed.
+        // `0614`. It travels on the reading because the caller is what
+        // has the attachment to write it against — this dialog is
+        // handed a reading and nothing else, on purpose.
+        documentKind: _kind,
       );
 
   static String? _trimmed(TextEditingController c) {
@@ -223,7 +250,7 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
     final foots = _doesNotFoot;
 
     return AlertDialog(
-      title: const Text('What the document says'),
+      title: const Text('What AI SmartScan read'),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -242,6 +269,17 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
               // back empty and a form that refuses to open are the same
               // dead end, and the paper is already attached either way.
               const SizedBox(height: Space.sm),
+              // What the paper IS, above what it says. `0614`. It is
+              // first because it decides what everything below is for,
+              // and it is a picker rather than a label because a first
+              // reading of a faded receipt is a draft -- the same
+              // bargain the figures already make.
+              _KindField(
+                guess: _guess,
+                value: _kind,
+                onChanged: (v) => setState(() => _kind = v),
+              ),
+              const Divider(height: Space.xl),
               // Three lines, because a Malaysian company name plus its
               // two registration numbers does not fit on one and the
               // whole point of showing it is that it can be checked.
@@ -610,6 +648,81 @@ class _DateField extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// What the paper is, above what it says.
+///
+/// `0614`. A picker rather than a label, because the classifier is
+/// matching strings against letterheads and the person holding the
+/// paper knows better. The reason is shown beside it — "Says TAX
+/// INVOICE" reads as a reason somebody can agree or disagree with,
+/// where a percentage reads as a machine being certain about something
+/// it cannot be certain about.
+class _KindField extends ConsumerWidget {
+  const _KindField({
+    required this.guess,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final DocumentGuess guess;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final kinds = ref.watch(offeredScanKindsProvider).valueOrNull;
+    final muted = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    // Nothing until the list arrives. A picker with one item in it,
+    // which then changes under somebody, is worse than a beat of
+    // nothing.
+    if (kinds == null || kinds.isEmpty) return const SizedBox.shrink();
+
+    final codes = [for (final k in kinds) k.code];
+    // A guess at a kind that has since been switched off. The dropdown
+    // would throw on a value that is not among its items, and the
+    // document somebody is looking at is not the place to find out.
+    final current = codes.contains(value) ? value : codes.first;
+    // And the correction is reported UP rather than kept here. Showing
+    // one kind and handing back another is the fault a picker exists to
+    // prevent, and it would be invisible: the screen would look right
+    // and the scan would be filed as something nobody chose.
+    if (current != value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => onChanged(current));
+    }
+    final chosen = kinds.firstWhere((k) => k.code == current);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          key: const ValueKey('scan-document-kind'),
+          isExpanded: true,
+          value: current,
+          decoration: InputDecoration(
+            labelText: 'What this is',
+            // The hedge is in the label, where it belongs: "might be"
+            // asks somebody to look, "is" does not.
+            helperText: guess.isSure
+                ? guess.because
+                : '${guess.because} — check it',
+          ),
+          items: [
+            for (final k in kinds)
+              DropdownMenuItem(value: k.code, child: Text(k.display)),
+          ],
+          onChanged: onChanged,
+        ),
+        if (chosen.hint != null) ...[
+          const SizedBox(height: 4),
+          Text(chosen.hint!, style: muted),
+        ],
+      ],
     );
   }
 }

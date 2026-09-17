@@ -81,8 +81,9 @@ class _LoyaltyScreenState extends ConsumerState<LoyaltyScreen> {
     await runWithFeedback(
       context,
       successMessage: 'Adjusted, and written down',
-      action: () =>
-          ref.read(repoProvider)!.adjustLoyaltyPoints(id, answer.points, answer.note),
+      action: () => ref
+          .read(repoProvider)!
+          .adjustLoyaltyPoints(id, answer.points, answer.note),
     );
     if (!mounted) return;
     final contactId = account['contact_id'] as String?;
@@ -245,6 +246,7 @@ class _LoyaltyScreenState extends ConsumerState<LoyaltyScreen> {
                       'gives an answer rather than a shortlist.',
                 ),
               ),
+            if (_selected != null) _SelectedMember(member: _selected!),
             if (_found.isNotEmpty)
               Expanded(
                 child: ListView(
@@ -378,6 +380,106 @@ class _MemberLine extends ConsumerWidget {
         if (member['points'] != null) '${member['points']} points',
         if (name != null) '$name',
       ].join(' · '),
+    );
+  }
+}
+
+/// How long since a point last moved on this account.
+///
+/// The dormancy sweep at the top of this screen clears the balance of
+/// every account quiet for longer than the programme allows, and until
+/// now no screen in the app said when any account was last active. A
+/// shop pressing "Expire dormant" could not tell beforehand who it
+/// would hit; it found out from the list of names afterwards.
+///
+/// "No points have moved yet" is a different statement from "quiet for
+/// a long time", and is said as such: an account enrolled this morning
+/// has no activity and is not dormant.
+///
+/// Deliberately approximate past two months. A shopkeeper deciding
+/// whether to sweep needs "about eight months", not "247 days"; and
+/// months here are thirtieths of the elapsed days rather than calendar
+/// months, which is why it says "about".
+String loyaltyLastActive(DateTime? last, {DateTime? now}) {
+  if (last == null) return 'No points have moved on this account yet';
+  final days = (now ?? DateTime.now()).difference(last).inDays;
+  final on = Fmt.date(last);
+  if (days <= 0) return 'Last active today';
+  if (days == 1) return 'Last active yesterday';
+  if (days < 60) return 'Last active $on — $days days ago';
+  final months = days ~/ 30;
+  return 'Last active $on — about $months months ago';
+}
+
+/// Everything the programme knows about the member somebody tapped.
+///
+/// `loyalty_account_balance` has returned this since 0212 and
+/// `loyaltyAccountBalanceProvider` has wrapped it, and this screen has
+/// invalidated the provider after every adjustment — and nothing read
+/// it. What the list shows comes from `loyalty_lookup`, which carries
+/// the points and what they are worth but neither the programme's name
+/// nor when the account was last active.
+///
+/// The last of those is the one this screen could least afford to be
+/// missing, because the button in its own app bar takes points away on
+/// exactly that basis.
+class _SelectedMember extends ConsumerWidget {
+  const _SelectedMember({required this.member});
+
+  final Map<String, dynamic> member;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contactId = member['contact_id'] as String?;
+    if (contactId == null) return const SizedBox.shrink();
+    final balance = ref.watch(loyaltyAccountBalanceProvider(contactId));
+
+    // Quiet while it loads and quiet if it fails: the row above already
+    // carries the points, and this panel is the detail behind a row
+    // that is useful without it.
+    final row = balance.valueOrNull;
+    if (row == null) return const SizedBox.shrink();
+
+    final points = Fmt.toInt(row['points']);
+    return Card(
+      key: const ValueKey('loyalty-balance'),
+      margin: const EdgeInsets.only(bottom: Space.md),
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              '${row['program'] ?? 'Loyalty'}',
+              subtitle: row['card_no'] == null
+                  ? 'No card issued'
+                  : 'Card ${row['card_no']}',
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: StatTile(label: 'Points', value: '$points'),
+                ),
+                Expanded(
+                  child: StatTile(
+                    label: 'Worth',
+                    // What the shop owes if they spend the lot today.
+                    // Points are a liability, and a liability with no
+                    // figure beside it is one nobody has priced.
+                    value: Fmt.money(Fmt.toDouble(row['worth'])),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Space.sm),
+            Text(
+              loyaltyLastActive(Fmt.parseDate(row['last_activity'])),
+              key: const ValueKey('loyalty-last-active'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

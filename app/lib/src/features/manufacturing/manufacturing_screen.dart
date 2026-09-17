@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../stock/new_warehouse_dialog.dart';
 import 'bom_dialog.dart';
 import 'work_centre_dialog.dart';
 
@@ -391,23 +393,21 @@ class _NewOrderDialogState extends ConsumerState<NewOrderDialog> {
                   style: TextStyle(fontSize: 13),
                 )
               else ...[
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
                   key: const ValueKey('mo-bom'),
-                  value: _bomId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Make'),
-                  items: [
+                  options: [
                     for (final b in boms)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: b['id'] as String,
-                        child: Text(
-                          '${b['code']} · '
-                          '${(b['items'] as Map?)?['name'] ?? ''}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: '${(b['items'] as Map?)?['name'] ?? ''}',
+                        sublabel: '${b['code']}',
+                        keywords: ['${b['code']}'],
                       ),
                   ],
-                  onChanged: _saving ? null : (v) => setState(() => _bomId = v),
+                  value: _bomId,
+                  label: 'Make',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _bomId = v),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -425,25 +425,14 @@ class _NewOrderDialogState extends ConsumerState<NewOrderDialog> {
                 ),
                 const SizedBox(height: 12),
                 if (warehouses.length > 1)
-                  DropdownButtonFormField<String>(
+                  SearchablePicker<String>(
+                    options: warehouseOptions(warehouses),
                     value: _warehouseId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'From and into',
-                      helperText:
-                          'Parts come off here and the finished '
-                          'item goes back here',
-                    ),
-                    items: [
-                      for (final w in warehouses)
-                        DropdownMenuItem(
-                          value: w['id'] as String,
-                          child: Text('${w['code']} · ${w['name']}'),
-                        ),
-                    ],
-                    onChanged: _saving
-                        ? null
-                        : (v) => setState(() => _warehouseId = v),
+                    label: 'From and into',
+                    helperText: 'Parts come off here and the finished '
+                        'item goes back here',
+                    enabled: !_saving,
+                    onChanged: (v) => setState(() => _warehouseId = v),
                   ),
                 const SizedBox(height: 12),
                 Row(

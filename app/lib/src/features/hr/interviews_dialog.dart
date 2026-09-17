@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -105,14 +107,19 @@ class _RoundTile extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: onEdit,
-      title: Row(children: [
-        Text('Round ${Fmt.toInt(round['round_no'])}',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        if (outcome != null) ...[
-          const SizedBox(width: Space.sm),
-          StatusChip(outcome, compact: true),
+      // `Wrap`, so the outcome chip drops to a second line rather
+      // than off the right edge. See the header of
+      // check_narrow_rows.py.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Space.sm,
+        runSpacing: 2,
+        children: [
+          Text('Round ${Fmt.toInt(round['round_no'])}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (outcome != null) StatusChip(outcome, compact: true),
         ],
-      ]),
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -240,19 +247,13 @@ class _RoundDialogState extends ConsumerState<_RoundDialog> {
                 ),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String?>(
+              SearchablePicker<String>(
+                options: employeePickerOptions(employees),
                 value: _interviewer,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Interviewer'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Not set')),
-                  for (final e in employees)
-                    DropdownMenuItem(
-                      value: e.id,
-                      child:
-                          Text(e.fullName, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+                label: 'Interviewer',
+                hint: 'Type a name or a staff number',
+                allowEmpty: true,
+                emptyLabel: 'Not set',
                 onChanged: (v) => setState(() => _interviewer = v),
               ),
               const Divider(height: Space.xl),

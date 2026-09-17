@@ -26,6 +26,31 @@ import '../../core/theme.dart';
 /// that is safe only when somebody remembers is not a default.
 const demoModeEnabled = bool.fromEnvironment('DEMO_MODE');
 
+/// Whether the sign-in screen draws the demo logins at all.
+///
+/// Four conditions, and every one of them is a reason not to. Written
+/// as a function rather than as an `&&` chain inside a widget tree
+/// because it is the whole security posture of this panel, and an `&&`
+/// chain in a build method is a thing nothing can assert.
+///
+/// * [buildAllows] is `demoModeEnabled`, the compile-time flag. It is
+///   the outer gate and cannot be reopened from the database: a build
+///   made without it does not carry the demo password.
+/// * [platformOffers] is the console switch, off by default, so a build
+///   that does carry the password still shows nothing until somebody
+///   decides it should.
+/// * [isSignUp] — the demo is an alternative to making an account, not
+///   a step in making one.
+/// * [atCompanyDoor] — a row of other companies' demo logins on Sinar's
+///   own page reads as though those companies are part of Sinar, or
+///   that this is not really Sinar's page.
+bool showDemoAccounts({
+  required bool buildAllows,
+  required bool platformOffers,
+  required bool isSignUp,
+  required bool atCompanyDoor,
+}) => buildAllows && platformOffers && !isSignUp && !atCompanyDoor;
+
 /// Overridable so a fork can seed its own demo data without editing code.
 const demoPassword = String.fromEnvironment(
   'DEMO_PASSWORD',
@@ -77,6 +102,18 @@ const demoAccounts = <DemoAccount>[
     icon: Icons.domain_outlined,
   ),
   DemoAccount(
+    email: 'accountant@iakauntan.com',
+    role: 'Accounting firm',
+    sees: 'One practice holding four companies, switched between',
+    icon: Icons.account_balance_outlined,
+  ),
+  DemoAccount(
+    email: 'legal@iakauntan.com',
+    role: 'Law firm',
+    sees: 'Matters, client account money kept apart, and billed hours',
+    icon: Icons.gavel_outlined,
+  ),
+  DemoAccount(
     email: 'property@iakauntan.com',
     role: 'Property manager',
     sees: 'A strata scheme and a commercial block, with their charges',
@@ -93,6 +130,18 @@ const demoAccounts = <DemoAccount>[
     role: 'Salon owner',
     sees: 'A day of appointments, two chairs, and a monthly package',
     icon: Icons.content_cut_outlined,
+  ),
+  DemoAccount(
+    email: 'kedai@iakauntan.com',
+    role: 'Shopkeeper',
+    sees: 'A minimarket: scanned barcodes, a shift, and a shelf running out',
+    icon: Icons.storefront_outlined,
+  ),
+  DemoAccount(
+    email: 'kilang@iakauntan.com',
+    role: 'Factory owner',
+    sees: 'A furniture floor — materials, a routing, and work in progress',
+    icon: Icons.precision_manufacturing_outlined,
   ),
   DemoAccount(
     email: 'stall@iakauntan.com',

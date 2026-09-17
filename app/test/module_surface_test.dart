@@ -65,6 +65,7 @@ void main() {
     required Set<String> modules,
     required Map<String, dynamic> figures,
     Map<String, ({String name, String group})>? labels,
+    List<String>? panels,
   }) => ProviderScope(
     overrides: [
       currentUserProvider.overrideWithValue(null),
@@ -81,6 +82,10 @@ void main() {
       moduleDashboardProvider.overrideWith((_) async => figures),
       if (labels != null)
         moduleLabelsProvider.overrideWith((_) async => labels),
+      if (panels != null)
+        userPreferencesProvider.overrideWith(
+          (_) async => UserPreferences(dashboardCards: panels),
+        ),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -96,14 +101,47 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Go and ask for a module's own dashboard.
+  ///
+  /// Which is now a deliberate act rather than where the screen lands.
+  /// The strip of tabs this replaced scrolled sideways off the edge of
+  /// a phone and put whichever module sorted first in front of
+  /// everybody; the landing page is the same for all of them now, and a
+  /// module dashboard is chosen by name from one box.
+  ///
+  /// [named] is what the picker calls it — the platform's name for the
+  /// module when the catalogue has arrived, and the bare code when it
+  /// has not.
+  Future<void> show(WidgetTester tester, String named) async {
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('dashboard-view')),
+        matching: find.byType(TextField),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: find.byType(ListTile), matching: find.text(named)),
+    );
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('a service desk company is not shown the ledger', (tester) async {
     await onADesktop(tester, shell(const {'ticketing', 'contacts'}));
 
-    // What it pays for, and the two screens every company keeps.
+    // What it pays for, and the screens every company keeps.
     expect(find.text('Service desk'), findsOneWidget);
-    expect(find.text('Contacts'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Team'), findsOneWidget);
+
+    // Contacts is four entries now, not one: the split into Customer,
+    // Supplier and Prospect put three doors beside All Contacts, and
+    // this assertion used to look for a nav item called exactly
+    // "Contacts" — which is nobody's label any more.
+    expect(find.text('All Contacts'), findsOneWidget);
+    expect(find.text('Customer'), findsOneWidget);
+    expect(find.text('Supplier'), findsOneWidget);
+    expect(find.text('Prospect'), findsOneWidget);
 
     // What it does not. These carried no module tag at all before 0234
     // and were shown to every company on the platform.
@@ -114,6 +152,22 @@ void main() {
     expect(find.text('Withholding tax'), findsNothing);
     expect(find.text('Reports'), findsNothing);
     expect(find.text('Exchange rates'), findsNothing);
+
+    // The assistant is a module like any other. It is the newest one
+    // here and the easiest to leave ungated, because its whole surface
+    // is a single screen and a single screen is easy to hang off the
+    // bottom of the list without a tag.
+    expect(find.text('Ask about your books'), findsNothing);
+  });
+
+  testWidgets('a company that bought the assistant gets its door', (
+    tester,
+  ) async {
+    // The other half. Asserting only the absence above would pass just
+    // as well against a destination nobody ever added, which is the
+    // state 0470 actually left this in.
+    await onADesktop(tester, shell(const {'ai', 'contacts'}));
+    expect(find.text('Ask about your books'), findsOneWidget);
   });
 
   testWidgets('a company that keeps books still gets all of it', (
@@ -151,6 +205,13 @@ void main() {
       ),
     );
 
+    // The landing page is the Overview, the same for everybody. The
+    // ticket figures are a module dashboard, and somebody has to ask.
+    expect(find.byType(ModuleDashboardPane), findsNothing);
+    expect(find.text('Open tickets'), findsNothing);
+
+    await show(tester, 'ticketing');
+
     expect(find.text('Open tickets'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
     expect(find.text('2 unassigned'), findsOneWidget);
@@ -165,12 +226,14 @@ void main() {
     expect(find.text('Receivables'), findsNothing);
   });
 
-  testWidgets('the tabs are named by the platform, not by their codes', (
+  testWidgets('the picker names modules by the platform, not by their codes', (
     tester,
   ) async {
     // The other half. Above, the catalogue is missing and the company
-    // still gets its dashboard; here it has arrived and the tab carries
-    // the name the console gave the module rather than `ticketing`.
+    // can still reach its dashboard; here it has arrived and the row
+    // carries the name the console gave the module rather than
+    // `ticketing`. Which matters more now than it did under the tabs:
+    // the name is what somebody types to find it.
     await onADesktop(
       tester,
       dashboard(
@@ -185,7 +248,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Service desk'), findsOneWidget);
+    await show(tester, 'Service desk');
+
     expect(find.text('ticketing'), findsNothing);
     expect(find.text('Open tickets'), findsOneWidget);
   });
@@ -214,6 +278,8 @@ void main() {
         },
       ),
     );
+
+    await show(tester, 'crm');
 
     expect(find.text('Open deals'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
@@ -247,6 +313,8 @@ void main() {
       ),
     );
 
+    await show(tester, 'crm');
+
     expect(find.textContaining('other currencies'), findsNothing);
     expect(find.text('Nothing owed'), findsOneWidget);
   });
@@ -271,6 +339,8 @@ void main() {
         },
       ),
     );
+
+    await show(tester, 'secretarial');
 
     expect(find.text('Past their deadline'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
@@ -303,19 +373,104 @@ void main() {
       ),
     );
 
+    await show(tester, 'secretarial');
+
     expect(find.text('Nothing is late'), findsOneWidget);
     expect(find.text('Nothing in the next month'), findsOneWidget);
     expect(find.textContaining('Next on'), findsNothing);
   });
 
-  testWidgets('a company with no module at all is told so, not left blank', (
+  testWidgets('a company with no module at all still gets a landing page', (
     tester,
   ) async {
+    // What changed when the tabs went. A company holding nothing used
+    // to be sent straight to an empty state, because there was no first
+    // tab to land on. The landing page is not a module's now — it is
+    // the to-do list and the ticker, which belong to nobody in
+    // particular — so it is still there, and there is nothing to pick
+    // between, so there is no box either.
+    await onADesktop(tester, dashboard(modules: const {}, figures: const {}));
+
+    expect(find.text('Nothing to show yet'), findsNothing);
+    expect(find.byKey(const ValueKey('dashboard-view')), findsNothing);
+    expect(find.byType(ModuleDashboardPane), findsNothing);
+  });
+
+  testWidgets('and is told so only when it has emptied the page itself', (
+    tester,
+  ) async {
+    // The one case left where there is genuinely nothing to draw: no
+    // module, and both panels switched off under Settings > Landing
+    // page. A greeting over white space reads as broken, so it says so
+    // and names both ways back.
     await onADesktop(
       tester,
-      dashboard(modules: const {}, figures: const {}),
+      dashboard(modules: const {}, figures: const {}, panels: const []),
     );
 
     expect(find.text('Nothing to show yet'), findsOneWidget);
+  });
+
+  testWidgets('the landing page is the same one for a company holding six', (
+    tester,
+  ) async {
+    // The point of the change. Whatever a company bought, everybody
+    // lands on the same page; the modules are behind one box, in
+    // platform order, under a name they can search.
+    await onADesktop(
+      tester,
+      dashboard(
+        modules: const {'ticketing', 'crm', 'secretarial'},
+        figures: const {},
+        labels: const {
+          'crm': (name: 'Sales pipeline', group: 'Sales'),
+          'ticketing': (name: 'Service desk', group: 'Service desk'),
+          'secretarial': (name: 'Registrar', group: 'Secretarial'),
+        },
+      ),
+    );
+
+    expect(find.byType(ModuleDashboardPane), findsNothing);
+    expect(find.byKey(const ValueKey('dashboard-view')), findsOneWidget);
+
+    // And the box is the way to one, found by typing the code rather
+    // than the name — which is what somebody who knows the product
+    // types.
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('dashboard-view')),
+        matching: find.byType(TextField),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('dashboard-view')),
+        matching: find.byType(TextField),
+      ),
+      'crm',
+    );
+    await tester.pumpAndSettle();
+
+    // Only the one row, and it is the one named for people rather than
+    // the code that found it.
+    expect(
+      find.descendant(of: find.byType(ListTile), matching: find.text('Sales pipeline')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byType(ListTile), matching: find.text('Registrar')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ListTile),
+        matching: find.text('Sales pipeline'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ModuleDashboardPane), findsOneWidget);
   });
 }

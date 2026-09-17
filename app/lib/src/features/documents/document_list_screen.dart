@@ -9,7 +9,11 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/repository.dart';
+import 'bulk_plan.dart';
 import 'doc_types.dart';
+import 'duplicate_bill.dart';
+import 'late_orders_dialog.dart';
 import '../shared/scan_intake.dart';
 import '../shared/supplier_from_scan.dart';
 import 'settlement_dialog.dart';
@@ -54,7 +58,7 @@ Future<void> _scanInto(
 
   String? contactId = match.contactId;
   if (match.outcome == SupplierOutcome.ask) {
-    contactId = await _pickSupplier(context, ref, read?.supplierName);
+    contactId = await _pickSupplier(context, ref, read);
   }
 
   if (contactId == null) {
@@ -65,8 +69,32 @@ Future<void> _scanInto(
     return;
   }
 
+  // 0628. Before anything is created, not after: a duplicate caught
+  // here is a decision, and one caught after the draft exists is a
+  // second draft to go and delete. The same receipt photographed twice
+  // is the ordinary way this happens, and the second photograph is
+  // taken by somebody who does not remember the first.
+  //
+  // Only on the purchase side. A sales document's number is this
+  // company's own sequence and cannot collide.
+  if (!meta.kind.isSales) {
+    if (!context.mounted) return;
+    final go = await _clearOfDuplicates(
+      context,
+      ref,
+      contactId: contactId,
+      docType: docType,
+      read: read,
+    );
+    if (!go) {
+      await repo.deleteAttachmentById(staged.attachmentId);
+      return;
+    }
+    if (!context.mounted) return;
+  }
+
   try {
-    final id = await repo.saveDocument(
+    final saved = await repo.saveDocument(
       kind: meta.kind,
       docType: docType,
       header: {
@@ -76,6 +104,7 @@ Future<void> _scanInto(
       },
       lines: const [],
     );
+    final id = saved.id;
     await repo.refileAttachment(
       attachmentId: staged.attachmentId,
       table: meta.kind.table,
@@ -94,24 +123,117 @@ Future<void> _scanInto(
   }
 }
 
+
+/// Warns about a bill already on the books, and lets it go on anyway.
+///
+/// `0628`. Returns true to carry on. A check that REFUSED would refuse
+/// a supplier's corrected re-issue and a genuine second delivery on one
+/// day, and what people do with a check that is wrong a tenth of the
+/// time is type the number differently — which destroys the only field
+/// it runs on.
+///
+/// A lookup that fails is not a duplicate. It carries on: a network
+/// error must not stop somebody entering a bill.
+Future<bool> _clearOfDuplicates(
+  BuildContext context,
+  WidgetRef ref, {
+  required String contactId,
+  required String docType,
+  required OcrExtraction? read,
+}) async {
+  final number = read?.documentNo?.trim();
+  final date = read?.documentDate;
+  final total = read?.totalAmount;
+  if ((number == null || number.isEmpty) && (date == null || total == null)) {
+    return true;
+  }
+
+  final List<DuplicateBill> found;
+  try {
+    final rows = await ref.read(repoProvider)!.duplicatePurchaseDocuments(
+      contactId: contactId,
+      docType: docType,
+      supplierDocNo: number,
+      docDate: date,
+      totalAmount: total,
+    );
+    found = [for (final r in rows) DuplicateBill.fromMap(r)];
+  } catch (_) {
+    return true;
+  }
+  if (found.isEmpty || !context.mounted) return found.isEmpty;
+
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.copy_all_outlined),
+      title: Text(
+        duplicateHeadline(found),
+        key: const ValueKey('duplicate-headline'),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            duplicateAdvice(found),
+            key: const ValueKey('duplicate-advice'),
+          ),
+          const SizedBox(height: Space.md),
+          for (final d in found)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                duplicateLine(d),
+                key: ValueKey('duplicate-line-${d.id}'),
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('duplicate-stop'),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Stop'),
+        ),
+        // Deliberately not styled as the primary action. Going on is
+        // allowed and is sometimes right; it should not be the button
+        // somebody presses without reading.
+        TextButton(
+          key: const ValueKey('duplicate-go-on'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Enter it anyway'),
+        ),
+      ],
+    ),
+  );
+  return go ?? false;
+}
+
 /// Which supplier this is from — the one thing no scan can decide.
 Future<String?> _pickSupplier(
   BuildContext context,
   WidgetRef ref,
-  String? readName,
+  OcrExtraction? read,
 ) {
   return showDialog<String>(
     context: context,
-    builder: (_) => _SupplierPicker(readName: readName),
+    builder: (_) => _SupplierPicker(read: read),
   );
 }
 
 class _SupplierPicker extends ConsumerStatefulWidget {
-  const _SupplierPicker({this.readName});
+  const _SupplierPicker({this.read});
 
-  /// What the document said, used to seed the search and shown as a
-  /// reminder — never selected automatically.
-  final String? readName;
+  /// What the document said. The name seeds the search and is shown as
+  /// a reminder — never selected automatically. The rest of it is what
+  /// pre-fills a supplier created from here, so the SSM number and the
+  /// address the scan found are not thrown away just because the name
+  /// matched nothing.
+  final OcrExtraction? read;
+
+  String? get readName => read?.supplierName;
 
   @override
   ConsumerState<_SupplierPicker> createState() => _SupplierPickerState();
@@ -180,9 +302,14 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
                     ? const EmptyState(
                         icon: Icons.person_search_outlined,
                         title: 'No supplier matches',
+                        // No longer "add the supplier under Contacts
+                        // first". That meant leaving the scan, going
+                        // somewhere else, and starting again — for the
+                        // commonest case there is, a bill from somebody
+                        // new.
                         message:
-                            'Clear the search to see them all, or add '
-                            'the supplier under Contacts first.',
+                            'Clear the search to see them all, or create '
+                            'this one without leaving the scan.',
                       )
                     : ListView.separated(
                         itemCount: list.length,
@@ -203,6 +330,27 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
         ),
       ),
       actions: [
+        // The way out that did not exist. Somebody scanning a bill
+        // from a supplier who is not on file used to be told to go to
+        // Contacts and start again, which is the commonest case there
+        // is — a new supplier is exactly when a bill needs scanning.
+        TextButton.icon(
+          key: const ValueKey('picker-new-supplier'),
+          onPressed: () async {
+            final id = await createSupplierFromScan(context, ref, widget.read);
+            if (id != null && context.mounted) Navigator.pop(context, id);
+          },
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('New supplier'),
+        ),
+        // No `Spacer()` between these two, however much this wants to
+        // push Cancel to the other end. `AlertDialog.actions` are laid
+        // out by an `OverflowBar`, which is not a Flex, and a `Spacer`
+        // is an `Expanded` — which throws at layout in a parent that
+        // cannot give it a flex. In a release web build that throw is
+        // an `ErrorWidget`, and `ErrorWidget` renders as a plain grey
+        // rectangle filling whatever space it is given. Which is to say
+        // the whole dialog goes grey, with no message anywhere.
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
@@ -210,6 +358,24 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
       ],
     );
   }
+}
+
+/// One thing the app bar offers, as a button or as a menu item.
+///
+/// [id] is only for the two that a test names; the rest are found by
+/// their label.
+class _ListAction {
+  const _ListAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.id,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? id;
 }
 
 class DocumentListScreen extends ConsumerStatefulWidget {
@@ -225,6 +391,193 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   String _status = 'all';
   String _search = '';
 
+  /// Ticked, for a batch. Empty means the list behaves exactly as it
+  /// did before 0500: tapping a row opens it.
+  final _picked = <String>{};
+  bool _running = false;
+
+  void _toggle(String id) => setState(() {
+    if (!_picked.remove(id)) _picked.add(id);
+  });
+
+  Future<void> _runBatch(
+    List<BusinessDocument> docs,
+    String verb,
+    Future<List<Map<String, dynamic>>> Function(List<String>) action,
+    String field,
+  ) async {
+    if (docs.isEmpty || _running) return;
+    setState(() => _running = true);
+    List<Map<String, dynamic>> rows = const [];
+    try {
+      rows = await action([for (final d in docs) d.id]);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$verb failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+    if (!mounted || rows.isEmpty) return;
+
+    setState(_picked.clear);
+    ref.invalidate(documentsProvider);
+    refreshLedgerData(ref);
+
+    final failed = [
+      for (final r in rows)
+        if (r[field] != true) r,
+    ];
+    if (failed.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(BulkPlan.outcome(rows, field))));
+      return;
+    }
+    // Named, not counted. "2 failed" is not something anybody can act
+    // on; "INV-19 is dated into a closed period" is.
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(BulkPlan.outcome(rows, field)),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final r in failed)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r['doc_no']?.toString() ?? 'A document',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          r['problem']?.toString() ?? 'Refused.',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Roughly what one of the secondary actions occupies: a
+  /// `TextButton.icon` whose label is two or three words. Taken from
+  /// the widest of them, "From the group (2)", with room to spare --
+  /// under-estimating it puts the bar back over the edge, and the
+  /// sweep in `document_list_screen_test.dart` is what would say so.
+  static const _actionWidth = 190.0;
+
+  /// The title, the type switcher and the New button, which are on the
+  /// bar whatever the document type is. Sized for the longest pair of
+  /// them -- "Purchase Orders" over "New purchase order" -- because it
+  /// is a single number for every list and the widest one is the one
+  /// that has to fit. At 420 the purchase order list still went 22
+  /// pixels over at exactly 700, which is what the sweep found.
+  static const _chromeWidth = 520.0;
+
+  /// Everything on the bar that is not the type switcher or "New".
+  ///
+  /// Gathered into a list rather than written inline so the same
+  /// entries can be buttons on a wide screen and menu items on a narrow
+  /// one, instead of being described twice and drifting apart.
+  List<_ListAction> _secondaryActions(
+    BuildContext context, {
+    required DocTypeMeta meta,
+    required DocKind kind,
+    required bool canWrite,
+    required bool canPost,
+  }) {
+    // Only on bills, and only when a group company has actually
+    // addressed something here. A permanent entry for a company with no
+    // group is a door onto an empty room.
+    final waiting = widget.docType != 'bill'
+        ? 0
+        : (ref.watch(intercompanyInboxProvider).valueOrNull ?? const [])
+              .where((r) => r['already_billed'] != true)
+              .length;
+
+    // Only on the sales order list, and only when something is actually
+    // late. A permanent button reading "nothing is late" is the same
+    // empty room; a count is a reason to look.
+    final late = widget.docType != 'sales_order'
+        ? const <Map<String, dynamic>>[]
+        : (ref.watch(lateOrdersProvider).valueOrNull ?? const []);
+
+    return [
+      if (waiting > 0)
+        _ListAction(
+          id: 'open-intercompany',
+          label: 'From the group ($waiting)',
+          icon: Icons.swap_horiz,
+          onTap: () => context.go('/intercompany'),
+        ),
+      if (late.isNotEmpty)
+        _ListAction(
+          id: 'late-orders',
+          label: 'Late (${late.length})',
+          icon: Icons.schedule,
+          onTap: () => showLateOrders(context),
+        ),
+      if (canPost && meta.settles)
+        _ListAction(
+          label: kind.isSales ? 'Receive payment' : 'Pay supplier',
+          icon: Icons.payments_outlined,
+          onTap: () => showSettlementDialog(context, ref, kind: kind),
+        ),
+      // Only on the purchase side. A sales invoice is raised from what
+      // we are owed, not read off a piece of paper somebody handed us --
+      // there is nothing to scan.
+      if (canWrite && !kind.isSales)
+        _ListAction(
+          label: 'Scan ${meta.singular.toLowerCase()}',
+          icon: Icons.document_scanner_outlined,
+          onTap: () =>
+              _scanInto(context, ref, docType: widget.docType, meta: meta),
+        ),
+    ];
+  }
+
+  Widget _searchField(DocKind kind) => TextField(
+    onChanged: (v) => setState(() => _search = v),
+    decoration: InputDecoration(
+      hintText: kind.isSales
+          ? 'Search document number'
+          : 'Search our number or the supplier’s',
+      prefixIcon: const Icon(Icons.search, size: 20),
+    ),
+  );
+
+  Widget _statusFilter() => SegmentedButton<String>(
+    showSelectedIcon: false,
+    segments: const [
+      ButtonSegment(value: 'all', label: Text('All')),
+      ButtonSegment(value: 'draft', label: Text('Draft')),
+      ButtonSegment(value: 'outstanding', label: Text('Outstanding')),
+    ],
+    selected: {_status},
+    onSelectionChanged: (s) => setState(() => _status = s.first),
+  );
+
   @override
   Widget build(BuildContext context) {
     final meta = metaFor(widget.docType);
@@ -239,6 +592,31 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     );
     final canWrite = ref.watch(canWriteProvider);
     final canPost = ref.watch(canPostProvider);
+
+    // What a batch of these could do fits on a laptop and ran off
+    // everything narrower. Measured: a bill list for a company in a
+    // group carries the type switcher, "From the group (2)",
+    // "Pay supplier", "Scan bill" and "New bill", which together need
+    // about 970 logical pixels -- so a browser window at 800 lost the
+    // right-hand end of the bar, and a phone lost most of it. Flutter
+    // CLIPS an overflowing toolbar rather than reporting it in a
+    // release build, so nobody would have been told.
+    final secondary = _secondaryActions(
+      context,
+      meta: meta,
+      kind: kind,
+      canWrite: canWrite,
+      canPost: canPost,
+    );
+    // Asked of how many there actually are rather than of a single
+    // breakpoint, because the number changes with the document type,
+    // the role and whether a group company has sent anything: an
+    // invoice list for a viewer has none of them and a bill list for an
+    // owner in a group has three, and one threshold cannot be right for
+    // both.
+    final room = MediaQuery.sizeOf(context).width;
+    final folded = room < _chromeWidth + secondary.length * _actionWidth;
+    final narrow = room < 700;
 
     return Scaffold(
       appBar: AppBar(
@@ -263,48 +641,17 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 ),
             ],
           ),
-          // Only on bills, and only when a group company has actually
-          // addressed something here. A permanent menu item for a
-          // company with no group is a door onto an empty room.
-          if (widget.docType == 'bill')
-            Consumer(
-              builder: (context, ref, _) {
-                final waiting =
-                    (ref.watch(intercompanyInboxProvider).valueOrNull ??
-                            const [])
-                        .where((r) => r['already_billed'] != true)
-                        .length;
-                if (waiting == 0) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: TextButton.icon(
-                    key: const ValueKey('open-intercompany'),
-                    onPressed: () => context.go('/intercompany'),
-                    icon: const Icon(Icons.swap_horiz, size: 18),
-                    label: Text('From the group ($waiting)'),
-                  ),
-                );
-              },
-            ),
-          if (canPost && meta.settles)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: TextButton.icon(
-                onPressed: () => showSettlementDialog(context, ref, kind: kind),
-                icon: const Icon(Icons.payments_outlined, size: 18),
-                label: Text(kind.isSales ? 'Receive payment' : 'Pay supplier'),
+          if (!folded)
+            for (final a in secondary)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: TextButton.icon(
+                  key: a.id == null ? null : ValueKey(a.id!),
+                  onPressed: a.onTap,
+                  icon: Icon(a.icon, size: 18),
+                  label: Text(a.label),
+                ),
               ),
-            ),
-          // Only on the purchase side. A sales invoice is raised from
-          // what we are owed, not read off a piece of paper somebody
-          // handed us — there is nothing to scan.
-          if (canWrite && !kind.isSales)
-            TextButton.icon(
-              onPressed: () =>
-                  _scanInto(context, ref, docType: widget.docType, meta: meta),
-              icon: const Icon(Icons.document_scanner_outlined, size: 18),
-              label: Text('Scan ${meta.singular.toLowerCase()}'),
-            ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -312,44 +659,81 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 onPressed: () =>
                     context.go('${kind.routePrefix}/${widget.docType}/new'),
                 icon: const Icon(Icons.add, size: 18),
-                label: Text('New ${meta.singular.toLowerCase()}'),
+                label: Text(
+                  narrow ? 'New' : 'New ${meta.singular.toLowerCase()}',
+                ),
               ),
+            ),
+          // Folded rather than dropped. Every one of these is the only
+          // way to reach what is behind it from this screen, so hiding
+          // one on a phone would be removing the feature there.
+          if (folded && secondary.isNotEmpty)
+            PopupMenuButton<int>(
+              key: const ValueKey('more-actions'),
+              tooltip: 'More',
+              itemBuilder: (_) => [
+                for (var i = 0; i < secondary.length; i++)
+                  PopupMenuItem(
+                    value: i,
+                    child: Row(
+                      children: [
+                        Icon(secondary[i].icon, size: 18),
+                        const SizedBox(width: 12),
+                        // A menu on a phone is 256 wide and
+                        // "From the group (1)" beside its icon does not
+                        // fit -- so the label yields rather than
+                        // overflowing the item it is in.
+                        Flexible(
+                          child: Text(
+                            secondary[i].label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              onSelected: (i) => secondary[i].onTap(),
             ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    onChanged: (v) => setState(() => _search = v),
-                    decoration: InputDecoration(
-                      hintText: kind.isSales
-                          ? 'Search document number'
-                          : 'Search our number or the supplier’s',
-                      prefixIcon: const Icon(Icons.search, size: 20),
+          // The segmented control alone is 504 wide, which is more than
+          // a phone has, so on a narrow screen the two go one above the
+          // other and the control scrolls sideways -- the arrangement
+          // `narrow_layout_test.dart` established when the e-Invoice
+          // filters lost "Needs fixing" off the right edge.
+          preferredSize: Size.fromHeight(narrow ? 116 : 64),
+          child: narrow
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Space.lg,
+                        0,
+                        Space.lg,
+                        Space.sm,
+                      ),
+                      child: _searchField(kind),
                     ),
+                    FilterBar(child: _statusFilter()),
+                  ],
+                )
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.lg,
+                    0,
+                    Space.lg,
+                    Space.md,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: _searchField(kind)),
+                      const SizedBox(width: 12),
+                      _statusFilter(),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 'all', label: Text('All')),
-                    ButtonSegment(value: 'draft', label: Text('Draft')),
-                    ButtonSegment(
-                      value: 'outstanding',
-                      label: Text('Outstanding'),
-                    ),
-                  ],
-                  selected: {_status},
-                  onSelectionChanged: (s) => setState(() => _status = s.first),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
       body: AsyncView(
@@ -407,12 +791,116 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     doc: list[i],
                     docType: widget.docType,
                     kind: kind,
+                    // Only where a batch could do something: the two
+                    // bulk functions are the sales side's, and somebody
+                    // who cannot post or send has nothing to tick for.
+                    picked: _picked.contains(list[i].id),
+                    onPick: kind.isSales && (canPost || canWrite)
+                        ? () => _toggle(list[i].id)
+                        : null,
                   ),
                 ),
               ),
+              if (_picked.isNotEmpty)
+                _BatchBar(
+                  plan: BulkPlan.of(list, _picked, widget.docType),
+                  running: _running,
+                  onClear: () => setState(_picked.clear),
+                  onPost: canPost
+                      ? (docs) => _runBatch(
+                          docs,
+                          'Post',
+                          ref.read(repoProvider)!.bulkPostDocuments,
+                          'posted',
+                        )
+                      : null,
+                  onEmail: canWrite
+                      ? (docs) => _runBatch(
+                          docs,
+                          'Email',
+                          ref.read(repoProvider)!.bulkEmailDocuments,
+                          'sent',
+                        )
+                      : null,
+                ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The bar that appears once something is ticked.
+///
+/// What each button says comes from [BulkPlan], which knows that a
+/// quotation writes no journal and a posted invoice does not post
+/// twice — so "Post 12 of 40" is said before the batch rather than
+/// discovered after it.
+class _BatchBar extends StatelessWidget {
+  const _BatchBar({
+    required this.plan,
+    required this.running,
+    required this.onClear,
+    required this.onPost,
+    required this.onEmail,
+  });
+
+  final BulkPlan plan;
+  final bool running;
+  final VoidCallback onClear;
+  final void Function(List<BusinessDocument>)? onPost;
+  final void Function(List<BusinessDocument>)? onEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.lg,
+          vertical: Space.sm,
+        ),
+        child: Row(
+          children: [
+            Text(
+              '${plan.selected.length} selected',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            if (running)
+              const Padding(
+                padding: EdgeInsets.only(right: Space.md),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            TextButton(
+              onPressed: running ? null : onClear,
+              child: const Text('Clear'),
+            ),
+            const SizedBox(width: Space.sm),
+            if (onEmail != null)
+              OutlinedButton(
+                onPressed: running || plan.emailable.isEmpty
+                    ? null
+                    : () => onEmail!(plan.emailable),
+                child: Text(plan.emailLabel()),
+              ),
+            if (onPost != null) ...[
+              const SizedBox(width: Space.sm),
+              FilledButton(
+                onPressed: running || plan.postable.isEmpty
+                    ? null
+                    : () => onPost!(plan.postable),
+                child: Text(plan.postLabel()),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -423,11 +911,15 @@ class _DocumentTile extends StatelessWidget {
     required this.doc,
     required this.docType,
     required this.kind,
+    this.picked = false,
+    this.onPick,
   });
 
   final BusinessDocument doc;
   final String docType;
   final DocKind kind;
+  final bool picked;
+  final VoidCallback? onPick;
 
   @override
   Widget build(BuildContext context) {
@@ -435,17 +927,27 @@ class _DocumentTile extends StatelessWidget {
 
     return ListTile(
       onTap: () => context.go('${kind.routePrefix}/$docType/${doc.id}'),
+      leading: onPick == null
+          ? null
+          : Checkbox(value: picked, onChanged: (_) => onPick!()),
       contentPadding: const EdgeInsets.symmetric(
         horizontal: Space.lg,
         vertical: Space.xs,
       ),
-      title: Row(
+      // A `Wrap`, not a `Row`. The trailing column takes what it needs
+      // first, which on a phone leaves this about 120 wide -- and a Row
+      // pushed the chip and the e-Invoice mark off the right edge of
+      // every line in the list. Truncating the document NUMBER instead
+      // is not the trade to make: it is the thing somebody came to the
+      // list to read.
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 2,
         children: [
           Text(doc.docNo, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(width: 10),
           StatusChip(doc.isOverdue ? 'overdue' : doc.status, compact: true),
-          if (doc.einvoiceStatus != 'not_applicable') ...[
-            const SizedBox(width: 6),
+          if (doc.einvoiceStatus != 'not_applicable')
             Tooltip(
               message: 'e-Invoice: ${Fmt.label(doc.einvoiceStatus)}',
               child: Icon(
@@ -454,7 +956,6 @@ class _DocumentTile extends StatelessWidget {
                 color: _einvoiceColor(context, doc.einvoiceStatus),
               ),
             ),
-          ],
         ],
       ),
       subtitle: Text(

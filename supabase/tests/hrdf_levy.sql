@@ -1,0 +1,479 @@
+-- =====================================================================
+-- iAkauntan :: the HRD Corp levy is charged on the levy's own wage
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/hrdf_levy.sql
+--
+-- `salary_components.is_hrdf_liable` sat beside its three siblings from
+-- `0028` until `0370` and nothing read it: the levy was charged on the
+-- EPF wage.
+--
+-- Those are different wages, and the difference is statutory. The PSMB
+-- Act 2001 counts basic salary and fixed allowances; HRD Corp's guidance
+-- excludes overtime, commission, bonus and other incentives, service
+-- charge, travelling allowance, gratuity, and payments on retirement,
+-- retrenchment or termination. EPF is payable on most of those. A bonus
+-- is the ordinary case and it is not small: one or two months' salary,
+-- once a year, levied at one per cent on wages the Act says are not
+-- wages — and the other eleven months agree to the ringgit, which is
+-- what kept it hidden.
+--
+-- Asserted as a difference between two identical employees, so what is
+-- proved is the bonus and nothing else. A change to the levy rate moves
+-- both sides together and this file still holds.
+--
+-- Nothing is written; the file rolls back.
+-- =====================================================================
+
+\set ON_ERROR_STOP on
+
+begin;
+
+\i supabase/tests/_helpers.sql
+
+do $$
+declare
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_bonus  uuid;
+  v_with   uuid;
+  v_plain  uuid;
+  v_ot     uuid;
+  r_with   record;
+  r_plain  record;
+  r_ot     record;
+begin
+  v_org := pg_temp.test_org('Bonus Bulan Kedua Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- Ten or more Malaysian employees, so one per cent and no opting in.
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-12', date '2026-12-01', date '2026-12-31',
+          date '2026-12-31')
+  returning id into v_period;
+
+  -- Two months' salary in December, which is what a Malaysian bonus
+  -- usually is. EPF is payable on it; the levy is not.
+  insert into public.salary_components
+    (org_id, code, name, kind, default_amount,
+     is_taxable, is_epf_liable, is_socso_liable, is_eis_liable,
+     is_hrdf_liable)
+  values (v_org, 'BONUS', 'Annual bonus', 'earning', 8000,
+          true, true, true, true, false)
+  returning id into v_bonus;
+
+  -- The same person twice, except for the bonus.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B1', 'Bonused', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_with;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B2', 'Not bonused', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_plain;
+
+  insert into public.employee_salary_components
+    (org_id, employee_id, component_id, effective_from)
+  values (v_org, v_with, v_bonus, date '2020-01-01');
+
+  -- And a third who worked overtime and was reimbursed a claim, so the
+  -- other two exclusions are exercised on the same run.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B3', 'Overtime and a claim', date '2020-01-01', 5000,
+          25, 8, date '1992-04-15', 'single', 'citizen')
+  returning id into v_ot;
+  -- Ten hours, so the overtime is RM 375.00 at time and a half.
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, ot_normal_minutes)
+  values (v_org, v_ot, date '2026-12-14', 360),
+         (v_org, v_ot, date '2026-12-15', 240);
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, status,
+     total_amount, approved_amount, pay_with_payroll)
+  values (v_org, 'EC-B3-1', v_ot, date '2026-12-15', 'approved',
+          300, 300, true);
+
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-12') returning id into v_run;
+  perform public.calculate_payroll_run(v_run);
+
+  select * into r_with from public.payslips
+   where run_id = v_run and employee_id = v_with;
+  select * into r_plain from public.payslips
+   where run_id = v_run and employee_id = v_plain;
+  select * into r_ot from public.payslips
+   where run_id = v_run and employee_id = v_ot;
+
+  -- ------------------------------------------------------------------
+  -- The bonus reached EPF and not the levy
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('the bonus is paid', r_with.gross_pay, 12000.00);
+  perform pg_temp.check_eq('and EPF is charged on all of it',
+    r_with.epf_wage, 12000.00);
+  perform pg_temp.check_eq('while the levy wage is the basic salary',
+    r_with.hrdf_wage, 4000.00);
+  perform pg_temp.check_eq('so the levy is forty ringgit', r_with.hrdf, 40.00);
+
+  -- The difference, which is the whole assertion. Before 0370 the
+  -- bonused employee was levied 120.00 and the colleague 40.00 for the
+  -- same wages under the Act.
+  perform pg_temp.check_eq('the colleague without a bonus pays the same levy',
+    r_with.hrdf - r_plain.hrdf, 0);
+  perform pg_temp.check_eq('though EPF sees eight thousand more',
+    r_with.epf_wage - r_plain.epf_wage, 8000.00);
+
+  -- Stated so the two cannot both be wrong in the same direction and
+  -- still pass: the rate is one per cent, not one.
+  perform pg_temp.check_eq('and the levy is one per cent of that wage',
+    r_with.hrdf, round(r_with.hrdf_wage / 100, 2));
+
+  -- ------------------------------------------------------------------
+  -- Overtime and a reimbursement, which the Act excludes by name
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('overtime and the claim are paid',
+    r_ot.gross_pay, 5675.00);
+  perform pg_temp.check_eq('the levy wage is the basic salary alone',
+    r_ot.hrdf_wage, 5000.00);
+  perform pg_temp.check_eq('so the levy is fifty', r_ot.hrdf, 50.00);
+
+  -- Asserted on the lines as well as on the total. Overtime happens to
+  -- be outside the EPF wage too, so a levy computed the old way agreed
+  -- here by accident — the flag is what makes it a decision.
+  perform pg_temp.check_true('the basic line is levy wages',
+    (select is_hrdf_liable from public.payslip_lines
+      where payslip_id = r_ot.id and code = 'BASIC'));
+  perform pg_temp.check_true('the overtime line is not',
+    not (select is_hrdf_liable from public.payslip_lines
+          where payslip_id = r_ot.id and code = 'OT'));
+  perform pg_temp.check_true('nor is money handed back to the employee',
+    not (select is_hrdf_liable from public.payslip_lines
+          where payslip_id = r_ot.id and code = 'CLAIMS'));
+  perform pg_temp.check_true('and the bonus line carries the component''s flag',
+    not (select is_hrdf_liable from public.payslip_lines
+          where payslip_id = r_with.id and code = 'BONUS'));
+
+  -- The run total is the sum of the three, not of the EPF wages.
+  perform pg_temp.check_eq('the run totals the levy it actually charged',
+    (select total_hrdf from public.payroll_runs where id = v_run),
+    130.00);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A company that never registered
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  r        record;
+begin
+  v_org := pg_temp.test_org('Tidak Berdaftar Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  -- No hrdf_category: fewer than five employees, or an industry the Act
+  -- does not cover. There is no levy to charge and no wage to charge it
+  -- on, and the payslip should say nothing rather than say zero of
+  -- something.
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-03', date '2026-03-01', date '2026-03-31',
+          date '2026-03-31')
+  returning id into v_period;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'N1', 'Nobody levied', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_emp;
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-03') returning id into v_run;
+  perform public.calculate_payroll_run(v_run);
+
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+  perform pg_temp.check_eq('an unregistered company is levied nothing',
+    r.hrdf, 0);
+  -- The wage is still recorded. It is what the levy would be charged on
+  -- the day the company crosses ten employees, and a company working out
+  -- whether it is about to owe one needs the figure before it owes it.
+  perform pg_temp.check_eq('and the wage it would be charged on is kept',
+    r.hrdf_wage, 4000.00);
+  perform pg_temp.check_true('no levy line appears on the payslip',
+    not exists (select 1 from public.payslip_lines
+                 where payslip_id = r.id and code = 'HRDF'));
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And whether the payslip may call itself verified
+-- ---------------------------------------------------------------------
+--
+-- `payslips.schedules_verified` is what the banner on the payslip screen
+-- and the line on the PDF are drawn from. Until `0409` it was built from
+-- four bodies and there are five: the levy reads `statutory_rates`
+-- directly rather than through `app.calc_statutory`, so its schedule's
+-- verification had no way in.
+--
+-- Nothing on this project is verified today, so the hole is masked --
+-- every payslip is already unverified because of the other four. The
+-- fixture below verifies them deliberately, which is what makes the
+-- question answerable at all.
+do $$
+declare
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_emp2   uuid;
+  r        record;
+begin
+  v_org := pg_temp.test_org('Levi Belum Disemak Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-06', date '2026-06-01', date '2026-06-30',
+          date '2026-06-30')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'V1', 'Disemak sebahagian', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-06') returning id into v_run;
+
+  -- The four that always reached the flag, checked against what the
+  -- bodies published. The levy's table is left as it is.
+  update public.statutory_schedules set is_verified = true
+   where body in ('epf', 'socso', 'eis', 'pcb');
+
+  perform pg_temp.check_eq('four bodies are verified and the levy is not',
+    (select count(*) from public.statutory_schedules where is_verified), 4);
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_true('the levy was actually charged', r.hrdf > 0);
+  perform pg_temp.check_true(
+    'so the payslip does not claim its figures came from verified tables',
+    not r.schedules_verified);
+
+  -- The positive control, and the one that matters: a flag that is
+  -- always false is no more use than one that is always true.
+  update public.statutory_schedules set is_verified = true where body = 'hrdf';
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+  perform pg_temp.check_true('and once the levy''s table is checked too, it does',
+    r.schedules_verified);
+
+  -- ------------------------------------------------------------------
+  -- A category set, and no table in force to answer it
+  -- ------------------------------------------------------------------
+  -- `0404`'s shape. The levy comes out zero because there is nothing to
+  -- compute it from, which is the right answer; calling that zero
+  -- verified is not.
+  update public.statutory_schedules set effective_to = date '2025-12-31'
+   where body = 'hrdf';
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_eq('with no HRDF table in force the levy is zero',
+    r.hrdf, 0);
+  perform pg_temp.check_true(
+    'and the payslip says so rather than calling the zero verified',
+    not r.schedules_verified);
+
+  -- ------------------------------------------------------------------
+  -- An employee the levy never applied to
+  -- ------------------------------------------------------------------
+  -- Still no HRDF table in force, and the company still says it is
+  -- liable -- but this employee is not counted for the levy, so the
+  -- levy's table was never read on their behalf and must not take their
+  -- payslip's verification with it. This is the other half of the same
+  -- gate, and without a case for it the eligibility test would be code
+  -- nothing runs.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status, hrdf_eligible)
+  values (v_org, 'V2', 'Tidak dilevi', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen', false)
+  returning id into v_emp2;
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp2;
+
+  perform pg_temp.check_eq('an employee outside the levy is levied nothing',
+    r.hrdf, 0);
+  perform pg_temp.check_true(
+    'and keeps the verification the four bodies earned',
+    r.schedules_verified);
+
+  -- ------------------------------------------------------------------
+  -- And a company the levy never applied to
+  -- ------------------------------------------------------------------
+  -- The levy's verification counts where the levy was consulted, on the
+  -- same terms as the other four. A company with no category must not
+  -- be dragged unverified by a table it never reads.
+  update public.payroll_settings set hrdf_category = null where org_id = v_org;
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_eq('an unregistered company is levied nothing here too',
+    r.hrdf, 0);
+  perform pg_temp.check_true(
+    'and its payslip is verified on the strength of the four it does use',
+    r.schedules_verified);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- =====================================================================
+-- Which HRDF schedule, and which rate in it
+-- =====================================================================
+--
+-- The lookup is four conditions and an ordering, and three of them had
+-- nothing asserting them because the repository ships exactly one HRDF
+-- schedule with exactly two categories in it and every test used the
+-- same one. A mutation sweep of `calculate_payroll_run` kept all three
+-- alive:
+--
+--   * `order by s.effective_from desc` reversed -- a rate the Minister
+--     replaced years ago, charged for ever
+--   * `s.effective_from <= pay_date` dropped -- a rate gazetted to start
+--     next year, charged this year
+--   * `r.category = v_set.hrdf_category` dropped -- the employer on the
+--     voluntary half rate charged the mandatory one, or the other way
+--     about
+--
+-- The fourth, `effective_to`, was already covered above.
+-- =====================================================================
+do $$
+declare
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_old    uuid;
+  v_new    uuid;
+  r        record;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Jadual Levi Sdn Bhd');
+
+  -- An earlier block in this file ended every HRDF schedule, to prove
+  -- that a payslip computed from no table in force says so. This one
+  -- needs the shipped table back.
+  update public.statutory_schedules set effective_to = null
+   where body = 'hrdf' and effective_from = date '2021-03-01';
+
+  -- A rate that applied before the current one, and a rate gazetted to
+  -- take effect after this pay date. Both at figures nothing else in
+  -- the suite uses, so a payslip cannot land on one by accident.
+  --
+  -- The superseded one is left with NO end date, which is how these
+  -- tables are actually maintained: a new schedule is published and the
+  -- old row is left alone. `effective_to` is therefore not what puts it
+  -- out of reach -- the ordering is, and that is the point.
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, is_verified)
+  values ('hrdf', 'PSMB levy, superseded', 'percentage', date '2015-01-01',
+          false)
+  returning id into v_old;
+  insert into public.statutory_rates
+    (schedule_id, category, employer_rate)
+  values (v_old, 'mandatory_10plus', 2.0000),
+         (v_old, 'optional_5to9', 1.5000);
+
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, is_verified)
+  values ('hrdf', 'PSMB levy, from 2030', 'percentage', date '2030-01-01',
+          false)
+  returning id into v_new;
+  insert into public.statutory_rates
+    (schedule_id, category, employer_rate)
+  values (v_new, 'mandatory_10plus', 3.0000),
+         (v_new, 'optional_5to9', 2.5000);
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-09', date '2026-09-01', date '2026-09-30',
+          date '2026-09-30')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'J1', 'Pekerja levi', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-09') returning id into v_run;
+
+  -- ------------------------------------------------------------------
+  -- The mandatory rate, with an older and a future schedule on file
+  -- ------------------------------------------------------------------
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  -- 1% of RM4,000. The superseded table would give RM80 and the future
+  -- one RM120, so this single figure separates all three.
+  perform pg_temp.check_eq('the levy takes the schedule in force on the pay date',
+    r.hrdf, 40.00);
+
+  -- ------------------------------------------------------------------
+  -- The voluntary rate: the same tables, a different employer
+  -- ------------------------------------------------------------------
+  -- An employer with five to nine employees may register voluntarily
+  -- and pays half the rate. Nothing in the suite had ever asked for
+  -- this category, so `r.category = v_set.hrdf_category` was a filter
+  -- with one row on either side of it.
+  update public.payroll_settings set hrdf_category = 'optional_5to9'
+   where org_id = v_org;
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_eq('a voluntary registrant pays half of it',
+    r.hrdf, 20.00);
+
+  perform pg_temp.sign_out();
+end $$;
+
+rollback;

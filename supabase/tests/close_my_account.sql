@@ -6,9 +6,9 @@
 -- Two assertions carry this file and they pull against each other, which
 -- is the point of writing it this way:
 --
---   * The identity goes. Name, email, phone and avatar are scrubbed from
---     both `profiles` and `auth.users`, membership and push tokens are
---     deleted, and sign-in is shut.
+--   * The identity goes. Name, email, phone and avatar are gone from
+--     `profiles` and from `auth.users`, push tokens are deleted, every
+--     membership stops conferring anything, and sign-in is shut.
 --   * The audit trail stays. `organizations.created_by`,
 --     `gl_entries.posted_by` and ninety-odd other columns still resolve
 --     to the same row. A ledger that cannot say who posted an entry is
@@ -17,6 +17,13 @@
 --
 -- Either one alone passes for the wrong reason. Scrubbing nothing keeps
 -- the trail; deleting the user keeps no trail at all.
+--
+-- What 0619 changed, and what this file had to change with it: the
+-- identity now MOVES into `account_closures` rather than being
+-- overwritten, and the membership rows are suspended rather than
+-- deleted. `account_closure.sql` is where that half is asserted. Here
+-- the question is only the one this file has always asked -- is it gone
+-- from the product -- and the answer is still yes.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -114,25 +121,35 @@ begin
 
   v_res := public.delete_my_account();
   perform pg_temp.check_text('it reports what it did',
-    (v_res ->> 'anonymised'), 'true');
+    (v_res ->> 'closed'), 'true');
 
   -- ------------------------------------------------------------------
   -- The identity is gone.
   -- ------------------------------------------------------------------
   perform pg_temp.check_text('the name is replaced',
     (select full_name from public.profiles where id = v_owner),
-    'Deleted user');
+    'Closed account');
   perform pg_temp.check_true('the email is gone',
     (select email is null from public.profiles where id = v_owner));
   perform pg_temp.check_true('and the phone',
     (select phone is null from public.profiles where id = v_owner));
   perform pg_temp.check_true('the auth address is replaced with a dead one',
-    (select email like 'deleted-%@deleted.invalid' from auth.users
+    (select email like 'closed-%@deleted.invalid' from auth.users
       where id = v_owner));
   perform pg_temp.check_true('and sign-in is shut',
     (select banned_until is not null from auth.users where id = v_owner));
-  perform pg_temp.check_eq('membership is revoked',
-    (select count(*) from public.org_members where user_id = v_owner), 0);
+  -- 0619: the row stays and confers nothing, rather than going. Both
+  -- halves asserted, because either alone is the bug -- a deleted row
+  -- loses the record that the person was ever here, and a row left
+  -- 'active' leaves them holding the books they just left.
+  perform pg_temp.check_eq('the membership row is kept',
+    (select count(*) from public.org_members where user_id = v_owner), 1);
+  perform pg_temp.check_eq('suspended rather than deleted',
+    (select status::text from public.org_members where user_id = v_owner),
+    'suspended');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and it opens nothing',
+    not app.is_org_member(v_org));
   perform pg_temp.check_eq('and the devices are forgotten',
     (select count(*) from public.device_tokens where user_id = v_owner), 0);
 

@@ -1,9 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/env.dart';
 import '../../core/providers.dart';
 
 /// One block of copy on the landing page.
 typedef LandingSection = ({String? icon, String title, String? body});
+
+/// One figure in the band of numbers.
+///
+/// [value] is a string rather than a number on purpose: "240,000", "30",
+/// "1,200+" and "RM4b" are all things a band like this carries, and the
+/// moment it is numeric somebody has to decide how to format it for a
+/// page that only ever displays it.
+typedef LandingStat = ({String value, String label, String? icon});
+
+/// Something a customer said, and who said it.
+typedef LandingTestimonial = ({
+  String quote,
+  String author,
+  String? company,
+  String? avatarUrl,
+});
+
+/// One mark on the customer wall.
+typedef LandingLogo = ({String name, String logoUrl});
 
 /// One thing a company can hold, and what it costs a month.
 typedef LandingModule = ({
@@ -22,10 +42,9 @@ typedef LandingModule = ({
 /// test agree; a quote a visitor works out for themselves and an invoice
 /// a month later must not disagree, and this is the half of that which
 /// runs in a browser.
-double monthlyTotal(List<LandingModule> modules, Set<String> chosen) =>
-    modules
-        .where((m) => m.isCore || chosen.contains(m.code))
-        .fold<double>(0, (sum, m) => sum + m.monthlyPrice);
+double monthlyTotal(List<LandingModule> modules, Set<String> chosen) => modules
+    .where((m) => m.isCore || chosen.contains(m.code))
+    .fold<double>(0, (sum, m) => sum + m.monthlyPrice);
 
 /// One shop the app can be downloaded from.
 typedef LandingAppLink = ({
@@ -41,23 +60,275 @@ typedef LandingAppLink = ({
 /// page yet. The screen shows its built-in copy in that case rather than
 /// an error: a visitor who arrives before anybody has written the site
 /// should still be able to sign in.
+/// The mark the product ships with.
+///
+/// `logos/landing/logo`, public because the bucket is: `logos_read` is
+/// `using (bucket_id = 'logos')` and nothing further, which it has to
+/// be — the mark at the top of the landing page is read by people who
+/// are not signed in.
+///
+/// The file has been in storage since 24 August; what was missing was
+/// the column pointing at it, so every screen drew `_FallbackMark`
+/// instead. `0325` sets the same value as the column default, so the
+/// database and the offline fallback agree about what an unbranded
+/// platform looks like — and `_FallbackMark` goes back to being what it
+/// was written for, the case where the address will not load.
+const defaultLogoUrl =
+    'https://ewwcgtnniwqndrzukksm.supabase.co/storage/v1/object/public/'
+    'logos/landing/logo?v=1787561059459';
+
+/// The icon the browser tab shows when nobody has chosen one.
+///
+/// A different column from [defaultLogoUrl] and, today, the same image.
+/// They are not the same job: a mark on a landing page is read at 36
+/// pixels beside a wordmark, a favicon at 16 in a row of other tabs,
+/// and the version that survives that is usually cropped tighter with
+/// no wordmark at all. Two defaults so they can drift apart the moment
+/// somebody uploads a proper one.
+///
+/// `applyFavicon` returns early on null, so before `0326` the uploaded
+/// icon was never used and the tab kept the static one in
+/// `web/index.html` — which is still the last resort, one layer further
+/// out than this.
+const defaultAppIconUrl =
+    'https://ewwcgtnniwqndrzukksm.supabase.co/storage/v1/object/public/'
+    'logos/landing/app-icon?v=1787675276405';
+
+/// The picture the hero shows when nobody has chosen one.
+///
+/// `app/web/hero-dashboard.png`, served from the same origin as the
+/// page: a screenshot of the real dashboard, rendered from the real
+/// widgets by `screenshots/dashboard_shot.dart` rather than drawn to
+/// look like one. Same-origin so it survives a strict connect policy
+/// and does not hand a third party the referrer of every visitor to
+/// the front page.
+///
+/// `0321` sets the same value as the column default, so the database
+/// and the offline fallback agree about what an unconfigured platform
+/// looks like.
+const defaultHeroImageUrl = 'https://iakauntan.com/hero-dashboard.png';
+
+/// What the page says about the product before anybody has written
+/// anything.
+///
+/// The page shipped with a hero and a footer and nothing between them:
+/// `sections` defaulted to an empty list, and the feature blocks only
+/// existed once somebody had added rows in the console. So a platform
+/// that had not been through the CMS had a front page that said what the
+/// product was called and nothing about what it does.
+///
+/// These are that missing middle. They are replaced wholesale the moment
+/// `landing_sections` holds anything — one row in the console and none of
+/// this is used — so they are a starting point rather than something to
+/// work around.
+///
+/// Written from what this repository actually implements, and no further.
+/// A landing page that claims a feature the product does not have costs
+/// more than an empty one: the first person to look for it is a customer
+/// who has already paid.
+const defaultSections = <LandingSection>[
+  (
+    icon: 'receipt',
+    title: 'LHDN e-Invoice',
+    body:
+        'Submit to MyInvois from the invoice screen and keep the '
+        'validated document, its UUID and its QR against the invoice it '
+        'came from. Consolidated submission for the counter sales nobody '
+        'asked a receipt for.',
+  ),
+  (
+    icon: 'payments',
+    title: 'Double-entry accounting',
+    body:
+        'Sales, purchases, banking and a general ledger that balances '
+        'by construction. Multi-currency with realised and unrealised '
+        'gain posted where it belongs, and fiscal periods that close.',
+  ),
+  (
+    icon: 'people',
+    title: 'Payroll and HR',
+    body:
+        'EPF, SOCSO, EIS and PCB computed to the statutory tables, '
+        'leave and claims that post themselves to the ledger, and a bank '
+        'file the payroll run exports.',
+  ),
+  (
+    icon: 'expenses',
+    title: 'Expenses and claims',
+    body:
+        'Photograph a receipt and let it read itself, or key it in. '
+        'Staff claims route through an approval chain and post to the '
+        'ledger once approved, against the account they belong to.',
+  ),
+  (
+    icon: 'store',
+    title: 'Point of sale',
+    body:
+        'Retail, food and beverage, and service businesses, on a '
+        'counter, a tablet or a phone. Keeps selling when the connection '
+        'drops and lands the batch when it returns.',
+  ),
+  (
+    icon: 'inventory',
+    title: 'Stock that ties to the ledger',
+    body:
+        'Serial numbers and batches, several warehouses, landed cost, '
+        'and units that differ between how you buy and how you sell. '
+        'Reordering off measured demand rather than a guess.',
+  ),
+  (
+    icon: 'shield',
+    title: 'Corporate secretarial',
+    body:
+        'Registers, resolutions and the SSM deadlines a company '
+        'actually owes, counted on the Malaysian calendar rather than '
+        'the server\'s.',
+  ),
+  (
+    icon: 'insights',
+    title: 'The statements an auditor asks for',
+    body:
+        'Profit and loss, balance sheet, cash flow, changes in equity, '
+        'aged receivables and payables, SST summary and deferred '
+        'revenue — on screen, as PDF, and as CSV you can add up.',
+  ),
+  (
+    icon: 'cloud',
+    title: 'One place, every device',
+    body:
+        'The same books in a browser, on Android and on iOS. Roles '
+        'down to the individual permission, and an audit trail of who '
+        'changed what.',
+  ),
+];
+
+/// Why choose this one, as against what it does.
+///
+/// The same shape as a feature block and a different place on the page:
+/// `landing_sections.kind` is `feature` or `reason`, and the database
+/// splits them. Replaced wholesale the moment somebody writes a reason
+/// of their own in the console.
+///
+/// Every line here is checkable against this repository, which is the
+/// only test a claim on a front page can be held to. What is not here
+/// is anything about how many customers there are, how long the company
+/// has been trading, or what any of them think — those are
+/// [LandingStat] and [LandingTestimonial], they ship empty, and they
+/// stay empty until an operator writes figures they can stand behind.
+const defaultReasons = <LandingSection>[
+  (
+    icon: 'gavel',
+    title: 'Built for Malaysian rules',
+    body:
+        'e-Invoice to MyInvois, SST, EPF, SOCSO, EIS, PCB and the SSM '
+        'filing calendar. Not a foreign package with a Malaysian tax '
+        'code bolted on the side.',
+  ),
+  (
+    icon: 'calculate',
+    title: 'The arithmetic is tested',
+    body:
+        'Every statutory figure the software works out has an '
+        'assertion behind it that fails if the number moves. The rate '
+        'tables are dated, so last year is still computed last year\'s '
+        'way.',
+  ),
+  (
+    icon: 'lock',
+    title: 'Your books are yours',
+    body:
+        'Every company\'s data is separated in the database itself, '
+        'not by a filter the application remembers to apply. Roles go '
+        'down to the individual permission.',
+  ),
+  (
+    icon: 'devices',
+    title: 'One system, not five',
+    body:
+        'Accounting, CRM, payroll, point of sale, stock and corporate '
+        'secretarial share one ledger. A payroll run posts itself; a '
+        'sale at the counter is in the accounts before the shift ends.',
+  ),
+  (
+    icon: 'sync_alt',
+    title: 'Nothing is locked in',
+    body:
+        'Statements, ledgers and registers export as CSV and PDF, and '
+        'a customer or item list imports the same way. Leaving is a '
+        'download rather than a negotiation.',
+  ),
+  (
+    icon: 'payments',
+    title: 'Pay for what you use',
+    body:
+        'The books are the core. Everything else — payroll, POS, '
+        'corporate secretarial, ticketing — is a module a company turns '
+        'on when it needs it and not before.',
+  ),
+];
+
+/// What it files under, said directly beneath the hero.
+///
+/// The first question anybody asks of accounting software here is
+/// whether it handles what they actually have to submit, and the page
+/// used to answer it eight blocks down inside feature copy.
+///
+/// Every entry is a claim about this repository rather than about the
+/// world, which is why these ship filled while [LandingContent.stats]
+/// and [LandingContent.testimonials] ship empty. MyInvois submission is
+/// in `supabase/functions`; the EPF, SOCSO, EIS and PCB arithmetic is
+/// asserted in `supabase/tests/statutory.sql` and fails CI if a figure
+/// moves; the SSM deadlines are computed in the corporate secretarial
+/// engine on the Malaysian calendar.
+///
+/// **None of these is a certification.** A trust strip on a SaaS page
+/// usually means ISO 27001 or SOC 2 — audits a company either passed or
+/// did not. Nothing here asserts one, and nothing here should until
+/// somebody has actually been audited and adds it themselves.
+const defaultBadges = <LandingSection>[
+  (icon: 'receipt', title: 'LHDN MyInvois e-Invoice', body: null),
+  (icon: 'gavel', title: 'SST', body: null),
+  (icon: 'people', title: 'EPF · SOCSO · EIS', body: null),
+  (icon: 'calculate', title: 'PCB / MTD', body: null),
+  (icon: 'shield', title: 'SSM filing deadlines', body: null),
+  (icon: 'insights', title: 'MFRS-shaped statements', body: null),
+];
+
 class LandingContent {
   const LandingContent({
     required this.published,
-    this.logoUrl,
+    this.logoUrl = defaultLogoUrl,
     this.logoDarkUrl,
-    this.wordmark = 'iAkauntan',
+    // `landing_page.wordmark` is NOT NULL, so the backend always
+    // answers and this is only what an empty payload gets. The app's
+    // own build-time name rather than a literal typed here again: one
+    // place decides what this product calls itself when nothing else
+    // has said.
+    this.wordmark = Env.appName,
     this.tagline,
     this.brandColour,
     this.brandColourDark,
-    this.appIconUrl,
+    this.appIconUrl = defaultAppIconUrl,
     this.themeMode = 'system',
     this.heroHeadline =
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     this.heroSubhead,
+    this.heroImageUrl = defaultHeroImageUrl,
     this.signInLabel = 'Sign in',
     this.registerLabel = 'Create an account',
     this.registerEnabled = true,
+    this.barSignInDesktop = true,
+    this.barSignInMobile = true,
+    this.barRegisterDesktop = true,
+    this.barRegisterMobile = true,
+    this.heroSignInDesktop = true,
+    this.heroSignInMobile = true,
+    this.heroRegisterDesktop = true,
+    this.heroRegisterMobile = true,
+    this.footerSignInDesktop = true,
+    this.footerSignInMobile = true,
+    this.footerRegisterDesktop = true,
+    this.footerRegisterMobile = true,
     this.companyName,
     this.companyRegNo,
     this.address,
@@ -68,9 +339,51 @@ class LandingContent {
     this.showPricing = false,
     this.pricingHeading,
     this.pricingNote,
-    this.sections = const [],
+    this.sections = defaultSections,
+    this.reasons = defaultReasons,
+    this.badges = defaultBadges,
     this.appLinks = const [],
     this.modules = const [],
+    this.stats = const [],
+    this.testimonials = const [],
+    this.logos = const [],
+    this.ctaHeadline,
+    this.ctaBody,
+    this.ctaLabel,
+    this.ctaUrl,
+    this.unknownTitle,
+    this.unknownBody,
+    this.unknownCtaLabel,
+    this.unknownCtaUrl,
+    this.demoAccountsEnabled = false,
+    this.schemeLight = const {},
+    this.schemeDark = const {},
+    this.metaTitle,
+    this.metaDescription,
+    this.signinShowLogo = false,
+    this.signinShowName = false,
+    this.signinHeadline,
+    this.signinShowHeadline = false,
+    this.signinShowHeading = false,
+    this.signinShowRegister = false,
+    this.signinShowPasskey = false,
+    this.signinShowMagicLink = false,
+    this.turnstileSiteKey,
+    this.signinPoints = const [],
+    this.signinEmailLabel,
+    this.signinPasswordLabel,
+    this.signinNameLabel,
+    this.signinForgotLabel,
+    this.signinRegisterPrompt,
+    this.signinSigninPrompt,
+    this.loginShowHeadline = false,
+    this.loginShowHeading = false,
+    this.loginHeadline,
+    this.loginEmailLabel,
+    this.loginPasswordLabel,
+    this.loginForgotLabel,
+    this.loginSignInLabel,
+    this.loginPoints = const [],
   });
 
   final bool published;
@@ -93,9 +406,94 @@ class LandingContent {
   final String themeMode;
   final String heroHeadline;
   final String? heroSubhead;
+
+  /// The picture behind the hero copy.
+  ///
+  /// A column on `landing_page` since 0290 that nothing read until the
+  /// hero became two columns — the CMS wrote it and the page ignored
+  /// it. It shipped null, and null drew a plain panel: the right answer
+  /// for a platform that has not chosen an image, and the wrong one for
+  /// this platform, which has. `0321` makes the rendered dashboard the
+  /// default in the database and here, so a page nobody has configured
+  /// still shows the product.
+  ///
+  /// Still nullable, because it can still be cleared — and because a
+  /// payload from before the default has to parse. The hero falls back
+  /// to the drawn panel when it is null and to a flat ink field when
+  /// the address will not load, so neither leaves white text on white.
+  final String? heroImageUrl;
   final String signInLabel;
   final String registerLabel;
   final bool registerEnabled;
+
+  /// One switch per button a visitor can actually see.
+  ///
+  /// A button is three decisions, not one: where it sits (the top bar
+  /// or under the headline), how wide the screen is when it is drawn,
+  /// and which way in it offers. `0320` had two switches and could not
+  /// express "Create an account on the desktop bar, only Sign in on a
+  /// phone", which is an ordinary thing to want.
+  ///
+  /// The bar's mobile pair governs the menu sheet as well as the bar:
+  /// the sheet is where the bar's controls go when the screen is too
+  /// narrow to draw them, so hiding a button in one and leaving it in
+  /// the other would be hiding it from nobody.
+  ///
+  /// `registerEnabled` still decides whether the platform takes
+  /// registrations at all; these say where its button is drawn.
+  ///
+  /// `0321` deliberately left the footer out of this, on the argument
+  /// that somebody who has read to the bottom and wants in should not
+  /// have to guess the address. `0578` made the footer switchable too,
+  /// and kept that argument as the DEFAULT rather than as a rule: all
+  /// four footer switches ship true, so nothing changes for a platform
+  /// that does not go looking. What changed is that a platform running
+  /// a closed beta, or one whose footer sits under a page that already
+  /// carries its own call to action, can now say so.
+  ///
+  /// All twelve default true here as well as in the database, so a
+  /// payload that predates the columns, or the shipped fallback
+  /// content, still gives a visitor a way in.
+  final bool barSignInDesktop;
+  final bool barSignInMobile;
+  final bool barRegisterDesktop;
+  final bool barRegisterMobile;
+  final bool heroSignInDesktop;
+  final bool heroSignInMobile;
+  final bool heroRegisterDesktop;
+  final bool heroRegisterMobile;
+  final bool footerSignInDesktop;
+  final bool footerSignInMobile;
+  final bool footerRegisterDesktop;
+  final bool footerRegisterMobile;
+
+  /// Which way in each place offers at this width.
+  ///
+  /// Six questions rather than twelve fields at every call site, and
+  /// the one place `registerEnabled` is folded in: a register button is
+  /// only ever drawn where the platform is actually taking
+  /// registrations, so no caller has to remember to ask twice.
+  bool barSignIn({required bool wide}) =>
+      wide ? barSignInDesktop : barSignInMobile;
+  bool barRegister({required bool wide}) =>
+      registerEnabled && (wide ? barRegisterDesktop : barRegisterMobile);
+  bool heroSignIn({required bool wide}) =>
+      wide ? heroSignInDesktop : heroSignInMobile;
+  bool heroRegister({required bool wide}) =>
+      registerEnabled && (wide ? heroRegisterDesktop : heroRegisterMobile);
+  bool footerSignIn({required bool wide}) =>
+      wide ? footerSignInDesktop : footerSignInMobile;
+  bool footerRegister({required bool wide}) =>
+      registerEnabled && (wide ? footerRegisterDesktop : footerRegisterMobile);
+
+  /// Whether the footer's "Get started" column has anything in it.
+  ///
+  /// Asked by the footer so the heading is not drawn over nothing. The
+  /// legal column in the same widget already guards this way, and for
+  /// the same reason: a heading with nothing behind it reads as a
+  /// broken page rather than a deliberate one.
+  bool footerWayIn({required bool wide}) =>
+      footerSignIn(wide: wide) || footerRegister(wide: wide);
   final String? companyName;
   final String? companyRegNo;
   final String? address;
@@ -107,11 +505,224 @@ class LandingContent {
   final String? pricingHeading;
   final String? pricingNote;
   final List<LandingSection> sections;
+  final List<LandingSection> reasons;
+
+  /// The strip under the hero. Ships filled — see [defaultBadges].
+  final List<LandingSection> badges;
   final List<LandingAppLink> appLinks;
   final List<LandingModule> modules;
 
+  /// The band of figures, and the two collections that go with it.
+  ///
+  /// Empty by default and empty until an operator writes rows in the
+  /// console — no built-in copy, unlike [sections] and [reasons]. A
+  /// customer count, a quote with somebody's name on it and another
+  /// company's mark are claims about the world rather than descriptions
+  /// of the software, and inventing them would put fabricated evidence
+  /// on a page that asks people for money. The screen renders nothing
+  /// where they are empty.
+  final List<LandingStat> stats;
+  final List<LandingTestimonial> testimonials;
+  final List<LandingLogo> logos;
+
+  /// The band partway down, for somebody who has read enough. Nothing
+  /// renders unless [ctaHeadline] is set.
+  final String? ctaHeadline;
+  final String? ctaBody;
+  final String? ctaLabel;
+  final String? ctaUrl;
+
   /// The page nobody has written yet.
   ///
+  /// The page a visitor gets at a subdomain nobody holds.
+  ///
+  /// All four nullable, and null is not an absence to render — it is
+  /// "the operator has not written this", and the screen falls back to
+  /// the copy below. Emptying a box in the console therefore restores
+  /// the default rather than producing a blank apology.
+  ///
+  /// These arrive in the payload's `brand` object rather than its
+  /// `page`, so they survive an unpublished site: somebody standing at
+  /// a door that does not open needs an answer whether or not a
+  /// marketing site has been written.
+  final String? unknownTitle;
+  final String? unknownBody;
+  final String? unknownCtaLabel;
+
+  /// Where that page's button goes. Null means the bare domain, which
+  /// the screen works out from the address it is being drawn at — the
+  /// platform does not have to be told its own name twice.
+  final String? unknownCtaUrl;
+
+  /// Whether the sign-in screen offers the one-tap demo logins.
+  ///
+  /// The inner of two gates, and the default is the closed one. The
+  /// outer gate is `demoModeEnabled`, a compile-time flag: a build that
+  /// did not ask for demo mode does not carry the demo password at all,
+  /// and no row can put it back. This decides whether a build that
+  /// *does* carry it actually offers the list — which is a decision
+  /// about what the platform is doing this week, not about how it was
+  /// compiled.
+  ///
+  /// In `brand` rather than `page`, so it works before anybody has
+  /// published a marketing site. The sign-in screen draws either way.
+  final bool demoAccountsEnabled;
+
+  /// What the sign-in screen shows beside the form, and whether it
+  /// shows any of it.
+  ///
+  /// Every switch here defaults to hidden. Before `0336` the panel was
+  /// a Dart literal — our mark, our headline, our three claims about
+  /// Malaysian e-Invoice — on every deployment of this product,
+  /// including one run by somebody who had uploaded their own logo and
+  /// written their own front page. Off by default is the correction:
+  /// what appears on that page is there because an operator put it
+  /// there.
+  ///
+  /// In `brand` rather than `page`, so the sign-in form does not have
+  /// to wait for a marketing site to be published.
+  /// One colour per scheme role, where an operator has chosen one.
+  ///
+  /// Keyed by role — `primary`, `container`, `secondary`, `surface`,
+  /// `surfaceTint`, `error` — and usually empty, which is the normal
+  /// state: Material derives every role from the brand colour, and an
+  /// override replaces one of them afterwards rather than instead.
+  ///
+  /// `0343`. Before it, the six tiles under Branding were a picture of
+  /// the derivation with nothing behind them to type into.
+  final Map<String, String> schemeLight;
+  final Map<String, String> schemeDark;
+
+  /// The roles an operator may override, in the order the console
+  /// shows them.
+  static const schemeRoles = [
+    'primary',
+    'container',
+    'secondary',
+    'surface',
+    'surfaceTint',
+    'error',
+  ];
+
+  /// The column one role is stored in, for [which] scheme.
+  ///
+  /// Named here rather than spelled out at both ends, because the two
+  /// ends are a Dart map key and a Postgres column and they differ in
+  /// exactly one place.
+  static String schemeColumn(String which, String role) =>
+      'scheme_${which}_${role == 'surfaceTint' ? 'surface_tint' : role}';
+
+  /// What the browser itself shows: the tab's title and the sentence a
+  /// link preview reads.
+  ///
+  /// Stored since `0290` and edited in the console since `0316`, and
+  /// read by nothing until `0339` put them in `brand` — so an operator
+  /// could write a browser-tab title and watch it change nothing.
+  ///
+  /// Null falls back to the wordmark for the title and to whatever the
+  /// build shipped for the description.
+  final String? metaTitle;
+  final String? metaDescription;
+
+  /// Two switches rather than one since `0338`: a logo that already
+  /// contains the platform's name does not want the word beside it, and
+  /// an abstract mark may want only the word.
+  final bool signinShowLogo;
+  final bool signinShowName;
+  final String? signinHeadline;
+  final bool signinShowHeadline;
+
+  /// Whether "Welcome back" and the sentence under it are drawn. The
+  /// wording itself is `0334`'s `site_pages`, so this is only whether.
+  final bool signinShowHeading;
+
+  /// Whether "New to X? Create an account" is offered under the button.
+  final bool signinShowRegister;
+
+  /// `0579`. Draws "Sign in with a passkey" on the form.
+  ///
+  /// Ships FALSE, unlike the rest of this page's switches, because
+  /// GoTrue answers `passkey_disabled` until passkeys are turned on
+  /// for the project in the Supabase dashboard. Dashboard first,
+  /// then here — the other order draws a button that fails for
+  /// everybody who presses it.
+  final bool signinShowPasskey;
+
+  /// `0613`. Draws "Email me a link instead" on the form.
+  ///
+  /// Ships FALSE, for the same reason as [signinShowPasskey] and in the
+  /// same order: GoTrue sends the mail, and until an SMTP sender is
+  /// configured in the Supabase dashboard the project falls back to a
+  /// rate deliberately too low to use — so the button quietly does
+  /// nothing for almost everybody who presses it, and they wait.
+  final bool signinShowMagicLink;
+
+  /// Cloudflare Turnstile's site key, or null where no captcha is
+  /// configured (`0556`).
+  ///
+  /// Public by design: it identifies the widget to the browser and
+  /// proves nothing on its own. The secret that verifies a token lives
+  /// in the Supabase dashboard, which is also what does the verifying.
+  final String? turnstileSiteKey;
+
+  /// The bullets beside the form, each already filtered on its own
+  /// switch by the database. An empty list means nothing to draw, which
+  /// is what a platform that has turned all three off has asked for.
+  final List<LandingSection> signinPoints;
+
+  /// The words on the form itself.
+  ///
+  /// All nullable, and null means the word the product ships with — not
+  /// an empty label. A form whose boxes have no names is not a cleaner
+  /// form, so unlike `0336`'s switches these do not default to off.
+  final String? signinEmailLabel;
+  final String? signinPasswordLabel;
+  final String? signinNameLabel;
+  final String? signinForgotLabel;
+
+  /// The same seven again, for the login page.
+  ///
+  /// `0350`. A workspace address is dressed separately from the
+  /// platform's own sign-in screen, because the two are written for
+  /// different people — and because a console tab whose switches
+  /// silently moved the *other* page's would be the worst kind of
+  /// working.
+  ///
+  /// Seven and not thirteen. `show_logo` and `show_name` are already
+  /// decided at a company's door, which always draws its own mark;
+  /// `show_register`, the two prompts and `name_label` all belong to an
+  /// offer of an account that `0336` took off a door. A switch that
+  /// cannot change what is on the screen is worse than no switch.
+  final bool loginShowHeadline;
+  final bool loginShowHeading;
+  final String? loginHeadline;
+  final String? loginEmailLabel;
+  final String? loginPasswordLabel;
+  final String? loginForgotLabel;
+  final String? loginSignInLabel;
+  final List<LandingSection> loginPoints;
+
+  /// The two sentences under the button: the one offering an account,
+  /// and the one back to signing in.
+  final String? signinRegisterPrompt;
+  final String? signinSigninPrompt;
+
+  /// The headline the panel falls back to when nobody has written one.
+  ///
+  /// Kept here rather than in the screen because the console's preview
+  /// and the screen have to agree about it, and because it is the copy
+  /// this repository shipped with rather than a placeholder.
+  static const defaultSigninHeadline =
+      'Accounting and CRM\nfor Malaysian business.';
+
+  /// What the page says when nobody has written it.
+  static const defaultUnknownTitle = 'There is nothing at this address';
+  static const defaultUnknownBody =
+      'The web address you used does not belong to any company here. '
+      'Check it for a typo, or ask whoever gave it to you for the '
+      'current one.';
+  static const defaultUnknownCtaLabel = 'Go to the main site';
+
   /// Not an empty object: the defaults above are the copy the product
   /// ships with, so an unpublished site is a plain one rather than a
   /// blank one.
@@ -127,30 +738,194 @@ class LandingContent {
 /// nobody can sign in from.
 LandingContent parseLandingContent(Object? raw) {
   if (raw is! Map) return LandingContent.fallback;
-  final page = raw['page'];
-  if (page is! Map) return LandingContent.fallback;
 
-  String? str(String key) {
-    final v = page[key];
+  final page = raw['page'];
+
+  // `0316`. The brand arrives in its own key and is never gated on
+  // publishing: putting your own logo on your own accounting system
+  // should not require putting a marketing site on the internet. Read
+  // before the early return below, because that return is exactly the
+  // unpublished case the brand still has to survive.
+  final brand = raw['brand'] is Map ? raw['brand'] as Map : const {};
+
+  String? from(Map m, String key) {
+    final v = m[key];
     if (v is! String) return null;
     final t = v.trim();
     return t.isEmpty ? null : t;
   }
 
-  final sections = <LandingSection>[];
-  for (final e in (raw['sections'] as List? ?? const [])) {
+  // Brand first, then the page. The fallback is for a payload written
+  // before 0316, where these fields only ever lived on the page.
+  String? brandStr(String key) =>
+      from(brand, key) ?? (page is Map ? from(page, key) : null);
+
+  // The same lookup for a switch. Absent is false rather than true,
+  // which is the whole point of the column: a payload written before
+  // 0335 has no answer, and "no answer" must not read as "show them".
+  bool brandBool(String key) {
+    if (brand[key] is bool) return brand[key] as bool;
+    final pg = page;
+    if (pg is Map && pg[key] is bool) return pg[key] as bool;
+    return false;
+  }
+
+  // A key that arrived as something other than a list is no rows, not
+  // a crash. `as List?` throws on a string, and the whole point of this
+  // function is that the front page survives whatever comes back — it
+  // is the only route a signed-out visitor has to the sign-in button.
+  List<Object?> listAt(String key) {
+    final v = raw[key];
+    return v is List ? v : const [];
+  }
+
+  // `sections` and `reasons` are the same shape from the same table,
+  // split by `landing_sections.kind`, so they are read the same way.
+  List<LandingSection> blocks(String key) {
+    final out = <LandingSection>[];
+    for (final e in listAt(key)) {
+      if (e is! Map) continue;
+      final title = e['title'];
+      if (title is! String || title.trim().isEmpty) continue;
+      out.add((
+        icon: e['icon'] is String ? e['icon'] as String : null,
+        title: title.trim(),
+        body: e['body'] is String ? (e['body'] as String).trim() : null,
+      ));
+    }
+    return out;
+  }
+
+  // 0336. Above the early return rather than after it: the sign-in
+  // bullets travel ungated, so an unpublished site still has them.
+  // 0343. One map per scheme, holding only the roles somebody has
+  // actually chosen. Absent and blank are the same thing here — both
+  // mean "let Material derive this one".
+  Map<String, String> schemeOverrides(String which) {
+    final out = <String, String>{};
+    for (final role in LandingContent.schemeRoles) {
+      final v = brandStr(LandingContent.schemeColumn(which, role));
+      if (v != null) out[role] = v;
+    }
+    return out;
+  }
+
+  if (page is! Map) {
+    return LandingContent(
+      // Nobody has published a site, and that is still true — what
+      // changed is that it no longer costs the operator their colours.
+      published: false,
+      logoUrl: brandStr('logo_url') ?? defaultLogoUrl,
+      logoDarkUrl: brandStr('logo_dark_url'),
+      wordmark: brandStr('wordmark') ?? 'iAkauntan',
+      brandColour: brandStr('brand_colour'),
+      brandColourDark: brandStr('brand_colour_dark'),
+      appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
+      themeMode: brandStr('theme_mode') ?? 'system',
+      // Read here too, and this branch is the one that matters: an
+      // operator who has not published a site still has visitors
+      // arriving at names nobody holds.
+      unknownTitle: brandStr('unknown_title'),
+      unknownBody: brandStr('unknown_body'),
+      unknownCtaLabel: brandStr('unknown_cta_label'),
+      unknownCtaUrl: brandStr('unknown_cta_url'),
+      demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+      schemeLight: schemeOverrides('light'),
+      schemeDark: schemeOverrides('dark'),
+      metaTitle: brandStr('meta_title'),
+      metaDescription: brandStr('meta_description'),
+      signinShowLogo: brandBool('signin_show_logo'),
+      signinShowName: brandBool('signin_show_name'),
+      signinHeadline: brandStr('signin_headline'),
+      signinShowHeadline: brandBool('signin_show_headline'),
+      signinShowHeading: brandBool('signin_show_heading'),
+      signinShowRegister: brandBool('signin_show_register'),
+      signinShowPasskey: brandBool('signin_show_passkey'),
+      signinShowMagicLink: brandBool('signin_show_magic_link'),
+      turnstileSiteKey: brandStr('turnstile_site_key'),
+      signinPoints: blocks('signin_points'),
+      signinEmailLabel: brandStr('signin_email_label'),
+      signinPasswordLabel: brandStr('signin_password_label'),
+      signinNameLabel: brandStr('signin_name_label'),
+      signinForgotLabel: brandStr('signin_forgot_label'),
+      signinRegisterPrompt: brandStr('signin_register_prompt'),
+      signinSigninPrompt: brandStr('signin_signin_prompt'),
+      loginShowHeadline: brandBool('login_show_headline'),
+      loginShowHeading: brandBool('login_show_heading'),
+      loginHeadline: brandStr('login_headline'),
+      loginEmailLabel: brandStr('login_email_label'),
+      loginPasswordLabel: brandStr('login_password_label'),
+      loginForgotLabel: brandStr('login_forgot_label'),
+      loginSignInLabel: brandStr('login_sign_in_label'),
+      loginPoints: blocks('login_points'),
+      // 0337. These two have been on the table since 0290 and were
+      // read out of `page` only, so an unpublished site fell back to
+      // the literals — on the one screen that draws unpublished.
+      signInLabel: brandStr('sign_in_label') ?? 'Sign in',
+      registerLabel: brandStr('register_label') ?? 'Create an account',
+    );
+  }
+
+  String? str(String key) => from(page, key);
+
+  final sections = blocks('sections');
+  final reasons = blocks('reasons');
+  final badges = blocks('badges');
+
+  // The three that ship empty. No defaults to fall back to and none
+  // wanted: an absent band is the correct rendering of "the operator
+  // has not said", and anything else here would be this file inventing
+  // a customer count.
+  final stats = <LandingStat>[];
+  for (final e in listAt('stats')) {
     if (e is! Map) continue;
-    final title = e['title'];
-    if (title is! String || title.trim().isEmpty) continue;
-    sections.add((
+    final value = e['value'];
+    final label = e['label'];
+    if (value is! String || value.trim().isEmpty) continue;
+    if (label is! String || label.trim().isEmpty) continue;
+    stats.add((
+      value: value.trim(),
+      label: label.trim(),
       icon: e['icon'] is String ? e['icon'] as String : null,
-      title: title.trim(),
-      body: e['body'] is String ? (e['body'] as String).trim() : null,
     ));
   }
 
+  final testimonials = <LandingTestimonial>[];
+  for (final e in listAt('testimonials')) {
+    if (e is! Map) continue;
+    final quote = e['quote'];
+    final author = e['author'];
+    // Dropped rather than shown anonymously. The saver refuses to store
+    // a quote with nobody against it; a row that arrived without one
+    // anyway is not something to put on the page and attribute to
+    // nobody.
+    if (quote is! String || quote.trim().isEmpty) continue;
+    if (author is! String || author.trim().isEmpty) continue;
+    testimonials.add((
+      quote: quote.trim(),
+      author: author.trim(),
+      company:
+          e['company'] is String && (e['company'] as String).trim().isNotEmpty
+          ? (e['company'] as String).trim()
+          : null,
+      avatarUrl: e['avatar_url'] is String ? e['avatar_url'] as String : null,
+    ));
+  }
+
+  final logos = <LandingLogo>[];
+  for (final e in listAt('logos')) {
+    if (e is! Map) continue;
+    final name = e['name'];
+    final url = e['logo_url'];
+    // A broken image on a wall of customer marks reads as a customer
+    // who left, so an address the browser cannot fetch is no row.
+    if (name is! String || name.trim().isEmpty) continue;
+    if (url is! String || !url.startsWith('http')) continue;
+    logos.add((name: name.trim(), logoUrl: url));
+  }
+
   final links = <LandingAppLink>[];
-  for (final e in (raw['app_links'] as List? ?? const [])) {
+  for (final e in listAt('app_links')) {
     if (e is! Map) continue;
     final url = e['url'];
     final code = e['store_code'];
@@ -171,7 +946,7 @@ LandingContent parseLandingContent(Object? raw) {
   }
 
   final modules = <LandingModule>[];
-  for (final e in (raw['modules'] as List? ?? const [])) {
+  for (final e in listAt('modules')) {
     if (e is! Map) continue;
     final code = e['code'];
     final name = e['name'];
@@ -179,8 +954,9 @@ LandingContent parseLandingContent(Object? raw) {
     modules.add((
       code: code,
       name: name,
-      description:
-          e['description'] is String ? (e['description'] as String) : null,
+      description: e['description'] is String
+          ? (e['description'] as String)
+          : null,
       // The price arrives as a JSON number or a string depending on the
       // driver; either way an unparseable one is nothing rather than a
       // crash, because a landing page that throws is a landing page
@@ -194,21 +970,61 @@ LandingContent parseLandingContent(Object? raw) {
 
   return LandingContent(
     published: true,
-    logoUrl: str('logo_url'),
-    logoDarkUrl: str('logo_dark_url'),
-    wordmark: str('wordmark') ?? 'iAkauntan',
+    logoUrl: brandStr('logo_url') ?? defaultLogoUrl,
+    logoDarkUrl: brandStr('logo_dark_url'),
+    wordmark: brandStr('wordmark') ?? 'iAkauntan',
     tagline: str('tagline'),
-    brandColour: str('brand_colour'),
-    brandColourDark: str('brand_colour_dark'),
-    appIconUrl: str('app_icon_url'),
-    themeMode: str('theme_mode') ?? 'system',
-    heroHeadline: str('hero_headline') ??
+    brandColour: brandStr('brand_colour'),
+    brandColourDark: brandStr('brand_colour_dark'),
+    appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
+    themeMode: brandStr('theme_mode') ?? 'system',
+    heroHeadline:
+        str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),
-    signInLabel: str('sign_in_label') ?? 'Sign in',
-    registerLabel: str('register_label') ?? 'Create an account',
+    heroImageUrl: str('hero_image_url') ?? defaultHeroImageUrl,
+    // `brandStr` since 0337, not `str`: the sign-in screen reads these
+    // and it draws before anything is published.
+    signInLabel: brandStr('sign_in_label') ?? 'Sign in',
+    registerLabel: brandStr('register_label') ?? 'Create an account',
     registerEnabled: page['register_enabled'] is bool
         ? page['register_enabled'] as bool
+        : true,
+    barSignInDesktop: page['bar_sign_in_desktop'] is bool
+        ? page['bar_sign_in_desktop'] as bool
+        : true,
+    barSignInMobile: page['bar_sign_in_mobile'] is bool
+        ? page['bar_sign_in_mobile'] as bool
+        : true,
+    barRegisterDesktop: page['bar_register_desktop'] is bool
+        ? page['bar_register_desktop'] as bool
+        : true,
+    barRegisterMobile: page['bar_register_mobile'] is bool
+        ? page['bar_register_mobile'] as bool
+        : true,
+    heroSignInDesktop: page['hero_sign_in_desktop'] is bool
+        ? page['hero_sign_in_desktop'] as bool
+        : true,
+    heroSignInMobile: page['hero_sign_in_mobile'] is bool
+        ? page['hero_sign_in_mobile'] as bool
+        : true,
+    heroRegisterDesktop: page['hero_register_desktop'] is bool
+        ? page['hero_register_desktop'] as bool
+        : true,
+    heroRegisterMobile: page['hero_register_mobile'] is bool
+        ? page['hero_register_mobile'] as bool
+        : true,
+    footerSignInDesktop: page['footer_sign_in_desktop'] is bool
+        ? page['footer_sign_in_desktop'] as bool
+        : true,
+    footerSignInMobile: page['footer_sign_in_mobile'] is bool
+        ? page['footer_sign_in_mobile'] as bool
+        : true,
+    footerRegisterDesktop: page['footer_register_desktop'] is bool
+        ? page['footer_register_desktop'] as bool
+        : true,
+    footerRegisterMobile: page['footer_register_mobile'] is bool
+        ? page['footer_register_mobile'] as bool
         : true,
     companyName: str('company_name'),
     companyRegNo: str('company_reg_no'),
@@ -220,9 +1036,59 @@ LandingContent parseLandingContent(Object? raw) {
     showPricing: page['show_pricing'] == true,
     pricingHeading: str('pricing_heading'),
     pricingNote: str('pricing_note'),
-    sections: sections,
+    // The console's rows win outright when there are any; the shipped
+    // copy fills the page until somebody writes their own. Not merged:
+    // an operator who has written three blocks means three blocks, not
+    // three plus five they did not ask for.
+    sections: sections.isEmpty ? defaultSections : sections,
+    reasons: reasons.isEmpty ? defaultReasons : reasons,
+    badges: badges.isEmpty ? defaultBadges : badges,
     appLinks: links,
     modules: modules,
+    // Not `?? default`: there is no default, and that is the design.
+    stats: stats,
+    testimonials: testimonials,
+    logos: logos,
+    ctaHeadline: str('cta_headline'),
+    ctaBody: str('cta_body'),
+    ctaLabel: str('cta_label'),
+    ctaUrl: str('cta_url'),
+    // `brandStr` and not `str`: these live in `brand` so they survive
+    // an unpublished site, and reading them from the page as well is
+    // what lets a payload written before 0331 still parse.
+    unknownTitle: brandStr('unknown_title'),
+    unknownBody: brandStr('unknown_body'),
+    unknownCtaLabel: brandStr('unknown_cta_label'),
+    unknownCtaUrl: brandStr('unknown_cta_url'),
+    demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+    schemeLight: schemeOverrides('light'),
+    schemeDark: schemeOverrides('dark'),
+    metaTitle: brandStr('meta_title'),
+    metaDescription: brandStr('meta_description'),
+    signinShowLogo: brandBool('signin_show_logo'),
+    signinShowName: brandBool('signin_show_name'),
+    signinHeadline: brandStr('signin_headline'),
+    signinShowHeadline: brandBool('signin_show_headline'),
+    signinShowHeading: brandBool('signin_show_heading'),
+    signinShowRegister: brandBool('signin_show_register'),
+    signinShowPasskey: brandBool('signin_show_passkey'),
+    signinShowMagicLink: brandBool('signin_show_magic_link'),
+    turnstileSiteKey: brandStr('turnstile_site_key'),
+    signinPoints: blocks('signin_points'),
+    signinEmailLabel: brandStr('signin_email_label'),
+    signinPasswordLabel: brandStr('signin_password_label'),
+    signinNameLabel: brandStr('signin_name_label'),
+    signinForgotLabel: brandStr('signin_forgot_label'),
+    signinRegisterPrompt: brandStr('signin_register_prompt'),
+    signinSigninPrompt: brandStr('signin_signin_prompt'),
+    loginShowHeadline: brandBool('login_show_headline'),
+    loginShowHeading: brandBool('login_show_heading'),
+    loginHeadline: brandStr('login_headline'),
+    loginEmailLabel: brandStr('login_email_label'),
+    loginPasswordLabel: brandStr('login_password_label'),
+    loginForgotLabel: brandStr('login_forgot_label'),
+    loginSignInLabel: brandStr('login_sign_in_label'),
+    loginPoints: blocks('login_points'),
   );
 }
 
@@ -231,9 +1097,28 @@ LandingContent parseLandingContent(Object? raw) {
 /// `landing_page()` is one of the functions open to an unauthenticated
 /// caller, so this works before anybody has signed in — which is the
 /// whole point of it.
+/// How long a page will wait for the words an operator wrote before it
+/// draws the ones the product shipped with.
+///
+/// Every public page now holds a spinner until this provider and its
+/// neighbours have answered, so that nobody sees our version of a page
+/// replaced by theirs. That trade only works if an answer always comes:
+/// a request that hangs — a phone that has left the network mid-flight,
+/// an origin that accepts a connection and never replies — used to cost
+/// a page drawn in the shipped words, and without a deadline it would
+/// now cost a page that spins for ever.
+///
+/// Five seconds because the call is a single indexed read and normally
+/// answers in a fraction of one. It is a ceiling on a failure, not a
+/// budget for a success.
+const brandDeadline = Duration(seconds: 5);
+
 final landingContentProvider = FutureProvider<LandingContent>((ref) async {
   try {
-    final data = await ref.watch(supabaseProvider).rpc('landing_page');
+    final data = await ref
+        .watch(supabaseProvider)
+        .rpc('landing_page')
+        .timeout(brandDeadline);
     return parseLandingContent(data);
   } catch (_) {
     // A front door that will not open because the network hiccupped is

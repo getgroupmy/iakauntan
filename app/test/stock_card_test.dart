@@ -268,7 +268,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('stock-card-warehouse')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('WH-B · Second Warehouse').last);
+    await tester.tap(find.text('Second Warehouse').last);
     await tester.pumpAndSettle();
 
     // The narrowed card, not the whole one — which only happens if the
@@ -292,7 +292,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('stock-card-warehouse')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('WH-B · Second Warehouse').last);
+    await tester.tap(find.text('Second Warehouse').last);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('stock-card-disagreement')), findsNothing);

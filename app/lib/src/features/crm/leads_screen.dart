@@ -3,9 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/row_actions.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../custom_fields/custom_fields_section.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'deal_outcome.dart';
 
 /// The top of the funnel.
 ///
@@ -101,6 +107,8 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
                   canWrite: canWrite,
                   onEdit: () => _edit(list[i]),
                   onConvert: () => _convert(list[i]),
+                  onLose: () => _lose(list[i]),
+                  onReopen: () => _reopen(list[i]),
                 ),
               ),
       ),
@@ -113,6 +121,40 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
       builder: (_) => _LeadDialog(lead: lead),
     );
     if (saved == true) ref.invalidate(leadsProvider(_status));
+  }
+
+  /// Losing a lead, with the reason asked for at the moment it is known.
+  ///
+  /// A list of dead leads with no reasons on it is a list nobody reads
+  /// twice, and `leads.lost_reason` had been a column since `0008` with
+  /// nothing to write it.
+  Future<void> _lose(Map<String, dynamic> lead) async {
+    final reason = await promptForText(
+      context,
+      title: 'Why did it come to nothing?',
+      label: 'Reason',
+      confirmLabel: 'Mark as lost',
+      // The same list a deal is closed with, so the two halves of the
+      // funnel can be read together rather than in two vocabularies.
+      suggestions: lostReasons,
+    );
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.closeLead(lead['id'] as String, reason),
+      successMessage: 'Marked as lost',
+    );
+    if (ok) ref.invalidate(leadsProvider(_status));
+  }
+
+  Future<void> _reopen(Map<String, dynamic> lead) async {
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.reopenLead(lead['id'] as String),
+      successMessage: 'Back on the list',
+    );
+    if (ok) ref.invalidate(leadsProvider(_status));
   }
 
   Future<void> _convert(Map<String, dynamic> lead) async {
@@ -132,6 +174,8 @@ class _LeadTile extends StatelessWidget {
   const _LeadTile({
     required this.lead,
     required this.canWrite,
+    required this.onLose,
+    required this.onReopen,
     required this.onEdit,
     required this.onConvert,
   });
@@ -140,6 +184,8 @@ class _LeadTile extends StatelessWidget {
   final bool canWrite;
   final VoidCallback onEdit;
   final VoidCallback onConvert;
+  final VoidCallback onLose;
+  final VoidCallback onReopen;
 
   @override
   Widget build(BuildContext context) {
@@ -178,19 +224,45 @@ class _LeadTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (value > 0) Money(value, bold: true),
-        // Converting is what a lead is for. A converted one has nowhere
-        // left to go, and a lost one has to be reopened first — the
-        // database refuses both, so the button should not offer them.
-        if (canWrite && !converted && status != 'lost') ...[
-          const SizedBox(width: Space.sm),
-          FilledButton.tonal(
-            onPressed: onConvert,
-            child: const Text('Convert'),
-          ),
+      // The value stays put; the actions become a menu on a phone,
+      // where this row ran 6 pixels past the edge of the screen.
+      trailing: RowActions(
+        menuKey: 'lead-actions',
+        leading: value > 0 ? Money(value, bold: true) : null,
+        actions: [
+          // Converting is what a lead is for. A converted one has
+          // nowhere left to go, and a lost one has to be reopened first
+          // — the database refuses both, so the button should not offer
+          // them.
+          if (canWrite && !converted && status != 'lost') ...[
+            RowAction(
+              actionKey: 'convert-lead',
+              label: 'Convert',
+              icon: Icons.person_add_alt_outlined,
+              emphasis: RowActionEmphasis.filled,
+              onTap: onConvert,
+            ),
+            RowAction(
+              actionKey: 'lose-lead',
+              label: 'It came to nothing',
+              icon: Icons.do_not_disturb_on_outlined,
+              // An icon on a wide screen, with its words as the
+              // tooltip; a line with its words on it in the menu.
+              iconOnly: true,
+              onTap: onLose,
+            ),
+          ],
+          // And back, because `convert_lead` has said "reopen it first"
+          // since `0093` about a state nothing could leave.
+          if (canWrite && status == 'lost')
+            RowAction(
+              actionKey: 'reopen-lead',
+              label: 'Reopen',
+              icon: Icons.restart_alt,
+              onTap: onReopen,
+            ),
         ],
-      ]),
+      ),
     );
   }
 }
@@ -209,6 +281,8 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
   late String _status = widget.lead?['status']?.toString() ?? 'new';
   bool _saving = false;
 
+  Map<String, dynamic> _customFields = const {};
+
   static const _fields = <(String, String)>[
     ('company_name', 'Company'),
     ('first_name', 'First name'),
@@ -226,6 +300,9 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
   @override
   void initState() {
     super.initState();
+    _customFields = Map<String, dynamic>.from(
+      (widget.lead?['custom_fields'] as Map?) ?? const {},
+    );
     for (final (key, _) in _fields) {
       _c[key] = TextEditingController(text: widget.lead?[key]?.toString() ?? '');
     }
@@ -285,9 +362,18 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
                       value: 'qualified', child: Text('Qualified')),
                   DropdownMenuItem(
                       value: 'unqualified', child: Text('Unqualified')),
-                  DropdownMenuItem(value: 'lost', child: Text('Lost')),
+                  // `lost` is not offered here. Setting it from a
+                  // dropdown left `leads.lost_reason` empty for every
+                  // lead a company ever gave up on — see `0373`. Losing
+                  // one is done from the list, where the reason can be
+                  // asked for with it.
                 ],
                 onChanged: (v) => setState(() => _status = v ?? 'new'),
+              ),
+              CustomFieldsSection(
+                entity: 'lead',
+                values: _customFields,
+                onChanged: (v) => setState(() => _customFields = v),
               ),
             ],
           ),
@@ -330,6 +416,7 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
         key: key == 'estimated_value'
             ? (double.tryParse(_c[key]!.text.trim()) ?? 0)
             : (_c[key]!.text.trim().isEmpty ? null : _c[key]!.text.trim()),
+      'custom_fields': _customFields,
     };
 
     final ok = await runWithFeedback(
@@ -405,18 +492,36 @@ class _ConvertDialogState extends ConsumerState<_ConvertDialog> {
                     : 'Starts in the first open stage of the pipeline'),
               ),
               if (_opportunity && pipelines.isNotEmpty) ...[
-                DropdownButtonFormField<String>(
-                  value: _pipelineId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Pipeline'),
-                  items: [
+                SearchablePicker<String>(
+                  options: [
                     for (final p in pipelines)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: p['id'] as String,
-                        child: Text(p['name']?.toString() ?? '',
-                            overflow: TextOverflow.ellipsis),
+                        label: p['name']?.toString() ?? '',
                       ),
                   ],
+                  value: _pipelineId,
+                  label: 'Pipeline',
+                  createLabel: 'Add pipeline',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New pipeline',
+                    // No code box: `pipelines` has no code column, and
+                    // asking for one would teach a rule that is not
+                    // there.
+                    blurb: 'Not on the list yet. Its stages are set up '
+                        'on the Pipeline screen afterwards.',
+                    nameHint: 'Enterprise sales',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.pipeline,
+                            name: name,
+                          );
+                      ref.invalidate(pipelinesProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _pipelineId = v),
                 ),
                 const SizedBox(height: Space.md),

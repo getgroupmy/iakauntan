@@ -52,7 +52,13 @@ class _WithholdingDialogState extends ConsumerState<_WithholdingDialog> {
   double get _tax {
     final gross = double.tryParse(_gross.text.trim()) ?? 0;
     final rate = double.tryParse(_rate.text.trim()) ?? 0;
-    return (gross * rate / 100 * 100).round() / 100;
+    // What `create_withholding` will actually withhold, rather than a
+    // second opinion about it. The figure is not sent -- the gross and
+    // the rate are, and `0099` does the arithmetic -- so this is a
+    // PREVIEW, and a preview that disagrees with the certificate by a
+    // cent is worse than no preview. `Fmt.taxOn` is that function's
+    // rounding, written once.
+    return Fmt.taxOn(gross, rate);
   }
 
   Future<void> _save() async {

@@ -154,6 +154,61 @@ class OcrLine {
 ///
 /// Every field is nullable, and that is the point: "the tax number is not
 /// printed on this receipt" is a useful answer and a zero is not.
+/// Folds a reader's continuation rows back into the item above them.
+///
+/// A charge often takes more than one printed line — the item on the
+/// first, a part number or a period covered on the second — and a reader
+/// asked for "one entry per printed line" hands back two rows, the
+/// second carrying a description and no money at all.
+///
+/// Left alone, that second row becomes a line on somebody's bill at
+/// quantity one and price zero: a phantom charge with the real charge's
+/// detail in it. Dropping it instead loses what they are being charged
+/// for. Neither is right, so it is folded into the description above it,
+/// which is where the paper put it.
+///
+/// A row with no money and **nothing above it** is kept as a line of its
+/// own: it may be a genuine item whose price the reader could not make
+/// out, and inventing a rule that swallows the first line of a document
+/// would be worse than the problem.
+///
+/// This runs whatever the reader was. The prompt asks for the right
+/// shape; this is what makes the wrong shape harmless, and a reader
+/// swapped for another next year does not get to reintroduce the bug.
+List<OcrLine> foldOcrContinuations(List<OcrLine> lines) {
+  final out = <OcrLine>[];
+  for (final line in lines) {
+    final text = (line.description ?? '').trim();
+    final hasMoney =
+        (line.unitPrice != null && line.unitPrice != 0) ||
+        (line.amount != null && line.amount != 0) ||
+        (line.quantity != null && line.quantity != 0);
+
+    if (text.isEmpty) {
+      // Nothing printed and nothing charged. Not a line and not a
+      // continuation of one.
+      if (hasMoney) out.add(line);
+      continue;
+    }
+
+    if (!hasMoney && out.isNotEmpty) {
+      final above = out.removeLast();
+      out.add(
+        OcrLine(
+          description: '${(above.description ?? '').trim()}\n$text',
+          quantity: above.quantity,
+          unitPrice: above.unitPrice,
+          amount: above.amount,
+        ),
+      );
+      continue;
+    }
+
+    out.add(line);
+  }
+  return out;
+}
+
 class OcrExtraction {
   const OcrExtraction({
     this.supplierName,
@@ -171,6 +226,7 @@ class OcrExtraction {
     this.lines = const [],
     this.note,
     this.rawText,
+    this.documentKind,
   });
 
   final String? supplierName;
@@ -218,6 +274,15 @@ class OcrExtraction {
   /// empty page that looks like a failure.
   final String? rawText;
 
+  /// What KIND of paper this is, as a `scan_document_kinds.code`.
+  ///
+  /// `0614`. Guessed by `document_classifier.dart` from [rawText] and
+  /// confirmable by the person holding the paper — the fields above are
+  /// what the reading made of the document, and this is what the
+  /// document is. Null where nobody was asked, which is every reading
+  /// taken before 0614 and every one where the list had not loaded.
+  final String? documentKind;
+
   /// The same reading with some of it changed.
   ///
   /// Only ever sets; it cannot put a field back to null, which is what
@@ -239,6 +304,7 @@ class OcrExtraction {
     List<OcrLine>? lines,
     String? note,
     String? rawText,
+    String? documentKind,
   }) =>
       OcrExtraction(
         supplierName: supplierName ?? this.supplierName,
@@ -257,6 +323,7 @@ class OcrExtraction {
         lines: lines ?? this.lines,
         note: note ?? this.note,
         rawText: rawText ?? this.rawText,
+        documentKind: documentKind ?? this.documentKind,
       );
 
   /// The amount to put in an expense's Amount field.
@@ -288,6 +355,7 @@ class OcrExtraction {
             .toList(),
         note: _text(j['note']),
         rawText: _text(j['raw_text']),
+        documentKind: _text(j['document_kind']),
       );
 
   /// The same shape the server-side readers return, so a scan logged
@@ -320,6 +388,7 @@ class OcrExtraction {
         ],
         'note': note,
         'raw_text': rawText,
+        'document_kind': documentKind,
       };
 
   static String? _text(Object? v) {
@@ -419,6 +488,27 @@ extension RepoOcr on Repo {
         'p_extracted': read?.toJson(),
         'p_error': error,
       });
+
+  /// Files the most recent scan of an attachment as a kind of document.
+  ///
+  /// `0614`. Separate from the reading because the kind is settled
+  /// AFTER it: by the time somebody has looked at the dialog the scan
+  /// row exists, written by `ocr_finish` or by `ocr_record_local`.
+  ///
+  /// Answers null where there was no scan to write on — a capture
+  /// nobody read still reaches this with whatever the form said — which
+  /// is why it is not an error.
+  Future<String?> setScanDocumentKind({
+    required String attachmentId,
+    String? kind,
+  }) async {
+    final out = await client.rpc('set_scan_document_kind', params: {
+      'p_org_id': orgId,
+      'p_attachment_id': attachmentId,
+      'p_document_kind': kind,
+    });
+    return out?.toString();
+  }
 
   /// Every movement of the scanning balance, newest first.
   Future<List<Map<String, dynamic>>> creditLedger() async => Repo.rows(
@@ -532,7 +622,11 @@ class OcrException implements Exception {
 /// the tenant settings screen, which is why a company can pick a reader
 /// the app has never heard of. It is only the editing that had no way
 /// in.
-extension RepoOcrCatalog on Repo {
+/// Hangs off the platform and not off a company, for the same reason
+/// the AI catalogue does: a reader is the platform's, neither call
+/// takes an org id, and written `on Repo` this screen refused the
+/// operator it exists for with "Your company has not finished loading".
+extension PlatformOcrCatalog on PlatformRepo {
   /// Every reader, active or not. The platform view rather than the
   /// tenant one: a retired reader still matters to whoever retired it.
   Future<List<Map<String, dynamic>>> ocrProviderCatalog() async => Repo.rows(
@@ -542,7 +636,7 @@ extension RepoOcrCatalog on Repo {
           'code, name, kind, endpoint, model, price, takes_key, '
           'runs_on_device, blurb, is_active',
         )
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// Adds a reader or edits one.
@@ -561,7 +655,7 @@ extension RepoOcrCatalog on Repo {
     double? price,
     bool? isActive,
     String? blurb,
-  }) async => await callRpc(
+  }) async => await client.rpc(
     'platform_set_ocr_provider',
     params: {
       'p_code': code,

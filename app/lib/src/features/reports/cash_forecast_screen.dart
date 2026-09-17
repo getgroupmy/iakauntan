@@ -38,10 +38,18 @@ String weekLabel(Map<String, dynamic> row) {
   return 'Week $n · ${Fmt.date(start)}';
 }
 
-/// Red when the week closes short. The one thing on the page that has
-/// to be impossible to miss.
+/// Bad news when the week closes short. The one thing on the page that
+/// has to be impossible to miss.
+///
+/// `overdrawn` is the server's answer and is read as one: a week is
+/// short because the closing balance went below zero, and recomputing
+/// that here from the figures on the row would be a second opinion that
+/// could disagree with the first.
+Tone? weekTone(Map<String, dynamic> row) =>
+    row['overdrawn'] == true ? Tone.bad : null;
+
 Color? weekColour(BuildContext context, Map<String, dynamic> row) =>
-    row['overdrawn'] == true ? context.colors.danger : null;
+    context.toneColour(weekTone(row));
 
 /// How late a customer actually pays, said the way somebody would
 /// defend or dispute it.
@@ -51,6 +59,42 @@ String lagLabel(Map<String, dynamic> row) {
   if (days < 0) return 'Pays ${-days} day${days == -1 ? '' : 's'} early';
   return 'Takes $days day${days == 1 ? '' : 's'} longer than the terms';
 }
+
+/// Whose habit actually moves the forecast.
+///
+/// A customer who owes nothing has no invoice for the lag to shift, so
+/// their habit changes no week on the page — listing them buries the
+/// three names somebody came here to argue about. The order the
+/// function returns is kept: latest first, which is the order the
+/// argument goes in.
+List<Map<String, dynamic>> lagsWorthArguingAbout(
+  Iterable<Map<String, dynamic>> rows,
+) =>
+    [
+      for (final r in rows)
+        if ((double.tryParse('${r['outstanding'] ?? 0}') ?? 0) > 0) r,
+    ];
+
+/// What the lags are holding up altogether.
+double lagsOutstanding(Iterable<Map<String, dynamic>> rows) => double.parse(
+      rows
+          .fold<double>(
+            0,
+            (a, r) => a + (double.tryParse('${r['outstanding'] ?? 0}') ?? 0),
+          )
+          .toStringAsFixed(2),
+    );
+
+/// Where the number came from, said once so nobody has to guess how far
+/// back it looks.
+///
+/// `app.contact_payment_lag` averages the last twelve settled invoices
+/// and clamps each between thirty days early and a hundred and eighty
+/// late, so one furious month cannot move a customer's habit by a year.
+const String lagsProvenance =
+    'The average of the last twelve invoices each customer settled, '
+    'counted from the day it fell due. A single very late payment is '
+    'capped at 180 days so it cannot move the habit by a year.';
 
 /// What the bank will look like, and when it runs short.
 class CashFlowScreen extends ConsumerStatefulWidget {
@@ -90,6 +134,16 @@ class _CashFlowScreenState extends ConsumerState<CashFlowScreen> {
                 : 'Using the terms as written',
             icon: Icon(_useHistory ? Icons.history : Icons.event_outlined),
             onPressed: () => setState(() => _useHistory = !_useHistory),
+          ),
+          // The numbers behind the toggle beside it. The tooltip has
+          // been claiming the forecast uses "how late each customer
+          // actually pays" and there was no way to see, or dispute,
+          // a single one of those figures.
+          IconButton(
+            key: const ValueKey('payment-lags'),
+            tooltip: 'How late each customer pays',
+            icon: const Icon(Icons.schedule_outlined),
+            onPressed: _lags,
           ),
           IconButton(
             tooltip: 'What only you know',
@@ -195,6 +249,12 @@ class _CashFlowScreenState extends ConsumerState<CashFlowScreen> {
       ),
     );
   }
+
+  /// Why the forecast moved an invoice.
+  Future<void> _lags() => showDialog<void>(
+        context: context,
+        builder: (_) => const _LagsSheet(),
+      );
 
   Future<void> _items() async {
     final changed = await showModalBottomSheet<bool>(
@@ -426,6 +486,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                 onChanged: (_) => setState(() {}),
               ),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _recurrence,
                 decoration: const InputDecoration(labelText: 'How often'),
                 items: const [
@@ -508,6 +569,99 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   if (ok && context.mounted) Navigator.of(context).pop(true);
                 },
           child: const Text('Add it'),
+        ),
+      ],
+    );
+  }
+}
+
+/// How late each customer actually pays.
+///
+/// `customer_payment_lags` was written for exactly this — "so somebody
+/// can see why the forecast moved an invoice and argue with it" — and
+/// nothing watched it, so the toggle in the app bar made a claim the
+/// screen could not support.
+class _LagsSheet extends ConsumerWidget {
+  const _LagsSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lags = ref.watch(customerPaymentLagsProvider);
+
+    return AlertDialog(
+      title: const Text('How late each customer pays'),
+      content: SizedBox(
+        width: 520,
+        height: 440,
+        child: AsyncView<List<Map<String, dynamic>>>(
+          value: lags,
+          onRetry: () => ref.invalidate(customerPaymentLagsProvider),
+          builder: (all) {
+            final rows = lagsWorthArguingAbout(all);
+            if (rows.isEmpty) {
+              return const EmptyState(
+                icon: Icons.schedule_outlined,
+                title: 'Nothing outstanding',
+                message: 'A customer who owes nothing has no invoice for '
+                    'a habit to move, so nothing here changes the '
+                    'forecast.',
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  lagsProvenance,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: context.scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: Space.sm),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: rows.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final r = rows[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text('${r['party']}'),
+                        subtitle: Text(
+                          lagLabel(r),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: Money(
+                          num.tryParse('${r['outstanding'] ?? 0}'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.sm),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${rows.length} customers owing',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      Money(lagsOutstanding(rows), bold: true),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
         ),
       ],
     );

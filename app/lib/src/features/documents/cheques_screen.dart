@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../banking/new_bank_account_dialog.dart';
+import '../contacts/new_contact_dialog.dart';
 
 /// Which way the cheque goes, in the words a shop uses.
 String chequeDirection(String? d) =>
@@ -39,13 +43,94 @@ String chequeSummary(Map<String, dynamic> row) => [
   Fmt.date(DateTime.tryParse('${row['cheque_date']}')),
 ].join(' · ');
 
-/// Red for a cheque that should have been banked and was not, and
-/// nothing for the rest.
-Color? chequeColour(BuildContext context, Map<String, dynamic> row) {
+/// Bad news for a cheque that bounced, and worth looking at for one
+/// that matured and is still sitting there.
+///
+/// Only `held` and `deposited` can be late. A cheque that has cleared
+/// is finished, and one that was cancelled or handed back is finished
+/// too — their `days_to_go` goes on counting down and means nothing, so
+/// colouring on it would put a warning against a cheque nobody owes
+/// anything about.
+Tone? chequeTone(Map<String, dynamic> row) {
   final status = '${row['status']}';
-  if (status == 'bounced') return context.colors.danger;
+  if (status == 'bounced') return Tone.bad;
   if (status != 'held' && status != 'deposited') return null;
-  return Fmt.toInt(row['days_to_go']) < 0 ? context.colors.warning : null;
+  return Fmt.toInt(row['days_to_go']) < 0 ? Tone.warn : null;
+}
+
+Color? chequeColour(BuildContext context, Map<String, dynamic> row) =>
+    context.toneColour(chequeTone(row));
+
+/// The cheques that need banking, in one sentence, or null for none.
+///
+/// `pdc_maturing` has answered this since 0275 — what matures inside
+/// the month, plus anything whose date has gone and which has not
+/// cleared — and `pdcMaturingProvider` has wrapped it, and this screen
+/// has invalidated it after every action on a cheque. Nothing drew it.
+///
+/// What the screen showed instead was the whole register: every cheque
+/// ever recorded, cleared and bounced and handed back among them, each
+/// carrying its own countdown. A shop with two hundred cheques scrolls
+/// past the one sitting in a drawer. The register is the record; this
+/// is the worklist.
+///
+/// The two directions are totalled apart on purpose. An incoming cheque
+/// past its date is money nobody has banked; an outgoing one past its
+/// date is money still in the account that somebody is entitled to
+/// take. Adding them would produce a figure that is neither.
+///
+/// Pure so the wording can be asserted without a widget, the way
+/// [chequeWhen] and [chequeTone] already are. What is in the database —
+/// which cheques are outstanding, which are late — is
+/// `supabase/tests/post_dated_cheques.sql`.
+({String text, Tone? tone})? chequesToBankLine(
+  List<Map<String, dynamic>> rows,
+) {
+  if (rows.isEmpty) return null;
+
+  final late = rows.where((r) => r['overdue'] == true).toList();
+  if (late.isNotEmpty) {
+    return (
+      text:
+          '${_plural(late.length, 'cheque')} past its date and not '
+          'cleared. ${_bothWays(late)}',
+      tone: Tone.warn,
+    );
+  }
+
+  // `pdc_maturing` orders by cheque date, so the first row is the
+  // nearest one. Nothing here is late, so this is a note rather than a
+  // warning and takes no colour.
+  final first = Fmt.date(DateTime.tryParse('${rows.first['cheque_date']}'));
+  return (
+    text:
+        '${_plural(rows.length, 'cheque')} maturing within the month, '
+        'the first on $first. ${_bothWays(rows)}',
+    tone: null,
+  );
+}
+
+/// "One cheque is" or "4 cheques are" — the count and the verb that
+/// goes with it, because "1 cheques are" is the kind of thing that
+/// makes a reader distrust the number beside it.
+String _plural(int n, String noun) =>
+    n == 1 ? 'One $noun is' : '$n ${noun}s are';
+
+/// The money, split by which way the cheque goes.
+String _bothWays(List<Map<String, dynamic>> rows) {
+  double sum(String direction) => rows
+      .where((r) => '${r['direction']}' == direction)
+      .fold<double>(0, (t, r) => t + Fmt.toDouble(r['amount']));
+
+  final incoming = sum('incoming');
+  final outgoing = sum('outgoing');
+  final toBank = '${Fmt.money(incoming)} to bank';
+  final written = '${Fmt.money(outgoing)} we wrote and nobody has presented';
+  if (incoming > 0 && outgoing > 0) return '$toBank, and $written.';
+  if (outgoing > 0) {
+    return '${written[0].toUpperCase()}${written.substring(1)}.';
+  }
+  return '${toBank[0].toUpperCase()}${toBank.substring(1)}.';
 }
 
 /// What can still be done to a cheque in this state.
@@ -75,61 +160,72 @@ class ChequesScreen extends ConsumerWidget {
         icon: const Icon(Icons.event_note_outlined),
         label: const Text('Record one'),
       ),
-      body: AsyncView<List<Map<String, dynamic>>>(
-        value: rows,
-        onRetry: () => ref.invalidate(
-          postDatedChequesProvider((direction: null, status: null)),
-        ),
-        builder: (list) {
-          if (list.isEmpty) {
-            return const EmptyState(
-              icon: Icons.event_note_outlined,
-              title: 'No cheques on hand',
-              message: 'A cheque dated next month is not money in the bank. '
-                  'Record it here and the customer stops being chased, '
-                  'while the bank balance waits until it clears.',
-            );
-          }
-          return ListView.separated(
-            itemCount: list.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final c = list[i];
-              return ListTile(
-                isThreeLine: true,
-                leading: Icon(
-                  '${c['direction']}' == 'outgoing'
-                      ? Icons.call_made
-                      : Icons.call_received,
-                ),
-                title: Text('${c['pdc_no']} · ${chequeDirection('${c['direction']}')}'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(chequeSummary(c)),
-                    Text(
-                      [
-                        chequeWhen(c),
-                        if ('${c['bounce_reason'] ?? ''}'.trim().isNotEmpty)
-                          '${c['bounce_reason']}',
-                      ].join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: chequeColour(context, c),
+      body: Column(
+        children: [
+          const _ToBank(),
+          Expanded(
+            child: AsyncView<List<Map<String, dynamic>>>(
+              value: rows,
+              onRetry: () => ref.invalidate(
+                postDatedChequesProvider((direction: null, status: null)),
+              ),
+              builder: (list) {
+                if (list.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.event_note_outlined,
+                    title: 'No cheques on hand',
+                    message:
+                        'A cheque dated next month is not money in the bank. '
+                        'Record it here and the customer stops being chased, '
+                        'while the bank balance waits until it clears.',
+                  );
+                }
+                return ListView.separated(
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final c = list[i];
+                    return ListTile(
+                      isThreeLine: true,
+                      leading: Icon(
+                        '${c['direction']}' == 'outgoing'
+                            ? Icons.call_made
+                            : Icons.call_received,
                       ),
-                    ),
-                  ],
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Money(num.tryParse('${c['amount']}')),
-                    _menu(context, ref, c),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+                      title: Text(
+                        '${c['pdc_no']} · ${chequeDirection('${c['direction']}')}',
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(chequeSummary(c)),
+                          Text(
+                            [
+                              chequeWhen(c),
+                              if ('${c['bounce_reason'] ?? ''}'
+                                  .trim()
+                                  .isNotEmpty)
+                                '${c['bounce_reason']}',
+                            ].join(' · '),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: chequeColour(context, c)),
+                          ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Money(num.tryParse('${c['amount']}')),
+                          _menu(context, ref, c),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -152,12 +248,7 @@ class ChequesScreen extends ConsumerWidget {
           () => ref.read(repoProvider)!.clearPdc(id),
           'Cleared',
         ),
-        'bounce' => _withReason(
-          context,
-          ref,
-          id,
-          bounce: true,
-        ),
+        'bounce' => _withReason(context, ref, id, bounce: true),
         _ => _withReason(context, ref, id, bounce: false),
       },
       itemBuilder: (_) => [
@@ -328,7 +419,8 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
     // The server refuses a cheque that settles less than its face
     // value, so the button says no first rather than after the dialog
     // has closed.
-    final settlesOk = settled == 0 || (settled * 100).round() == (amount * 100).round();
+    final settlesOk =
+        settled == 0 || (settled * 100).round() == (amount * 100).round();
 
     return AlertDialog(
       title: const Text('A post-dated cheque'),
@@ -360,15 +452,17 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                 }),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contact,
-                decoration: InputDecoration(
-                  labelText: incoming ? 'From whom' : 'To whom',
+                label: incoming ? 'From whom' : 'To whom',
+                hint: 'Type a name or a code',
+                createLabel: incoming ? 'Add customer' : 'Add supplier',
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: incoming ? 'customer' : 'supplier',
+                  typed: typed,
                 ),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
                 onChanged: (v) => setState(() {
                   _contact = v;
                   _settles.clear();
@@ -389,7 +483,9 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                   Expanded(
                     child: TextField(
                       controller: _bankName,
-                      decoration: const InputDecoration(labelText: 'Which bank'),
+                      decoration: const InputDecoration(
+                        labelText: 'Which bank',
+                      ),
                     ),
                   ),
                 ],
@@ -402,20 +498,19 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                 decoration: const InputDecoration(labelText: 'How much'),
                 onChanged: (_) => setState(() {}),
               ),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: bankPickerOptions(banks),
+                createLabel: 'Add bank account',
+                // 0529 made this list writable for the first
+                // time. Until then a company that opened a
+                // second account had nowhere in the product to
+                // say so.
+                onCreate: (typed) =>
+                    createBankAccountFromPicker(context, typed: typed),
                 value: _bank,
-                decoration: InputDecoration(
-                  labelText: incoming
-                      ? 'Where it will be banked'
-                      : 'Which of ours it is drawn on',
-                ),
-                items: [
-                  for (final b in banks)
-                    DropdownMenuItem(
-                      value: '${b['id']}',
-                      child: Text('${b['name']}'),
-                    ),
-                ],
+                label: incoming
+                    ? 'Where it will be banked'
+                    : 'Which of ours it is drawn on',
                 onChanged: (v) => setState(() => _bank = v),
               ),
               ListTile(
@@ -519,8 +614,8 @@ class _Settles extends ConsumerWidget {
             onChanged: (v) {
               final id = '${r['document_id']}';
               if (v == true) {
-                picked[id] =
-                    (num.tryParse('${r['outstanding']}') ?? 0).toDouble();
+                picked[id] = (num.tryParse('${r['outstanding']}') ?? 0)
+                    .toDouble();
               } else {
                 picked.remove(id);
               }
@@ -528,6 +623,53 @@ class _Settles extends ConsumerWidget {
             },
           ),
       ],
+    );
+  }
+}
+
+/// Draws [chequesToBankLine] above the register.
+///
+/// Silent while it loads and silent if it fails: the list below has its
+/// own error state, and a screen that reports the same outage twice is
+/// harder to read than one that reports it once.
+class _ToBank extends ConsumerWidget {
+  const _ToBank();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = ref.watch(pdcMaturingProvider).valueOrNull;
+    if (rows == null) return const SizedBox.shrink();
+    final line = chequesToBankLine(rows);
+    if (line == null) return const SizedBox.shrink();
+
+    final colour = context.toneColour(line.tone);
+    return Container(
+      width: double.infinity,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            line.tone == Tone.warn
+                ? Icons.error_outline
+                : Icons.account_balance_outlined,
+            size: 18,
+            color: colour,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              line.text,
+              key: const ValueKey('pdc-to-bank'),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colour,
+                fontWeight: line.tone == Tone.warn ? FontWeight.w600 : null,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

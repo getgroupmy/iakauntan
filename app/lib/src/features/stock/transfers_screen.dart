@@ -3,14 +3,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../items/new_item_dialog.dart';
+import 'conversion_outputs.dart';
+import 'new_warehouse_dialog.dart';
 
 /// Where a transfer has got to, in the words a warehouse uses.
 ///
 /// Pure and exported so the list, the detail sheet and the tests agree.
+/// Whether a transfer can still be called off.
+///
+/// `cancel_stock_transfer` takes only a draft: once the van is loaded
+/// the stock has moved, and the answer is to "send it back the other
+/// way rather than pretending it did not". A draft typed by mistake
+/// had no way out at all until this reached the screen.
+bool transferIsCancellable(String? status) => status == 'draft';
+
 String transferState(String? status) => switch (status) {
   'draft' => 'Being written',
   'sent' => 'On its way',
@@ -119,6 +131,26 @@ class _TransferListState extends ConsumerState<_TransferList> {
     if (saved == true) _reload();
   }
 
+  Future<void> _cancel(Map<String, dynamic> row) async {
+    final ok = await confirm(
+      context,
+      title: 'Call off ${row['transfer_no']}?',
+      message:
+          'Nothing has left the store yet, so nothing moves back. The '
+          'transfer stays on the list marked cancelled.',
+      confirmLabel: 'Call it off',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    final done = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.cancelStockTransfer(row['id'] as String),
+      successMessage: 'Called off',
+    );
+    if (done) _reload();
+  }
+
   Future<void> _send(Map<String, dynamic> row) async {
     final done = await runWithFeedback(
       context,
@@ -193,6 +225,13 @@ class _TransferListState extends ConsumerState<_TransferList> {
                           ? context.colors.warning.withValues(alpha: 0.15)
                           : null,
                     ),
+                    if (transferIsCancellable(status))
+                      IconButton(
+                        key: const ValueKey('cancel-transfer'),
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Call it off',
+                        onPressed: () => _cancel(row),
+                      ),
                     if (status == 'draft')
                       IconButton(
                         icon: const Icon(Icons.send_outlined),
@@ -233,11 +272,27 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
   final List<Map<String, dynamic>> _lines = [];
   final _notes = TextEditingController();
 
+  /// The list the two pickers search. Its own copy, because a warehouse
+  /// created FROM one of those pickers has to appear in the other one
+  /// without the sheet being closed and reopened.
+  late final List<Map<String, dynamic>> _warehouses = [...widget.warehouses];
+
   @override
   void initState() {
     super.initState();
     _from = widget.warehouses.first['id'] as String?;
     _to = widget.warehouses[1]['id'] as String?;
+  }
+
+  /// Add a warehouse from the box that wanted one.
+  Future<String?> _newWarehouse(String typed) async {
+    final created = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => NewWarehouseDialog(seedName: typed),
+    );
+    if (created == null || !mounted) return null;
+    setState(() => _warehouses.add(created));
+    return '${created['id']}';
   }
 
   @override
@@ -298,30 +353,22 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: warehouseOptions(_warehouses),
               value: _from,
-              decoration: const InputDecoration(labelText: 'Leaving'),
-              items: [
-                for (final w in widget.warehouses)
-                  DropdownMenuItem(
-                    value: w['id'] as String,
-                    child: Text('${w['name']}'),
-                  ),
-              ],
+              label: 'Leaving',
               onChanged: (v) => setState(() => _from = v),
+              onCreate: _newWarehouse,
+              createLabel: 'Add warehouse',
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: warehouseOptions(_warehouses),
               value: _to,
-              decoration: const InputDecoration(labelText: 'Arriving'),
-              items: [
-                for (final w in widget.warehouses)
-                  DropdownMenuItem(
-                    value: w['id'] as String,
-                    child: Text('${w['name']}'),
-                  ),
-              ],
+              label: 'Arriving',
               onChanged: (v) => setState(() => _to = v),
+              onCreate: _newWarehouse,
+              createLabel: 'Add warehouse',
             ),
             const SizedBox(height: Space.md),
             for (final line in _lines)
@@ -464,6 +511,25 @@ class _StockLineDialogState extends ConsumerState<_StockLineDialog> {
   final _qty = TextEditingController();
   final _share = TextEditingController();
 
+  /// The list the picker searches. Its own copy, so an item created
+  /// from the box appears in it without the dialog being reopened.
+  late final List<Item> _items = [...widget.items];
+
+  /// Add an item from the box that wanted one.
+  Future<String?> _newItem(String typed) async {
+    final created = await showDialog<Item>(
+      context: context,
+      // Typed into the description box, so it seeds the description.
+      builder: (_) => NewItemDialog(seedName: typed),
+    );
+    if (created == null || !mounted) return null;
+    setState(() {
+      _items.add(created);
+      _uom = null;
+    });
+    return created.id;
+  }
+
   @override
   void dispose() {
     _qty.dispose();
@@ -483,33 +549,40 @@ class _StockLineDialogState extends ConsumerState<_StockLineDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: itemPickerOptions(_items),
               value: _item,
-              decoration: const InputDecoration(labelText: 'What'),
-              items: [
-                for (final i in widget.items)
-                  DropdownMenuItem(value: i.id, child: Text(i.name)),
-              ],
+              label: 'What',
               onChanged: (v) => setState(() {
                 _item = v;
+                // The units on offer belong to the item, so a new item
+                // cannot keep the old one's unit.
                 _uom = null;
               }),
+              onCreate: _newItem,
+              createLabel: 'Add item',
             ),
             TextField(
               controller: _qty,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'How much'),
             ),
-            DropdownButtonFormField<String>(
-              value: _uom,
-              decoration: const InputDecoration(labelText: 'In what unit'),
-              items: [
+            SearchablePicker<String>(
+              options: [
                 for (final o in options.valueOrNull ?? const [])
-                  DropdownMenuItem(
+                  PickerOption<String>(
                     value: '${o['uom_code']}',
-                    child: Text('${o['uom_name']}'),
+                    label: '${o['uom_name']}',
+                    keywords: ['${o['uom_code']}'],
                   ),
               ],
+              value: _uom,
+              label: 'In what unit',
+              // Nothing to add here: the units an item can be counted
+              // in are its own conversions, set up on the item, not a
+              // list this dialog may extend.
+              enabled: _item != null,
+              hint: _item == null ? 'Pick an item first' : null,
               onChanged: (v) => setState(() => _uom = v),
             ),
             if (widget.wantsShare)
@@ -530,7 +603,7 @@ class _StockLineDialogState extends ConsumerState<_StockLineDialog> {
           onPressed: _item == null || _uom == null
               ? null
               : () {
-                  final name = widget.items
+                  final name = _items
                       .firstWhere((i) => i.id == _item)
                       .name;
                   Navigator.of(context).pop({
@@ -572,7 +645,7 @@ class _ConversionListState extends ConsumerState<_ConversionList> {
   Future<void> _run(Map<String, dynamic> row) async {
     final times = await showDialog<num>(
       context: context,
-      builder: (ctx) => _TimesDialog(name: '${row['name']}'),
+      builder: (ctx) => _TimesDialog(row: row),
     );
     if (times == null || !mounted) return;
     final done = await runWithFeedback(
@@ -624,6 +697,10 @@ class _ConversionListState extends ConsumerState<_ConversionList> {
           itemBuilder: (context, i) {
             final row = rows[i];
             return ListTile(
+              // The same sheet the play button opens. Nothing is cut up
+              // until "Do it" is pressed, so this is how a conversion
+              // that has been switched off can still be read.
+              onTap: () => _run(row),
               title: Text('${row['name']}'),
               subtitle: Text(
                 '${row['from_quantity']} ${row['from_uom_code']} '
@@ -673,6 +750,23 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
   String? _uom;
   final List<Map<String, dynamic>> _outputs = [];
 
+  /// Its own copy, so an item created from the input box is also on
+  /// offer to the output lines below it.
+  late final List<Item> _items = [...widget.items];
+
+  Future<String?> _newItem(String typed) async {
+    final created = await showDialog<Item>(
+      context: context,
+      builder: (_) => NewItemDialog(seedName: typed),
+    );
+    if (created == null || !mounted) return null;
+    setState(() {
+      _items.add(created);
+      _uom = null;
+    });
+    return created.id;
+  }
+
   @override
   void dispose() {
     _code.dispose();
@@ -684,7 +778,7 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
   Future<void> _addOutput() async {
     final chosen = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _StockLineDialog(items: widget.items, wantsShare: true),
+      builder: (_) => _StockLineDialog(items: _items, wantsShare: true),
     );
     if (chosen == null) return;
     setState(() => _outputs.add(chosen));
@@ -749,17 +843,16 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
               decoration: const InputDecoration(labelText: 'Code'),
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: itemPickerOptions(_items),
               value: _item,
-              decoration: const InputDecoration(labelText: 'What goes in'),
-              items: [
-                for (final i in widget.items)
-                  DropdownMenuItem(value: i.id, child: Text(i.name)),
-              ],
+              label: 'What goes in',
               onChanged: (v) => setState(() {
                 _item = v;
                 _uom = null;
               }),
+              onCreate: _newItem,
+              createLabel: 'Add item',
             ),
             Row(
               children: [
@@ -772,16 +865,18 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
                 ),
                 const SizedBox(width: Space.md),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _uom,
-                    decoration: const InputDecoration(labelText: 'Unit'),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final o in options.valueOrNull ?? const [])
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: '${o['uom_code']}',
-                          child: Text('${o['uom_name']}'),
+                          label: '${o['uom_name']}',
+                          keywords: ['${o['uom_code']}'],
                         ),
                     ],
+                    value: _uom,
+                    label: 'Unit',
+                    enabled: _item != null,
                     onChanged: (v) => setState(() => _uom = v),
                   ),
                 ),
@@ -838,17 +933,28 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
   }
 }
 
-class _TimesDialog extends StatefulWidget {
-  const _TimesDialog({required this.name});
+/// What a conversion makes, before anybody agrees to make it.
+///
+/// The list could only ever say "3 things". This is the sheet that
+/// names them, scales them by the number typed, and shows how the
+/// input's value is split between them.
+class _TimesDialog extends ConsumerStatefulWidget {
+  const _TimesDialog({required this.row});
 
-  final String name;
+  final Map<String, dynamic> row;
 
   @override
-  State<_TimesDialog> createState() => _TimesDialogState();
+  ConsumerState<_TimesDialog> createState() => _TimesDialogState();
 }
 
-class _TimesDialogState extends State<_TimesDialog> {
+class _TimesDialogState extends ConsumerState<_TimesDialog> {
   final _times = TextEditingController(text: '1');
+
+  @override
+  void initState() {
+    super.initState();
+    _times.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -858,13 +964,101 @@ class _TimesDialogState extends State<_TimesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final row = widget.row;
+    final id = row['id'] as String;
+    final active = row['is_active'] == true;
+    final times = timesOf(_times.text);
+    final blocked = conversionBlockedBecause(isActive: active, times: times);
+    final outputs = ref.watch(itemConversionOutputsProvider(id));
+
+    final fromQty = num.tryParse('${row['from_quantity'] ?? 0}') ?? 0;
+    final needed = consumedQuantity(fromQuantity: fromQty, times: times ?? 0);
+    final onHand = num.tryParse('${row['on_hand'] ?? 0}') ?? 0;
+    final short = times != null &&
+        looksShortInTheStore(onHand: onHand, needed: needed);
+
+    final small = Theme.of(context).textTheme.bodySmall;
+
     return AlertDialog(
-      title: Text(widget.name),
-      content: TextField(
-        controller: _times,
-        keyboardType: TextInputType.number,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'How many times'),
+      title: Text('${row['name']}'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _times,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'How many times'),
+              ),
+              const SizedBox(height: Space.md),
+              Text(
+                times == null
+                    ? 'Takes ${Fmt.qty(fromQty)} ${row['from_uom_code']} '
+                          '${row['from_item']} each time.'
+                    : 'Takes ${Fmt.qty(needed)} ${row['from_uom_code']} '
+                          '${row['from_item']} and makes:',
+                style: small,
+              ),
+              const SizedBox(height: Space.sm),
+              AsyncView(
+                value: outputs,
+                onRetry: () =>
+                    ref.invalidate(itemConversionOutputsProvider(id)),
+                builder: (rows) {
+                  if (rows.isEmpty) {
+                    return Text('Nothing — nobody said what comes out.',
+                        style: small);
+                  }
+                  final share = declaredShare(rows);
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final o in rows)
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${o['item_name']}'),
+                          subtitle: Text(outputLine(o, times ?? 1)),
+                        ),
+                      // Only worth saying when it is wrong. Anything
+                      // `upsert_item_conversion` accepted comes to a
+                      // hundred; a split that has drifted has been
+                      // costing everything wrongly since it did.
+                      if (share != 100)
+                        Text(
+                          'The shares come to ${Fmt.qty(share)}%, not 100. '
+                          'What comes out is being costed against a bird '
+                          'that is not the whole bird.',
+                          style: small?.copyWith(color: context.colors.warning),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              if (short) ...[
+                const SizedBox(height: Space.sm),
+                Text(
+                  'There may not be that much of it in the store — '
+                  '${Fmt.qty(onHand)} across every store, and this needs '
+                  '${Fmt.qty(needed)}.',
+                  style: small?.copyWith(color: context.colors.warning),
+                ),
+              ],
+              if (blocked != null) ...[
+                const SizedBox(height: Space.sm),
+                Text(
+                  blocked,
+                  style: small?.copyWith(color: context.colors.danger),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
       actions: [
         TextButton(
@@ -872,8 +1066,9 @@ class _TimesDialogState extends State<_TimesDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () =>
-              Navigator.of(context).pop(num.tryParse(_times.text.trim()) ?? 1),
+          onPressed: blocked != null
+              ? null
+              : () => Navigator.of(context).pop(times),
           child: const Text('Do it'),
         ),
       ],

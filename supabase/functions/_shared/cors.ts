@@ -1,12 +1,23 @@
 // Cross-origin rules, and what a failure is allowed to say.
 
+import { originAllowed } from "./origin.ts";
+
+
 /// Origins the browser may call these functions from.
 ///
 /// Unset means `*`, which is where this started and what the running
 /// deployment relies on. Set `ALLOWED_ORIGINS` — comma separated — to
-/// narrow it to the app's own domain; anything not on the list gets no
+/// narrow it to the app's own domains; anything not on the list gets no
 /// `Access-Control-Allow-Origin` header at all and the browser refuses
 /// the response.
+///
+/// An entry may carry one `*`, which stands for exactly one DNS label:
+/// `https://*.iakauntan.com` admits `https://sinar.iakauntan.com` and
+/// nothing else. That exists because `0327` sells a company its own
+/// subdomain, and a list of exact strings cannot name a domain that
+/// does not exist yet — set on a deployment with tenant subdomains, the
+/// exact-match version refused every one of them and the company saw
+/// its own sign-in page fail on submit.
 ///
 /// Only browsers are affected. The scheduled workflows and the mobile
 /// app send no `Origin` and enforce nothing, so tightening this cannot
@@ -32,7 +43,7 @@ export function corsFor(req?: Request): Record<string, string> {
   const origin = req?.headers.get("Origin") ?? "";
   // No header rather than a wrong one: echoing an origin that is not on
   // the list is the mistake this check exists to avoid.
-  if (ALLOWED.includes(origin)) {
+  if (originAllowed(origin, ALLOWED)) {
     return { ...base, "Access-Control-Allow-Origin": origin };
   }
   return base;
@@ -95,10 +106,14 @@ export function serveFunction(
 /// threw it may be carrying a request body, a provider URL or somebody's
 /// invoice on it, and logs are read by people who have no business
 /// seeing a particular company's data.
+/// The context is whatever a JSON log line can hold: a boolean answers
+/// "was a key configured" more honestly than the string "yes", and
+/// narrowing this to strings only pushed that conversion onto every
+/// caller, where it was forgotten once already.
 export function logFailure(
   err: unknown,
   event: string,
-  context?: Record<string, string>,
+  context?: Record<string, string | number | boolean>,
 ): string {
   const ref = crypto.randomUUID();
   console.error(

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 
 /// The people at a company and the places you deliver to.
@@ -457,11 +459,31 @@ class _AddressDialogState extends ConsumerState<_AddressDialog> {
               for (final (key, label) in _fields)
                 Padding(
                   padding: const EdgeInsets.only(bottom: Space.md),
-                  child: TextField(
-                    controller: _c[key],
-                    autofocus: key == 'label',
-                    decoration: InputDecoration(labelText: label),
-                  ),
+                  // The street line suggests; the rest are boxes it
+                  // fills. A delivery address is the one somebody types
+                  // fastest and checks least, which is the address a
+                  // suggestion is worth most on.
+                  child: key == 'address_line1'
+                      ? AddressField(
+                          controller: _c[key]!,
+                          label: label,
+                          country: ref.watch(orgCountryAlpha2Provider),
+                          onChosen: (a) {
+                            fillAddressBoxes(
+                              a,
+                              states,
+                              postcode: _c['postcode'],
+                              city: _c['city'],
+                            );
+                            final code = stateCodeFor(states, a.state);
+                            if (code != null) setState(() => _state = code);
+                          },
+                        )
+                      : TextField(
+                          controller: _c[key],
+                          autofocus: key == 'label',
+                          decoration: InputDecoration(labelText: label),
+                        ),
                 ),
               DropdownButtonFormField<String?>(
                 value: _state,

@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'budget_line_editor.dart';
 
 /// What a budget's row says under its name.
 String budgetSummary(Map<String, dynamic> row) {
@@ -36,15 +37,24 @@ String varianceLabel(Map<String, dynamic> row) {
       : '$money $direction · ${pct.abs().toStringAsFixed(1)}%';
 }
 
-/// Green for good news, red for bad, and nothing for a line that is on
-/// plan or for an account where the question does not apply.
-Color? varianceColour(BuildContext context, Map<String, dynamic> row) {
+/// Good news or bad, and nothing for a line that is on plan or for an
+/// account where the question does not apply.
+///
+/// On `favourable`, never on the sign. `0274` says why it puts that
+/// column on the row: spending less than planned and earning less than
+/// planned are both negative variances and only one of them is good
+/// news. A screen that coloured on the arithmetic would call a bad
+/// month a good one.
+Tone? varianceTone(Map<String, dynamic> row) {
   final v = num.tryParse('${row['variance'] ?? 0}') ?? 0;
   if (v == 0) return null;
   final good = row['favourable'];
   if (good is! bool) return null;
-  return good ? context.colors.success : context.colors.danger;
+  return good ? Tone.good : Tone.bad;
 }
+
+Color? varianceColour(BuildContext context, Map<String, dynamic> row) =>
+    context.toneColour(varianceTone(row));
 
 /// The periods a report covers, named the way somebody asks for them.
 String periodRangeLabel(int from, int to) {
@@ -310,6 +320,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: year,
                   decoration: const InputDecoration(labelText: 'From which year'),
                   items: [
@@ -409,6 +420,7 @@ class _BudgetDialogState extends ConsumerState<_BudgetDialog> {
             onChanged: (_) => setState(() {}),
           ),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             value: _year,
             decoration: const InputDecoration(labelText: 'Which year'),
             items: [
@@ -467,6 +479,16 @@ class _BudgetGrid extends ConsumerWidget {
 
   final Map<String, dynamic> budget;
 
+  Future<void> _change(
+    BuildContext context,
+    WidgetRef ref,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    // The whole working set goes into the editor, because
+    // set_budget_lines replaces rather than patches.
+    await showBudgetLineEditor(context, budget: budget, lines: rows);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = '${budget['id']}';
@@ -490,27 +512,60 @@ class _BudgetGrid extends ConsumerWidget {
                 onRetry: () => ref.invalidate(budgetLinesProvider(id)),
                 builder: (rows) {
                   if (rows.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(Space.md),
-                      child: Text(
-                        'Nothing in it. Fill it from last year and then '
-                        'change the lines that matter.',
+                    return Padding(
+                      padding: const EdgeInsets.all(Space.md),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Nothing in it. Fill it from last year and then '
+                            'change the lines that matter, or budget an '
+                            'account at a time.',
+                          ),
+                          if (budgetIsEditable('${budget['status']}'))
+                            Padding(
+                              padding: const EdgeInsets.only(top: Space.sm),
+                              child: FilledButton.tonal(
+                                key: const ValueKey('start-budget-lines'),
+                                onPressed: () => _change(context, ref, rows),
+                                child: const Text('Budget an account'),
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   }
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) {
-                      final l = rows[i];
-                      return ListTile(
-                        dense: true,
-                        title: Text('${l['code']} ${l['name']}'),
-                        subtitle: Text('${l['period_name']}'),
-                        trailing: Money(num.tryParse('${l['amount']}')),
-                      );
-                    },
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (budgetIsEditable('${budget['status']}'))
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            key: const ValueKey('change-budget-lines'),
+                            onPressed: () => _change(context, ref, rows),
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            label: const Text('Change the lines'),
+                          ),
+                        ),
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: rows.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final l = rows[i];
+                            return ListTile(
+                              dense: true,
+                              title: Text('${l['code']} ${l['name']}'),
+                              subtitle: Text('${l['period_name']}'),
+                              trailing: Money(num.tryParse('${l['amount']}')),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),

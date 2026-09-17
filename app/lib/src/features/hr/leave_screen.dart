@@ -3,10 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
+import '../../core/row_actions.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'who_is_away.dart';
 
 /// Leave requests and approvals in one place. What you see depends on
 /// who you are: your own requests, your team's if you manage anyone, the
@@ -29,6 +33,11 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
       appBar: AppBar(
         title: const Text('Leave'),
         actions: [
+          IconButton(
+            tooltip: 'Who is away',
+            onPressed: () => showWhoIsAway(context),
+            icon: const Icon(Icons.beach_access_outlined),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Space.md),
             child: FilledButton.icon(
@@ -93,7 +102,20 @@ class _LeaveTile extends ConsumerWidget {
         ? Fmt.date(request.startDate)
         : '${Fmt.date(request.startDate)} – ${Fmt.date(request.endDate)}';
 
+    final editable = canEditContact(request);
+
     return ListTile(
+      // Tapping a row is how the contact gets corrected. `0038`'s
+      // update policy freezes the whole row once it leaves draft, which
+      // is right for the dates and wrong for where somebody is, so
+      // `0395` gives that one field a path of its own.
+      onTap: editable
+          ? () async {
+              if (await showEditLeaveContact(context, request)) {
+                ref.invalidate(leaveRequestsProvider);
+              }
+            }
+          : null,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
       title: Row(children: [
@@ -108,25 +130,38 @@ class _LeaveTile extends ConsumerWidget {
       subtitle: Text(
         '${request.leaveTypeName ?? 'Leave'} · $span · '
         '${Fmt.days(request.totalDays)} day(s)'
-        '${request.reason != null && request.reason!.isNotEmpty ? ' · ${request.reason}' : ''}',
+        '${request.reason != null && request.reason!.isNotEmpty ? ' · ${request.reason}' : ''}'
+        '${request.contactWhileAway != null ? ' · ${request.contactWhileAway}' : ''}',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: canDecide
-          ? Row(mainAxisSize: MainAxisSize.min, children: [
-              TextButton(
-                onPressed: () => _decide(context, ref, false),
-                child: Text('Reject',
-                    style: TextStyle(color: context.colors.danger)),
-              ),
-              const SizedBox(width: Space.xs),
-              FilledButton(
-                onPressed: () => _decide(context, ref, true),
-                child: const Text('Approve'),
-              ),
-            ])
-          : null,
+      // `RowActions`, so the pair become ONE menu below 700. "Reject"
+      // and "Approve" together are 168 pixels of labelled buttons, and
+      // a `ListTile` does not overflow when that leaves nothing for the
+      // request's own line -- it GIVES it what is left and wraps it one
+      // letter per line, which is the shape `row_actions.dart`'s own
+      // header is about.
+      trailing: !canDecide
+          ? null
+          : RowActions(
+              menuKey: 'leave-actions',
+              actions: [
+                RowAction(
+                  actionKey: 'approve-leave',
+                  label: 'Approve',
+                  icon: Icons.check,
+                  emphasis: RowActionEmphasis.filled,
+                  onTap: () => _decide(context, ref, true),
+                ),
+                RowAction(
+                  actionKey: 'reject-leave',
+                  label: 'Reject',
+                  icon: Icons.close,
+                  onTap: () => _decide(context, ref, false),
+                ),
+              ],
+            ),
     );
   }
 
@@ -143,6 +178,39 @@ class _LeaveTile extends ConsumerWidget {
   }
 }
 
+/// Whether a half day may be asked for at all.
+///
+/// Two conditions, both of which the database also holds — `0397` for
+/// the single date and the arithmetic, `0365` for the leave type. This
+/// is here so the form does not offer what would be refused; the
+/// refusal is still the control, and has to be, because this code runs
+/// on a device somebody else owns.
+///
+/// `0365` wrote its rule and nothing ever set the flag it reads, so it
+/// guarded a door nobody could open until `0397`. The switch is the
+/// door.
+bool canTakeHalfDay({
+  required LeaveType? type,
+  required DateTime start,
+  required DateTime end,
+}) {
+  if (type == null || !type.allowHalfDay) return false;
+  return start.year == end.year &&
+      start.month == end.month &&
+      start.day == end.day;
+}
+
+/// What a request is for, given the dates and whether it is a half day.
+///
+/// An upper bound, and the database enforces it as one: ten calendar
+/// days over a public holiday may honestly be fewer days of leave, and
+/// deciding which needs the work calendar that neither side consults.
+double leaveDaysFor({
+  required DateTime start,
+  required DateTime end,
+  required bool halfDay,
+}) => halfDay ? 0.5 : end.difference(start).inDays + 1;
+
 class _RequestLeaveDialog extends ConsumerStatefulWidget {
   const _RequestLeaveDialog();
 
@@ -153,20 +221,48 @@ class _RequestLeaveDialog extends ConsumerStatefulWidget {
 class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
   final _formKey = GlobalKey<FormState>();
   final _reason = TextEditingController();
+  final _contact = TextEditingController();
   String? _typeId;
   DateTime _start = DateTime.now();
   DateTime _end = DateTime.now();
+  bool _halfDay = false;
+  String _period = 'morning';
   bool _saving = false;
+
+  /// A half day is one date, so the switch is only offered when the two
+  /// dates are the same, and it turns itself off when they stop being.
+  /// The database says the same thing — `0397` — and this is so the
+  /// person is not offered something that will be refused.
+  bool get _oneDate => _start.year == _end.year &&
+      _start.month == _end.month &&
+      _start.day == _end.day;
+
+  LeaveType? _typeOf(List<LeaveType> types) =>
+      types.where((x) => x.id == _typeId).firstOrNull;
+
+  bool _allowsHalfDay(List<LeaveType> types) =>
+      _typeOf(types)?.allowHalfDay ?? true;
+
+  bool _canHalfDay(List<LeaveType> types) =>
+      canTakeHalfDay(type: _typeOf(types), start: _start, end: _end);
 
   @override
   void dispose() {
     _reason.dispose();
+    _contact.dispose();
     super.dispose();
   }
 
-  /// Calendar days between the two dates. Working-day and half-day
-  /// handling belongs with the leave policy, which lives in the database.
-  double get _days => _end.difference(_start).inDays + 1;
+  /// What the request is for.
+  ///
+  /// Calendar days between the two dates, or half a day when it is one.
+  /// This is an upper bound and the database enforces it as one — a
+  /// span of ten days over a public holiday may honestly be fewer days
+  /// of leave, and deciding which needs the work calendar, which
+  /// neither side consults. `0397`'s header sets out why that lower
+  /// bound is left unstated rather than invented.
+  double get _days =>
+      leaveDaysFor(start: _start, end: _end, halfDay: _halfDay);
 
   @override
   Widget build(BuildContext context) {
@@ -186,18 +282,46 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
               types.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text('$e'),
-                data: (list) => DropdownButtonFormField<String>(
-                  value: _typeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Leave type *'),
-                  items: [
+                data: (list) => SearchablePicker<String>(
+                  options: [
                     for (final t in list)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: t.id,
-                        child: Text(_labelFor(t, balances)),
+                        // The label carries the balance left, which is
+                        // the number somebody checks before choosing.
+                        label: _labelFor(t, balances),
                       ),
                   ],
-                  onChanged: (v) => setState(() => _typeId = v),
+                  value: _typeId,
+                  label: 'Leave type *',
+                  createLabel: 'Add leave type',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New leave type',
+                    // Said plainly, because a type created here has NO
+                    // entitlement until somebody sets one, and a leave
+                    // type nobody is entitled to is a request that will
+                    // be refused.
+                    blurb: 'Not on the list yet. It will start with no '
+                        'entitlement — set the days, the carry-forward '
+                        'and who it applies to in HR setup.',
+                    nameHint: 'Compassionate leave',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.leaveType,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(leaveTypesProvider);
+                      return id;
+                    },
+                  ),
+                  onChanged: (v) => setState(() {
+                    _typeId = v;
+                    if (!_allowsHalfDay(list)) _halfDay = false;
+                  }),
                   validator: (v) => v == null ? 'Choose a leave type' : null,
                 ),
               ),
@@ -210,6 +334,7 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                     onChanged: (d) => setState(() {
                       _start = d;
                       if (_end.isBefore(d)) _end = d;
+                      if (!_oneDate) _halfDay = false;
                     }),
                   ),
                 ),
@@ -218,10 +343,50 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                   child: _DateField(
                     label: 'Last day',
                     value: _end,
-                    onChanged: (d) => setState(() => _end = d),
+                    onChanged: (d) => setState(() {
+                      _end = d;
+                      if (!_oneDate) _halfDay = false;
+                    }),
                   ),
                 ),
               ]),
+              const SizedBox(height: Space.sm),
+              // `0027` modelled half days, `0365` wrote the rule about
+              // which leave may be taken in them, and nothing had ever
+              // set the flag either was about.
+              types.maybeWhen(
+                data: (list) => Row(children: [
+                  Switch(
+                    value: _halfDay,
+                    onChanged: _canHalfDay(list)
+                        ? (v) => setState(() => _halfDay = v)
+                        : null,
+                  ),
+                  const SizedBox(width: Space.sm),
+                  Expanded(
+                    child: Text(
+                      !_oneDate
+                          ? 'Half day — for a single date'
+                          : !_allowsHalfDay(list)
+                              ? 'Half day — not for this kind of leave'
+                              : 'Half day',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  if (_halfDay && _canHalfDay(list))
+                    SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: 'morning', label: Text('AM')),
+                        ButtonSegment(value: 'afternoon', label: Text('PM')),
+                      ],
+                      selected: {_period},
+                      onSelectionChanged: (v) =>
+                          setState(() => _period = v.first),
+                    ),
+                ]),
+                orElse: () => const SizedBox.shrink(),
+              ),
               const SizedBox(height: Space.sm),
               Text('${Fmt.days(_days)} day(s)',
                   style: Theme.of(context).textTheme.bodySmall),
@@ -230,6 +395,19 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                 controller: _reason,
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'Reason'),
+              ),
+              const SizedBox(height: Space.md),
+              // A column since `0027` that nothing could write until
+              // `0395` gave the RPC a parameter for it. It can be
+              // changed later — where somebody is changes — so it is
+              // asked for here and not demanded.
+              TextFormField(
+                controller: _contact,
+                decoration: const InputDecoration(
+                  labelText: 'Where to reach you',
+                  helperText: 'A number or address that works while you '
+                      'are away. You can change this later.',
+                ),
               ),
             ],
           ),
@@ -271,6 +449,10 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
             end: _end,
             days: _days,
             reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
+            contactWhileAway:
+                _contact.text.trim().isEmpty ? null : _contact.text.trim(),
+            isHalfDay: _halfDay,
+            halfDayPeriod: _halfDay ? _period : null,
           ),
       successMessage: 'Submitted for approval',
     );

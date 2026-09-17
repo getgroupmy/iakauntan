@@ -34,6 +34,12 @@ create or replace function pg_temp.reset_landing()
 returns void language sql as $$
   delete from public.landing_app_links;
   delete from public.landing_sections;
+  -- 0317's three. Left out of this list they would survive into the
+  -- next block, which is how the first draft of this file came to
+  -- assert two sections and find three.
+  delete from public.landing_stats;
+  delete from public.landing_testimonials;
+  delete from public.landing_logos;
   delete from public.landing_page;
 $$;
 
@@ -528,6 +534,1040 @@ begin
 
   perform pg_temp.sign_in_as(v_admin);
   perform public.platform_save_module('einvoice', p_is_active => true);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0317: the three collections that ship empty, and stay empty
+--
+-- `landing_stats`, `landing_testimonials` and `landing_logos` carry
+-- claims about the world — how many customers a platform has, what a
+-- named person at a named company said about it, whose mark may appear
+-- on the page. None of those is the software's to assert on an
+-- operator's behalf, so the migration seeds nothing and the client
+-- defaults nothing.
+--
+-- That is a property worth asserting rather than trusting, because the
+-- failure is silent and expensive: a seed row added later "just as an
+-- example" is a fabricated endorsement on a page that asks people for
+-- money, and nobody reading the front page can tell the difference.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_eq('the product ships no customer figures',
+    (select count(*) from public.landing_stats), 0);
+  perform pg_temp.check_eq('and no testimonials',
+    (select count(*) from public.landing_testimonials), 0);
+  perform pg_temp.check_eq('and nobody else''s logo',
+    (select count(*) from public.landing_logos), 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What a stranger gets from the new collections
+--
+-- Same gate as the sections: written by an administrator, withheld
+-- while the page is a draft, ordered by what somebody chose, and read
+-- back as `anon` rather than as the superuser the rest of this file
+-- would otherwise be.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_role text;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+
+  -- Drafted first, deliberately: everything below is written while the
+  -- page is unpublished, so the withholding is tested against rows that
+  -- exist rather than against an empty table that would pass anyway.
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'iAkauntan', 'is_published', false));
+  perform public.platform_save_landing_stat(
+    null, '240,000', 'Businesses', 'store', 20);
+  perform public.platform_save_landing_stat(
+    null, '30', 'Years', 'schedule', 10);
+  perform public.platform_save_landing_testimonial(
+    null, 'The payroll run stopped being a week of my month.',
+    'Siti Nurhaliza binti Rahman', 'Kedai Runcit Seri Muda', null, 10);
+  perform public.platform_save_landing_logo(
+    null, 'Sinar Teknologi', 'https://cdn.iakauntan.test/logos/sinar.png', 10);
+  perform public.platform_save_landing_section(
+    null, 'Support in your language', 'Bahasa Melayu and English.',
+    'support', 10, null, 'reason');
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+
+  perform pg_temp.check_true('a drafted page is still a draft',
+    v_out -> 'page' = 'null'::jsonb);
+  perform pg_temp.check_eq('and the figures drafted for it are withheld',
+    jsonb_array_length(v_out -> 'stats'), 0);
+  perform pg_temp.check_eq('and the testimonials',
+    jsonb_array_length(v_out -> 'testimonials'), 0);
+  perform pg_temp.check_eq('and the customer logos',
+    jsonb_array_length(v_out -> 'logos'), 0);
+  perform pg_temp.check_eq('and the reasons to choose it',
+    jsonb_array_length(v_out -> 'reasons'), 0);
+
+  -- Publish, and read it as a stranger again.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_role := current_user;
+    v_out := public.landing_page();
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the collections were read as a visitor',
+    v_role = 'anon');
+  perform pg_temp.check_eq('both figures reach them',
+    jsonb_array_length(v_out -> 'stats'), 2);
+  perform pg_temp.check_eq('in the order somebody chose, not the order typed',
+    v_out -> 'stats' -> 0 ->> 'label', 'Years');
+  perform pg_temp.check_eq('a figure keeps the formatting it was given',
+    v_out -> 'stats' -> 1 ->> 'value', '240,000');
+  perform pg_temp.check_eq('the testimonial reaches them',
+    v_out -> 'testimonials' -> 0 ->> 'quote',
+    'The payroll run stopped being a week of my month.');
+  perform pg_temp.check_eq('with the name that stands behind it',
+    v_out -> 'testimonials' -> 0 ->> 'author',
+    'Siti Nurhaliza binti Rahman');
+  perform pg_temp.check_eq('and the logo',
+    v_out -> 'logos' -> 0 ->> 'logo_url',
+    'https://cdn.iakauntan.test/logos/sinar.png');
+
+  -- The two kinds are the same table and two places on the page. A
+  -- reason landing in `sections` would put "Support in your language"
+  -- in the feature grid, which is where this would go wrong quietly.
+  perform pg_temp.check_eq('a reason is a reason',
+    jsonb_array_length(v_out -> 'reasons'), 1);
+  perform pg_temp.check_eq('and not a feature',
+    jsonb_array_length(v_out -> 'sections'), 0);
+  perform pg_temp.check_eq('and it is the one that was written',
+    v_out -> 'reasons' -> 0 ->> 'title', 'Support in your language');
+
+  -- A block saved without saying which kind is a feature, which is what
+  -- every row written before 0317 is.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_section(
+    null, 'Double-entry accounting', 'A ledger that balances.', 'payments', 20);
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_eq('a block that did not say is a feature',
+    jsonb_array_length(v_out -> 'sections'), 1);
+  perform pg_temp.check_eq('and it did not join the reasons',
+    jsonb_array_length(v_out -> 'reasons'), 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Switching one off, and taking one away
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_stat uuid; v_quote uuid; v_logo uuid; v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  v_stat  := public.platform_save_landing_stat(null, '12', 'Outlets');
+  v_quote := public.platform_save_landing_testimonial(
+    null, 'Stock finally ties to the ledger.', 'Lim Wei Jian', 'Kedai Besi Maju');
+  v_logo  := public.platform_save_landing_logo(
+    null, 'Amanah Setiausaha', 'https://cdn.iakauntan.test/logos/amanah.png');
+
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('all three are on the page',
+    jsonb_array_length(v_out -> 'stats')
+      + jsonb_array_length(v_out -> 'testimonials')
+      + jsonb_array_length(v_out -> 'logos'), 3);
+
+  perform public.platform_save_landing_stat(v_stat, p_is_active => false);
+  perform public.platform_save_landing_testimonial(v_quote, p_is_active => false);
+  perform public.platform_save_landing_logo(v_logo, p_is_active => false);
+
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('a figure switched off is off',
+    jsonb_array_length(v_out -> 'stats'), 0);
+  perform pg_temp.check_eq('and a testimonial withdrawn is gone',
+    jsonb_array_length(v_out -> 'testimonials'), 0);
+  perform pg_temp.check_eq('and a customer who asked to come down is down',
+    jsonb_array_length(v_out -> 'logos'), 0);
+
+  -- Patching one field leaves the rest of the row where it was. The
+  -- calls above passed nothing but `is_active`, so a coalesce written
+  -- the wrong way round would have blanked the label.
+  perform pg_temp.check_eq('and switching it off changed nothing else',
+    (select label from public.landing_stats where id = v_stat), 'Outlets');
+
+  perform pg_temp.check_true('deleting a figure reports that it went',
+    public.platform_delete_landing_stat(v_stat));
+  perform pg_temp.check_true('and twice reports that it did not',
+    not public.platform_delete_landing_stat(v_stat));
+  perform pg_temp.check_true('a testimonial deletes the same way',
+    public.platform_delete_landing_testimonial(v_quote));
+  perform pg_temp.check_true('and says so when there was nothing to delete',
+    not public.platform_delete_landing_testimonial(v_quote));
+  perform pg_temp.check_true('and a logo',
+    public.platform_delete_landing_logo(v_logo));
+  perform pg_temp.check_true('and says so the second time',
+    not public.platform_delete_landing_logo(v_logo));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What the savers refuse
+--
+-- The rule worth writing down is the testimonial's: a quote with nobody
+-- against it is the exact shape an invented one takes. The database
+-- cannot check that a person said a thing — that is the operator's to
+-- stand behind — but it can refuse to store a page element that has no
+-- name on it at all, which is the difference between a claim somebody
+-- made and a claim that appeared.
+-- ---------------------------------------------------------------------
+do $$
+declare v_admin uuid := pg_temp.test_user(); v_ok boolean; v_id uuid;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_stat(null, '240,000', '   ');
+  exception when sqlstate '23514' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a number that does not say what it counts', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_stat(null, '', 'Businesses');
+  exception when sqlstate '23514' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('and a label with no number under it', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_testimonial(
+      null, 'Best software ever.', null);
+  exception when sqlstate '23514' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a quote with nobody against it is refused', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_testimonial(null, '   ', 'Somebody');
+  exception when sqlstate '23514' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('and a name with nothing said under it', v_ok);
+
+  -- Same rule the store links have had since 0290: a relative path in a
+  -- database three clients read is not an address.
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_logo(
+      null, 'Sinar', '/assets/logos/sinar.png');
+  exception when sqlstate '22023' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a logo without a scheme is refused', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_logo(null, '  ', 'https://x.test/a.png');
+  exception when sqlstate '23514' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('and one that does not say whose it is', v_ok);
+
+  -- And the refusal holds on the way through too, not only on creation.
+  v_id := public.platform_save_landing_logo(
+    null, 'Sinar', 'https://cdn.iakauntan.test/logos/sinar.png');
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_logo(v_id, null, 'sinar.png');
+  exception when sqlstate '22023' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('editing one to a relative path is refused too', v_ok);
+  perform pg_temp.check_eq('and the address it had is still there',
+    (select logo_url from public.landing_logos where id = v_id),
+    'https://cdn.iakauntan.test/logos/sinar.png');
+
+  -- A block is one of two things, and a third would render nowhere.
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_section(
+      null, 'Something', 'Somewhere', null, null, null, 'banner');
+  exception when sqlstate '22023' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a block that is neither feature nor reason', v_ok);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Only a platform administrator, here too
+--
+-- The three new tables have no insert, update or delete policy at all,
+-- so the savers are the only door. This asserts the door is locked; the
+-- block below asserts there is no window.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid;
+  v_org uuid := pg_temp.test_org('Syarikat Lain');
+  v_ok boolean;
+begin
+  v_owner := pg_temp.test_user();
+  delete from public.platform_admins where user_id = v_owner;
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_stat(null, '1,000,000', 'Businesses');
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('an ordinary owner cannot post a figure', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_testimonial(
+      null, 'We are the best.', 'Us');
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('nor put words in a customer''s mouth', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_logo(
+      null, 'Somebody Else', 'https://x.test/a.png');
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('nor hang somebody else''s mark on the page', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_delete_landing_stat(gen_random_uuid());
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('nor take a figure down', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_delete_landing_testimonial(gen_random_uuid());
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('nor a testimonial', v_ok);
+
+  v_ok := false;
+  begin
+    perform public.platform_delete_landing_logo(gen_random_uuid());
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('nor a logo', v_ok);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The new tables are readable and not writable
+--
+-- Different from `landing_page` and `landing_sections`, which are shut
+-- to anon outright. These three are granted `select` so the same
+-- `for select using (true)` shape as the rest of the site's public data
+-- holds, and the point to assert is the other half: a stranger — or any
+-- signed-in user — writing to them directly is refused, because there
+-- is no policy that would let them and no grant either.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_role text; v_table text;
+  v_ins boolean; v_upd boolean; v_del boolean;
+begin
+  perform pg_temp.sign_out();
+  set local role anon;
+  v_role := current_user;
+  reset role;
+  perform pg_temp.check_true('the grants were read against a real anon role',
+    v_role = 'anon');
+
+  foreach v_table in array
+    array['landing_stats', 'landing_testimonials', 'landing_logos']
+  loop
+    perform pg_temp.check_true(
+      format('%s is readable by a visitor', v_table),
+      has_table_privilege('anon', 'public.' || v_table, 'select'));
+
+    select has_table_privilege('anon', 'public.' || v_table, 'insert'),
+           has_table_privilege('anon', 'public.' || v_table, 'update'),
+           has_table_privilege('anon', 'public.' || v_table, 'delete')
+      into v_ins, v_upd, v_del;
+    perform pg_temp.check_true(
+      format('and %s is not a visitor''s to write', v_table),
+      not (v_ins or v_upd or v_del));
+
+    select has_table_privilege('authenticated', 'public.' || v_table, 'insert'),
+           has_table_privilege('authenticated', 'public.' || v_table, 'update'),
+           has_table_privilege('authenticated', 'public.' || v_table, 'delete')
+      into v_ins, v_upd, v_del;
+    perform pg_temp.check_true(
+      format('nor a signed-in user''s: %s', v_table),
+      not (v_ins or v_upd or v_del));
+
+    -- No write policy either, so the savers are the only door rather
+    -- than the convenient one.
+    perform pg_temp.check_eq(
+      format('%s has exactly one policy, and it is a read', v_table),
+      (select string_agg(cmd, ',' order by cmd) from pg_policies
+        where schemaname = 'public' and tablename = v_table),
+      'SELECT');
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Somewhere to press, partway down
+--
+-- Four columns on `landing_page`, so they ride out on `page` and are
+-- withheld with it. Nothing renders unless a headline is set, which is
+-- how a platform that does not want the band simply does not get one.
+-- ---------------------------------------------------------------------
+do $$
+declare v_admin uuid := pg_temp.test_user(); v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  v_out := public.landing_page();
+  perform pg_temp.check_true('a page with no call to action carries none',
+    v_out -> 'page' ->> 'cta_headline' is null);
+
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'cta_headline', 'Mula hari ini',
+    'cta_body',     'Percubaan 30 hari, tiada kad kredit.',
+    'cta_label',    'Cuba percuma',
+    'cta_url',      'https://iakauntan.test/daftar'));
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_eq('and one that does reaches a visitor',
+    v_out -> 'page' ->> 'cta_headline', 'Mula hari ini');
+  perform pg_temp.check_eq('with the button''s words',
+    v_out -> 'page' ->> 'cta_label', 'Cuba percuma');
+  perform pg_temp.check_eq('and somewhere for it to go',
+    v_out -> 'page' ->> 'cta_url', 'https://iakauntan.test/daftar');
+
+  -- Clearing the headline is how the band comes off again. A coalesce
+  -- here would put back what was cleared and the operator would have no
+  -- way to remove it at all.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_page(
+    jsonb_build_object('cta_headline', ''));
+  v_out := public.landing_page();
+  perform pg_temp.check_true('and clearing the headline takes it off again',
+    v_out -> 'page' ->> 'cta_headline' is null);
+  perform pg_temp.check_eq('while leaving what it did not mention',
+    v_out -> 'page' ->> 'cta_label', 'Cuba percuma');
+end $$;
+
+-- A button the browser cannot follow, same rule as the store links.
+do $$
+declare v_admin uuid := pg_temp.test_user(); v_ok boolean := false;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  begin
+    perform public.platform_save_landing_page(
+      jsonb_build_object('cta_url', '/daftar'));
+  exception when sqlstate '22023' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a call to action with no scheme is refused', v_ok);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0318: a draft somebody can look at
+--
+-- The gate `0290` put on this page is right and stays. What it never
+-- had was a way for the person writing the draft to see it, so the only
+-- ways to look at a stats band were to publish invented copy to the
+-- open internet or to unpublish and see nothing.
+--
+-- The property that matters is not "the preview shows the draft" — that
+-- is easy and would pass with a function that returns anything. It is
+-- that the preview shows *what the page will show once published*. A
+-- preview that drifts from the page is worse than none, because it is
+-- believed. Both doors call `app.landing_payload`, and the assertion
+-- below is the two payloads being equal once publishing is the only
+-- difference left.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_draft jsonb; v_public jsonb; v_published jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+
+  -- A whole site, written and not published.
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'iAkauntan',
+    'hero_headline', 'Perakaunan untuk perniagaan Malaysia',
+    'cta_headline', 'Mula hari ini',
+    'is_published', false));
+  perform public.platform_save_landing_section(
+    null, 'e-Invoice', 'To MyInvois.', 'receipt', 10);
+  perform public.platform_save_landing_section(
+    null, 'Support', 'In Bahasa Melayu.', 'support', 10, null, 'reason');
+  perform public.platform_save_landing_stat(null, '30', 'Years', 'schedule', 10);
+  perform public.platform_save_landing_testimonial(
+    null, 'The payroll run stopped being a week of my month.',
+    'Lim Wei Jian', 'Kedai Besi Maju');
+  perform public.platform_save_landing_logo(
+    null, 'Sinar Teknologi', 'https://cdn.iakauntan.test/logos/sinar.png');
+  perform public.platform_save_landing_app_link(
+    'play_store', 'Google Play', 'https://play.google.com/store/apps/details?id=a');
+
+  v_draft := public.platform_landing_preview();
+
+  -- The point of the whole migration.
+  perform pg_temp.check_true('an administrator can see the unpublished page',
+    v_draft -> 'page' <> 'null'::jsonb);
+  perform pg_temp.check_eq('and the figures drafted for it',
+    jsonb_array_length(v_draft -> 'stats'), 1);
+  perform pg_temp.check_eq('and the testimonials',
+    jsonb_array_length(v_draft -> 'testimonials'), 1);
+  perform pg_temp.check_eq('and the customer logos',
+    jsonb_array_length(v_draft -> 'logos'), 1);
+  perform pg_temp.check_eq('and the reasons',
+    jsonb_array_length(v_draft -> 'reasons'), 1);
+  perform pg_temp.check_eq('and the feature blocks',
+    jsonb_array_length(v_draft -> 'sections'), 1);
+  perform pg_temp.check_eq('and the store buttons',
+    jsonb_array_length(v_draft -> 'app_links'), 1);
+
+  -- While the same site is still nobody else's business.
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_public := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_true('and a visitor still gets nothing',
+    v_public -> 'page' = 'null'::jsonb);
+  perform pg_temp.check_eq('nor the figures',
+    jsonb_array_length(v_public -> 'stats'), 0);
+  perform pg_temp.check_eq('nor the testimonials',
+    jsonb_array_length(v_public -> 'testimonials'), 0);
+  perform pg_temp.check_eq('nor the logos',
+    jsonb_array_length(v_public -> 'logos'), 0);
+
+  -- Now publish, change nothing else, and read it as a stranger. What
+  -- they get has to be exactly what the administrator was shown — the
+  -- one assertion that makes the preview worth having.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_published := public.landing_page();
+  end;
+  reset role;
+
+  -- `is_published` itself is the one field that moved, so it is taken
+  -- out of both sides rather than the comparison being loosened to the
+  -- handful of keys somebody remembered to list.
+  perform pg_temp.check_eq(
+    'what the preview showed is what publishing published',
+    (v_published #- '{page,is_published}')::text,
+    (v_draft     #- '{page,is_published}')::text);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The draft is a platform administrator's alone
+--
+-- The preview is the only route to an ungated payload, so it is the
+-- only thing standing between a half-written site and anybody who can
+-- call an RPC. `app.landing_payload` takes the flag but is granted to
+-- nobody: both callers are SECURITY DEFINER and run as the definer, so
+-- no client role needs to reach it and none can.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid;
+  v_org uuid := pg_temp.test_org('Syarikat Ketiga');
+  v_admin uuid := pg_temp.test_user();
+  v_ok boolean; v_role text;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'Draf', 'hero_headline', 'Belum siap',
+    'is_published', false));
+
+  -- An ordinary company owner.
+  v_owner := pg_temp.test_user();
+  delete from public.platform_admins where user_id = v_owner;
+  perform pg_temp.sign_in_as(v_owner);
+  v_ok := false;
+  begin
+    perform public.platform_landing_preview();
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('an ordinary owner cannot read the draft', v_ok);
+
+  -- And a stranger, who cannot even execute it.
+  perform pg_temp.sign_out();
+  set local role anon;
+  v_role := current_user;
+  v_ok := false;
+  begin
+    perform public.platform_landing_preview();
+  exception when insufficient_privilege then v_ok := true;
+  end;
+  reset role;
+  perform pg_temp.check_true('the refusal was measured against anon',
+    v_role = 'anon');
+  perform pg_temp.check_true('a stranger may not even call it', v_ok);
+
+  perform pg_temp.check_true('and the payload itself is granted to nobody',
+    not has_function_privilege('anon', 'app.landing_payload(boolean)', 'execute')
+    and not has_function_privilege(
+      'authenticated', 'app.landing_payload(boolean)', 'execute'));
+
+  -- The public function takes no argument, so there is no value a
+  -- caller can pass to reach the draft body. Asserted structurally
+  -- because no observation of a well-behaved caller could show it.
+  perform pg_temp.check_eq('landing_page() takes no argument to abuse',
+    (select count(*)::int from pg_proc
+      where oid = 'public.landing_page()'::regprocedure and pronargs = 0), 1);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0319: a third kind, and what it may say
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_ok boolean;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  perform public.platform_save_landing_section(
+    null, 'MyInvois', null, 'receipt', 10, null, 'badge');
+  perform public.platform_save_landing_section(
+    null, 'Double entry', 'A ledger that balances.', 'payments', 10);
+  perform public.platform_save_landing_section(
+    null, 'Local support', 'In Bahasa Melayu.', 'support', 10, null, 'reason');
+
+  v_out := public.landing_page();
+  -- Three kinds, three keys, one row in each. The failure this catches
+  -- is a badge landing in the feature grid, where it would render as a
+  -- card with no body and read as unfinished copy.
+  perform pg_temp.check_eq('a badge is a badge',
+    jsonb_array_length(v_out -> 'badges'), 1);
+  perform pg_temp.check_eq('and does not join the features',
+    jsonb_array_length(v_out -> 'sections'), 1);
+  perform pg_temp.check_eq('nor the reasons',
+    jsonb_array_length(v_out -> 'reasons'), 1);
+  perform pg_temp.check_eq('and it is the one that was written',
+    v_out -> 'badges' -> 0 ->> 'title', 'MyInvois');
+
+  -- Withheld with everything else while the page is a draft.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', false));
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_eq('a drafted badge is withheld too',
+    jsonb_array_length(v_out -> 'badges'), 0);
+
+  -- And an administrator can see it, which is 0318's shared body doing
+  -- its job: `badges` was added once and both doors carry it.
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_eq('while the preview shows it',
+    jsonb_array_length(public.platform_landing_preview() -> 'badges'), 1);
+
+  -- A fourth kind renders nowhere, so it is refused rather than stored.
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_section(
+      null, 'Something', null, null, null, null, 'banner');
+  exception when sqlstate '22023' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a fourth kind is refused', v_ok);
+
+  -- And the two 0317 knew about still work, which is what recreating
+  -- the saver could have broken.
+  perform pg_temp.check_true('a feature still saves',
+    public.platform_save_landing_section(
+      null, 'Payroll', null, null, null, null, 'feature') is not null);
+  perform pg_temp.check_true('and a reason',
+    public.platform_save_landing_section(
+      null, 'Fast', null, null, null, null, 'reason') is not null);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0321: one switch per button, and a hero picture out of the box
+-- 0578: and the footer, which 0321 left out
+--
+-- `0320` had two switches, one per place. `0321` has eight — place,
+-- width, and which way in — because a button is three decisions and an
+-- operator wanting "Create an account on the desktop bar, only Sign in
+-- on a phone" could not say so.
+--
+-- `0578` adds the footer's two links at both widths, making twelve.
+-- `0321` left the footer out deliberately, on the argument that
+-- somebody who has read to the bottom should not have to guess the
+-- address; `0578` keeps that as the DEFAULT -- all four ship on -- and
+-- stops it being a rule the operator cannot reach.
+--
+-- What is asserted is the shape the page has to have for the switches
+-- to be believed: all twelve default on, each saves on its own without
+-- disturbing the other eleven, an untouched one survives somebody
+-- else's edit, and none of them can be set by anybody but a platform
+-- administrator. The failure this catches is a switch the console
+-- writes and the payload drops, which is worse than no switch because
+-- it is trusted.
+--
+-- The list below is what drives all four of those checks, so adding a
+-- switch here is adding it to every one of them.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_ok boolean; v_key text; v_other text;
+  v_keys text[] := array[
+    'bar_sign_in_desktop', 'bar_sign_in_mobile',
+    'bar_register_desktop', 'bar_register_mobile',
+    'hero_sign_in_desktop', 'hero_sign_in_mobile',
+    'hero_register_desktop', 'hero_register_mobile',
+    'footer_sign_in_desktop', 'footer_sign_in_mobile',
+    'footer_register_desktop', 'footer_register_mobile'];
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  -- Shipped on, all twelve. A platform that never opens the console
+  -- has the page it had before the columns existed.
+  v_out := public.landing_page();
+  foreach v_key in array v_keys loop
+    perform pg_temp.check_eq(format('%s ships on', v_key),
+      v_out -> 'page' ->> v_key, 'true');
+  end loop;
+
+  -- One at a time, and only the one. This is the whole reason there are
+  -- eight rather than two: a switch that also moved the phone's button
+  -- would look right in the console and wrong on the page.
+  foreach v_key in array v_keys loop
+    perform public.platform_save_landing_page(
+      jsonb_build_object(v_key, false));
+    v_out := public.landing_page();
+    perform pg_temp.check_eq(format('%s goes off', v_key),
+      v_out -> 'page' ->> v_key, 'false');
+    foreach v_other in array v_keys loop
+      if v_other <> v_key then
+        perform pg_temp.check_eq(
+          format('%s is untouched by %s', v_other, v_key),
+          v_out -> 'page' ->> v_other, 'true');
+      end if;
+    end loop;
+    -- Back on, so the next one starts from the same page.
+    perform public.platform_save_landing_page(
+      jsonb_build_object(v_key, true));
+  end loop;
+
+  -- A patch that says nothing about them changes none of them. The
+  -- console sends only what the operator touched, so an untouched
+  -- switch must survive somebody else's edit.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('hero_sign_in_mobile', false));
+  perform public.platform_save_landing_page(
+    jsonb_build_object('hero_headline', 'Books that balance'));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('an unrelated edit leaves a switch alone',
+    v_out -> 'page' ->> 'hero_sign_in_mobile', 'false');
+  perform pg_temp.check_eq('while saving what it did change',
+    v_out -> 'page' ->> 'hero_headline', 'Books that balance');
+
+  -- The draft door carries them too. 0318's shared body is the reason
+  -- this is one assertion rather than a second implementation: a key
+  -- added to the page is added once.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', false));
+  perform pg_temp.check_eq('the preview shows the draft switch',
+    public.platform_landing_preview() -> 'page' ->> 'hero_sign_in_mobile',
+    'false');
+  perform pg_temp.check_true('while the page itself shows nothing at all',
+    public.landing_page() -> 'page' = 'null'::jsonb);
+
+  -- The hero has a picture without anybody choosing one, and it is
+  -- served from the same origin as the page.
+  perform pg_temp.check_eq('the hero ships with a picture',
+    public.platform_landing_preview() -> 'page' ->> 'hero_image_url',
+    'https://iakauntan.com/hero-dashboard.png');
+
+  -- 0325. And a mark, which reaches the browser through `brand` rather
+  -- than `page` — branding a product is not publishing a website, so it
+  -- is never gated on `is_published` and an unpublished platform still
+  -- has its logo on the signed-in app.
+  perform pg_temp.check_true('and the product ships with a mark',
+    public.landing_page() -> 'brand' ->> 'logo_url' like
+      'https://%/storage/v1/object/public/logos/landing/logo%');
+
+  -- 0326. And an icon for the browser tab, which is its own column:
+  -- `applyFavicon` returns early on null, so before this the uploaded
+  -- one was never used.
+  perform pg_temp.check_true('and an icon for the tab',
+    public.landing_page() -> 'brand' ->> 'app_icon_url' like
+      'https://%/storage/v1/object/public/logos/landing/app-icon%');
+
+  -- Nobody else may touch any of it. The page is the whole platform's
+  -- front door, and an ordinary account holder — the same person, with
+  -- the badge taken off — is not an administrator.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true, 'bar_sign_in_mobile', true));
+  delete from public.platform_admins where user_id = v_admin;
+  perform pg_temp.sign_in_as(v_admin);
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_page(
+      jsonb_build_object('bar_sign_in_mobile', false));
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true(
+    'somebody who is not a platform administrator is refused', v_ok);
+  perform pg_temp.check_eq('and the switch is where the administrator left it',
+    public.landing_page() -> 'page' ->> 'bar_sign_in_mobile', 'true');
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0322: the front page is told when to look again
+--
+-- The trigger sends the name of the table that changed to a public
+-- broadcast topic and nothing else, so a stranger's browser can know to
+-- re-ask `landing_page()` without the socket ever carrying a draft.
+--
+-- Asserted here as structure rather than as delivery: whether Realtime
+-- hands the message on is Realtime's business and needs a running
+-- server, but which tables carry the trigger, and that the payload is
+-- the table name alone, are this repository's.
+-- ---------------------------------------------------------------------
+do $$
+declare v_src text; v_table text;
+begin
+  select prosrc into v_src
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'app' and p.proname = 'landing_touched';
+
+  perform pg_temp.check_true('the nudge exists', v_src is not null);
+
+  -- The one thing that would turn a nudge into a leak. Matched on a
+  -- field reference — `new.` or `old.` — rather than on the bare words,
+  -- because the function's own comment says why it does not use them
+  -- and a test that reads prose tests nothing.
+  perform pg_temp.check_true('and carries no row with it',
+    v_src !~ '\m(new|old)\.');
+  perform pg_temp.check_true('only the name of the table that changed',
+    v_src ~ 'tg_table_name');
+
+  -- Every table the payload is built from. One left off is a page that
+  -- updates for some edits and not others, which is harder to notice
+  -- than one that never updates at all.
+  foreach v_table in array array[
+    'landing_page', 'landing_sections', 'landing_app_links',
+    'landing_stats', 'landing_testimonials', 'landing_logos',
+    'platform_modules']
+  loop
+    perform pg_temp.check_eq(format('%s nudges the front page', v_table),
+      (select count(*)::int from pg_trigger t
+        where t.tgrelid = format('public.%I', v_table)::regclass
+          and not t.tgisinternal
+          and t.tgfoid = 'app.landing_touched()'::regprocedure), 1);
+  end loop;
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0579: a key instead of a password
+--
+-- `signin_show_passkey` is the only switch on this page that ships
+-- OFF, and that is the whole assertion. GoTrue answers
+-- `passkey_disabled` until passkeys are turned on for the project in
+-- the Supabase dashboard, so a button drawn before that fails for
+-- everybody who presses it. A default of true here would be a default
+-- that breaks the sign-in form of every deployment that takes it.
+--
+-- Also asserted: it reaches the form. It rides in `brand` rather than
+-- `page` for the reason `signin_show_register` does — the sign-in
+-- screen draws before anything is published, and a platform with no
+-- marketing site still has a door.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  -- `reset_landing` deletes the row; the payload's `brand` falls back
+  -- to a literal when there is none, and a literal has no opinion
+  -- about a column. So make the row the way every other block here
+  -- does, and read the default off THAT.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  -- Off out of the box, unlike every other switch here.
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('a passkey is not offered until somebody says so',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'false');
+
+  -- And it is in `brand`, so an unpublished platform still gets it.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_passkey', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'and reaches the sign-in form before anything is published',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'true');
+
+  -- Turning it on left the rest of the form alone. The failure this
+  -- catches is a patch that writes one column by clearing its
+  -- neighbours.
+  perform pg_temp.check_eq('without disturbing the register switch',
+    v_out -> 'brand' ->> 'signin_show_register', 'false');
+
+  -- As somebody who is not platform staff. Without this the check
+  -- would run as the administrator above and pass for the wrong
+  -- reason, which is the failure `check_refused` exists to make
+  -- impossible to write by accident.
+  perform pg_temp.sign_in_as(pg_temp.another_user('outsider@example.test'));
+  perform pg_temp.check_refused(
+    'and only a platform administrator may offer it',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_passkey', false)),
+    '%front door%', '42501');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0613: a link instead of a password
+--
+-- The second switch on this page that ships OFF, and for a sibling
+-- reason: GoTrue sends the mail, and until an SMTP sender is configured
+-- in the Supabase dashboard the project's fallback rate is a handful of
+-- messages an hour across every address. A button drawn before that
+-- does nothing for almost everybody who presses it -- and they wait,
+-- which is worse than a button that is not there.
+--
+-- The assertion that matters most is the last one: the two switches are
+-- independent. A patch that wrote one by clearing the other would take
+-- the passkey off every deployment that turned this on, silently.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'a sign-in link is not offered until somebody says so',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'false');
+
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_magic_link', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'and reaches the sign-in form before anything is published',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'true');
+
+  -- Both at once, which is the combination the docs recommend. And the
+  -- failure this catches: a patch that writes one switch by clearing
+  -- its neighbour.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_passkey', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'turning the passkey on leaves the link on',
+    v_out -> 'brand' ->> 'signin_show_magic_link', 'true');
+  perform pg_temp.check_eq(
+    'and both are offered together',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'true');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('lain@example.test'));
+  perform pg_temp.check_refused(
+    'and only a platform administrator may offer it',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_magic_link', false)),
+    '%front door%', '42501');
 end $$;
 
 

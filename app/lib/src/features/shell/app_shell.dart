@@ -4,13 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/live_updates.dart';
+import '../../core/maintenance.dart';
 import '../../core/platform_live.dart';
+import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
+import '../landing/landing_content.dart';
 import '../chat/call_incoming.dart';
 import '../chat/chat_live.dart';
+import '../admin/platform_console_screen.dart';
+import 'notification_bell.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
 /// One heading and the destinations beneath it.
@@ -65,6 +70,44 @@ List<MenuSection<T>> groupByModule<T>(
   ];
 }
 
+/// What a waiting count reads as on a badge.
+///
+/// Capped, because the badge is a nudge rather than a figure: past a
+/// point the exact number changes nothing about what you do next, and
+/// a four-digit badge stops being a badge and starts being a shape.
+String badgeLabel(int count) => count > 99 ? '99+' : '$count';
+
+/// Whether a destination is the one the unread count belongs to.
+bool destCarriesUnread(String path) => path == '/chat';
+
+/// What the "More" slot carries on a phone.
+///
+/// `chatUnreadProvider` says it is "for the badge on the rail" and
+/// there was no badge anywhere -- the count was derived, summed and
+/// thrown away. On a phone the problem is worse than a missing badge:
+/// Chat is not a primary destination, so its badge would sit inside a
+/// sheet nobody opens unless they already knew there was something in
+/// it. The count moves to "More", which is the only thing on that bar
+/// able to say it.
+///
+/// Nought where this company does not hold Chat at all, and nought
+/// where Chat has a slot of its own -- the badge would then be shown
+/// twice, once against the thing and once against the drawer it is
+/// not in.
+/// An icon with a count on it, or the icon as it was.
+Widget _badged(Widget icon, int count) =>
+    count > 0 ? Badge(label: Text(badgeLabel(count)), child: icon) : icon;
+
+int unreadOnMore({
+  required Iterable<String> reachable,
+  required Iterable<String> primary,
+  required int unread,
+}) {
+  if (!reachable.any(destCarriesUnread)) return 0;
+  if (primary.any(destCarriesUnread)) return 0;
+  return unread;
+}
+
 class _Dest {
   const _Dest(
     this.label,
@@ -76,6 +119,7 @@ class _Dest {
     this.altModule,
     this.platformOnly = false,
     this.adminOnly = false,
+    this.firmOnly = false,
   });
 
   final String label;
@@ -118,14 +162,64 @@ class _Dest {
   /// colleague works from, and `security_log` refuses them anyway -- so
   /// showing it would be a door that opens onto an error message.
   final bool adminOnly;
+
+  /// Shown only to somebody who belongs to an accounting practice.
+  ///
+  /// Not a module: a practice is not something a company buys, and it is
+  /// not attached to the company in the rail at all — the same person
+  /// sees it whichever of their clients they are looking at. Almost
+  /// nobody has one, so an always-visible "Practice" would be a door
+  /// onto an explanation for every company that keeps its own books.
+  final bool firmOnly;
 }
 
-const _destinations = <_Dest>[
+/// One place inside the product that an address can be pointed at.
+///
+/// `0342` lets an operator confine a subdomain to a module, or to one
+/// screen inside it. The console needs a list of what those are, and
+/// this is it — derived from the same table the navigation is built
+/// from, so a screen that exists is offerable and one that does not
+/// cannot be chosen.
+typedef ModuleDestination = ({String module, String label, String path});
+
+/// Every destination a name can be pointed at, module first.
+///
+/// Platform-only destinations are left out: the console's own sections
+/// are not something a company's address opens. So are the five that
+/// belong to no module — Dashboard, Import, Team, Email and Settings
+/// are the workspace rather than the product, and confining an address
+/// to "Settings" is not a thing anybody means.
+List<ModuleDestination> assignableDestinations() {
+  final out = <ModuleDestination>[
+    for (final d in _destinations)
+      if (d.module != null && !d.platformOnly && !d.adminOnly)
+        (module: d.module!, label: d.label, path: d.path),
+  ];
+  out.sort((a, b) {
+    final byModule = a.module.compareTo(b.module);
+    return byModule != 0 ? byModule : a.label.compareTo(b.label);
+  });
+  return out;
+}
+
+/// The paths a name confined to [module] may reach.
+///
+/// Every destination of that module, plus its alternate — property is
+/// sold as strata and non-strata and either opens the portfolio, so an
+/// address confined to one of them must not stop at the other's door.
+Set<String> pathsForModule(String module) => {
+  for (final d in _destinations)
+    if (d.module == module || d.altModule == module) d.path,
+};
+
+// Not `const`: the console's ten sections are appended from their own
+// table at the end, and a constant list cannot be built with a loop.
+final _destinations = <_Dest>[
   _Dest(
     'Dashboard',
     Icons.dashboard_outlined,
     Icons.dashboard,
-    '/',
+    '/dashboard',
     primary: true,
   ),
   _Dest(
@@ -157,12 +251,55 @@ const _destinations = <_Dest>[
     '/legal',
     module: 'legal',
   ),
+  // Client money, in and out. 0549 built both movements and the only
+  // door onto either was the matter screen -- one matter at a time,
+  // which is where you go when you already know which matter you want.
+  // Somebody banking the morning's cheques does not: they have a
+  // cheque and a client, and the matter is what they are looking up.
   _Dest(
-    'Contacts',
+    'Receive payment',
+    Icons.south_west_outlined,
+    Icons.south_west,
+    '/legal/receipts',
+    module: 'legal',
+  ),
+  _Dest(
+    'Payout',
+    Icons.north_east_outlined,
+    Icons.north_east,
+    '/legal/payouts',
+    module: 'legal',
+  ),
+  // Four doors onto one screen, under the CONTACTS heading the module
+  // already gives them. All Contacts stays what it was — the same page,
+  // opening on the same tab — and the three below it open it on theirs.
+  _Dest(
+    'All Contacts',
     Icons.people_outline,
     Icons.people,
     '/contacts',
     primary: true,
+    module: 'contacts',
+  ),
+  _Dest(
+    'Customer',
+    Icons.person_outline,
+    Icons.person,
+    '/customers',
+    module: 'contacts',
+  ),
+  _Dest(
+    'Supplier',
+    Icons.local_shipping_outlined,
+    Icons.local_shipping,
+    '/suppliers',
+    module: 'contacts',
+  ),
+  _Dest(
+    'Prospect',
+    Icons.person_search_outlined,
+    Icons.person_search,
+    '/prospects',
     module: 'contacts',
   ),
   _Dest(
@@ -378,13 +515,7 @@ const _destinations = <_Dest>[
   // the person who runs the shop, and Reports is gated on accounting
   // that a food stall may not have bought.
   // The line at the door, beside the floor plan it feeds.
-  _Dest(
-    'Queue',
-    Icons.people_outline,
-    Icons.people,
-    '/queue',
-    module: 'pos',
-  ),
+  _Dest('Queue', Icons.people_outline, Icons.people, '/queue', module: 'pos'),
   // Everything out on a motorbike, beside the queue for the same
   // reason: both are somebody standing at the pass being asked how much
   // longer.
@@ -600,6 +731,20 @@ const _destinations = <_Dest>[
     '/assets',
     module: 'fixed_assets',
   ),
+  // Before the journals rather than after them: the chart is what a
+  // journal posts INTO, and somebody looking for an account code is
+  // looking for it before they write the entry, not after.
+  //
+  // It had no entry at all until it was reported missing. The chart sat
+  // on a card most of the way down Settings — a company's setup, which
+  // is not what a chart of accounts is.
+  _Dest(
+    'Chart of accounts',
+    Icons.account_tree_outlined,
+    Icons.account_tree,
+    '/accounts',
+    module: 'accounting',
+  ),
   _Dest(
     'Journals',
     Icons.menu_book_outlined,
@@ -652,6 +797,13 @@ const _destinations = <_Dest>[
   ),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest(
+    'Practice',
+    Icons.apartment_outlined,
+    Icons.apartment,
+    '/practice',
+    firmOnly: true,
+  ),
+  _Dest(
     'Security',
     Icons.shield_outlined,
     Icons.shield,
@@ -659,14 +811,56 @@ const _destinations = <_Dest>[
     adminOnly: true,
   ),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),
-  _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
+  // Mail that arrived, as opposed to `/email` which is mail this
+  // company sent. Two different questions, and putting them on one
+  // screen would make the outbox's own list harder to read.
   _Dest(
-    'Platform',
-    Icons.shield_outlined,
-    Icons.shield,
-    '/admin',
-    platformOnly: true,
+    'Inbox',
+    Icons.inbox_outlined,
+    Icons.inbox,
+    '/inbox',
+    module: 'mailbox',
   ),
+  _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
+  // The assistant. One entry, because it is one screen — the module's
+  // whole surface is a question box.
+  _Dest(
+    'Ask about your books',
+    Icons.auto_awesome_outlined,
+    Icons.auto_awesome,
+    '/ask',
+    primary: true,
+    module: 'ai',
+  ),
+  // No module, and last: reporting a fault is not a feature a company
+  // buys, and a company that has stopped paying for one is exactly the
+  // company most likely to want to say why.
+  _Dest(
+    'Report a problem',
+    Icons.bug_report_outlined,
+    Icons.bug_report,
+    '/feedback',
+  ),
+  // The platform console, one destination per section. Everything a
+  // platform operator does lives in this menu rather than in a second
+  // one drawn inside the console — there is one side menu in this app
+  // and this is it.
+  //
+  // `module` carries the heading rather than a module code: no module
+  // is named "Billing", so `groupByModule` falls through to the code
+  // itself, which is the heading. And `platformOnly` is answered before
+  // `module` is ever read, so nothing here is hidden for want of an
+  // entitlement nobody sells.
+  for (final s in platformConsoleSections)
+    _Dest(
+      s.label,
+      s.icon,
+      s.selectedIcon,
+      s.path,
+      primary: s.primary,
+      module: s.group,
+      platformOnly: true,
+    ),
 ];
 
 class AppShell extends ConsumerWidget {
@@ -675,7 +869,14 @@ class AppShell extends ConsumerWidget {
   final Widget child;
   final String location;
 
-  static const _railBreakpoint = 900.0;
+  /// Where the bottom bar gives way to the side menu, and where that
+  /// menu grows from a column of icons to icons with their names.
+  ///
+  /// Public because the platform console has a menu of its own beside
+  /// this one, and a second menu that changed shape at its own widths
+  /// would be a different menu rather than the same one twice.
+  static const railBreakpoint = 900.0;
+  static const extendedBreakpoint = 1200.0;
 
   /// Material's own defaults for the rail, named here because the header
   /// sits beside the rail rather than inside it and has to match.
@@ -683,26 +884,41 @@ class AppShell extends ConsumerWidget {
   // itself against the rail it stands in for, and a private static is
   // not visible from another class even in the same file.
   static const extendedWidth = 256.0;
-  static const _collapsedWidth = 80.0;
+  static const collapsedWidth = 80.0;
 
   /// Destinations this user can actually reach: modules the company
   /// holds and has not put away, plus the platform console for staff.
   List<_Dest> _visible(WidgetRef ref) {
-    final isPlatformAdmin = ref.watch(isPlatformAdminProvider).value ?? false;
+    // `valueOrNull` at all five sites in this method, and the reason is
+    // the shell rather than taste. `AsyncError.value` THROWS, so the
+    // `??` beside it never runs -- and a throw HERE is not one screen
+    // failing to load. It is the navigation rail failing to build, so
+    // there is no rail to navigate away with and nothing on screen but
+    // grey. The fallbacks below are all "show less", which is the safe
+    // direction: a door that is missing for a moment beats every door
+    // missing until a reload.
+    final isPlatformAdmin =
+        ref.watch(isPlatformAdminProvider).valueOrNull ?? false;
 
     // Every destination but the console reads from an organization, so
     // with none selected they are doors onto an empty room. A platform
     // operator belongs to no company and would otherwise be handed a full
     // rail of screens that can only fail.
     final hasOrg =
-        (ref.watch(organizationsProvider).value ?? const []).isNotEmpty;
+        (ref.watch(organizationsProvider).valueOrNull ?? const []).isNotEmpty;
 
     final isAdmin = ref.watch(canAdminProvider);
+
+    // Read once for the rail rather than by the screen, so the door
+    // appears the moment somebody is taken on at a practice.
+    final atAPractice =
+        (ref.watch(myFirmsProvider).valueOrNull ?? const []).isNotEmpty;
 
     return _destinations.where((d) {
       if (d.platformOnly) return isPlatformAdmin;
       if (!hasOrg) return false;
       if (d.adminOnly && !isAdmin) return false;
+      if (d.firmOnly && !atAPractice) return false;
       if (d.module == null) return true;
       if (moduleEnabled(ref, d.module!)) return true;
       return d.altModule != null && moduleEnabled(ref, d.altModule!);
@@ -715,7 +931,9 @@ class AppShell extends ConsumerWidget {
     var bestLength = 0;
     for (var i = 0; i < dests.length; i++) {
       final path = dests[i].path;
-      final match = path == '/' ? location == '/' : location.startsWith(path);
+      // `/dashboard` is a prefix of nothing else, so the exact-match
+      // special case the old `/` needed is gone with it.
+      final match = location.startsWith(path);
       if (match && path.length >= bestLength) {
         best = i;
         bestLength = path.length;
@@ -747,14 +965,42 @@ class AppShell extends ConsumerWidget {
     // list is empty. Either one puts selectedIndex out of range, which
     // throws while building — and a release build renders a thrown build
     // as a blank page, with no clue as to why.
-    if (dests.length < 2) return _bareLayout(context, dests);
+    if (dests.length < 2) {
+      return _underTheNotice(ref, _bareLayout(context, dests));
+    }
 
-    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
-    return _reachableByCall(
+    final wide = MediaQuery.sizeOf(context).width >= railBreakpoint;
+    return _underTheNotice(
       ref,
-      wide
-          ? _wideLayout(context, ref, dests)
-          : _narrowLayout(context, ref, dests),
+      _reachableByCall(
+        ref,
+        wide
+            ? _wideLayout(context, ref, dests)
+            : _narrowLayout(context, ref, dests),
+      ),
+    );
+  }
+
+  /// The maintenance banner, above whatever the layout drew.
+  ///
+  /// `0018` seeded `maintenance_mode` as "Show a maintenance banner and
+  /// block writes" and it did neither for five hundred migrations.
+  /// `0564` makes `can_write` and `can_admin` refuse; this is the other
+  /// half, and it is the half that stops somebody concluding the
+  /// product is broken. A save that fails with no explanation is a bug
+  /// report.
+  ///
+  /// Above the whole shell rather than on one screen, because the
+  /// screen somebody is on when the shutter comes down is not
+  /// predictable.
+  Widget _underTheNotice(WidgetRef ref, Widget shell) {
+    final notice = ref.watch(maintenanceNoticeProvider).valueOrNull;
+    if (notice == null) return shell;
+    return Column(
+      children: [
+        MaintenanceBanner(message: notice),
+        Expanded(child: shell),
+      ],
     );
   }
 
@@ -771,7 +1017,10 @@ class AppShell extends ConsumerWidget {
   /// starting a heartbeat in a company that never bought chat. So this
   /// waits for the real answer.
   Widget _reachableByCall(WidgetRef ref, Widget child) {
-    final modules = ref.watch(enabledModulesProvider).value;
+    // The null check below already says what this means to do when the
+    // answer has not arrived; a failed load is the same situation and
+    // must not throw out of the shell.
+    final modules = ref.watch(enabledModulesProvider).valueOrNull;
     if (modules == null || !modules.contains('chat')) return child;
     if (!moduleEnabled(ref, 'chat')) return child;
 
@@ -796,6 +1045,8 @@ class AppShell extends ConsumerWidget {
               children: [
                 const _RailHeader(extended: false),
                 const Spacer(),
+                // No bell here: this layout is what somebody sees when
+                // there is no company to have notifications for.
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _AccountButton(),
@@ -815,7 +1066,7 @@ class AppShell extends ConsumerWidget {
 
   Widget _wideLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
     final scheme = Theme.of(context).colorScheme;
-    final extended = MediaQuery.sizeOf(context).width >= 1200;
+    final extended = MediaQuery.sizeOf(context).width >= extendedBreakpoint;
 
     // Watched, not read: the setting and the module names arrive after
     // the first frame, and a menu that only regroups when something
@@ -827,11 +1078,16 @@ class AppShell extends ConsumerWidget {
     // to say what they have in common — 0293's switch is about a menu
     // somebody can read, and a heading over a 72-pixel column is not
     // one.
-    final grouped = extended &&
-        (ref.watch(navGroupingProvider).valueOrNull ?? false);
-    final groupNames = ref.watch(moduleLabelsProvider).valueOrNull?.map(
-              (code, m) => MapEntry(code, m.group),
-            ) ??
+    // The count `chatUnreadProvider` has always derived, finally put
+    // where its own doc comment said it was for.
+    final unread = ref.watch(chatUnreadProvider);
+    final grouped =
+        extended && (ref.watch(navGroupingProvider).valueOrNull ?? false);
+    final groupNames =
+        ref
+            .watch(moduleLabelsProvider)
+            .valueOrNull
+            ?.map((code, m) => MapEntry(code, m.group)) ??
         const <String, String>{};
 
     return Scaffold(
@@ -852,7 +1108,7 @@ class AppShell extends ConsumerWidget {
             // this subtree and an intrinsic pass offers unbounded width.
             // The company switcher is a Row that fills its line, and a
             // Row cannot size itself against unbounded width at all.
-            width: extended ? extendedWidth : _collapsedWidth,
+            width: extended ? extendedWidth : collapsedWidth,
             child: Column(
               children: [
                 // Outside the scroll view: the company you are looking at
@@ -878,6 +1134,7 @@ class AppShell extends ConsumerWidget {
                                   dests: dests,
                                   selected: _selectedIndexIn(dests),
                                   groupNames: groupNames,
+                                  unread: unread,
                                   onSelected: (i) => context.go(dests[i].path),
                                 )
                               : NavigationRail(
@@ -890,17 +1147,34 @@ class AppShell extends ConsumerWidget {
                                     child: Align(
                                       alignment: Alignment.bottomCenter,
                                       child: Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
-                                        child: _AccountButton(),
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12,
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const NotificationBell(),
+                                            _AccountButton(),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                   destinations: [
                                     for (final d in dests)
                                       NavigationRailDestination(
-                                        icon: Icon(d.icon),
-                                        selectedIcon: Icon(d.selectedIcon),
+                                        icon: _badged(
+                                          Icon(d.icon),
+                                          destCarriesUnread(d.path)
+                                              ? unread
+                                              : 0,
+                                        ),
+                                        selectedIcon: _badged(
+                                          Icon(d.selectedIcon),
+                                          destCarriesUnread(d.path)
+                                              ? unread
+                                              : 0,
+                                        ),
                                         label: Text(d.label),
                                       ),
                                   ],
@@ -925,8 +1199,20 @@ class AppShell extends ConsumerWidget {
 
   Widget _narrowLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
     final primary = dests.where((d) => d.primary).toList();
+    // Material's bottom bar refuses to draw fewer than two slots, and
+    // "More" is only one of them — so a set of destinations with none
+    // marked primary threw rather than rendered. The first destination
+    // stands in: whatever this person can reach, they can reach one of
+    // it without opening the sheet.
+    if (primary.isEmpty) primary.add(dests.first);
     final selected = dests[_selectedIndexIn(dests)];
     final primaryIndex = primary.indexOf(selected);
+    final unread = ref.watch(chatUnreadProvider);
+    final onMore = unreadOnMore(
+      reachable: [for (final d in dests) d.path],
+      primary: [for (final d in primary) d.path],
+      unread: unread,
+    );
 
     return Scaffold(
       body: child,
@@ -939,9 +1225,12 @@ class AppShell extends ConsumerWidget {
             _showMoreSheet(
               context,
               dests,
-              groupNames: ref.read(moduleLabelsProvider).valueOrNull?.map(
-                    (code, m) => MapEntry(code, m.group),
-                  ) ??
+              unread: unread,
+              groupNames:
+                  ref
+                      .read(moduleLabelsProvider)
+                      .valueOrNull
+                      ?.map((code, m) => MapEntry(code, m.group)) ??
                   const {},
               grouped: ref.read(navGroupingProvider).valueOrNull ?? false,
             );
@@ -950,12 +1239,18 @@ class AppShell extends ConsumerWidget {
         destinations: [
           for (final d in primary)
             NavigationDestination(
-              icon: Icon(d.icon),
-              selectedIcon: Icon(d.selectedIcon),
+              icon: _badged(
+                Icon(d.icon),
+                destCarriesUnread(d.path) ? unread : 0,
+              ),
+              selectedIcon: _badged(
+                Icon(d.selectedIcon),
+                destCarriesUnread(d.path) ? unread : 0,
+              ),
               label: d.label,
             ),
-          const NavigationDestination(
-            icon: Icon(Icons.more_horiz),
+          NavigationDestination(
+            icon: _badged(const Icon(Icons.more_horiz), onMore),
             label: 'More',
           ),
         ],
@@ -976,6 +1271,7 @@ class AppShell extends ConsumerWidget {
     List<_Dest> dests, {
     required Map<String, String> groupNames,
     required bool grouped,
+    int unread = 0,
   }) {
     final rest = dests.where((d) => !d.primary).toList();
     showModalBottomSheet<void>(
@@ -1017,6 +1313,9 @@ class AppShell extends ConsumerWidget {
                   ListTile(
                     leading: Icon(d.icon),
                     title: Text(d.label),
+                    trailing: destCarriesUnread(d.path) && unread > 0
+                        ? Badge(label: Text(badgeLabel(unread)))
+                        : null,
                     onTap: () {
                       Navigator.pop(ctx);
                       context.go(d.path);
@@ -1061,17 +1360,17 @@ class _GroupedRail extends StatelessWidget {
     required this.selected,
     required this.groupNames,
     required this.onSelected,
+    this.unread = 0,
   });
 
   final List<_Dest> dests;
   final int selected;
   final Map<String, String> groupNames;
   final void Function(int index) onSelected;
+  final int unread;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return SizedBox(
       // The same width as the extended rail this replaces, so turning
       // the setting on moves headings in without the menu resizing.
@@ -1086,32 +1385,24 @@ class _GroupedRail extends StatelessWidget {
             groupNames,
             true,
           )) ...[
-            if (section.heading != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
-                child: Text(
-                  section.heading!.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
+            if (section.heading != null) RailHeading(section.heading!),
             for (final d in section.items)
-              _GroupedRailTile(
-                dest: d,
+              RailTile(
+                icon: d.icon,
+                selectedIcon: d.selectedIcon,
+                label: d.label,
                 // The index the caller knows this destination by. The
                 // sections reorder them, so the position within a
                 // section says nothing about which route it is — reading
                 // the index off the section would navigate somewhere
                 // else entirely.
                 selected: dests.indexOf(d) == selected,
+                unread: destCarriesUnread(d.path) ? unread : 0,
                 onTap: () => onSelected(dests.indexOf(d)),
               ),
           ],
           const Spacer(),
+          const NotificationBell(),
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _AccountButton(),
@@ -1122,16 +1413,58 @@ class _GroupedRail extends StatelessWidget {
   }
 }
 
-class _GroupedRailTile extends StatelessWidget {
-  const _GroupedRailTile({
-    required this.dest,
+/// The words over a run of related destinations.
+///
+/// Public, and used by the platform console's menu as well as this one:
+/// a heading that was drawn one way here and another way there would be
+/// two menus rather than one menu in two places.
+class RailHeading extends StatelessWidget {
+  const RailHeading(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// One row of a grouped side menu: an icon, a name, and a pill behind
+/// it when it is the one you are looking at.
+///
+/// Takes the icons and the label rather than a destination, so the
+/// platform console — whose sections are not routes — draws its menu
+/// out of the same rows this one is made of.
+class RailTile extends StatelessWidget {
+  const RailTile({
+    super.key,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
     required this.selected,
     required this.onTap,
+    this.unread = 0,
   });
 
-  final _Dest dest;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
+
+  /// How many are waiting behind this one. Nought draws nothing.
+  final int unread;
 
   @override
   Widget build(BuildContext context) {
@@ -1150,7 +1483,7 @@ class _GroupedRailTile extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  selected ? dest.selectedIcon : dest.icon,
+                  selected ? selectedIcon : icon,
                   size: 22,
                   color: selected
                       ? scheme.onSecondaryContainer
@@ -1159,7 +1492,7 @@ class _GroupedRailTile extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    dest.label,
+                    label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1171,6 +1504,7 @@ class _GroupedRailTile extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (unread > 0) Badge(label: Text(badgeLabel(unread))),
               ],
             ),
           ),
@@ -1180,7 +1514,6 @@ class _GroupedRailTile extends StatelessWidget {
   }
 }
 
-
 class _RailHeader extends ConsumerWidget {
   const _RailHeader({required this.extended});
 
@@ -1188,7 +1521,7 @@ class _RailHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final org = ref.watch(currentOrgProvider).value;
+    final org = ref.watch(currentOrgProvider).valueOrNull;
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
@@ -1196,7 +1529,14 @@ class _RailHeader extends ConsumerWidget {
       child: extended
           ? _OrgSwitcher(org: org)
           : Tooltip(
-              message: org?.name ?? 'iAkauntan',
+              // The company wins when there is one — this is their
+              // workspace, not the platform's. The fallback is the only
+              // place the platform's own name belongs here.
+              // Empty rather than the shipped name while the brand is
+              // in flight: a tooltip nobody is hovering over costs
+              // nothing to withhold, and Flutter draws none for an
+              // empty message.
+              message: org?.name ?? platformWordmark(ref) ?? '',
               child: CircleAvatar(
                 backgroundColor: scheme.primary,
                 child: Text(
@@ -1221,12 +1561,18 @@ class _OrgSwitcher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final orgs =
-        ref.watch(organizationsProvider).value ?? const <Organization>[];
+        ref.watch(organizationsProvider).valueOrNull ?? const <Organization>[];
+
+    // Multi-Company is a module (0486). The sheet opens for somebody
+    // who has one company and may add another, as well as for somebody
+    // who has several -- otherwise the only door to a second company
+    // would be one you need a second company to reach.
+    final canAdd = ref.watch(canAddCompanyProvider).valueOrNull ?? false;
 
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: orgs.length < 2
+        onTap: orgs.length < 2 && !canAdd
             ? null
             : () => showDialog<void>(
                 context: context,
@@ -1250,6 +1596,24 @@ class _OrgSwitcher extends ConsumerWidget {
                           Navigator.pop(ctx);
                         },
                       ),
+                    // Absent rather than present and refusing: the
+                    // server answers `can_add_company`, so a company
+                    // without the module is not offered a door that
+                    // opens onto an error.
+                    if (canAdd) ...[
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('add-company'),
+                        leading: const Icon(Icons.add_business_outlined),
+                        title: const Text('Add a company'),
+                        subtitle: const Text('Another set of books on '
+                            'this sign-in'),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          context.go('/companies/new');
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1280,7 +1644,7 @@ class _OrgSwitcher extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      org?.name ?? 'iAkauntan',
+                      org?.name ?? platformWordmark(ref) ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1302,7 +1666,8 @@ class _OrgSwitcher extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (orgs.length > 1) const Icon(Icons.unfold_more, size: 16),
+              if (orgs.length > 1 || canAdd)
+                const Icon(Icons.unfold_more, size: 16),
             ],
           ),
         ),
@@ -1315,7 +1680,7 @@ class _AccountButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    final role = ref.watch(memberRoleProvider).value ?? '';
+    final role = ref.watch(memberRoleProvider).valueOrNull ?? '';
 
     return PopupMenuButton<String>(
       tooltip: user?.email ?? 'Account',
@@ -1356,4 +1721,30 @@ class _AccountButton extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// What this platform calls itself, for the handful of places that have
+/// no company to name yet.
+///
+/// Not a replacement for the organization's name anywhere: an accountant
+/// working inside "Sinar Teknologi" should see Sinar Teknologi, and the
+/// operator's brand belongs on the way in and on the front page rather
+/// than over the top of their customer's own identity.
+///
+/// Null while the payload is still in flight, and only then. Every
+/// public page draws [PageWaiting] rather than the name we ship with
+/// (see `core/page_waiting.dart`); the shell cannot do that, because
+/// holding somebody's books behind a spinner waiting on the landing
+/// payload would be a worse trade than the flicker it fixes. So the
+/// word waits on its own: the space where it goes stays empty for the
+/// length of one round trip, and the name arrives once instead of
+/// arriving wrong and being corrected.
+///
+/// A failure still gives 'iAkauntan'. A payload that is never coming is
+/// a real answer, and this is what a platform that has not renamed
+/// itself is called.
+String? platformWordmark(WidgetRef ref) {
+  final fetched = ref.watch(landingContentProvider);
+  if (!settled(fetched)) return null;
+  return fetched.valueOrNull?.wordmark ?? 'iAkauntan';
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/format.dart';
 import '../core/providers.dart';
 import 'repository.dart';
 
@@ -39,8 +40,8 @@ class PlatformCatalog {
           'code, name, description, monthly_price, is_core, sort_order, '
           'is_active, nav_group',
         )
-        .order('sort_order')
-        .order('code'),
+        .order('sort_order', ascending: true)
+        .order('code', ascending: true),
   );
 
   Future<void> saveModule(
@@ -64,6 +65,57 @@ class PlatformCatalog {
     },
   );
 
+  /// Every promotion, active or not, with the module and company it
+  /// names resolved.
+  ///
+  /// Through the RPC rather than the table: the read policy shows a
+  /// tenant its own promotions and the ones open to everybody, which is
+  /// the wrong list for a console -- an operator has to see what every
+  /// customer was given, including the promotions that have ended.
+  Future<List<Map<String, dynamic>>> promotions() async =>
+      Repo.rows(await client.rpc('platform_promotions'));
+
+  /// Create one ([id] null) or change one.
+  ///
+  /// Every argument but [id] is optional and omitted when null, which
+  /// is what lets the dialog send only what somebody actually changed.
+  Future<String?> savePromotion({
+    String? id,
+    String? name,
+    String? moduleCode,
+    String? orgId,
+    String? kind,
+    int? trialDays,
+    double? percentOff,
+    double? fixedPrice,
+    DateTime? startsOn,
+    DateTime? endsOn,
+    bool? isActive,
+    String? notes,
+  }) async => await client.rpc(
+    'platform_save_promotion',
+    params: {
+      if (id != null) 'p_id': id,
+      if (name != null) 'p_name': name,
+      if (moduleCode != null) 'p_module_code': moduleCode,
+      if (orgId != null) 'p_org_id': orgId,
+      if (kind != null) 'p_kind': kind,
+      if (trialDays != null) 'p_trial_days': trialDays,
+      if (percentOff != null) 'p_percent_off': percentOff,
+      if (fixedPrice != null) 'p_fixed_price': fixedPrice,
+      if (startsOn != null) 'p_starts_on': Fmt.iso(startsOn),
+      if (endsOn != null) 'p_ends_on': Fmt.iso(endsOn),
+      if (isActive != null) 'p_is_active': isActive,
+      if (notes != null) 'p_notes': notes,
+    },
+  ) as String?;
+
+  /// Stop one, today, for everybody at once. There is no delete: a
+  /// promotion that has priced an invoice is part of why that invoice
+  /// says what it says.
+  Future<void> endPromotion(String id) =>
+      client.rpc('platform_end_promotion', params: {'p_id': id});
+
   /// Every gateway including the ones being set up, which the read
   /// policy withholds from a tenant.
   Future<List<Map<String, dynamic>>> paymentGateways() async =>
@@ -80,6 +132,9 @@ class PlatformCatalog {
     String? instructions,
     bool? isActive,
     int? sortOrder,
+    List<String>? countries,
+    List<String>? methods,
+    String? docsUrl,
   }) => client.rpc(
     'platform_save_payment_gateway',
     params: {
@@ -93,8 +148,36 @@ class PlatformCatalog {
       if (instructions != null) 'p_instructions': instructions,
       if (isActive != null) 'p_is_active': isActive,
       if (sortOrder != null) 'p_sort_order': sortOrder,
+      // Sent when the caller passed one, omitted when it did not, which
+      // is the difference `0352` turns on: null leaves the column
+      // alone and `[]` means the gateway sells everywhere. A screen
+      // that always sent `countries` would empty the coverage list of
+      // every gateway somebody merely switched on.
+      if (countries != null) 'p_countries': countries,
+      if (methods != null) 'p_methods': methods,
+      if (docsUrl != null) 'p_docs_url': docsUrl,
     },
   );
+
+  /// The gateways this platform has switched on that sell where a
+  /// company is.
+  ///
+  /// Takes the country in either spelling. `organizations.country_code`
+  /// is alpha-3 and `payment_gateways.countries` is alpha-2, and `0352`
+  /// resolves between them in the database rather than leaving every
+  /// caller to remember — the failure when one forgets is an empty list
+  /// rather than an error, which reads as "there is no way to pay us".
+  ///
+  /// Unlike [paymentGateways] this runs as the caller, so the read
+  /// policy withholds a gateway still being set up. That is the whole
+  /// difference between the two: this is what a tenant may see.
+  Future<List<Map<String, dynamic>>> gatewaysFor(String? country) async =>
+      Repo.rows(
+        await client.rpc(
+          'payment_gateways_for',
+          params: {'p_country': country},
+        ),
+      );
 
   /// Whether the side menu gathers destinations under module headings.
   Future<bool> navGrouping() async {
@@ -128,9 +211,27 @@ final platformModulesAdminProvider =
   (ref) => ref.watch(platformCatalogProvider).modules(),
 );
 
+/// Every promotion, for the console's list.
+final platformPromotionsAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(platformCatalogProvider).promotions(),
+);
+
 final platformGatewaysAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(platformCatalogProvider).paymentGateways(),
+);
+
+/// The ways a company in a given country may pay.
+///
+/// A family on the country rather than a read of the current
+/// organization, because the console shows the same list for a country
+/// an operator picked and the settings screen shows it for the one the
+/// company is registered in. One provider, two questions with the same
+/// shape.
+final gatewaysForCountryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>(
+  (ref, country) => ref.watch(platformCatalogProvider).gatewaysFor(country),
 );
 
 /// True when the side menu should be gathered under module headings.
@@ -153,7 +254,7 @@ final moduleLabelsProvider =
         .watch(supabaseProvider)
         .from('platform_modules')
         .select('code, name, nav_group')
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
   return {
     for (final r in rows)

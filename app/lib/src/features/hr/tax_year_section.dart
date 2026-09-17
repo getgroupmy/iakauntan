@@ -225,7 +225,8 @@ class _ReliefList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final types = ref.watch(reliefTypesProvider).valueOrNull ?? const [];
+    final typesAsync = ref.watch(reliefTypesProvider(taxYear));
+    final types = typesAsync.valueOrNull ?? const <ReliefType>[];
     final byCode = {for (final t in types) t.code: t};
 
     return Column(
@@ -243,6 +244,28 @@ class _ReliefList extends ConsumerWidget {
             label: const Text('Add'),
           ),
         ),
+        // Why the Add button is off, when it is off. Without this the
+        // list failing to load and LHDN having published nothing look
+        // identical from the outside — a greyed-out button and no
+        // reason — which is how a broken column name went unnoticed for
+        // the whole life of this screen.
+        if (types.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Space.sm),
+            child: Text(
+              typesAsync.hasError
+                  ? 'The list of reliefs could not be loaded, so nothing '
+                        'can be declared here yet.'
+                  : typesAsync.isLoading
+                  ? 'Loading the reliefs that may be declared…'
+                  : 'No reliefs are published for tax year $taxYear yet.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: typesAsync.hasError
+                    ? context.scheme.error
+                    : context.scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         AsyncView(
           value: reliefs,
           onRetry: () => ref.invalidate(declaredReliefsProvider(employeeId)),
@@ -277,7 +300,14 @@ class _ReliefList extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      onTap: () => _edit(context, ref, types, list[i]),
+                      // Same gate as Add, and for a harder reason: the
+                      // dialog's dropdown is built from `types`, and
+                      // Flutter asserts when a non-null value has no
+                      // matching item. An empty list here is a crash,
+                      // not a disabled field.
+                      onTap: types.isEmpty
+                          ? null
+                          : () => _edit(context, ref, types, list[i]),
                     ),
                   ],
                 ]),
@@ -334,7 +364,15 @@ class _ReliefDialog extends StatefulWidget {
 }
 
 class _ReliefDialogState extends State<_ReliefDialog> {
-  late String _code = widget.existing?.reliefCode ?? widget.types.first.code;
+  // A relief already on file whose code the current schedule no longer
+  // offers would give the dropdown a value with no matching item, which
+  // Flutter asserts on. Falling back to the first offered code keeps the
+  // dialog openable; the ceiling that then applies is the one the
+  // database will judge it by either way.
+  late String _code =
+      widget.types.any((t) => t.code == widget.existing?.reliefCode)
+      ? widget.existing!.reliefCode
+      : widget.types.first.code;
   late final _amount = TextEditingController(
       text: widget.existing == null
           ? ''

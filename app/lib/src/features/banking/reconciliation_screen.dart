@@ -1,13 +1,19 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'book_balance.dart';
+import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
+import 'transfers_history_dialog.dart';
 
 /// Reconciling a bank account against its statement.
 ///
@@ -98,6 +104,16 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
                 if (done == true) _refresh();
               },
             ),
+          // The register of them, which was written and never read: a
+          // transfer, once made, left the app entirely.
+          IconButton(
+            key: const ValueKey('transfers-history'),
+            tooltip: 'Transfers made',
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () async {
+              if (await showTransfersHistory(context)) await _refresh();
+            },
+          ),
           if (canPost)
             IconButton(
               tooltip: 'Import statement',
@@ -120,6 +136,28 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
                       if (changed == true) await _refresh();
                     },
             ),
+          // What the account itself says it holds, and the way to
+          // rebuild it. `current_balance` is a running total kept by
+          // twenty-three statements across the migrations, and
+          // `resync_bank_balance` — asserted since 0175 and called by
+          // nothing — is what puts it back in step with the ledger.
+          IconButton(
+            key: const ValueKey('book-balance'),
+            tooltip: 'Book balance',
+            icon: const Icon(Icons.account_balance_outlined),
+            onPressed: _bankAccountId == null
+                ? null
+                : () async {
+                    final account = banks.firstWhere(
+                      (b) => b['id'] == _bankAccountId,
+                      orElse: () => const <String, dynamic>{},
+                    );
+                    if (account.isEmpty) return;
+                    if (await showBookBalance(context, account: account)) {
+                      await _refresh();
+                    }
+                  },
+          ),
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
@@ -207,13 +245,35 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     if (!mounted) return;
     // Skipped lines and unreadable lines are both reported. A statement
     // that half-imports quietly reconciles to the wrong number.
+    final checks = (result['balance_checks'] as num? ?? 0).toInt();
     final parts = <String>[
       '${result['imported']} imported',
       if ((result['skipped'] as num? ?? 0) > 0)
         '${result['skipped']} already there',
+      // Worth saying out loud. It is the difference between a paste
+      // that looks right and one the statement's own arithmetic agrees
+      // with, and somebody who pastes a balance column deserves to know
+      // the check happened rather than to assume it.
+      if (checks > 0) 'balance follows on $checks lines',
       if (parsed.problems.isNotEmpty)
         '${parsed.problems.length} could not be read',
     ];
+
+    // The figure the difference gets measured against, taken from the
+    // bank instead of typed. `bank_reconciliation_status` subtracts the
+    // statement balance from the books, so a slip in it is a difference
+    // that is not there — and the search for it goes through the lines,
+    // which are fine.
+    final closing = (result['closing_balance'] as num?)?.toDouble();
+    final closingDate = result['closing_date'] as String?;
+    if (closing != null) {
+      _statementBalance.text = closing.toStringAsFixed(2);
+      final on = DateTime.tryParse(closingDate ?? '');
+      if (on != null) _asAt = on;
+      parts.add('closing ${Fmt.money(closing)}'
+          '${on == null ? '' : ' at ${Fmt.date(on)}'}');
+    }
+
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(parts.join(' · '))));
     await _refresh();
@@ -307,17 +367,17 @@ class _Controls extends StatelessWidget {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     final fields = <Widget>[
-      DropdownButtonFormField<String>(
+      SearchablePicker<String>(
+        options: bankPickerOptions(banks),
+        createLabel: 'Add bank account',
+        // 0529 made this list writable for the first
+        // time. Until then a company that opened a
+        // second account had nowhere in the product to
+        // say so.
+        onCreate: (typed) =>
+            createBankAccountFromPicker(context, typed: typed),
         value: bankAccountId,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Account'),
-        items: [
-          for (final b in banks)
-            DropdownMenuItem(
-              value: b['id'] as String,
-              child: Text(b['name'] as String, overflow: TextOverflow.ellipsis),
-            ),
-        ],
+        label: 'Account',
         onChanged: (v) => v == null ? null : onBank(v),
       ),
       InkWell(
@@ -594,11 +654,43 @@ class _PasteDialog extends StatefulWidget {
 
 class _PasteDialogState extends State<_PasteDialog> {
   final _text = TextEditingController();
+  String? _fileName;
+  bool _reading = false;
 
   @override
   void dispose() {
     _text.dispose();
     super.dispose();
+  }
+
+  /// A statement is a file somebody downloaded. Making them open it in
+  /// a text editor to copy it out is friction on the one step of
+  /// reconciliation that is already tedious — and on an MT940, whose
+  /// `.sta` or `.940` extension most editors will not open at all.
+  ///
+  /// No extension filter. Banks name these `.csv`, `.txt`, `.sta`,
+  /// `.940` and `.TXT`, and a filter that misses one is a file the
+  /// picker refuses to show for a reason nobody can see.
+  /// `parseStatement` works out which format it is from the content.
+  Future<void> _openFile() async {
+    setState(() => _reading = true);
+    try {
+      final file = await openFile();
+      if (file == null) return;
+      final text = await file.readAsString();
+      if (!mounted) return;
+      setState(() {
+        _text.text = text;
+        _fileName = file.name;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not read the file: $e')));
+    } finally {
+      if (mounted) setState(() => _reading = false);
+    }
   }
 
   @override
@@ -615,10 +707,33 @@ class _PasteDialogState extends State<_PasteDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Paste the CSV your bank exports, including its header row. '
-                'Columns are found by name, so the order does not matter. '
-                'Lines already imported are skipped.',
+                'Open the file your bank exports, or paste it. A CSV needs '
+                'its header row — columns are found by name, so the order '
+                'does not matter. An MT940, which is what corporate '
+                'accounts get, is recognised on its own. Lines already '
+                'imported are skipped.',
                 style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    key: const ValueKey('statement-open-file'),
+                    onPressed: _reading ? null : _openFile,
+                    icon: const Icon(Icons.folder_open_outlined, size: 18),
+                    label: const Text('Open a file'),
+                  ),
+                  if (_fileName != null) ...[
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        _fileName!,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 12),
               TextField(

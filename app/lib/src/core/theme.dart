@@ -32,6 +32,31 @@ abstract final class Motion {
       MediaQuery.disableAnimationsOf(context) ? Duration.zero : d;
 }
 
+/// What a screen is claiming when it colours something.
+///
+/// Separate from the colour itself, and that separation is the point.
+/// "This variance is unfavourable", "this cheque should have been banked
+/// and was not", "this bundle is priced under its own parts", "this week
+/// the bank closes short" are statements about the business. Red is how
+/// one of them is shown.
+///
+/// Kept apart because the statements could not be asserted while they
+/// were entangled with the colour: reading a `Color` back needs a
+/// `BuildContext`, so every one of these decisions sat in a function no
+/// unit test could call, and four of them did. A wrong one is silent —
+/// a favourable variance in red reads as bad news about a good month —
+/// which is precisely the kind of thing this repository asserts.
+enum Tone {
+  /// Good news. Green.
+  good,
+
+  /// Worth looking at. Amber.
+  warn,
+
+  /// Bad news, and the thing on the page hardest to miss. Red.
+  bad,
+}
+
 /// Status colours, which are *not* the brand accent — a figure is green
 /// because it is money in, not because green is on brand. Held in a theme
 /// extension so each brightness gets a shade that actually passes contrast
@@ -83,15 +108,14 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? info,
     Color? moneyIn,
     Color? moneyOut,
-  }) =>
-      AppColors(
-        success: success ?? this.success,
-        warning: warning ?? this.warning,
-        danger: danger ?? this.danger,
-        info: info ?? this.info,
-        moneyIn: moneyIn ?? this.moneyIn,
-        moneyOut: moneyOut ?? this.moneyOut,
-      );
+  }) => AppColors(
+    success: success ?? this.success,
+    warning: warning ?? this.warning,
+    danger: danger ?? this.danger,
+    info: info ?? this.info,
+    moneyIn: moneyIn ?? this.moneyIn,
+    moneyOut: moneyOut ?? this.moneyOut,
+  );
 
   @override
   AppColors lerp(AppColors? other, double t) {
@@ -113,6 +137,16 @@ extension AppColorsX on BuildContext {
       Theme.of(this).extension<AppColors>() ?? AppColors._light;
 
   ColorScheme get scheme => Theme.of(this).colorScheme;
+
+  /// The colour a [Tone] is shown in, or null for no tone at all —
+  /// which is a real answer and the commonest one: most rows on most
+  /// screens are making no claim.
+  Color? toneColour(Tone? tone) => switch (tone) {
+    Tone.good => colors.success,
+    Tone.warn => colors.warning,
+    Tone.bad => colors.danger,
+    null => null,
+  };
 }
 
 /// iAkauntan visual identity: a deep teal that reads as trustworthy on a
@@ -148,15 +182,78 @@ class AppTheme {
   /// request was blocked.
   static const fontFamily = 'Plus Jakarta Sans';
 
-  static ThemeData light({Color? seedColor}) =>
-      _build(Brightness.light, seedColor);
-  static ThemeData dark({Color? seedColor}) =>
-      _build(Brightness.dark, seedColor);
+  static ThemeData light({
+    Color? seedColor,
+    Map<String, String> overrides = const {},
+  }) => _build(Brightness.light, seedColor, overrides);
 
-  static ThemeData _build(Brightness brightness, [Color? seedColor]) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seedColor ?? seed,
-      brightness: brightness,
+  static ThemeData dark({
+    Color? seedColor,
+    Map<String, String> overrides = const {},
+  }) => _build(Brightness.dark, seedColor, overrides);
+
+  /// Ink that can be read on [background].
+  ///
+  /// Material pairs every role with an `on` colour it computed from the
+  /// seed. An override replaces the role and cannot replace the pair —
+  /// so a pale Primary would keep white text on every filled button.
+  /// This is what stops that, and it is a rendering decision rather
+  /// than something to store.
+  static Color inkOn(Color background) =>
+      ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
+  /// [base] with whatever roles an operator has chosen replaced.
+  ///
+  /// On top of the derivation rather than instead of it: a platform
+  /// that overrides nothing but Error keeps a coherent scheme with its
+  /// own red in it, and clearing that box gives Material's red back.
+  ///
+  /// An unparseable value is ignored rather than thrown on — the
+  /// database checks the shape, but this is the code path every screen
+  /// in the product goes through, and a colour typed wrong somewhere
+  /// must not be a product that will not draw.
+  static ColorScheme applyOverrides(
+    ColorScheme base,
+    Map<String, String> overrides,
+  ) {
+    var scheme = base;
+    for (final entry in overrides.entries) {
+      final colour = parseHex(entry.value);
+      if (colour == null) continue;
+      final ink = inkOn(colour);
+      scheme = switch (entry.key) {
+        'primary' => scheme.copyWith(primary: colour, onPrimary: ink),
+        'container' =>
+          scheme.copyWith(primaryContainer: colour, onPrimaryContainer: ink),
+        'secondary' => scheme.copyWith(secondary: colour, onSecondary: ink),
+        'surface' => scheme.copyWith(surface: colour, onSurface: ink),
+        // The tone raised surfaces use, which is what the console's
+        // "Surface tint" tile shows. Not `surfaceTint`, which is an
+        // elevation overlay nobody looks at directly.
+        'surfaceTint' => scheme.copyWith(
+          surfaceContainerHighest: colour,
+          onSurfaceVariant: ink,
+        ),
+        'error' => scheme.copyWith(error: colour, onError: ink),
+        _ => scheme,
+      };
+    }
+    return scheme;
+  }
+
+  static ThemeData _build(
+    Brightness brightness, [
+    Color? seedColor,
+    Map<String, String> overrides = const {},
+  ]) {
+    final scheme = applyOverrides(
+      ColorScheme.fromSeed(
+        seedColor: seedColor ?? seed,
+        brightness: brightness,
+      ),
+      overrides,
     );
     final isDark = brightness == Brightness.dark;
     final colors = isDark ? AppColors._dark : AppColors._light;
@@ -170,8 +267,9 @@ class AppTheme {
       colorScheme: scheme,
       fontFamily: fontFamily,
       extensions: [colors],
-      scaffoldBackgroundColor:
-          isDark ? scheme.surface : const Color(0xFFF6F8F8),
+      scaffoldBackgroundColor: isDark
+          ? scheme.surface
+          : const Color(0xFFF6F8F8),
       visualDensity: VisualDensity.compact,
       hoverColor: hover,
       focusColor: focus,
@@ -229,10 +327,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.md),
           ),
-        ).copyWith(
-          mouseCursor: _clickable,
-          side: _focusRing(scheme.onSurface),
-        ),
+        ).copyWith(mouseCursor: _clickable, side: _focusRing(scheme.onSurface)),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
@@ -248,10 +343,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.md),
           ),
-        ).copyWith(
-          mouseCursor: _clickable,
-          side: _focusRing(scheme.primary),
-        ),
+        ).copyWith(mouseCursor: _clickable, side: _focusRing(scheme.primary)),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -260,10 +352,7 @@ class AppTheme {
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
-        ).copyWith(
-          mouseCursor: _clickable,
-          side: _focusRing(scheme.primary),
-        ),
+        ).copyWith(mouseCursor: _clickable, side: _focusRing(scheme.primary)),
       ),
       chipTheme: ChipThemeData(
         side: BorderSide.none,
@@ -344,24 +433,40 @@ class AppTheme {
     const tabular = [FontFeature.tabularFigures()];
     final base = ThemeData(brightness: brightness).textTheme;
 
-    TextStyle? t(TextStyle? s, {double? size, FontWeight? weight, double? ls}) =>
-        s?.copyWith(
-          fontFamily: fontFamily,
-          fontFeatures: tabular,
-          fontSize: size,
-          fontWeight: weight,
-          letterSpacing: ls,
-        );
+    TextStyle? t(
+      TextStyle? s, {
+      double? size,
+      FontWeight? weight,
+      double? ls,
+    }) => s?.copyWith(
+      fontFamily: fontFamily,
+      fontFeatures: tabular,
+      fontSize: size,
+      fontWeight: weight,
+      letterSpacing: ls,
+    );
 
     return base.copyWith(
       displaySmall: t(base.displaySmall, weight: FontWeight.w800, ls: -0.8),
       headlineMedium: t(base.headlineMedium, weight: FontWeight.w700, ls: -0.6),
-      headlineSmall: t(base.headlineSmall,
-          size: 22, weight: FontWeight.w700, ls: -0.4),
-      titleLarge:
-          t(base.titleLarge, size: 19, weight: FontWeight.w700, ls: -0.3),
-      titleMedium:
-          t(base.titleMedium, size: 15, weight: FontWeight.w600, ls: -0.1),
+      headlineSmall: t(
+        base.headlineSmall,
+        size: 22,
+        weight: FontWeight.w700,
+        ls: -0.4,
+      ),
+      titleLarge: t(
+        base.titleLarge,
+        size: 19,
+        weight: FontWeight.w700,
+        ls: -0.3,
+      ),
+      titleMedium: t(
+        base.titleMedium,
+        size: 15,
+        weight: FontWeight.w600,
+        ls: -0.1,
+      ),
       titleSmall: t(base.titleSmall, size: 13, weight: FontWeight.w600),
       bodyLarge: t(base.bodyLarge, size: 15),
       bodyMedium: t(base.bodyMedium, size: 13.5),
@@ -372,20 +477,21 @@ class AppTheme {
     );
   }
 
-  static final _clickable =
-      WidgetStateProperty.resolveWith<MouseCursor?>((states) =>
-          states.contains(WidgetState.disabled)
-              ? SystemMouseCursors.basic
-              : SystemMouseCursors.click);
+  static final _clickable = WidgetStateProperty.resolveWith<MouseCursor?>(
+    (states) => states.contains(WidgetState.disabled)
+        ? SystemMouseCursors.basic
+        : SystemMouseCursors.click,
+  );
 
   /// A ring, not just a tint. The default focused overlay is a wash of the
   /// button's own colour, which on a filled button is nearly invisible —
   /// and keyboard users are the ones who cannot see where they are.
   static WidgetStateProperty<BorderSide?> _focusRing(Color color) =>
-      WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.focused)
-              ? BorderSide(color: color, width: 2)
-              : null);
+      WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? BorderSide(color: color, width: 2)
+            : null,
+      );
 
   static OutlineInputBorder _border(Color color, {double width = 1}) =>
       OutlineInputBorder(

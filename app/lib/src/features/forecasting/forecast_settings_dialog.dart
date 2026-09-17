@@ -86,6 +86,7 @@ class _ForecastSettingsDialogState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _bucket,
                   decoration: const InputDecoration(
                     labelText: 'Read history in',
@@ -130,6 +131,7 @@ class _ForecastSettingsDialogState
                 ),
                 const SizedBox(height: Space.md),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _method,
                   decoration: const InputDecoration(labelText: 'Default method'),
                   items: const [

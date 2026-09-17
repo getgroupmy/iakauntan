@@ -314,4 +314,260 @@ begin
     has_table_privilege('authenticated', 'public.bank_transfers', 'select'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Undoing one, and the balance the app actually reads
+--
+-- `Undo Sdn Bhd` above asserts the ledger after a void, which is the
+-- audited number.  It is not the number the app puts on the screen:
+-- `bank_accounts.current_balance` is a running figure the two transfer
+-- functions maintain by hand, and sweeping `void_bank_transfer` found
+-- every line of that arithmetic unasserted.  The sending account could
+-- be left short, the receiving account could keep the money, the bank
+-- charges could go missing, and the trial balance would still be
+-- right — the ledger and the balance on the screen would simply
+-- disagree, which is the worst of the three outcomes because nothing
+-- looks wrong until somebody reconciles.
+--
+-- The reversal's date was open too, and so were the two refusals: a
+-- transfer already deleted, and a void by somebody with no right to
+-- post.  The double-void refusal was asserted only by its SQLSTATE,
+-- which `reverse_gl_entry` raises as well, so the message is checked
+-- here instead.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.tr_org('Undo Baki Sdn Bhd');
+  v_a uuid; v_b uuid; v_id uuid; v_gone uuid; v_rev uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_msg text;
+begin
+  v_a := pg_temp.bank(v_org, 'Current account', '1121');
+  v_b := pg_temp.bank(v_org, 'Savings account', '1122');
+
+  -- Sent, received and the fee are three different numbers, so a void
+  -- that puts back only some of them is visible.
+  v_id := public.create_bank_transfer(
+    p_from_account_id => v_a, p_to_account_id => v_b,
+    p_amount_sent => 10010, p_transfer_date => date '2026-03-01',
+    p_amount_received => 10000, p_bank_charges => 10);
+  perform public.post_bank_transfer(v_id);
+
+  perform pg_temp.check_eq('the running balance is down by sent plus fee',
+    (select current_balance from public.bank_accounts where id = v_a), -10010);
+  perform pg_temp.check_eq('and up at the other end by what arrived',
+    (select current_balance from public.bank_accounts where id = v_b), 10000);
+
+  -- The fee is inside the ten thousand and ten, not beside it: the
+  -- journal credits this account 10,010 and debits the tenner to 6300.
+  -- Taking the charge off twice was 0504. `resync_bank_balance` is the
+  -- definition of the figure, so the two have to agree.
+  perform pg_temp.check_eq('and the running balance agrees with the ledger',
+    public.resync_bank_balance(v_a), -10010);
+
+  -- ------------------------------------------------------------------
+  -- A transfer that is no longer there
+  -- ------------------------------------------------------------------
+  v_gone := public.create_bank_transfer(v_a, v_b, 100, date '2026-03-02');
+  update public.bank_transfers set deleted_at = now() where id = v_gone;
+  begin
+    perform public.void_bank_transfer(v_gone, 'Never happened');
+    raise exception 'FAIL voided a transfer that had been deleted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   a deleted transfer is not there to void';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Who may undo it
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-pindah@example.test'));
+  begin
+    perform public.void_bank_transfer(v_id, 'Not mine to void');
+    raise exception 'FAIL a stranger voided another company''s transfer';
+  exception when sqlstate '42501' then
+    -- `reverse_gl_entry` refuses a stranger too, with the same
+    -- SQLSTATE and one word less, so the message is what says which
+    -- of the two turned them away. Whole message, not a fragment.
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody who cannot post cannot void either',
+      v_msg = 'Insufficient privileges to post');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('and the money did not move on the attempt',
+    (select current_balance from public.bank_accounts where id = v_b), 10000);
+
+  -- ------------------------------------------------------------------
+  -- Undone
+  -- ------------------------------------------------------------------
+  v_rev := public.void_bank_transfer(v_id, 'Keyed against the wrong account');
+
+  -- Dated the day of the transfer, not the day somebody noticed. A
+  -- reversal posted into a later month moves profit between periods.
+  perform pg_temp.check_true('the reversal is dated the day of the transfer',
+    (select entry_date = date '2026-03-01' from public.gl_entries
+      where id = v_rev));
+  perform pg_temp.check_eq('the sending account has the money and the fee back',
+    (select current_balance from public.bank_accounts where id = v_a), 0);
+  perform pg_temp.check_eq('and the receiving account is not still holding it',
+    (select current_balance from public.bank_accounts where id = v_b), 0);
+
+  begin
+    perform public.void_bank_transfer(v_id, 'Again');
+    raise exception 'FAIL voided the same transfer twice';
+  exception when sqlstate '22023' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and it is the transfer refusing, not the ledger',
+      v_msg like '%is already void%');
+  end;
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Undoing one that crossed a currency
+--
+-- `current_balance` is carried in the base currency, so both legs of a
+-- void have to be converted on the way back out. A thousand dollars
+-- put back as a thousand ringgit leaves the account wrong by three and
+-- a half thousand, and only a foreign account can show it: with the
+-- ringgit side at a rate of one, either conversion could be dropped
+-- and the same-currency case would not notice. So it is done in both
+-- directions.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.tr_org('Pindah Mata Wang Sdn Bhd');
+  v_usd uuid; v_myr uuid; v_myr2 uuid; v_usd2 uuid; v_id uuid;
+begin
+  v_usd  := pg_temp.bank(v_org, 'USD account', '1121', 'USD');
+  v_myr  := pg_temp.bank(v_org, 'Ringgit account', '1122', 'MYR');
+  v_myr2 := pg_temp.bank(v_org, 'Ringgit account two', '1123', 'MYR');
+  v_usd2 := pg_temp.bank(v_org, 'USD account two', '1124', 'USD');
+
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date)
+  values (v_org, 'USD', 'MYR', 4.50, date '2026-03-01');
+
+  -- Dollars out: 1,000 USD at 4.50 is 4,500 ringgit of base value,
+  -- and 4,400 arrived, so 100 was exchange.
+  v_id := public.create_bank_transfer(
+    p_from_account_id => v_usd, p_to_account_id => v_myr,
+    p_amount_sent => 1000, p_transfer_date => date '2026-03-01',
+    p_amount_received => 4400);
+  perform public.post_bank_transfer(v_id);
+  perform pg_temp.check_eq('the dollar account is down by its base value',
+    (select current_balance from public.bank_accounts where id = v_usd), -4500);
+
+  perform public.void_bank_transfer(v_id, 'Wrong account');
+  perform pg_temp.check_eq('and the void puts back ringgit, not dollars',
+    (select current_balance from public.bank_accounts where id = v_usd), 0);
+  perform pg_temp.check_eq('with the ringgit end emptied too',
+    (select current_balance from public.bank_accounts where id = v_myr), 0);
+
+  -- Ringgit in: the conversion is on the receiving side this time.
+  v_id := public.create_bank_transfer(
+    p_from_account_id => v_myr2, p_to_account_id => v_usd2,
+    p_amount_sent => 4500, p_transfer_date => date '2026-03-01',
+    p_amount_received => 1000);
+  perform public.post_bank_transfer(v_id);
+  perform pg_temp.check_eq('the dollar account holds the base value of it',
+    (select current_balance from public.bank_accounts where id = v_usd2), 4500);
+
+  perform public.void_bank_transfer(v_id, 'Wrong account');
+  perform pg_temp.check_eq('and the void takes back ringgit, not dollars',
+    (select current_balance from public.bank_accounts where id = v_usd2), 0);
+  perform pg_temp.check_eq('leaving the sending account whole',
+    (select current_balance from public.bank_accounts where id = v_myr2), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Posting one: what it refuses, and what it carries onto the journal
+--
+-- Sweeping `post_bank_transfer` killed fifteen of twenty mutants and
+-- left the same shape behind as everywhere else: every figure in the
+-- journal and every running balance was caught, and none of the three
+-- refusals was. A transfer already deleted, a transfer already posted,
+-- and a stranger posting one all went through in silence.
+--
+-- The date and the reference survived too. Both are how a transfer is
+-- found again: the date decides which month's accounts it lands in,
+-- and the reference is what somebody types into the search box when
+-- the bank statement says IBG and nothing else.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.tr_org('Catat Pindahan Sdn Bhd');
+  v_a uuid; v_b uuid; v_id uuid; v_gone uuid; v_entry uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_msg text;
+begin
+  v_a := pg_temp.bank(v_org, 'Current account', '1121');
+  v_b := pg_temp.bank(v_org, 'Savings account', '1122');
+
+  -- ------------------------------------------------------------------
+  -- A transfer that is no longer there
+  -- ------------------------------------------------------------------
+  v_gone := public.create_bank_transfer(v_a, v_b, 100, date '2026-03-02');
+  update public.bank_transfers set deleted_at = now() where id = v_gone;
+  begin
+    perform public.post_bank_transfer(v_gone);
+    raise exception 'FAIL posted a transfer that had been deleted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   a deleted transfer is not there to post';
+  end;
+
+  v_id := public.create_bank_transfer(
+    p_from_account_id => v_a, p_to_account_id => v_b,
+    p_amount_sent => 2000, p_transfer_date => date '2026-03-01',
+    p_reference => 'IBG 20260301');
+
+  -- ------------------------------------------------------------------
+  -- Who may post it
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-catat@example.test'));
+  begin
+    perform public.post_bank_transfer(v_id);
+    raise exception 'FAIL a stranger posted another company''s transfer';
+  exception when sqlstate '42501' then
+    -- `create_gl_entry` would refuse them as well, further down, and
+    -- its wording ends '...to post to the ledger', so this has to be
+    -- the whole message rather than a fragment of it: a `like` on
+    -- 'privileges to post' is satisfied by either function.
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody outside the company cannot post it',
+      v_msg = 'Insufficient privileges to post');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and it is still sitting in draft',
+    (select status = 'draft' and gl_entry_id is null
+       from public.bank_transfers where id = v_id));
+
+  -- ------------------------------------------------------------------
+  -- Posted once, and only once
+  -- ------------------------------------------------------------------
+  v_entry := public.post_bank_transfer(v_id);
+
+  perform pg_temp.check_true('the journal is dated the day of the transfer',
+    (select entry_date = date '2026-03-01' from public.gl_entries
+      where id = v_entry));
+  perform pg_temp.check_true('and carries the reference the bank will quote',
+    (select reference = 'IBG 20260301' from public.gl_entries
+      where id = v_entry));
+
+  begin
+    perform public.post_bank_transfer(v_id);
+    raise exception 'FAIL posted the same transfer twice';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a transfer is only posted once',
+      v_msg like '%already posted%');
+  end;
+  perform pg_temp.check_eq('so there is one journal for it, not two',
+    (select count(*)::integer from public.gl_entries
+      where source_table = 'bank_transfers' and source_id = v_id), 1);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

@@ -406,4 +406,548 @@ begin
   raise notice 'ok   landed_cost';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Kos Mendarat Sdn Bhd: the spread between the charge accounts, and
+-- everything the run refuses
+--
+-- Sweeping `post_landed_cost_run` killed six of seventeen mutants. What
+-- the charges do to the average cost is nailed down above; almost
+-- nothing else was.
+--
+-- Two of the survivors are the same fixture problem. Every run in this
+-- file carries ONE charge line, and with one charge line the
+-- proportioning is unobservable: the ratio is applied, then immediately
+-- overwritten by `v_credit := v_left` because the first line is also
+-- the last. `v_ratio := 1` and the rounding override could both be
+-- deleted and the single line still came out at exactly what was
+-- capitalised. Three charge lines on three accounts, with a third of
+-- the goods still on the shelf, separates them: 100 each becomes 33.33,
+-- 33.33 and 33.34, and the odd sen is the whole point of the override.
+--
+-- The dates are the other kind. Every run here is dated `current_date`,
+-- so a function that used today's date instead of the run's would agree
+-- with the fixture on every single assertion. This run is dated thirty
+-- days back.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_wh     uuid; v_sup uuid; v_cust uuid;
+  v_batu   uuid; v_pasir uuid;
+  v_bill_a uuid; v_bill_b uuid; v_inv uuid;
+  v_a1 uuid; v_a2 uuid; v_a3 uuid; v_inv_acct uuid;
+  v_run    uuid; v_entry uuid; v_bare uuid; v_entry_run uuid;
+  v_when   date := current_date - 30;
+  v_msg    text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Kos Mendarat Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  -- The run is dated thirty days back, which can be last year in
+  -- January, so both years get a fiscal period.
+  perform public.create_fiscal_year(v_org,
+    (date_trunc('year', current_date) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory','purchases','sales']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'MAIN', 'The yard', true) returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SUP', 'A quarry', 'supplier') returning id into v_sup;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'A builder', 'customer') returning id into v_cust;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'BATU', 'Stone', 'stock', true, 'C62', 20.00)
+  returning id into v_batu;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'PASIR', 'Sand', 'stock', true, 'C62', 20.00)
+  returning id into v_pasir;
+
+  select id into v_a1 from public.accounts where org_id = v_org and code = '5400';
+  select id into v_a2 from public.accounts where org_id = v_org and code = '5100';
+  select id into v_a3 from public.accounts where org_id = v_org and code = '5900';
+  select id into v_inv_acct from public.accounts
+   where org_id = v_org and code = '1310' and not is_group;
+
+  -- Two bills, so a run can be aimed at one item or at both.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
+  values (v_org, 'bill', 'BILL-A', current_date - 40, v_sup, 'MYR', 1, 'draft')
+  returning id into v_bill_a;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_bill_a, 1, 'item', v_batu, 'Stone', 300, 'C62', 10.00, v_wh);
+  perform public.post_purchase_document(v_bill_a);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
+  values (v_org, 'bill', 'BILL-B', current_date - 40, v_sup, 'MYR', 1, 'draft')
+  returning id into v_bill_b;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_bill_b, 1, 'item', v_pasir, 'Sand', 100, 'C62', 10.00, v_wh);
+  perform public.post_purchase_document(v_bill_b);
+
+  -- Two hundred of the three hundred stone go out, so a third is left
+  -- and the ratio is a third. All the sand goes.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-A', current_date - 35, current_date - 35,
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_inv, 1, 'item', v_batu, 'Stone', 200, 'C62', 20.00, v_wh),
+         (v_org, v_inv, 2, 'item', v_pasir, 'Sand', 100, 'C62', 20.00, v_wh);
+  perform public.post_sales_document(v_inv);
+
+  perform pg_temp.check_eq('a third of the stone is left',
+    (select round(i.quantity_on_hand, 4) from public.items i where i.id = v_batu),
+    100::numeric);
+  perform pg_temp.check_eq('and none of the sand',
+    (select round(i.quantity_on_hand, 4) from public.items i where i.id = v_pasir),
+    0::numeric);
+
+  -- ------------------------------------------------------------------
+  -- Three charges, three accounts, a third of it capitalised
+  -- ------------------------------------------------------------------
+  v_run := public.upsert_landed_cost_run(
+    null, v_org, v_when,
+    jsonb_build_array(jsonb_build_object('bill', v_bill_a)),
+    jsonb_build_array(
+      jsonb_build_object('description', 'Ocean freight', 'amount', 100,
+                         'basis', 'value', 'account', v_a1),
+      jsonb_build_object('description', 'Import duty', 'amount', 100,
+                         'basis', 'value', 'account', v_a2),
+      jsonb_build_object('description', 'Demurrage', 'amount', 100,
+                         'basis', 'value', 'account', v_a3)),
+    'Three charges');
+
+  perform pg_temp.check_eq('three hundred of charges falls on the stone',
+    (select p.amount from public.landed_cost_preview(v_run) p
+      where p.item_code = 'BATU'), 300::numeric);
+  perform pg_temp.check_eq('and only the third still on the shelf takes it',
+    (select p.capitalised from public.landed_cost_preview(v_run) p
+      where p.item_code = 'BATU'), 100::numeric);
+
+  v_entry := public.post_landed_cost_run(v_run);
+  v_entry_run := v_run;
+
+  -- A third of three hundred is a hundred, and a third of each hundred
+  -- is 33.33 with a sen over. The sen goes to the last line, which is
+  -- the only reason the entry balances at all.
+  perform pg_temp.check_eq('the freight account gives up a third of its share',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_a1), 33.33::numeric);
+  perform pg_temp.check_eq('so does the duty account',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_a2), 33.33::numeric);
+  perform pg_temp.check_eq('and the last one takes the odd sen',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_a3), 33.34::numeric);
+  perform pg_temp.check_eq('which is what reaches the stock',
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_inv_acct), 100::numeric);
+
+  -- ------------------------------------------------------------------
+  -- On the day of the run, and tied to the journal
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true('the movement is dated the day of the run',
+    (select bool_and(m.movement_date = v_when) from public.stock_movements m
+      where m.source_table = 'landed_cost_runs' and m.source_id = v_run));
+  perform pg_temp.check_true('and so is the journal',
+    (select e.entry_date = v_when from public.gl_entries e where e.id = v_entry));
+  perform pg_temp.check_true('the movement names the journal it went with',
+    (select bool_and(m.gl_entry_id = v_entry) from public.stock_movements m
+      where m.source_table = 'landed_cost_runs' and m.source_id = v_run));
+  perform pg_temp.check_true('and the run names it too, and says it is posted',
+    (select r.gl_entry_id = v_entry and r.status = 'posted'
+       from public.landed_cost_runs r where r.id = v_run));
+
+  -- ------------------------------------------------------------------
+  -- A line with nothing left to sit on gets no movement at all
+  -- ------------------------------------------------------------------
+  v_run := public.upsert_landed_cost_run(
+    null, v_org, v_when,
+    jsonb_build_array(jsonb_build_object('bill', v_bill_a),
+                      jsonb_build_object('bill', v_bill_b)),
+    jsonb_build_array(jsonb_build_object(
+      'description', 'A late haulage invoice', 'amount', 80,
+      'basis', 'quantity', 'account', v_a1)),
+    null);
+  perform public.post_landed_cost_run(v_run);
+  perform pg_temp.check_eq('the sand, all sold, gets no revaluation movement',
+    (select count(*)::integer from public.stock_movements m
+      where m.source_table = 'landed_cost_runs' and m.source_id = v_run
+        and m.item_id = v_pasir), 0);
+  perform pg_temp.check_eq('while the stone still on the shelf gets one',
+    (select count(*)::integer from public.stock_movements m
+      where m.source_table = 'landed_cost_runs' and m.source_id = v_run
+        and m.item_id = v_batu), 1);
+
+  -- ------------------------------------------------------------------
+  -- And a run where everything has been sold is refused outright
+  -- ------------------------------------------------------------------
+  v_run := public.upsert_landed_cost_run(
+    null, v_org, v_when,
+    jsonb_build_array(jsonb_build_object('bill', v_bill_b)),
+    jsonb_build_array(jsonb_build_object(
+      'description', 'Sand haulage', 'amount', 50,
+      'basis', 'value', 'account', v_a1)),
+    null);
+  begin
+    perform public.post_landed_cost_run(v_run);
+    raise exception 'FAIL capitalised charges onto stock that is not there';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('charges cannot sit on goods that are gone',
+      v_msg like '%already been sold%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- A run with nothing to spread
+  -- ------------------------------------------------------------------
+  insert into public.landed_cost_runs (org_id, run_no, run_date, status)
+  values (v_org, 'LC-KOSONG', v_when, 'draft') returning id into v_bare;
+  insert into public.landed_cost_targets (org_id, run_id, bill_id)
+  values (v_org, v_bare, v_bill_a);
+  begin
+    perform public.post_landed_cost_run(v_bare);
+    raise exception 'FAIL posted a run with no charges on it';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a run with no charges has nothing to spread',
+      v_msg like '%nothing to spread%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Who may post one
+  -- ------------------------------------------------------------------
+  v_run := public.upsert_landed_cost_run(
+    null, v_org, v_when,
+    jsonb_build_array(jsonb_build_object('bill', v_bill_a)),
+    jsonb_build_array(jsonb_build_object(
+      'description', 'Insurance', 'amount', 30,
+      'basis', 'value', 'account', v_a1)),
+    null);
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-kos@example.test'));
+  begin
+    perform public.post_landed_cost_run(v_run);
+    raise exception 'FAIL a stranger posted another company''s landed cost';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody outside the company cannot post one',
+      v_msg like '%not permitted to write%');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and the run is still a draft',
+    (select r.status = 'draft' and r.gl_entry_id is null
+       from public.landed_cost_runs r where r.id = v_run));
+
+  -- ------------------------------------------------------------------
+  -- A company with nowhere to put the stock
+  --
+  -- The whole point of landed cost is that it lands on inventory. A
+  -- chart with no 1310 has nowhere for it to land, and posting anyway
+  -- would silently drop the debit side.
+  -- ------------------------------------------------------------------
+  update public.accounts set code = '1312'
+   where org_id = v_org and code = '1310' and not is_group;
+  begin
+    perform public.post_landed_cost_run(v_run);
+    raise exception 'FAIL posted with no inventory account in the chart';
+  exception when sqlstate 'P0002' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('with no inventory account it will not post',
+      v_msg like '%no inventory account%');
+  end;
+  update public.accounts set code = '1310'
+   where org_id = v_org and code = '1312' and not is_group;
+
+  -- ------------------------------------------------------------------
+  -- Cancelling one
+  --
+  -- `cancel_landed_cost_run` had no assertion of its own that could
+  -- fail: the file cancels a draft run and then checks the average cost
+  -- has not moved, which is equally true of a function that does
+  -- nothing at all. All four of its decisions were open.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true('an id that names no run cannot be cancelled',
+    (select not exists (select 1 from public.landed_cost_runs
+                         where id = '00000000-0000-0000-0000-000000000001')));
+  begin
+    perform public.cancel_landed_cost_run(
+      '00000000-0000-0000-0000-000000000001'::uuid);
+    raise exception 'FAIL cancelled a run that does not exist';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   and it says so rather than reporting success';
+  end;
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-batal-kos@example.test'));
+  begin
+    perform public.cancel_landed_cost_run(v_run);
+    raise exception 'FAIL a stranger cancelled another company''s run';
+  exception when sqlstate '42501' then
+    raise notice 'ok   somebody outside the company cannot cancel one';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The posted run from the top of this block. Stock it has already
+  -- revalued cannot be un-revalued by changing a status.
+  begin
+    perform public.cancel_landed_cost_run(v_entry_run);
+    raise exception 'FAIL cancelled a run that had already revalued stock';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a posted run is undone with an adjustment',
+      v_msg like '%stock adjustment%');
+  end;
+
+  perform pg_temp.check_true('a draft run is cancelled',
+    public.cancel_landed_cost_run(v_run) = true);
+  perform pg_temp.check_true('and the run says cancelled, not draft',
+    (select r.status = 'cancelled' from public.landed_cost_runs r
+      where r.id = v_run));
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What upsert_landed_cost_run refuses, and what editing one clears
+--
+-- A mutation sweep found seven survivors on this function. Three of
+-- them are the boundary, and all three turn out to be belt-and-braces
+-- now -- which was established by probe, not by reading:
+--
+--   - a run in another company: refused by the function.
+--   - a bill in another company: the function's org filter is
+--     redundant. With it removed, `landed_cost_targets_bill_same_org`
+--     (0518) refuses the insert.
+--   - an account in another company: likewise, `landed_cost_charges_
+--     account_same_org` (0514).
+--
+-- They are asserted by their WHOLE message, for the same reason as in
+-- `deposits.sql`: the schema refuses too, but it does not say
+-- "No such bill." to a person who picked the wrong one.
+--
+-- The other four are plain gaps. Freight is spread over stock that is
+-- already on a shelf, so what it does to the moving-average cost is
+-- decided here: a charge rounded to more than the sen, or a group
+-- account used as a posting account, or an edit that leaves the
+-- previous run's charges behind and doubles them.
+-- ---------------------------------------------------------------------
+
+do $$
+declare
+  v_owner  uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_org2   uuid;
+  v_sup    uuid;
+  v_item   uuid;
+  v_wh     uuid;
+  v_bill   uuid;
+  v_bill2  uuid;
+  v_draft  uuid;
+  v_run    uuid;
+  v_run2   uuid;
+  v_group  uuid;
+  v_theirs uuid;
+  v_msg    text;
+  v_n      numeric;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Kos Enggan Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'MAIN', 'Store', true) returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'BATU', 'Batu', 'stock', true, 'C62', 10.00)
+  returning id into v_item;
+
+  -- A posted bill: freight can only be spread over stock that arrived.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-K', current_date, v_sup, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_bill, 1, 'item', v_item, 'Batu', 100, 'C62', 10.00, v_wh);
+  perform public.post_purchase_document(v_bill);
+
+  -- And one that is not posted.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-DRAF', current_date, v_sup, 'MYR', 1, 'draft')
+  returning id into v_draft;
+
+  -- Freight on a bill nobody has posted: the goods are not on a shelf,
+  -- so there is nothing for the cost to land on.
+  begin
+    perform public.upsert_landed_cost_run(null, v_org, current_date,
+      jsonb_build_array(jsonb_build_object('bill', v_draft)),
+      '[]'::jsonb, 'draf');
+    perform pg_temp.check_true(
+      'freight cannot be spread over a bill nobody has posted', false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'freight cannot be spread over a bill nobody has posted, and it '
+      'says which: ' || v_msg,
+      v_msg like 'Bill BILL-DRAF is still draft%');
+  end;
+
+  -- A group account is a heading in the chart, not somewhere a posting
+  -- goes; the trial balance would carry a figure against a total.
+  select id into v_group from public.accounts
+   where org_id = v_org and is_group limit 1;
+  begin
+    perform public.upsert_landed_cost_run(null, v_org, current_date,
+      '[]'::jsonb,
+      jsonb_build_array(jsonb_build_object(
+        'description', 'Ocean freight', 'amount', 100,
+        'account', v_group)),
+      'kumpulan');
+    perform pg_temp.check_true(
+      'a heading in the chart is not somewhere a charge can be posted',
+      false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a heading in the chart is not somewhere a charge can be posted: '
+      || v_msg, v_msg = 'No such account.');
+  end;
+
+  -- The whole message, not a fragment: the schema refuses this too --
+  -- see the note above -- but it does not say this.
+  perform pg_temp.sign_in_as(v_owner);
+  v_org2 := pg_temp.test_org('Kos Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.landed_cost_runs (org_id, run_no, run_date, status)
+  values (v_org2, 'LC-JIRAN', current_date, 'draft') returning id into v_theirs;
+
+  begin
+    perform public.upsert_landed_cost_run(v_theirs, v_org, current_date,
+      '[]'::jsonb, '[]'::jsonb, 'jiran');
+    perform pg_temp.check_true(
+      'another company''s run cannot be edited from here', false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'another company''s run cannot be edited from here, and it says so '
+      'in words: ' || v_msg, v_msg = 'No such landed cost run.');
+  end;
+
+  -- The bill, the same way. `landed_cost_targets_bill_same_org` (0518)
+  -- refuses this too, and says nothing a person could act on.
+  declare v_theirbill uuid;
+  begin
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org2, 'S-J', 'Pembekal jiran', 'supplier')
+    returning id into v_theirbill;
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+       exchange_rate, status)
+    values (v_org2, 'bill', 'BILL-J', current_date, v_theirbill, 'MYR', 1,
+            'posted')
+    returning id into v_theirbill;
+
+    begin
+      perform public.upsert_landed_cost_run(null, v_org, current_date,
+        jsonb_build_array(jsonb_build_object('bill', v_theirbill)),
+        '[]'::jsonb, 'bil jiran');
+      perform pg_temp.check_true(
+        'freight cannot be spread over another company''s bill', false);
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_true(
+        'freight cannot be spread over another company''s bill, and it '
+        'says so in words: ' || v_msg, v_msg = 'No such bill.');
+    end;
+  end;
+
+  -- A charge is money, and money is kept to the sen. A third of a
+  -- hundred ringgit is 33.33, not 33.333333.
+  --
+  -- The `round(..., 2)` this asserts cannot be caught by a mutation:
+  -- `landed_cost_charges.amount` is numeric(18,2), so removing the
+  -- round changes nothing that reaches the row. The assertion is kept
+  -- because it pins the figure a person sees; it does not prove that
+  -- call is load-bearing, and the column type is why.
+  v_run := public.upsert_landed_cost_run(null, v_org, current_date,
+    jsonb_build_array(jsonb_build_object('bill', v_bill)),
+    jsonb_build_array(jsonb_build_object(
+      'description', 'Ocean freight', 'amount', 100.0/3, 'basis', 'quantity')),
+    'sen');
+  select amount into v_n from public.landed_cost_charges
+   where run_id = v_run and line_no = 1;
+  perform pg_temp.check_eq('a charge is kept to the sen', v_n, 33.33::numeric);
+
+  perform pg_temp.check_eq('and the basis it was asked for is the one kept',
+    (select count(*)::integer from public.landed_cost_charges
+      where run_id = v_run and basis = 'quantity'), 1);
+
+  -- Editing a run replaces what it holds. A run edited from two charges
+  -- to one has one, not three: the charges are what the cost is spread
+  -- from, so leaving the old ones behind doubles the freight on the
+  -- stock.
+  -- A SECOND bill on the edit, and only the second. If the old target
+  -- survived the edit the run would name two, and the freight would be
+  -- spread over stock it was never meant to reach. The first draft of
+  -- this passed the same bill both times, and `on conflict do nothing`
+  -- made a stale target indistinguishable from a replaced one.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-K2', current_date, v_sup, 'MYR', 1, 'draft')
+  returning id into v_bill2;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_bill2, 1, 'item', v_item, 'Batu lagi', 50, 'C62',
+          10.00, v_wh);
+  perform public.post_purchase_document(v_bill2);
+
+  v_run2 := public.upsert_landed_cost_run(v_run, v_org, current_date,
+    jsonb_build_array(jsonb_build_object('bill', v_bill2)),
+    jsonb_build_array(
+      jsonb_build_object('description', 'Ocean freight', 'amount', 60),
+      jsonb_build_object('description', 'Port charges',  'amount', 40)),
+    'dua');
+  perform pg_temp.check_eq('an edit is the run, not another one',
+    (v_run2 = v_run)::text, 'true');
+  perform pg_temp.check_eq('editing a run replaces its charges',
+    (select count(*)::integer from public.landed_cost_charges
+      where run_id = v_run), 2);
+  perform pg_temp.check_eq('and does not leave the old ones behind',
+    (select sum(amount) from public.landed_cost_charges
+      where run_id = v_run), 100::numeric);
+  perform pg_temp.check_eq('nor the old bills',
+    (select count(*)::integer from public.landed_cost_targets
+      where run_id = v_run), 1);
+  perform pg_temp.check_eq('and the one it names is the new one',
+    (select count(*)::integer from public.landed_cost_targets
+      where run_id = v_run and bill_id = v_bill2), 1);
+
+  raise notice 'landed cost: 3 refusals, the sen, the basis, and the edit';
+end $$;
+
 rollback;

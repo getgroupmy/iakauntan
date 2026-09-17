@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
+import 'stall_items_dialog.dart';
 
 /// What a stall's row says under its name.
 ///
@@ -99,16 +102,16 @@ class _StallsScreenState extends ConsumerState<StallsScreen>
               if (list.length > 1)
                 Padding(
                   padding: const EdgeInsets.all(Space.md),
-                  child: DropdownButtonFormField<String>(
-                    value: outlet,
-                    decoration: const InputDecoration(labelText: 'Court'),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final o in list)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: o['id'] as String,
-                          child: Text('${o['name']}'),
+                          label: '${o['name']}',
                         ),
                     ],
+                    value: outlet,
+                    label: 'Court',
                     onChanged: (v) => setState(() => _outlet = v),
                   ),
                 ),
@@ -192,12 +195,32 @@ class _StallListState extends ConsumerState<_StallList> {
                 leading: CircleAvatar(child: Text('${row['code']}')),
                 title: Text('${row['name']}'),
                 subtitle: Text(stallSummary(row)),
-                trailing: row['is_active'] == true
-                    ? null
-                    : const Chip(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (row['is_active'] != true)
+                      const Chip(
                         label: Text('Closed'),
                         visualDensity: VisualDensity.compact,
                       ),
+                    // Which dishes are this stall's. Nothing could say
+                    // so until now, and a stall that owns no dish
+                    // settles for nothing however much the court takes.
+                    TextButton(
+                      key: ValueKey('stall-items-${row['id']}'),
+                      onPressed: () async {
+                        if (await showStallItems(
+                          context,
+                          stall: row,
+                          stalls: rows,
+                        )) {
+                          _reload();
+                        }
+                      },
+                      child: const Text('Dishes'),
+                    ),
+                  ],
+                ),
                 onTap: () => _edit(row),
               );
             },
@@ -236,8 +259,29 @@ class _StallSheetState extends ConsumerState<_StallSheet> {
   late String? _operator = widget.stall?['operator_contact_id'] as String?;
   late bool _active = widget.stall?['is_active'] != false;
 
+  /// Save is gated on both boxes having something in them, and that
+  /// gate is read in `build`. Nothing rebuilt when either was typed
+  /// into, so the button woke only when the operator picker or the
+  /// switch was touched -- which means it worked if the operator was
+  /// chosen LAST and not if it was chosen first, from a form that
+  /// looks the same either way.
+  ///
+  /// The same defect, verbatim, was in `provider_roster_screen.dart`,
+  /// where nothing else was required and the button therefore never
+  /// woke at all.
+  @override
+  void initState() {
+    super.initState();
+    _code.addListener(_reread);
+    _name.addListener(_reread);
+  }
+
+  void _reread() => setState(() {});
+
   @override
   void dispose() {
+    _code.removeListener(_reread);
+    _name.removeListener(_reread);
     _code.dispose();
     _name.dispose();
     _commission.dispose();
@@ -293,16 +337,19 @@ class _StallSheetState extends ConsumerState<_StallSheet> {
               decoration: const InputDecoration(labelText: 'Called'),
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: contactPickerOptions(widget.contacts),
               value: _operator,
-              decoration: const InputDecoration(
-                labelText: 'Whose business it is',
-                helperText: 'The contact the settlement bill is raised against.',
+              label: 'Whose business it is',
+              helperText:
+                  'The contact the settlement bill is raised against.',
+              hint: 'Type a name or a code',
+              createLabel: 'Add operator',
+              onCreate: (typed) => createContactFromPicker(
+                context,
+                contactType: 'supplier',
+                typed: typed,
               ),
-              items: [
-                for (final c in widget.contacts)
-                  DropdownMenuItem(value: c.id, child: Text(c.name)),
-              ],
               onChanged: (v) => setState(() => _operator = v),
             ),
             const SizedBox(height: Space.md),

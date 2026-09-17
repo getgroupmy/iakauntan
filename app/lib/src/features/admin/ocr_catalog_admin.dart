@@ -179,7 +179,7 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Catalog updated',
-      action: () => ref.read(repoProvider)!.setOcrProvider(
+      action: () => ref.read(platformRepoProvider).setOcrProvider(
         code,
         name: _changed(_name, 'name'),
         kind: _changed(_kind, 'kind'),

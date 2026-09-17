@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -105,6 +106,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
             const SizedBox(height: Space.lg),
 
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _kind,
               decoration: const InputDecoration(labelText: 'Applies to'),
               items: const [
@@ -133,6 +135,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
 
             if (_types.isNotEmpty) ...[
               DropdownButtonFormField<String?>(
+                isExpanded: true,
                 value: _docType,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: [
@@ -171,6 +174,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
                 const SizedBox(width: Space.md),
                 Expanded(
                   child: DropdownButtonFormField<int>(
+                    isExpanded: true,
                     value: _step,
                     decoration: const InputDecoration(labelText: 'Step'),
                     items: [
@@ -196,6 +200,7 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
 
             if (_byRole)
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _role,
                 decoration: const InputDecoration(labelText: 'Approved by'),
                 items: [
@@ -205,20 +210,20 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
                 onChanged: (v) => setState(() => _role = v),
               )
             else
-              DropdownButtonFormField<String>(
-                value: _userId,
-                decoration: const InputDecoration(labelText: 'Approved by'),
-                items: [
+              SearchablePicker<String>(
+                options: [
                   // Only people who have actually joined. An invitation
                   // that has not been accepted has no user to hang a
                   // step off, so offering it would write a rule whose
                   // approver does not exist yet.
                   for (final m in team.where((m) => m.userId != null))
-                    DropdownMenuItem(
-                      value: m.userId,
-                      child: Text(m.displayName),
+                    PickerOption<String>(
+                      value: m.userId!,
+                      label: m.displayName,
                     ),
                 ],
+                value: _userId,
+                label: 'Approved by',
                 onChanged: (v) => setState(() => _userId = v),
               ),
 

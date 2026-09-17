@@ -148,7 +148,7 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.sa_org('Service Item Sdn Bhd');
-  v_item uuid; v_adj uuid;
+  v_item uuid; v_adj uuid; v_msg text;
 begin
   insert into public.items (org_id, code, name, item_type, track_inventory, uom_code)
   values (v_org, 'SVC-1', 'Consulting', 'service', false, 'C62')
@@ -159,7 +159,12 @@ begin
     perform public.post_stock_adjustment(v_adj);
     raise exception 'FAIL: adjusted the quantity of a service';
   exception when sqlstate '23514' then
-    raise notice 'ok   a service cannot be counted';
+    -- The message, because 23514 is also what an adjustment that
+    -- changes nothing raises, and a consulting line counted at five
+    -- against a system figure of zero reaches both.
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a service cannot be counted',
+      v_msg like '%does not track inventory%');
   end;
 end $$;
 
@@ -216,6 +221,172 @@ begin
   perform pg_temp.check_true('while its checked wrapper is not',
     has_function_privilege('authenticated',
       'public.ensure_default_warehouse(uuid)', 'execute'));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Kira Stok Sdn Bhd: everything about a count except the two figures
+--
+-- Sweeping `post_stock_adjustment` killed eight of twenty mutants. The
+-- two figures the file was written for — what the ledger says and what
+-- the stock report says — were caught every time. Almost everything
+-- around them was open: which warehouse the stock came off, which
+-- accounts it went to, whether the line's own cost was used or the
+-- average, whether a shortfall was labelled a shortfall, what day any
+-- of it happened on, whether the adjustment ended up posted, and
+-- whether the movements were tied back to the journal at all.
+--
+-- The fixture above cannot reach most of that. It has one warehouse,
+-- so a posting into the wrong one is invisible; one line, so a line
+-- that counted exactly right cannot be skipped wrongly; no cost on the
+-- line and no accounts of its own, so every `coalesce` falls through
+-- to the same answer either way. This one is built to tell them apart.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.sa_org('Kira Stok Sdn Bhd');
+  v_utama uuid; v_simpan uuid;
+  v_inv   uuid; v_adj_acct uuid;
+  v_item  uuid; v_tepat uuid; v_adj uuid; v_entry uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_msg   text;
+begin
+  -- Two warehouses, and the count is in the one that is not the
+  -- default, so a posting that quietly picks the default is visible.
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'UTAMA', 'Main store', true) returning id into v_utama;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'SIMPAN', 'Back store') returning id into v_simpan;
+
+  -- Accounts of its own at both ends, so falling through to 1310 and
+  -- 5900 is visible as well.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group,
+     parent_id, sort_order)
+  values (v_org, '1315', 'Stock in the back store', 'asset', 'inventory',
+          false, (select id from public.accounts
+                   where org_id = v_org and code = '1300'), 1500)
+  returning id into v_inv;
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group,
+     parent_id, sort_order)
+  values (v_org, '5910', 'Shrinkage, back store', 'expense', 'cost_of_sales',
+          false, (select parent_id from public.accounts
+                   where org_id = v_org and code = '5900'), 1500)
+  returning id into v_adj_acct;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price, inventory_account_id)
+  values (v_org, 'BARANG', 'Widget', 'stock', true, 'C62', 20, 10, v_inv)
+  returning id into v_item;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price)
+  values (v_org, 'TEPAT', 'Counted right', 'stock', true, 'C62', 5, 1)
+  returning id into v_tepat;
+
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'KS-0001', date '2026-01-01', 'opening_balance', v_item,
+          v_simpan, 100, 10),
+         (v_org, 'KS-0002', date '2026-01-01', 'opening_balance', v_tepat,
+          v_simpan, 50, 1);
+
+  insert into public.stock_adjustments
+    (org_id, adjustment_no, adjustment_date, warehouse_id, reason,
+     adjustment_type, status, account_id)
+  values (v_org, 'ADJ-KIRA', date '2026-03-31', v_simpan, 'Kiraan tahunan',
+          'stock_take', 'draft', v_adj_acct)
+  returning id into v_adj;
+
+  -- Ten short at twelve ringgit — a cost written on the line, not the
+  -- ten the average would give — and a second line that counted
+  -- exactly right and should leave no trace at all.
+  insert into public.stock_adjustment_lines
+    (org_id, adjustment_id, line_no, item_id, system_quantity,
+     counted_quantity, unit_cost)
+  values (v_org, v_adj, 1, v_item, 100, 90, 12),
+         (v_org, v_adj, 2, v_tepat, 50, 50, 0);
+
+  -- ------------------------------------------------------------------
+  -- Who may post it
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-kira@example.test'));
+  begin
+    perform public.post_stock_adjustment(v_adj);
+    raise exception 'FAIL a stranger posted another company''s count';
+  exception when sqlstate '42501' then
+    -- The whole message, not a fragment: create_gl_entry refuses with
+    -- '...to post to the ledger' and would satisfy a `like`.
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody outside the company cannot post a count',
+      v_msg = 'Insufficient privileges to post');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and the count is still in draft',
+    (select status = 'draft' and gl_entry_id is null
+       from public.stock_adjustments where id = v_adj));
+
+  v_entry := public.post_stock_adjustment(v_adj);
+
+  -- ------------------------------------------------------------------
+  -- One movement, in the right store, on the right day, labelled right
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('a line that counted right leaves no movement',
+    (select count(*)::integer from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj), 1);
+  perform pg_temp.check_true('the shortfall is a shortfall, not a windfall',
+    (select movement_type::text = 'adjustment_out' from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj));
+  perform pg_temp.check_true('it came off the store that was counted',
+    (select warehouse_id = v_simpan from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj));
+  perform pg_temp.check_true('on the day of the count, not the day of posting',
+    (select movement_date = date '2026-03-31' from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj));
+  perform pg_temp.check_true('and it names the journal it was posted with',
+    (select gl_entry_id = v_entry from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj));
+
+  perform pg_temp.check_eq('the back store is down ten',
+    (select quantity from public.stock_levels
+      where item_id = v_item and warehouse_id = v_simpan), 90);
+  perform pg_temp.check_eq('and nothing was taken out of the main store',
+    (select count(*)::integer from public.stock_levels
+      where item_id = v_item and warehouse_id = v_utama), 0);
+
+  -- ------------------------------------------------------------------
+  -- At the line's own cost, into the accounts it named
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('written off at twelve, not at the average ten',
+    (select coalesce(sum(l.credit), 0) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_inv), 120);
+  perform pg_temp.check_eq('to the account the item names, not 1310',
+    (select coalesce(sum(l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '1310'), 0);
+  perform pg_temp.check_eq('and charged where the count said, not to 5900',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_adj_acct), 120);
+  perform pg_temp.check_eq('with nothing in the default adjustment account',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '5900'), 0);
+
+  -- ------------------------------------------------------------------
+  -- And the journal, and the adjustment itself
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true('the journal is dated the day of the count',
+    (select entry_date = date '2026-03-31' from public.gl_entries
+      where id = v_entry));
+  perform pg_temp.check_true('and carries the reason somebody typed',
+    (select reference = 'Kiraan tahunan' from public.gl_entries
+      where id = v_entry));
+  perform pg_temp.check_true('the count is posted, not still open',
+    (select status = 'posted' from public.stock_adjustments where id = v_adj));
+
+  perform pg_temp.sign_out();
 end $$;
 
 rollback;

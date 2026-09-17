@@ -40,7 +40,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/entity_types_repository.dart';
+import '../data/scan_kinds_repository.dart';
+import '../data/search_registers_repository.dart';
 import '../data/landing_repository.dart';
+import '../data/site_pages_repository.dart';
 import '../data/platform_catalog_repository.dart';
 import '../features/landing/landing_content.dart';
 import 'providers.dart';
@@ -77,8 +81,59 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
   // is what `app.dart` reads the product's name and logo from, so a
   // logo replaced in the console changes the signed-in app too.
   'landing_page': [landingPageAdminProvider, landingContentProvider],
-  'landing_sections': [landingSectionsAdminProvider, landingContentProvider],
+  // Both kinds of block live in `landing_sections`, so a change to
+  // either has to refresh both console lists as well as the page.
+  'landing_sections': [
+    landingSectionsAdminProvider,
+    landingReasonsAdminProvider,
+    landingBadgesAdminProvider,
+    // 0336's fourth kind, the bullets beside the sign-in form. Left out
+    // of this list, editing one refreshed the landing page's three
+    // bands and not the list the operator was actually looking at.
+    landingSigninPointsAdminProvider,
+    // 0350's fifth, and left out of this list it would have had the
+    // same fault the fourth did: editing a company's bullet refreshing
+    // somebody else's list.
+    landingLoginPointsAdminProvider,
+    landingContentProvider,
+  ],
+  // 0334's five pages: the wording on the two auth screens and the
+  // three the footer links to. `sitePagesProvider` is what a visitor
+  // reads and `sitePageDraftsProvider` is the console's own view, and
+  // both have to move or the operator's tab and the visitor's disagree.
+  'site_pages': [sitePagesProvider, sitePageDraftsProvider],
   'landing_app_links': [landingAppLinksAdminProvider, landingContentProvider],
+  'landing_stats': [landingStatsAdminProvider, landingContentProvider],
+  'landing_testimonials': [
+    landingTestimonialsAdminProvider,
+    landingContentProvider,
+  ],
+  'landing_logos': [landingLogosAdminProvider, landingContentProvider],
+  // 0548. A promotion is a price, so it has to reach three places: the
+  // console's own list, the settings card that offers the module to a
+  // company, and the running total of what this month has cost —
+  // ending a promotion changes all three, and a screen still offering
+  // a price nobody is charging is worse than one that never refreshes.
+  // 0605. The kinds of business are a dropdown on the contact form and
+  // on registration, so an operator adding one has to reach every tab
+  // that draws it, not only the console page they added it on.
+  'entity_types': [allEntityTypesProvider, contactEntityTypesProvider],
+  // 0606. The registers Entity Search offers. Same argument: an
+  // administrator adding one is doing it for somebody who is looking
+  // at the button now.
+  'search_registers': [
+    allSearchRegistersProvider,
+    offeredSearchRegistersProvider,
+  ],
+  // 0614. What a scanned paper can be recognised as. Same argument
+  // again, and more immediate than either: the person this reaches is
+  // holding the paper while the administrator adds the kind.
+  'scan_document_kinds': [allScanKindsProvider, offeredScanKindsProvider],
+  'module_promotions': [
+    platformPromotionsAdminProvider,
+    moduleSurfaceProvider,
+    moduleChargesProvider,
+  ],
 };
 
 /// The platform tables listened to.
@@ -113,21 +168,31 @@ const _settle = Duration(milliseconds: 300);
 /// Watched by the shell, beside `liveUpdatesProvider`. Unlike that one
 /// this needs no organization — the brand and the module catalogue are
 /// read before anybody has chosen a company, and on the landing page
-/// there is no company to choose. It needs a signed-in user, because
-/// every policy on these tables is granted to `authenticated` and a
-/// channel opened without one can only ever receive nothing.
+/// there is no company to choose.
+///
+/// It used to need a signed-in user, and returned a channel-less object
+/// without one, because every policy on these tables is granted to
+/// `authenticated` and Postgres changes are delivered per subscriber
+/// under RLS. True, and it made the front page — the one screen read by
+/// people who are not signed in — the one screen that never updated. It
+/// connects either way now: a stranger receives no rows and does
+/// receive `0322`'s nudges, which carry no rows to withhold.
+///
+/// Rebuilt on sign-in and sign-out, which is what watching the user is
+/// for: the socket has to be reopened with the new token before the
+/// table subscriptions mean anything.
 final platformLiveProvider = Provider<PlatformLive>((ref) {
-  final user = ref.watch(currentUserProvider);
-
   final live = PlatformLive(ref);
   ref.onDispose(live.dispose);
 
-  // Checked before the client is reached for, so this can be read on a
-  // signed-out app — and in a test — without a Supabase that has been
-  // initialised.
-  if (user == null) return live;
+  // Asked before the client is reached for — and before the user is,
+  // since reading them goes through the same client. A widget test
+  // renders real screens without a Supabase, and a screen that opened a
+  // socket anyway would fail there and nowhere else.
+  if (!ref.watch(supabaseReadyProvider)) return live;
 
-  live._connect(ref.watch(supabaseProvider));
+  final user = ref.watch(currentUserProvider);
+  live._connect(ref.watch(supabaseProvider), signedIn: user != null);
   return live;
 });
 
@@ -143,7 +208,7 @@ class PlatformLive {
   /// Whether the socket is carrying platform changes at this moment.
   var connected = false;
 
-  void _connect(SupabaseClient client) {
+  void _connect(SupabaseClient client, {required bool signedIn}) {
     _client = client;
     // One topic for everybody. There is nothing to filter on — these
     // tables have no `org_id` and the rows are the platform's — so what
@@ -151,14 +216,37 @@ class PlatformLive {
     // where that decision belongs.
     final channel = client.channel('platform');
 
-    for (final table in _watchers.keys) {
-      channel.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: table,
-        callback: (_) => _touched(table),
-      );
+    // Postgres changes carry the row, so they only reach somebody the
+    // policy on the table lets read it — which is `authenticated`, and
+    // no further. A stranger on the front page gets nothing here.
+    if (signedIn) {
+      for (final table in _watchers.keys) {
+        channel.onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: table,
+          callback: (_) => _touched(table),
+        );
+      }
     }
+
+    // Which is why the landing tables also nudge. `0322` puts a trigger
+    // on each of them that broadcasts the name of the table that
+    // changed — the name, and nothing else — to a public topic, and
+    // this answers it by refetching through `landing_page()`. The gate
+    // is untouched: the socket says something was edited, the function
+    // still decides whether it has been published.
+    //
+    // Subscribed to whether or not anybody is signed in. An
+    // administrator with the console open in one tab and the front page
+    // in another is the person most likely to notice it missing.
+    channel.onBroadcast(
+      event: 'changed',
+      callback: (payload) {
+        final table = payload['table'];
+        if (table is String && _watchers.containsKey(table)) _touched(table);
+      },
+    );
 
     channel.subscribe((status, error) {
       connected = status == RealtimeSubscribeStatus.subscribed;

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
+import '../settings/ways_to_pay.dart';
 
 /// How a company settles a platform invoice.
 ///
@@ -70,10 +71,12 @@ class PaymentGatewaysAdminTab extends ConsumerWidget {
                       '${r['currency']}',
                       // Where it sells, because 0295 seeds forty-odd
                       // providers and a list of names alone is a list
-                      // nobody can find anything in.
-                      if (r['countries'] is List &&
-                          (r['countries'] as List).isNotEmpty)
-                        (r['countries'] as List).join(', '),
+                      // nobody can find anything in. `coverageLabel`
+                      // rather than the raw array: an empty list means
+                      // "everywhere" and printing nothing reads as
+                      // "nobody filled this in".
+                      coverageLabel(r),
+                      if (methodsLine(r).isNotEmpty) methodsLine(r),
                       if (r['secret_ref'] != null)
                         'secret in ${r['secret_ref']}'
                       else
@@ -134,6 +137,20 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
   late final _instructions = TextEditingController(
     text: '${widget.existing?['instructions'] ?? ''}',
   );
+  late final _countries = TextEditingController(text: _listText('countries'));
+  late final _methods = TextEditingController(text: _listText('methods'));
+  late final _docs = TextEditingController(
+    text: '${widget.existing?['docs_url'] ?? ''}',
+  );
+
+  /// A stored array as one editable line. Round-trips through
+  /// [splitCodes] on the way back, so what is typed here and what was
+  /// read out of the row compare as the same text when nothing changed.
+  String _listText(String key) {
+    final raw = widget.existing?[key];
+    if (raw is! List) return '';
+    return raw.map((e) => '$e').join(', ');
+  }
   late String _mode = '${widget.existing?['mode'] ?? 'sandbox'}';
   late bool _active = widget.existing?['is_active'] == true;
   bool _busy = false;
@@ -148,6 +165,9 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
       _secretRef,
       _checkout,
       _instructions,
+      _countries,
+      _methods,
+      _docs,
     ]) {
       c.dispose();
     }
@@ -158,6 +178,17 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
     final now = c.text.trim();
     final before = '${widget.existing?[key] ?? ''}'.trim();
     return now == before ? null : now;
+  }
+
+  /// Null when the field was not touched, so the save leaves the column
+  /// alone — which is what makes flicking the switch on one gateway
+  /// safe. An emptied field is `[]`, and `0352` reads that as "sells
+  /// everywhere" rather than as nothing to say.
+  List<String>? _changedList(TextEditingController c, String key) {
+    final now = splitCodes(c.text) ?? const [];
+    final before = splitCodes(_listText(key)) ?? const [];
+    if (now.join(',') == before.join(',')) return null;
+    return now;
   }
 
   Future<void> _save() async {
@@ -181,6 +212,9 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
         secretRef: _changed(_secretRef, 'secret_ref'),
         checkoutUrl: _changed(_checkout, 'checkout_url'),
         instructions: _changed(_instructions, 'instructions'),
+        countries: _changedList(_countries, 'countries'),
+        methods: _changedList(_methods, 'methods'),
+        docsUrl: _changed(_docs, 'docs_url'),
         isActive: _active != (widget.existing?['is_active'] == true)
             ? _active
             : (widget.existing == null ? _active : null),
@@ -221,6 +255,7 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
               ),
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _mode,
                 decoration: const InputDecoration(
                   labelText: 'Mode',
@@ -270,6 +305,32 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'What to tell the payer',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _countries,
+                decoration: const InputDecoration(
+                  labelText: 'Sells in',
+                  helperText: 'Two-letter country codes: MY, SG, ID. Leave '
+                      'empty for a gateway that sells everywhere.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _methods,
+                decoration: InputDecoration(
+                  labelText: 'Rails it carries',
+                  helperText: kMethodOrder.join(', '),
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _docs,
+                decoration: const InputDecoration(
+                  labelText: 'Documentation',
+                  helperText: 'Where an operator goes for their own keys. '
+                      'https only, and never a credential.',
                 ),
               ),
               SwitchListTile(

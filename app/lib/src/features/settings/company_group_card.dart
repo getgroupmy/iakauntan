@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -373,42 +374,38 @@ class _OwnershipDialogState extends ConsumerState<_OwnershipDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonFormField<String?>(
+              SearchablePicker<String>(
                 key: const ValueKey('ownership-parent'),
-                isExpanded: true,
-                value: _parent,
-                decoration: const InputDecoration(
-                  labelText: 'Owned by',
-                  helperText: 'A company in this group that you belong to',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    child: Text('Nobody — this is the top of the group'),
-                  ),
+                options: [
                   // A group can have more than one administrator, so the
                   // recorded parent may be a company this person is not
                   // a member of and which is therefore not on the list.
-                  // Carried as its own item so that opening the dialog
+                  // Carried as its own option so that opening the dialog
                   // and pressing Save does not silently clear ownership
                   // somebody else recorded.
                   if (_parent != null &&
                       !candidates.any(
                         (c) => c['org_id']?.toString() == _parent,
                       ))
-                    DropdownMenuItem<String?>(
-                      value: _parent,
-                      child: Text(
-                        widget.company['parent_name']?.toString() ??
-                            'The company recorded as owning this one',
-                      ),
+                    PickerOption<String>(
+                      value: _parent!,
+                      label:
+                          widget.company['parent_name']?.toString() ??
+                          'The company recorded as owning this one',
                     ),
                   for (final c in candidates)
-                    DropdownMenuItem<String?>(
-                      value: c['org_id']?.toString(),
-                      child: Text(c['name']?.toString() ?? ''),
+                    PickerOption<String>(
+                      value: '${c['org_id']}',
+                      label: c['name']?.toString() ?? '',
                     ),
                 ],
-                onChanged: _saving ? null : (v) => setState(() => _parent = v),
+                value: _parent,
+                label: 'Owned by',
+                helperText: 'A company in this group that you belong to',
+                enabled: !_saving,
+                allowEmpty: true,
+                emptyLabel: 'Nobody — this is the top of the group',
+                onChanged: (v) => setState(() => _parent = v),
               ),
               if (_parent != null) ...[
                 const SizedBox(height: Space.md),

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/format.dart';
+import '../../data/places_repository.dart';
 
 /// What the counter takes down when somebody rings up to order.
 typedef DeliveryAnswer = ({
@@ -57,6 +60,10 @@ String deliveryStatus(String? status) => switch (status) {
 Future<DeliveryAnswer?> showDeliverySheet(
   BuildContext context, {
   Map<String, dynamic> existing = const {},
+  // Offered only where the caller has something to remove and the
+  // database will take it back: `clear_pos_delivery` refuses a bill
+  // that is tendered and a run a driver already has.
+  Future<void> Function()? onRemove,
 }) => showModalBottomSheet<DeliveryAnswer>(
   context: context,
   isScrollControlled: true,
@@ -64,20 +71,21 @@ Future<DeliveryAnswer?> showDeliverySheet(
     padding: EdgeInsets.only(
       bottom: MediaQuery.of(context).viewInsets.bottom,
     ),
-    child: _DeliverySheet(existing: existing),
+    child: _DeliverySheet(existing: existing, onRemove: onRemove),
   ),
 );
 
-class _DeliverySheet extends StatefulWidget {
-  const _DeliverySheet({required this.existing});
+class _DeliverySheet extends ConsumerStatefulWidget {
+  const _DeliverySheet({required this.existing, this.onRemove});
 
   final Map<String, dynamic> existing;
+  final Future<void> Function()? onRemove;
 
   @override
-  State<_DeliverySheet> createState() => _DeliverySheetState();
+  ConsumerState<_DeliverySheet> createState() => _DeliverySheetState();
 }
 
-class _DeliverySheetState extends State<_DeliverySheet> {
+class _DeliverySheetState extends ConsumerState<_DeliverySheet> {
   late final TextEditingController _line1;
   late final TextEditingController _line2;
   late final TextEditingController _city;
@@ -135,15 +143,23 @@ class _DeliverySheetState extends State<_DeliverySheet> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
-            TextField(
+            AddressField(
               controller: _line1,
+              label: 'Address',
               autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Address',
-                hintText: 'Unit and street',
-              ),
+              // The Save button turns on once there is an address and
+              // a phone number, and it is this box that says so.
               onChanged: (_) => setState(() {}),
+              country: ref.watch(orgCountryAlpha2Provider),
+              // The state here is the name on the envelope rather than
+              // the LHDN code: `deliveryLine` reads `state_name`, and a
+              // driver reading "10" off a docket is not being told
+              // where Selangor is.
+              onChosen: (a) => setState(() {
+                if (a.postcode != null) _postcode.text = a.postcode!;
+                if (a.city != null) _city.text = a.city!;
+                if (a.state != null) _state.text = a.state!;
+              }),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -232,6 +248,18 @@ class _DeliverySheetState extends State<_DeliverySheet> {
                   : null,
               child: const Text('Save the address'),
             ),
+            if (widget.onRemove != null) ...[
+              const SizedBox(height: 4),
+              TextButton(
+                key: const ValueKey('clear-delivery'),
+                onPressed: () async {
+                  final remove = widget.onRemove!;
+                  Navigator.of(context).pop();
+                  await remove();
+                },
+                child: const Text('It is not going anywhere — take it off'),
+              ),
+            ],
           ],
         ),
       ),

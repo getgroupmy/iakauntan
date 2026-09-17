@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../banking/new_bank_account_dialog.dart';
 
 /// Sells or scraps an asset.
 ///
@@ -112,21 +115,22 @@ class _DisposalDialogState extends ConsumerState<_DisposalDialog> {
                 ),
               ]),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: bankPickerOptions(banks),
+                createLabel: 'Add bank account',
+                // 0529 made this list writable for the first
+                // time. Until then a company that opened a
+                // second account had nowhere in the product to
+                // say so.
+                onCreate: (typed) =>
+                    createBankAccountFromPicker(context, typed: typed),
                 value: _bankAccountId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Proceeds into',
-                  helperText: 'Left blank, they go to cash',
-                ),
-                items: [
-                  for (final b in banks)
-                    DropdownMenuItem(
-                      value: b['id'] as String,
-                      child: Text(b['name'] as String,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+                label: 'Proceeds into',
+                helperText: 'Left blank, they go to cash',
+                // The dropdown said proceeds could go to cash but gave
+                // no way back to it once an account had been chosen.
+                allowEmpty: true,
+                emptyLabel: 'Cash',
                 onChanged: (v) => setState(() => _bankAccountId = v),
               ),
               const SizedBox(height: 16),

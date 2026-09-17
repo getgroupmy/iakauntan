@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'asset_editor.dart';
 import 'asset_schedule_dialog.dart';
+import 'capitalise_dialog.dart';
 import 'depreciation_dialog.dart';
 import 'disposal_dialog.dart';
 
@@ -46,6 +47,16 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
               tooltip: 'Fixed asset schedule',
               icon: const Icon(Icons.table_chart_outlined),
               onPressed: () => showAssetSchedule(context),
+            ),
+          if (canWrite)
+            // The reconciliation from the ledger's end: what has been
+            // bought and coded to a fixed asset account with nothing in
+            // the register claiming it.
+            IconButton(
+              key: const ValueKey('asset-uncapitalised'),
+              tooltip: 'Bought, not in the register',
+              icon: const Icon(Icons.playlist_add_check_outlined),
+              onPressed: () => showUncapitalisedPurchases(context),
             ),
           if (canPost)
             IconButton(
@@ -166,6 +177,12 @@ class _AssetTile extends StatelessWidget {
       ),
       subtitle: Text(
         '${asset.basis} · bought ${Fmt.date(asset.acquisitionDate)}'
+        // Which bill the cost came from. An asset that names one can
+        // be checked against the ledger; one that was typed in cannot,
+        // which is what `0382` is about — so the register says which is
+        // which rather than looking the same either way.
+        '${asset.purchaseDocNo == null ? '' : ' · ${asset.purchaseDocNo}'}'
+        '${asset.supplierName == null ? '' : ' from ${asset.supplierName}'}'
         '${asset.depreciatedTo == null ? '' : ' · depreciated to ${Fmt.date(asset.depreciatedTo)}'}',
         style: Theme.of(context).textTheme.bodySmall,
       ),

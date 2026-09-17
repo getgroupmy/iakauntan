@@ -119,3 +119,30 @@ Future<OcrExtraction> readDocument(
     throw OcrException('Could not read it on this device: $e');
   }
 }
+
+/// Files the scan behind [attachmentId] as whatever kind of document
+/// the person settled on.
+///
+/// `0614`. Called after the scan result dialog closes, by whoever has
+/// the attachment in hand — the dialog is handed a reading and nothing
+/// else, so it cannot do this itself.
+///
+/// Best effort on purpose. This is a note about a reading, and a bill
+/// that was read and corrected must not be lost because the note would
+/// not write: the form has the figures either way, and a scan with no
+/// kind on it is what every reading before 0614 looks like.
+Future<void> rememberDocumentKind(
+  WidgetRef ref, {
+  required String attachmentId,
+  required OcrExtraction accepted,
+}) async {
+  final kind = accepted.documentKind;
+  if (kind == null) return;
+  try {
+    await ref
+        .read(repoProvider)
+        ?.setScanDocumentKind(attachmentId: attachmentId, kind: kind);
+  } catch (_) {
+    // Deliberately swallowed; see above.
+  }
+}
