@@ -39,7 +39,12 @@ const dropdownCensus = <String, int>{
   // to open -- so it cannot grow without somebody editing Dart, and a
   // seventh would arrive beside a screen to open.
   'features/admin/scan_kinds_admin.dart': 1,
-  'features/admin/statutory_rates_admin.dart': 3,
+  // Four since the paste path. The fourth is which amount column comes
+  // first in a pasted contribution table — two options, and the whole
+  // difference between them has to be readable at a glance, because
+  // getting it wrong deducts the employer's share from every employee.
+  // A list of two is not a list that grows.
+  'features/admin/statutory_rates_admin.dart': 4,
   'features/approvals/rule_editor.dart': 4,
   // The entity type a business chooses at REGISTRATION. This was
   // frozen here on the grounds that `app.entity_type` was an enum and

@@ -666,6 +666,30 @@ from a straight percentage by a few sen. Load the authority's own table
 and mark the schedule verified before submitting real returns. A payslip
 produced from an unverified schedule says so on its face.
 
+**Loading one is a paste now, not an afternoon.** `statutory_rates` has
+held `employee_amount` and `employer_amount` since `0025` and the
+console has had a band editor with gap and overlap checks — and no
+gazetted table had ever been loaded, because KWSP's Third Schedule runs
+to about ninety bands and PERKESO's to about seventy and typing them
+four boxes at a time is why. **Paste a table** in the rates console
+reads the authority's own printing: `RM`, thousands commas, en dashes,
+*Melebihi* for the top band.
+
+It supplies no figures. Every number comes from what was pasted, a line
+it cannot read is listed in full rather than guessed at — a band quietly
+dropped from the middle is a wage that lands in no band and a deduction
+of nothing — and **which amount column comes first is chosen, never
+inferred**. KWSP prints *Majikan* before *Pekerja* and most English
+reproductions print the employee first; read the wrong way round, every
+employee is deducted the employer's share, on every payslip, and nothing
+downstream can tell because both figures are plausible. Where the pasted
+headings contradict the choice, the preview says so and says what it
+would cost.
+
+What this does not do is make the figures right. Somebody still has to
+compare them with the gazette and mark the schedule verified, which is
+deliberately a second act by a second person.
+
 ### PCB
 
 Computed by projecting the year at the current month's rate, applying
@@ -1749,7 +1773,11 @@ Stated plainly so nothing here is mistaken for finished:
   machine cannot reach. Writing one from memory produces a file that
   looks correct in a diff and is refused at the counter. What is needed
   is the layout specification for each, not more code
-- The gazetted KWSP and PERKESO contribution tables (see HRMS above)
+- The gazetted KWSP and PERKESO contribution tables. This is a **data**
+  gap and not a code one: the schema has held band amounts since `0025`,
+  the console can now read a table off a paste (see HRMS above), and
+  nothing here will invent a contribution figure. Somebody has to paste
+  the authority's own schedule and mark it verified
 - ~~Biometric terminal integration: attendance records carry a terminal
   identifier, but nothing pushes punches in from a device yet.~~ Built,
   `0612`. A terminal registers under HR, gets a secret once (bcrypt on

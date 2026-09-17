@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../hr/statutory_rates_tab.dart';
+import 'contribution_table_paste.dart';
 
 /// Publishing the EPF, SOCSO, EIS, PCB and HRD Corp rate tables.
 ///
@@ -310,6 +311,30 @@ class _PublishDialogState extends ConsumerState<_PublishDialog> {
     super.dispose();
   }
 
+  /// Reads a table somebody pasted, and replaces the bands with it.
+  ///
+  /// Replaces rather than appends. A paste is the whole table — that is
+  /// what makes it worth pasting — and adding it to whatever was typed
+  /// first produces a set of bands that overlaps itself, which the
+  /// check below would refuse with a message about the wrong thing.
+  Future<void> _paste() async {
+    final read = await showDialog<List<RateDraft>>(
+      context: context,
+      builder: (_) => const _PasteTableDialog(),
+    );
+    if (read == null || read.isEmpty || !mounted) return;
+    setState(() {
+      _rates
+        ..clear()
+        ..addAll(read);
+      // A table of amounts is not a table of percentages, and the
+      // method decides which the payroll engine reads. Pasting one and
+      // leaving the method at `percentage` publishes a schedule whose
+      // amounts are never looked at.
+      _method = 'table';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final problem = rateTableProblem(_rates);
@@ -426,16 +451,28 @@ class _PublishDialogState extends ConsumerState<_PublishDialog> {
                       ? () => setState(() => _rates.removeAt(i))
                       : null,
                 ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => setState(() => _rates.add(RateDraft(
-                        category: _rates.last.category,
-                        wageFrom: _rates.last.wageTo ?? 0,
-                      ))),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add band'),
-                ),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () => setState(() => _rates.add(RateDraft(
+                          category: _rates.last.category,
+                          wageFrom: _rates.last.wageTo ?? 0,
+                        ))),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add band'),
+                  ),
+                  const SizedBox(width: Space.sm),
+                  // The reason a gazetted table has never been loaded.
+                  // KWSP's Third Schedule runs to about ninety bands and
+                  // PERKESO's to about seventy; typing them four boxes
+                  // at a time is an afternoon, and nobody has had one.
+                  TextButton.icon(
+                    key: const ValueKey('paste-rate-table'),
+                    onPressed: _paste,
+                    icon: const Icon(Icons.content_paste, size: 18),
+                    label: const Text('Paste a table'),
+                  ),
+                ],
               ),
               if (problem != null)
                 Text(problem,
@@ -634,6 +671,205 @@ class _RateRowState extends State<_RateRow> {
           onPressed: widget.onRemove,
         ),
       ]),
+    );
+  }
+}
+
+/// Pasting a gazetted contribution table in rather than typing it.
+///
+/// The parsing is in `contribution_table_paste.dart` and is pure; this
+/// is the preview. What it shows before anything is accepted:
+///
+///   * **which column is which**, chosen rather than guessed, because
+///     KWSP prints the employer first and most English reproductions
+///     print the employee first — and read the wrong way round every
+///     employee is deducted the employer's share, silently, on every
+///     payslip;
+///   * **every line that was not read**, in full rather than as a
+///     count, because "read 88 of 91" tells nobody which three;
+///   * **the first and last bands**, which is where a misread shows: a
+///     table whose lowest band starts at five ringgit instead of five
+///     thousand was read with the comma as a decimal point.
+class _PasteTableDialog extends StatefulWidget {
+  const _PasteTableDialog();
+
+  @override
+  State<_PasteTableDialog> createState() => _PasteTableDialogState();
+}
+
+class _PasteTableDialogState extends State<_PasteTableDialog> {
+  final _text = TextEditingController();
+  AmountColumns _order = AmountColumns.employeeFirst;
+  ParsedTable? _parsed;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _read() {
+    setState(() {
+      _parsed = parseContributionTable(_text.text, order: _order);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = _parsed;
+    final muted = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: context.scheme.onSurfaceVariant);
+    final warning = parsed == null ? null : columnOrderWarning(parsed, _order);
+
+    return AlertDialog(
+      title: const Text('Paste a contribution table'),
+      content: SizedBox(
+        width: 720,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Copy the table out of the authority’s own publication — '
+                'KWSP’s Third Schedule, PERKESO’s Second Schedule — and '
+                'paste it here. Nothing is filled in for you: every figure '
+                'comes from what you paste, and a line that cannot be read '
+                'is listed rather than guessed at.',
+                key: const ValueKey('paste-table-note'),
+                style: muted,
+              ),
+              const SizedBox(height: Space.md),
+              DropdownButtonFormField<AmountColumns>(
+                key: const ValueKey('paste-table-order'),
+                isExpanded: true,
+                value: _order,
+                decoration: const InputDecoration(
+                  labelText: 'Which amount column comes first',
+                  helperText:
+                      'KWSP prints the employer first. Getting this wrong '
+                      'swaps every deduction with every contribution.',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: AmountColumns.employeeFirst,
+                    child: Text('Employee, then employer'),
+                  ),
+                  DropdownMenuItem(
+                    value: AmountColumns.employerFirst,
+                    child: Text('Employer, then employee'),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => _order = v);
+                  if (_parsed != null) _read();
+                },
+              ),
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('paste-table-text'),
+                controller: _text,
+                minLines: 6,
+                maxLines: 12,
+                decoration: const InputDecoration(
+                  labelText: 'The table',
+                  alignLabelWithHint: true,
+                ),
+                onChanged: (_) {
+                  if (_parsed != null) setState(() => _parsed = null);
+                },
+              ),
+              const SizedBox(height: Space.sm),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonal(
+                  key: const ValueKey('paste-table-read'),
+                  onPressed: _text.text.trim().isEmpty ? null : _read,
+                  child: const Text('Read it'),
+                ),
+              ),
+              if (parsed != null) ...[
+                const Divider(height: Space.xl),
+                Text(
+                  '${parsed.bands.length} '
+                  'band${parsed.bands.length == 1 ? '' : 's'} read',
+                  key: const ValueKey('paste-table-count'),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                if (warning != null) ...[
+                  const SizedBox(height: Space.sm),
+                  Text(
+                    warning,
+                    key: const ValueKey('paste-table-order-warning'),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: context.colors.danger),
+                  ),
+                ],
+                if (parsed.bands.isNotEmpty) ...[
+                  const SizedBox(height: Space.sm),
+                  // The ends, which is where a misread shows.
+                  _Band('First', parsed.bands.first),
+                  _Band('Last', parsed.bands.last),
+                ],
+                if (parsed.skipped.isNotEmpty) ...[
+                  const SizedBox(height: Space.md),
+                  Text(
+                    'Not read:',
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(color: context.colors.warning),
+                  ),
+                  for (final s in parsed.skipped)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${s.line}  —  ${s.because}',
+                        style: muted,
+                      ),
+                    ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('paste-table-use'),
+          onPressed: parsed == null || parsed.bands.isEmpty
+              ? null
+              : () => Navigator.pop(context, parsed.bands),
+          child: const Text('Use these bands'),
+        ),
+      ],
+    );
+  }
+}
+
+class _Band extends StatelessWidget {
+  const _Band(this.label, this.band);
+
+  final String label;
+  final RateDraft band;
+
+  @override
+  Widget build(BuildContext context) {
+    final to = band.wageTo == null
+        ? 'and over'
+        : 'to ${Fmt.money(band.wageTo)}';
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        '$label: ${Fmt.money(band.wageFrom)} $to  ·  '
+        'employee ${Fmt.money(band.employeeAmount)}  ·  '
+        'employer ${Fmt.money(band.employerAmount)}',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
     );
   }
 }
