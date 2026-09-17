@@ -861,6 +861,22 @@ jobs:
       - name: Check every repository method and provider is reached
         run: python3 scripts/check_unreachable.py
 
+      # The same question of the SCHEMA, which on a project whose first
+      # rule is that the database IS the application is the layer that
+      # matters most. It found twenty columns nothing mentioned at all,
+      # two of them capabilities the product could not reach:
+      # `tax_codes.is_inclusive`, so no document could be raised at a
+      # tax-inclusive price (0641), and
+      # `organizations.tourism_tax_reg_no`, so an operator registered
+      # under the Tourism Tax Act had nowhere to record the number
+      # RMCD issued (0642).
+      #
+      # No database needed: it reads docs/api/openapi.json, which the
+      # step further down already refuses to let disagree with the
+      # schema.
+      - name: Check every column is written and read by something
+        run: python3 scripts/check_orphan_columns.py
+
       # `0531`. STABLE is a promise that a function does not write, and
       # PostgREST believes it: such a function runs in a READ ONLY
       # transaction, so a write inside one fails with 25006 and takes
@@ -1747,6 +1763,9 @@ jobs:
       # everything else. A harness that lies is worse than no harness.
       - name: The mutation harness's own assertions
         run: python3 scripts/mutate_test.py
+
+      - name: The orphan-column sweep's own assertions
+        run: python3 scripts/check_orphan_columns_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py

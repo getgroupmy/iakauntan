@@ -1246,6 +1246,84 @@ The enum sweeps ask which *values* of a column are unreachable. This
 one asks the same question of the column itself, and it turns out to
 have two distinct answers that need telling apart.
 
+### It is a gate now: `scripts/check_orphan_columns.py`
+
+Described here for months as a thing to run by hand, which is the
+failure this whole file is about. Run as a gate it found twenty columns
+that nothing at all mentions, and two of them were the valuable case
+above — the engine reading something nothing could set:
+
+- `tax_codes.is_inclusive`, a column since `0003`.
+  `app.calc_document_line` could always compute a tax-inclusive line
+  and nothing ever set the flag, so **no document in this product
+  could be raised at a price that includes its tax**. Closed by `0641`.
+- `organizations.tourism_tax_reg_no`, a column since `0001`, written on
+  the line after `sst_registration_no`. Its neighbour is asked for at
+  onboarding, edited in settings, printed on every PDF, shown to the
+  customer and sent to LHDN; this one had no form, no print and no
+  payload, so **an operator registered under the Tourism Tax Act had
+  nowhere to record the number RMCD issued**. Closed by `0642`.
+
+The mechanical part still cannot tell the two cases apart, which is
+what this section says and remains true. So the script does not try:
+every one of the thirteen columns it clears is named in one of four
+lists in its own source, with the reason, and the lists are the finding
+rather than the exemption —
+
+- `DELIBERATE` (3) — decided against, with the decision written down.
+  `organizations.registered_country_code` is the clean one: a
+  registered office is in Malaysia by statute (Companies Act 2016
+  s.46), so the column can only ever hold its default and a country
+  field beside the registered address would offer a choice that does
+  not exist.
+- `SUPERSEDED` (4) — the vestigial half of a mechanism something else
+  does properly. `accounts.opening_balance_date` is the one to read:
+  the date of an opening balance is on the journal
+  `import_opening_balances` posts, and meanwhile six statutory reports
+  still add `accounts.opening_balance` into their opening figure
+  **dateless**, so the first company to set it gets its opening
+  balance in every comparative period, including periods before it
+  converted.
+- `WHOLE_TABLE_UNREACHED` (2) — the column is not the finding, the
+  table is. `notes.is_pinned` and `fs_disclosures.value_text`: notes
+  attachable to anything, and MBRS disclosures, both tabled and never
+  built.
+- `KNOWN_GAPS` (4) — a ratchet, in the shape `check_unreachable.py`
+  uses for the providers nobody had drawn. **The number goes down.**
+  The one with teeth is `einvoice_documents.retry_count`: `submit.ts`
+  and `consolidations.ts` write `last_attempt_at` at every failure
+  site and never touch the count, and `0007` indexes
+  `(org_id, status, last_attempt_at)` as the retry picker — so a
+  document that can never succeed is re-submitted on every sweep,
+  against an API that is rate-limited and counts submissions.
+
+Some decisions this file records are not in those lists, because the
+gate does not report the column at all: a mention in ANOTHER
+migration's prose counts. `bank_transactions.value_date` is the
+specimen — `0369` explains at length why writing it to no consequence
+is the failure rather than a smaller version of the fix, and that
+paragraph is itself why the sweep clears it. So is
+`employees.eis_no`, which stays unwritten because PERKESO issues one
+number for SOCSO and EIS and `socso_no` is it.
+
+Two things the gate cannot see, both written in its header and both
+found by breaking it on purpose:
+
+- **A column its own later migration names, and nothing else.** Revert
+  the Dart half of `0642` and this still passes, because `0642` names
+  `tourism_tax_reg_no`. Proved, not assumed;
+  `check_orphan_columns_test.py` carries a named assertion for each of
+  the two columns the sweep found, so a revert is caught by something.
+- **Its own documentation, if you let it read it.** The first version
+  searched `docs` and `scripts` too. `scripts` holds the gate itself,
+  whose exemption lists name every column they clear as a string
+  literal — so naming a column in the list gave it a second mention
+  and it would never have been reported again. Ten of thirteen entries
+  were exempting nothing and three real orphans were hidden by prose
+  elsewhere, and the gate reported success. The same trap
+  `check_web_plugin_registrant.py` and `check_android_compile_sdk.py`
+  each fell into, one layer out.
+
 ```python
 # Every column of every base table, against app/lib and the edge
 # functions, and against the migrations with the declaration blanked
