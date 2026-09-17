@@ -12,6 +12,7 @@ import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../banking/new_bank_account_dialog.dart';
+import '../contacts/new_contact_dialog.dart';
 import '../settings/new_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import '../shared/scan_runner.dart';
@@ -129,6 +130,7 @@ class ExpensesScreen extends ConsumerWidget {
                   itemBuilder: (context, i) {
                     final e = list[i];
                     final account = e['accounts'] as Map?;
+                    final payee = (e['contacts'] as Map?)?['name'];
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 4),
@@ -150,6 +152,11 @@ class ExpensesScreen extends ConsumerWidget {
                       subtitle: Text(
                         [
                           e['expense_no'],
+                          // Who was paid, where there is one. First
+                          // after the number because it is the question
+                          // asked of a line of expenses more often than
+                          // which account it landed in.
+                          if (payee != null) payee,
                           if (account != null)
                             '${account['code']} ${account['name']}',
                           Fmt.date(Fmt.parseDate(e['expense_date'])),
@@ -206,6 +213,10 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   final _splitAmounts = <TextEditingController>[];
 
   String? _bankAccountId;
+
+  /// Who was paid. Null is the ordinary case for petty cash and stays
+  /// null: an expense with no payee is still an expense.
+  String? _contactId;
   String? _taxCodeId;
   String _paymentMode = '03';
   DateTime _date = DateTime.now();
@@ -388,6 +399,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
           description: _description.text.trim().isEmpty
               ? null
               : _description.text.trim(),
+          contactId: _contactId,
           bankAccountId: _bankAccountId,
           paymentModeCode: _paymentMode,
           taxCodeId: _taxCodeId,
@@ -429,6 +441,12 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
         .toList();
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
+    // Suppliers, because that is what a payee is: the same list the
+    // purchase side picks from, so a bill and the cash paid for it end
+    // up against one contact rather than two spellings of one.
+    final payees =
+        ref.watch(contactsProvider((type: 'supplier', search: ''))).valueOrNull ??
+            const <Contact>[];
 
     final ocr = ref.watch(ocrStatusProvider).valueOrNull ?? OcrSettings.off;
 
@@ -606,6 +624,37 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                     ),
                   ),
                 ]),
+                const SizedBox(height: 12),
+                // Who was paid. The column, the posting and the payment
+                // voucher have carried a payee since 0006 and nothing
+                // has ever set one: `recordExpense` takes `contactId`
+                // and no caller passed it, so `gl_lines.contact_id` was
+                // null on every expense ever posted and the voucher
+                // printed an em dash where the name goes.
+                //
+                // Optional, and deliberately. A toll, a parking ticket
+                // and a kopi for a site visit have no payee worth
+                // putting on file, and forcing one would fill the
+                // contact list with them.
+                SearchablePicker<String>(
+                  key: const ValueKey('expense-payee'),
+                  options: contactPickerOptions(payees),
+                  value: _contactId,
+                  allowEmpty: true,
+                  emptyLabel: 'Nobody in particular',
+                  label: 'Paid to',
+                  hint: 'Type a name',
+                  helperText:
+                      'Who the money went to. Leave blank for petty cash '
+                      'with no supplier behind it.',
+                  createLabel: 'Add supplier',
+                  onCreate: (typed) => createContactFromPicker(
+                    context,
+                    contactType: 'supplier',
+                    typed: typed,
+                  ),
+                  onChanged: (v) => setState(() => _contactId = v),
+                ),
                 const SizedBox(height: 12),
                 SearchablePicker<String>(
                   options: [
@@ -916,6 +965,10 @@ class _ExpenseDetail extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               line('Description', expense['description']?.toString() ?? '—'),
+              line(
+                'Paid to',
+                (expense['contacts'] as Map?)?['name']?.toString() ?? '—',
+              ),
               line('Date', Fmt.date(Fmt.parseDate(expense['expense_date']))),
               // A split expense's header account is only its largest
               // line, so showing it alone would be a quarter of the

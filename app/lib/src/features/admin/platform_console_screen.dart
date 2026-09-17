@@ -11,6 +11,7 @@ import 'entity_types_admin.dart';
 import 'search_registers_admin.dart';
 import 'ai_providers_admin.dart';
 import 'branding_admin.dart';
+import 'closed_accounts_admin.dart';
 import 'credit_admin.dart';
 import 'landing_cms.dart';
 import 'modules_admin.dart';
@@ -71,6 +72,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/organizations',
     primary: true,
     page: _OrganizationsTab(),
+  ),
+  (
+    group: 'Platform',
+    label: 'Closed accounts',
+    icon: Icons.inventory_2_outlined,
+    selectedIcon: Icons.inventory_2,
+    path: '/admin/closed',
+    primary: false,
+    page: ClosedAccountsAdminTab(),
   ),
   (
     group: 'Document scanning',

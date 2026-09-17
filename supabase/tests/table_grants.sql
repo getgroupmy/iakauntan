@@ -68,7 +68,11 @@ declare
   v_table text;
 begin
   foreach v_table in array array[
-    'einvoice_credentials', 'org_ocr_credentials'
+    'einvoice_credentials', 'org_ocr_credentials',
+    -- 0619. The identity of every closed login lives here, and the only
+    -- reader is a SECURITY DEFINER function that asks
+    -- `is_platform_admin()` first.
+    'account_closures'
   ]
   loop
     perform pg_temp.check_true(

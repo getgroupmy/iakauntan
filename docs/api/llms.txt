@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0618` (the highest applied migration).
-691 functions and 340 readable tables, of which
-259 functions only read.
+Schema version `0620` (the highest applied migration).
+696 functions and 340 readable tables, of which
+260 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**551 of 691 functions carry a `comment on
+**556 of 696 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -364,7 +364,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (480)
+### general (485)
 
 Not gated on any module.
 
@@ -450,7 +450,9 @@ Not gated on any module.
 - `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Closes the day and returns what it came to — worked, scheduled, overtime split into normal, rest day and holiday, and the lateness from the morning.
 - `close_lead(p_lead uuid, p_reason text)` *(writes)* — Marks a lead lost.
 - `close_matter(p_matter uuid, p_closed_date date, p_note text)` *(writes)* — Closes a file.
+- `close_my_account(p_reason text, p_close_sole_owned boolean)` *(writes)* — Closes the signed-in login.
 - `close_opportunity(p_opportunity uuid, p_outcome text, p_reason text, p_competitor text, p_closed_on date)` *(writes)* — Closes a deal and insists on a reason for the ones worth learning from.
+- `close_organization(p_org_id uuid, p_reason text)` *(writes)* — Closes a company.
 - `close_project(p_project uuid, p_write_off boolean)` *(writes)* — Closes a project.
 - `close_requisition(p_requisition uuid, p_status app.requisition_status, p_closed_on date)` *(writes)* — Stops a vacancy, by cancelling it or putting it on hold.
 - `collection_history(p_contact_id uuid)`
@@ -509,7 +511,7 @@ Not gated on any module.
 - `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)* — Platform staff approve or refuse a company's request for a name on our domain.
 - `declarable_reliefs(p_tax_year integer)` — The reliefs an employee may put on a TP1 for a tax year, with LHDN's ceiling on each.
 - `delete_mia_credential(p_id uuid)` *(writes)* — Removes a recorded MIA credential.
-- `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
+- `delete_my_account()` *(writes)* — 0158's name for close_my_account().
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)* — Marks a held cheque as paid in, and POSTS NOTHING.
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
 - `detach_company_from_firm(p_org_id uuid)` *(writes)* — Ends the appointment between a company and the accounting practice keeping its books, and returns how many memberships it removed.
@@ -618,6 +620,8 @@ Not gated on any module.
 - `platform_adjust_credit(p_org_id uuid, p_amount numeric, p_reason text)` *(writes)* — Moves a company's credit balance by hand, up or down, and returns the new balance.
 - `platform_ai_providers()` — The provider list for the platform console, with whether a key is on file and when it was set.
 - `platform_audit_trail(p_table text, p_limit integer)` *(writes)* — The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate tables may write.
+- `platform_close_account(p_kind text, p_subject_id uuid, p_reason text)` *(writes)* — Closes a login, a company or a ledger account on the operator's side -- the half of 0619 that answers a request made by email rather than pressed in Settings.
+- `platform_closed_accounts(p_kind text, p_include_restored boolean)` — Every closed login, company and ledger account, with the identity the product no longer shows.
 - `platform_credit_summary()`
 - `platform_delete_entity_type(p_code text)` *(writes)* — Removes a kind of business that nothing is filed as.
 - `platform_delete_landing_app_link(p_store_code text)` *(writes)* — Removes one download button from the landing page.
@@ -638,6 +642,7 @@ Not gated on any module.
 - `platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` *(writes)* — Publishes a statutory rate table -- EPF, SOCSO, EIS or PCB -- that EVERY company's payroll is then computed from.
 - `platform_reservations()`
 - `platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` *(writes)* — Holds a name on our domain -- for a company, for the platform's own use, or parked so nobody else takes it.
+- `platform_restore_account(p_closure_id uuid, p_note text)` *(writes)* — Brings a closed login, company or ledger account back.
 - `platform_save_entity_type(p_code text, p_label text, p_label_my text, p_sort_order integer, p_is_active boolean, p_is_public_company boolean, p_for_contacts boolean, p_for_organizations boolean, p_is_individual boolean)` *(writes)* — Adds or amends a kind of business.
 - `platform_save_landing_app_link(p_store_code text, p_label text, p_url text, p_badge_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits a download button -- App Store, Play Store -- on the landing page.
 - `platform_save_landing_logo(p_id uuid, p_name text, p_logo_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits a customer logo on the landing page.
@@ -756,7 +761,7 @@ Not gated on any module.
 - `request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` *(writes)* — Asks a company admin for temporary sight of payslips, and returns the request.
 - `request_subdomain(p_org_id uuid, p_subdomain text)` *(writes)* — Asks the platform for a name on our domain.
 - `resync_bank_balance(p_bank_account_id uuid)` *(writes)* — Rebuilds bank_accounts.current_balance from posted ledger lines.
-- `retire_account(p_id uuid)` *(writes)* — Removes an account from the chart if it can be removed and switches it off if it cannot, returning 'deleted' or 'deactivated' so the caller can say which happened.
+- `retire_account(p_id uuid)` *(writes)* — Closes a ledger account: switched off, hidden from the chart, and kept.
 - `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)* — Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss.
 - `revenue_schedule_due(p_org_id uuid)` — Deferred revenue not yet released, one row per period end — the shape recognise_revenue posts in.
 - `reverse_gl_entry(p_entry_id uuid, p_date date)` *(writes)* — Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given, numbered as a new journal and marked `is_reversal` pointing back at the original.

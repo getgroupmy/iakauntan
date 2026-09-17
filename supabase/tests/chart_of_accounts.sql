@@ -13,6 +13,14 @@
 --     every report ever run against it;
 --   * an account with postings is deactivated, never deleted.
 --
+-- 0619 took the deletion out of the third one entirely: nothing in this
+-- product deletes an account any more, posted to or not, because "keep
+-- the records and let only the console see them" is not a rule that can
+-- hold with one branch that removes the row. So the three assertions
+-- that used to read `deleted` now read `closed`, and each is paired
+-- with one that the row is still there -- which is the half that would
+-- otherwise have been lost with the word.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on
@@ -203,14 +211,17 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.coa_org('Carta Bersara Sdn Bhd');
 
-  -- Never touched: gone.
+  -- Never touched: closed, and kept. 0619.
   v_fresh := public.upsert_account(
     '6360', 'Opened by mistake', 'expense', 'operating_expense',
     p_org_id => v_org);
-  perform pg_temp.check_eq('an account nothing has touched is deleted',
-    public.retire_account(v_fresh), 'deleted');
-  perform pg_temp.check_true('and is really gone',
-    not exists (select 1 from public.accounts where id = v_fresh));
+  perform pg_temp.check_eq('an account nothing has touched is closed',
+    public.retire_account(v_fresh), 'closed');
+  perform pg_temp.check_true('and the row is still there',
+    exists (select 1 from public.accounts where id = v_fresh));
+  perform pg_temp.check_true('hidden rather than removed',
+    (select deleted_at is not null and not is_active
+       from public.accounts where id = v_fresh));
 
   -- Posted to: kept, switched off. Deleting it would take a balance
   -- out of the trial balance, which is how a set of books stops
@@ -225,8 +236,8 @@ begin
                          'debit', 0, 'credit', 90, 'description', 'A cost')),
     'One cost');
 
-  perform pg_temp.check_eq('an account with history is deactivated',
-    public.retire_account(v_used), 'deactivated');
+  perform pg_temp.check_eq('an account with history is closed',
+    public.retire_account(v_used), 'closed');
   perform pg_temp.check_true('and keeps its postings',
     exists (select 1 from public.gl_lines where account_id = v_used));
   perform pg_temp.check_true('while being switched off',
@@ -244,8 +255,8 @@ begin
     update public.accounts set opening_balance = 250 where id = v_opened;
 
     perform pg_temp.check_eq(
-      'an account carrying an opening balance is deactivated too',
-      public.retire_account(v_opened), 'deactivated');
+      'an account carrying an opening balance is closed too',
+      public.retire_account(v_opened), 'closed');
     perform pg_temp.check_true('and keeps the balance it carried',
       (select opening_balance from public.accounts where id = v_opened) = 250);
   end;
@@ -266,10 +277,10 @@ begin
   perform pg_temp.check_true(
     'a heading with accounts under it stays', not v_took);
 
-  perform pg_temp.check_eq('until they are gone',
-    public.retire_account(v_kid), 'deleted');
+  perform pg_temp.check_eq('until they are closed',
+    public.retire_account(v_kid), 'closed');
   perform pg_temp.check_eq('and then it goes too',
-    public.retire_account(v_head), 'deleted');
+    public.retire_account(v_head), 'closed');
 end $$;
 
 -- ---------------------------------------------------------------------

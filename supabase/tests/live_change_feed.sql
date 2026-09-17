@@ -54,15 +54,25 @@ begin;
 --     notices about nothing anybody can see.
 --
 -- So the rule is not "every org-scoped table" but "every org-scoped
--- table whose writes are changes". A glance is not a change, and
--- neither is a lookup. The list below is the exception in full, and it
+-- table whose writes are changes that the company may see". A glance is
+-- not a change, a lookup is not either, and a closure is a change the
+-- company is specifically not being shown. The list below is the exception in full, and it
 -- is a list rather than a pattern so that adding to it takes a
 -- decision.
 do $$
 declare
   v_missing text[];
   v_receipts text[] := array[
-    'security_events', 'payslip_access_log', 'ssm_api_log'];
+    'security_events', 'payslip_access_log', 'ssm_api_log',
+    -- 0619, and the fourth for a reason of its own. `account_closures`
+    -- records that a company, a login or a ledger account has been
+    -- closed, and NOBODY may read the table: row level security with no
+    -- policy, the same shape as the credentials tables. A feed notice
+    -- would wake every client watching that company to say a table they
+    -- cannot select from has moved -- and in the one case that matters,
+    -- to announce the company's own closure to the members who are in
+    -- the same instant losing access to it.
+    'account_closures'];
   v_wrongly_on text[];
 begin
   select coalesce(array_agg(c.relname order by c.relname), '{}')
@@ -143,13 +153,17 @@ begin
    where n.nspname = 'public'
      and c.relkind = 'r'
      and c.relname <> 'live_changes'
-     -- The same three read-receipt tables the block above excuses, for
-     -- the same reason: they are written by reads, and a screen that
-     -- refreshed on them would read again and never stop -- or, for
+     -- The same four tables the block above excuses, for the same
+     -- reasons: three are written by reads, and a screen that refreshed
+     -- on them would read again and never stop -- or, for
      -- `ssm_api_log`, would be told to re-read a table it may not
-     -- select from.
+     -- select from. `account_closures` (0619) is the fourth: nobody may
+     -- select from it either, and the change it records is a company's
+     -- own closure, which is not news to push at the members who are
+     -- losing access to it in the same instant.
      and c.relname not in
-       ('security_events', 'payslip_access_log', 'ssm_api_log')
+       ('security_events', 'payslip_access_log', 'ssm_api_log',
+        'account_closures')
      and exists (
        select 1 from information_schema.columns col
         where col.table_schema = 'public'

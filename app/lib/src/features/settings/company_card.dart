@@ -144,10 +144,131 @@ class CompanyCard extends ConsumerWidget {
             FieldRow(label: 'Phone', value: org.phone ?? 'Not set'),
             FieldRow(label: 'Base currency', value: org.baseCurrency),
             FieldRow(label: 'Rounding', value: Fmt.label(org.roundingMethod)),
+            if (ref.watch(isOwnerProvider)) ...[
+              const Divider(height: Space.xl),
+              _CloseCompany(org: org),
+            ],
           ],
         ),
       ),
     );
+  }
+}
+
+/// Closing the company.
+///
+/// The counterpart of closing a login, and the half somebody holding
+/// several companies actually needs: a company that has stopped trading
+/// should go away without taking the person, or their other companies,
+/// with it.
+///
+/// Nothing is deleted. The books stay exactly where they are — which is
+/// not a technicality, because the Companies Act 2016 s.245 and the
+/// Income Tax Act 1967 s.82 require them kept for seven years after the
+/// company stops needing them. What changes is that nobody in the
+/// product can reach them any more.
+class _CloseCompany extends ConsumerWidget {
+  const _CloseCompany({required this.org});
+
+  final Organization org;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Close this company',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          'Its ledger, documents, payroll and everything else stay '
+          'exactly where they are and stop being visible to anybody — '
+          'including you. The law requires those books kept for seven '
+          'years, so nothing is erased. Only the operator of this '
+          'platform can reopen it.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: Space.sm),
+        OutlinedButton.icon(
+          key: const ValueKey('close-company'),
+          onPressed: () => _close(context, ref),
+          icon: const Icon(Icons.business_outlined, size: 18),
+          label: const Text('Close this company'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: context.colors.danger,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _close(BuildContext context, WidgetRef ref) async {
+    final reason = TextEditingController();
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Close ${org.name}?'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Everybody on this company loses access immediately, '
+                'including you, and it disappears from the company '
+                'switcher. Nothing is deleted and only the operator of '
+                'this platform can reopen it.',
+              ),
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('close-company-reason'),
+                controller: reason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (optional)',
+                  helperText: 'Kept with the closure, for the operator.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('close-company-confirm'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.danger,
+            ),
+            child: const Text('Close it'),
+          ),
+        ],
+      ),
+    );
+    final why = reason.text.trim();
+    reason.dispose();
+    if (go != true || !context.mounted) return;
+
+    final done = await runWithFeedback(
+      context,
+      doing: 'close the company',
+      action: () => ref
+          .read(repoProvider)!
+          .closeOrganization(org.id, reason: why.isEmpty ? null : why),
+      successMessage: '${org.name} is closed',
+    );
+    if (!done || !context.mounted) return;
+
+    // The company the app is pointed at no longer exists as far as
+    // every guard in the database is concerned, so staying on it would
+    // be a screenful of empty lists and permission errors.
+    ref.read(currentOrgIdProvider.notifier).clear();
+    ref.invalidate(organizationsProvider);
   }
 }
 

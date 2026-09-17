@@ -259,6 +259,15 @@ final canAdminProvider = Provider<bool>((ref) {
   return const ['owner', 'admin'].contains(role);
 });
 
+/// Owner and nobody else. Separate from [canAdminProvider] because two
+/// things in this product are an owner's alone and an admin's not:
+/// handing the company over, and closing it. `close_organization`
+/// refuses an admin in the database; this is so the button is absent
+/// rather than present and refusing.
+final isOwnerProvider = Provider<bool>((ref) {
+  return (ref.watch(memberRoleProvider).valueOrNull ?? 'viewer') == 'owner';
+});
+
 /// Who may see the journals and audit trail. Auditors get read access to
 /// everything; sales and purchasing staff do not.
 final canReadLedgerProvider = Provider<bool>((ref) {
@@ -844,6 +853,15 @@ final platformOrgsProvider = FutureProvider.autoDispose<List<PlatformOrg>>((
 final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
   return ref.watch(platformRepoProvider).modules();
 });
+
+/// What has been closed, for the console. 0619.
+final platformClosuresProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({String? kind, bool includeRestored})>(
+      (ref, args) => ref.watch(platformRepoProvider).closedAccounts(
+        kind: args.kind,
+        includeRestored: args.includeRestored,
+      ),
+    );
 
 final platformSettingsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {

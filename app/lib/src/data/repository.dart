@@ -2151,18 +2151,53 @@ class Repo {
   Future<List<Map<String, dynamic>>> accountDeletionBlockers() async =>
       _rows(await callRpc('my_account_deletion_blockers'));
 
-  /// Closes the signed-in account: the identity is scrubbed from
-  /// `profiles` and `auth.users`, membership and push tokens go, and
-  /// every session is killed.
+  /// Closes the signed-in account: the identity disappears from
+  /// `profiles` and `auth.users`, every membership stops conferring
+  /// anything, push tokens go and every session is killed.
   ///
-  /// Anonymised rather than deleted, because roughly a hundred audit
-  /// columns — who posted this journal, who approved that payroll —
-  /// reference the user row, and a ledger that cannot say who posted an
-  /// entry is not evidence of anything.
-  Future<Map<String, dynamic>> deleteMyAccount() async {
-    final data = await callRpc('delete_my_account');
+  /// Nothing is deleted. Roughly a hundred audit columns — who posted
+  /// this journal, who approved that payroll — reference the user row,
+  /// and a ledger that cannot say who posted an entry is not evidence
+  /// of anything. Since 0619 the identity MOVES into a table only the
+  /// platform console can read, rather than being overwritten, which is
+  /// also the only way back.
+  ///
+  /// [closeSoleOwnedCompanies] answers the one refusal: a person who is
+  /// the last owner of a company cannot simply leave, because the
+  /// company would be left with nobody able to administer it. Passing
+  /// true closes those companies with them, each recorded as its own
+  /// closure.
+  Future<Map<String, dynamic>> closeMyAccount({
+    String? reason,
+    bool closeSoleOwnedCompanies = false,
+  }) async {
+    final data = await callRpc(
+      'close_my_account',
+      params: {
+        'p_reason': reason,
+        'p_close_sole_owned': closeSoleOwnedCompanies,
+      },
+    );
     return Map<String, dynamic>.from(data as Map);
   }
+
+  /// 0158's name for the same thing, kept for callers that pass nothing.
+  Future<Map<String, dynamic>> deleteMyAccount() => closeMyAccount();
+
+  /// Closes a company. Its books stay exactly where they are and stop
+  /// being visible to anybody but the platform console, which is also
+  /// the only way back. Owner only.
+  Future<Map<String, dynamic>> closeOrganization(
+    String orgId, {
+    String? reason,
+  }) async {
+    final data = await callRpc(
+      'close_organization',
+      params: {'p_org_id': orgId, 'p_reason': reason},
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
 
   /// Every reconciliation closed on an account, newest first, with the
   /// number of statement lines each one closed over — which is what
@@ -3900,14 +3935,17 @@ class Repo {
     // contact_id for whoever was paid, billed_to_id for the client it is
     // rebilled to — so PostgREST cannot guess which one is meant and
     // refuses the whole request with PGRST201 rather than choosing. The
-    // screen never read the name anyway. If it should show the payee, ask
-    // for it by constraint: `contacts!expenses_contact_id_fkey(name)`.
+    // payee is asked for by constraint name, which is the answer that
+    // comment used to only describe.
     final data = await client
         .from('expenses')
         // Named because 0514 added a same-org composite key alongside
         // the plain one, so 'accounts' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, accounts!expenses_account_id_fkey(code, name)')
+        .select(
+          '*, accounts!expenses_account_id_fkey(code, name), '
+          'contacts!expenses_contact_id_fkey(name)',
+        )
         .eq('org_id', orgId)
         .isFilter('deleted_at', null)
         .order('expense_date', ascending: false)
@@ -4692,6 +4730,57 @@ class PlatformRepo {
     'platform_set_org_status',
     params: {'p_org_id': orgId, 'p_status': status},
   );
+
+  // ------------------------------------------------------------------
+  // Closures (0619)
+  //
+  // On this class rather than on [Repo] because none of the three is
+  // about one company: an operator reading these belongs to no tenant,
+  // and `Repo` cannot be built without one.
+  // ------------------------------------------------------------------
+
+  /// Every closed login, company and ledger account, with the identity
+  /// the product no longer shows. [kind] is `user`, `organization` or
+  /// `ledger_account`, or null for all three.
+  Future<List<Map<String, dynamic>>> closedAccounts({
+    String? kind,
+    bool includeRestored = false,
+  }) async => Repo._rows(
+    await client.rpc(
+      'platform_closed_accounts',
+      params: {'p_kind': kind, 'p_include_restored': includeRestored},
+    ),
+  );
+
+  /// Closes one on the operator's side — the half of this that answers
+  /// a request made by email rather than pressed in Settings.
+  Future<Map<String, dynamic>> closeAccount({
+    required String kind,
+    required String subjectId,
+    String? reason,
+  }) async {
+    final data = await client.rpc(
+      'platform_close_account',
+      params: {
+        'p_kind': kind,
+        'p_subject_id': subjectId,
+        'p_reason': reason,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Brings one back. The only way back there is.
+  Future<Map<String, dynamic>> restoreAccount(
+    String closureId, {
+    String? note,
+  }) async {
+    final data = await client.rpc(
+      'platform_restore_account',
+      params: {'p_closure_id': closureId, 'p_note': note},
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
 
   Future<List<Map<String, dynamic>>> settings() async {
     final data = await client.from('platform_settings').select().order('key', ascending: true);

@@ -305,10 +305,11 @@ class _TypeGroup extends ConsumerWidget {
       context,
       title: 'Retire ${a.code} ${a.name}?',
       message:
-          'If nothing has ever been posted to it, it is removed. If '
-          'anything has, it is switched off and keeps its history — an '
-          'account with a balance cannot be deleted without the books '
-          'stopping balancing.',
+          'It is switched off and disappears from the chart, and it '
+          'keeps everything ever posted to it. Nothing is deleted — an '
+          'account with a balance cannot be, without the books stopping '
+          'balancing — and only the operator of this platform can put '
+          'it back.',
       confirmLabel: 'Retire',
       destructive: true,
     );
@@ -316,27 +317,18 @@ class _TypeGroup extends ConsumerWidget {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
 
-    String? outcome;
+    // One outcome now. 0459 had two — deleted when nothing had ever
+    // been posted to it, switched off when something had — and 0619
+    // took the delete out: nothing in this product deletes an account
+    // any more, so there is no longer anything for the server to
+    // decide and nothing to report after the fact.
     await runWithFeedback(
       context,
       doing: 'retire an account',
-      // Said after the fact rather than before, because which of the two
-      // happened is the server's to decide and the message would
-      // otherwise be a guess.
-      successMessage: null,
-      action: () async => outcome = await repo.retireAccount(a.id),
+      action: () => repo.retireAccount(a.id),
+      successMessage: '${a.code} is closed, and keeps its history',
     );
     ref.invalidate(accountsProvider);
-    if (!context.mounted || outcome == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          outcome == 'deleted'
-              ? '${a.code} removed — nothing had been posted to it'
-              : '${a.code} switched off, and keeps its postings',
-        ),
-      ),
-    );
   }
 }
 

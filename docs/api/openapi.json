@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0618",
+    "version": "0620",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -25509,6 +25509,57 @@
         }
       }
     },
+    "/rpc/close_my_account": {
+      "post": {
+        "operationId": "close_my_account",
+        "summary": "Closes the signed-in login",
+        "description": "Closes the signed-in login. The identity moves into account_closures, where only the platform console can read it; the user row, the audit trail and every membership row stay. Pass p_close_sole_owned to take companies nobody else owns with it. 0619.\n\n`public.close_my_account(p_reason text, p_close_sole_owned boolean)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_reason": {
+                    "type": "string"
+                  },
+                  "p_close_sole_owned": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/close_opportunity": {
       "post": {
         "operationId": "close_opportunity",
@@ -25562,6 +25613,61 @@
                 "schema": {
                   "type": "null"
                 }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/close_organization": {
+      "post": {
+        "operationId": "close_organization",
+        "summary": "Closes a company",
+        "description": "Closes a company. Nothing is deleted: the books stay exactly where they are and stop being visible to anybody but the platform console, which is also the only way back. Owner only. 0619.\n\n`public.close_organization(p_org_id uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -30595,8 +30701,8 @@
     "/rpc/delete_my_account": {
       "post": {
         "operationId": "delete_my_account",
-        "summary": "Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens\u2026",
-        "description": "Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed. The user row itself stays because a hundred audit columns reference it, and a ledger that cannot say who posted an entry is not a ledger.\n\n`public.delete_my_account()` Writes. Requires a signed-in user.",
+        "summary": "0158's name for close_my_account()",
+        "description": "0158's name for close_my_account(). Kept so callers do not have to change; the closure it performs is 0619's, which keeps the record rather than scrubbing it.\n\n`public.delete_my_account()` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41561,6 +41667,168 @@
         }
       }
     },
+    "/rpc/platform_close_account": {
+      "post": {
+        "operationId": "platform_close_account",
+        "summary": "Closes a login, a company or a ledger account on the operator's side -- the half of 0619 that answers a\u2026",
+        "description": "Closes a login, a company or a ledger account on the operator's side -- the half of 0619 that answers a request made by email rather than pressed in Settings.\n\n`public.platform_close_account(p_kind text, p_subject_id uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_kind": {
+                    "type": "string"
+                  },
+                  "p_subject_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_kind",
+                  "p_subject_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_closed_accounts": {
+      "post": {
+        "operationId": "platform_closed_accounts",
+        "summary": "Every closed login, company and ledger account, with the identity the product no longer shows",
+        "description": "Every closed login, company and ledger account, with the identity the product no longer shows. Platform operators only. 0619.\n\n`public.platform_closed_accounts(p_kind text, p_include_restored boolean)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_kind": {
+                    "type": "string"
+                  },
+                  "p_include_restored": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "subject_kind": {
+                        "type": "string"
+                      },
+                      "subject_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_name": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "detail": {},
+                      "reason": {
+                        "type": "string"
+                      },
+                      "closed_via": {
+                        "type": "string"
+                      },
+                      "closed_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "closed_by_name": {
+                        "type": "string"
+                      },
+                      "restored_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "restored_by_name": {
+                        "type": "string"
+                      },
+                      "restore_note": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_credit_summary": {
       "post": {
         "operationId": "platform_credit_summary",
@@ -42889,6 +43157,61 @@
                   "type": "string",
                   "format": "uuid"
                 }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_restore_account": {
+      "post": {
+        "operationId": "platform_restore_account",
+        "summary": "Brings a closed login, company or ledger account back",
+        "description": "Brings a closed login, company or ledger account back. The only way back there is, and it is on the operator's side by design. 0619.\n\n`public.platform_restore_account(p_closure_id uuid, p_note text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_closure_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_closure_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -57627,8 +57950,8 @@
     "/rpc/retire_account": {
       "post": {
         "operationId": "retire_account",
-        "summary": "Removes an account from the chart if it can be removed and switches it off if it cannot, returning 'deleted'\u2026",
-        "description": "Removes an account from the chart if it can be removed and switches it off if it cannot, returning 'deleted' or 'deactivated' so the caller can say which happened. Anything ever posted to it, a non-zero opening balance, or any other row still naming it -- a bank account, a budget line, an item's posting account -- means deactivated: deleting would take a balance out of the trial balance or answer with a constraint name instead of a sentence. Refuses outright for an account the ledger posts to by number, which can be renamed but not removed, and for one that still has accounts under it. Needs `can_post`.\n\n`public.retire_account(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Closes a ledger account: switched off, hidden from the chart, and kept",
+        "description": "Closes a ledger account: switched off, hidden from the chart, and kept. 0619 took out 0459's outright delete -- nothing in this product deletes an account any more, and the platform console is the only way back.\n\n`public.retire_account(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -88310,6 +88633,10 @@
           },
           "signup_entity_type": {
             "type": "string"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [

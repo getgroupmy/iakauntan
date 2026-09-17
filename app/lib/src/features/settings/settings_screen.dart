@@ -2214,12 +2214,17 @@ class _AboutCard extends ConsumerWidget {
 
 /// Closing your own account.
 ///
-/// What this does is anonymise rather than delete, and the dialog says
-/// so in those words. Roughly a hundred columns record who posted a
-/// journal, approved a payroll or signed a resolution, and a set of
-/// books that cannot answer that is not one anybody can rely on — so the
-/// identity goes and the trail stays. Saying "deleted" here and meaning
-/// something else would be the kind of promise that gets found out.
+/// Nothing is deleted, and the dialog says so in those words. Roughly a
+/// hundred columns record who posted a journal, approved a payroll or
+/// signed a resolution, and a set of books that cannot answer that is
+/// not one anybody can rely on — so the trail stays. What the product
+/// stops showing is the identity, which moves into a record only the
+/// platform operator can read.
+///
+/// That last part is said out loud here rather than implied. "Deleted"
+/// and "we still have it, and can put it back if you ask" are different
+/// promises, and offering the first while meaning the second is the kind
+/// of thing that gets found out.
 class _CloseAccount extends ConsumerWidget {
   const _CloseAccount();
 
@@ -2236,71 +2241,206 @@ class _CloseAccount extends ConsumerWidget {
         ),
         const SizedBox(height: Space.xs),
         Text(
-          'Your name, email address, phone number and picture are removed '
-          'from this system, every device stops receiving notifications, '
-          'and you are signed out of everywhere. Entries you posted keep '
-          'a record that somebody posted them, without saying who — the '
-          'law requires those books to be kept for seven years.',
+          'Your name, email address, phone number and picture stop '
+          'appearing anywhere in this system, every device stops '
+          'receiving notifications, and you are signed out of '
+          'everywhere. Entries you posted keep a record that somebody '
+          'posted them, without saying who — the law requires those '
+          'books to be kept for seven years. Nothing is erased: the '
+          'details are kept where only the operator of this platform '
+          'can see them, and only they can reopen the account.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: Space.sm),
         blockers.when(
           loading: () => const SizedBox.shrink(),
           error: (_, _) => const SizedBox.shrink(),
-          data: (rows) => rows.isEmpty
-              ? OutlinedButton.icon(
-                  key: const ValueKey('close-account'),
-                  onPressed: () => _close(context, ref),
-                  icon: const Icon(Icons.person_remove_outlined, size: 18),
-                  label: const Text('Close my account'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: context.colors.danger,
-                  ),
-                )
-              // Said before the button rather than after pressing it:
-              // the database refuses this, and an action that always
-              // fails is worse than one that is not offered.
-              : Container(
-                  key: const ValueKey('close-account-blocked'),
-                  padding: const EdgeInsets.all(Space.md),
-                  decoration: BoxDecoration(
-                    color: context.colors.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(Radii.md),
-                  ),
-                  child: Text(
-                    'You are the only owner of '
-                    '${rows.map((r) => r['organization']).join(', ')}. '
-                    'Make somebody else an owner first, or the company is '
-                    'left with nobody who can administer it.',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
+          data: (rows) => OutlinedButton.icon(
+            key: rows.isEmpty
+                ? const ValueKey('close-account')
+                : const ValueKey('close-account-sole-owner'),
+            onPressed: () => _close(context, ref, rows),
+            icon: const Icon(Icons.person_remove_outlined, size: 18),
+            label: const Text('Close my account'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.colors.danger,
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Future<void> _close(BuildContext context, WidgetRef ref) async {
-    final ok = await confirm(
-      context,
-      title: 'Close this account?',
-      message:
-          'This cannot be undone. Your name and contact details are '
-          'removed, you lose access to every company you belong to, and '
-          'you cannot sign in again with this address.',
-      confirmLabel: 'Close my account',
+  Future<void> _close(
+    BuildContext context,
+    WidgetRef ref,
+    List<Map<String, dynamic>> blockers,
+  ) async {
+    final answer = await showDialog<_CloseAccountAnswer>(
+      context: context,
+      builder: (_) => _CloseAccountDialog(blockers: blockers),
     );
-    if (!ok || !context.mounted) return;
+    if (answer == null || !context.mounted) return;
 
     final done = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.deleteMyAccount(),
+      action: () => ref.read(repoProvider)!.closeMyAccount(
+        reason: answer.reason,
+        closeSoleOwnedCompanies: answer.closeCompanies,
+      ),
       successMessage: 'Your account has been closed',
     );
     if (!done || !context.mounted) return;
 
     await ref.read(supabaseProvider).auth.signOut();
     ref.read(currentOrgIdProvider.notifier).clear();
+  }
+}
+
+/// What the dialog came back with.
+typedef _CloseAccountAnswer = ({String? reason, bool closeCompanies});
+
+/// The confirmation, which asks two things rather than one.
+///
+/// The reason is optional and is for the operator reading the closure
+/// later — "moving to another firm" is the difference between a record
+/// and a row.
+///
+/// The second question only appears for somebody who is the last owner
+/// of a company, and it is the one that used to be a refusal: the
+/// database would not let them go, because a company with no owner has
+/// nobody who can invite a replacement and no way back in. It still
+/// will not, unless they say here what should happen to those companies
+/// — which is a decision, and so is asked as one.
+class _CloseAccountDialog extends StatefulWidget {
+  const _CloseAccountDialog({required this.blockers});
+
+  final List<Map<String, dynamic>> blockers;
+
+  @override
+  State<_CloseAccountDialog> createState() => _CloseAccountDialogState();
+}
+
+class _CloseAccountDialogState extends State<_CloseAccountDialog> {
+  final _reason = TextEditingController();
+  bool _closeCompanies = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sole = widget.blockers
+        .map((r) => '${r['organization']}')
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Close this account?'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'You lose access to every company you belong to and you '
+                'cannot sign in again with this address. Your name and '
+                'contact details stop appearing anywhere in the '
+                'product. Only the operator of this platform can undo '
+                'it.',
+              ),
+              if (sole.isNotEmpty) ...[
+                const SizedBox(height: Space.md),
+                Container(
+                  padding: const EdgeInsets.all(Space.md),
+                  decoration: BoxDecoration(
+                    color: context.colors.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'You are the only owner of ${sole.join(', ')}.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: Space.xs),
+                      const Text(
+                        'Make somebody else an owner first, or close '
+                        'those companies with your account. A company '
+                        'left with no owner has nobody who can invite a '
+                        'replacement.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: Space.xs),
+                      CheckboxListTile(
+                        key: const ValueKey('close-sole-owned'),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        dense: true,
+                        value: _closeCompanies,
+                        onChanged: (v) =>
+                            setState(() => _closeCompanies = v ?? false),
+                        title: Text(
+                          'Close ${sole.length == 1 ? 'it' : 'them'} too',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        subtitle: const Text(
+                          'The books stay; nobody but the operator can '
+                          'reach them.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('close-account-reason'),
+                controller: _reason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (optional)',
+                  helperText: 'Kept with the closure, for the operator.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('close-account-confirm'),
+          // Offered and refused rather than absent, when the sole-owner
+          // question has not been answered: an empty space where a
+          // button was is not an explanation, and the sentence above it
+          // is.
+          onPressed: sole.isNotEmpty && !_closeCompanies
+              ? null
+              : () => Navigator.pop<_CloseAccountAnswer>(context, (
+                  reason: _reason.text.trim().isEmpty
+                      ? null
+                      : _reason.text.trim(),
+                  closeCompanies: _closeCompanies,
+                )),
+          style: FilledButton.styleFrom(
+            backgroundColor: context.colors.danger,
+          ),
+          child: const Text('Close my account'),
+        ),
+      ],
+    );
   }
 }
 
