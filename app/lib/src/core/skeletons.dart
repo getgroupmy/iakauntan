@@ -244,6 +244,13 @@ class FormSkeleton extends StatelessWidget {
       children: [
         for (var i = 0; i < fields; i++)
           Padding(
+            // Keyed for the same reason [CardRowsSkeleton]'s rows are:
+            // a screen wired to draw this can be asserted to draw it,
+            // and -- the part that matters -- asserted to draw more
+            // than nothing. `FormSkeleton(fields: 0)` is a live
+            // outline with no boxes in it, and every assertion about
+            // "no spinner, no fields yet" is true of it.
+            key: ValueKey('skeleton-form-field-$i'),
             padding: const EdgeInsets.only(bottom: Space.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

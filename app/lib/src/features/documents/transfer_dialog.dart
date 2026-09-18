@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import 'doc_types.dart';
 import 'transfer.dart';
@@ -124,9 +125,15 @@ class _TransferDialogState extends ConsumerState<_TransferDialog> {
         child: switch (null) {
           _ when _loadError != null =>
             Text('Could not read what is outstanding: $_loadError'),
-          _ when lines == null => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
+          // A row per document line, each with a description and a
+          // quantity box. The dialog is opened from a document whose
+          // lines are already on screen, so the shape is not a guess.
+          _ when lines == null => const CardRowsSkeleton(
+              rows: 4,
+              leading: false,
+              lines: 2,
+              trailing: 1,
+              trailingWidth: 110,
             ),
           _ when lines.every((l) => l.outstanding <= 0) => Text(
               'Every line has already been taken forward to a '

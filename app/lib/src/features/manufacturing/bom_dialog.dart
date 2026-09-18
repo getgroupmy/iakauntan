@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -153,11 +154,12 @@ class _BomDialogState extends ConsumerState<BomDialog> {
       content: SizedBox(
         width: 620,
         child: _loading
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(Space.xl),
-                  child: CircularProgressIndicator(),
-                ),
+            // `initState` only loads for an EXISTING recipe -- a new
+            // one starts with a blank line and never waits -- so this
+            // arm is always an editor with its boxes on the way.
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: Space.md),
+                child: FormSkeleton(fields: 4),
               )
             : SingleChildScrollView(
                 child: Column(

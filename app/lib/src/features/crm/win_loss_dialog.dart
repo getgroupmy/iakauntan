@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'deal_outcome.dart';
@@ -50,9 +51,14 @@ class _WinLossDialogState extends ConsumerState<_WinLossDialog> {
               return Text('${snap.error}');
             }
             if (!snap.hasData) {
-              return const SizedBox(
-                height: 120,
-                child: Center(child: CircularProgressIndicator()),
+              // One row per reason, which is the shape whatever the
+              // reasons turn out to be.
+              return const CardRowsSkeleton(
+                rows: 4,
+                leading: false,
+                lines: 2,
+                trailing: 1,
+                trailingWidth: 60,
               );
             }
             final rows = snap.data!;

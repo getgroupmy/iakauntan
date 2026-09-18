@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -112,7 +113,26 @@ class _ExchangeRatesScreenState extends ConsumerState<ExchangeRatesScreen> {
         future: _board,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
+            // One row per currency, inside the card they land in. The
+            // count is not known, but the row is -- a flag, a code and
+            // a rate -- and the card is drawn either way.
+            return SingleChildScrollView(
+              child: PageBody(
+                maxWidth: 860,
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: CardRowsSkeleton(
+                      rows: 6,
+                      leadingSize: 28,
+                      lines: 1,
+                      trailing: 1,
+                      trailingWidth: 90,
+                    ),
+                  ),
+                ),
+              ),
+            );
           }
           if (snap.hasError) {
             return Center(child: Text('${snap.error}'));

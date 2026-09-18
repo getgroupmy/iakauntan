@@ -10,6 +10,7 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -796,7 +797,24 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          // An existing contact's boxes are drawn and empty until the
+          // record arrives, which is exactly what a form skeleton is
+          // for. A NEW one is not: the form opens at the entity-type
+          // question and nothing is coming but a suggested code, so
+          // outlining six fields would claim a shape the screen is
+          // about to decide not to draw. That one keeps its circle,
+          // for the reason `core/page_waiting.dart` gives.
+          ? (widget.contactId == null
+                ? const Center(child: CircularProgressIndicator())
+                : const SingleChildScrollView(
+                    child: PageBody(
+                      maxWidth: 760,
+                      child: Padding(
+                        padding: EdgeInsets.only(top: Space.lg),
+                        child: FormSkeleton(fields: 6),
+                      ),
+                    ),
+                  ))
           : SingleChildScrollView(
               child: PageBody(
                 maxWidth: 760,

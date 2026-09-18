@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -41,9 +42,14 @@ class _LateOrdersDialogState extends ConsumerState<_LateOrdersDialog> {
           builder: (context, snap) {
             if (snap.hasError) return Text('${snap.error}');
             if (!snap.hasData) {
-              return const SizedBox(
-                height: 120,
-                child: Center(child: CircularProgressIndicator()),
+              // Document number, what is still to go, and how late --
+              // the row is the same shape before the orders arrive.
+              return const CardRowsSkeleton(
+                rows: 4,
+                leading: false,
+                lines: 2,
+                trailing: 1,
+                trailingWidth: 72,
               );
             }
             final rows = snap.data!;

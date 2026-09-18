@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
@@ -216,7 +217,18 @@ class LayoutBuilderScreenState extends ConsumerState<LayoutBuilderScreen> {
         ],
       ),
       body: rows == null
-          ? const Center(child: CircularProgressIndicator())
+          // A list of report rows, each a drag handle, a label and a
+          // pair of controls. The shape is the screen's own and does
+          // not depend on what comes back.
+          ? const Padding(
+              padding: EdgeInsets.all(Space.lg),
+              child: CardRowsSkeleton(
+                rows: 8,
+                leadingSize: 24,
+                lines: 1,
+                trailing: 2,
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.all(Space.lg),
               children: [

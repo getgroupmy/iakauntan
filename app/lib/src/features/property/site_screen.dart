@@ -437,7 +437,10 @@ class _Arrears extends ConsumerWidget {
           },
         );
       },
-      orElse: () => const Center(child: CircularProgressIndicator()),
+      // A banner and a list of unpaid charges. The banner's figure is
+      // not known yet, but that it is there -- and that a list follows
+      // -- is.
+      orElse: () => const ListSkeleton(rows: 6, leading: false),
     );
   }
 }
