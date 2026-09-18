@@ -8,6 +8,7 @@ import '../core/format.dart';
 // For `writeCustomFields`, which both `openMatter` and `createTicket`
 // need and which each of them used to write out again inline.
 import 'custom_fields_repository.dart';
+import '../features/contacts/brought_forward.dart';
 import '../features/documents/transfer.dart';
 // `RepoMia` at the foot of this file returns these.
 import '../features/mia/mia_credential.dart';
@@ -4008,6 +4009,39 @@ class Repo {
         .isFilter('deleted_at', null)
         .order('doc_date', ascending: true);
     return _rows(data).map(BusinessDocument.fromJson).toList();
+  }
+
+  /// The brought-forward statement: what happened, in date order.
+  ///
+  /// The other half of the question [outstandingFor] answers. That one
+  /// lists documents with a balance left on them, which is what somebody
+  /// chasing money wants. This one opens with what was owed before the
+  /// period, lists every posted document and every receipt that moved
+  /// it, and carries a running balance down the page -- which is what a
+  /// customer reconciling against their own ledger wants.
+  ///
+  /// `report_statement_of_account` (0624) does the arithmetic, including
+  /// the running balance, and this returns it unchanged. Recomputing the
+  /// balance here would be a second arithmetic to disagree with the
+  /// first, which is the failure `statement_of_account.sql` exists to
+  /// prevent between the ageing report and the open-item statement.
+  ///
+  /// Customer side only, because the function is: it reads
+  /// `sales_documents` and `receipts`.
+  Future<List<StatementLine>> statementOfAccount({
+    required String contactId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final data = await callRpc(
+      'report_statement_of_account',
+      params: {
+        'p_contact_id': contactId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      },
+    );
+    return _rows(data).map(StatementLine.fromJson).toList();
   }
 
   // ------------------------------------------------------------------

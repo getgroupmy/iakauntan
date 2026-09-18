@@ -27,6 +27,8 @@ import '../../data/ssm_repository.dart';
 import '../../data/entity_types_repository.dart';
 import '../shared/entity_search.dart';
 import '../shared/ssm_query_hints.dart';
+import 'brought_forward.dart';
+import 'brought_forward_pdf.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
 import 'customer_portal_card.dart';
@@ -418,6 +420,105 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     }
   }
 
+  /// The other statement: everything that happened in a period.
+  ///
+  /// Offered beside the open-item one rather than instead of it, because
+  /// the two answer different questions and a customer holding the wrong
+  /// one cannot tell. `report_statement_of_account` (0624) built this
+  /// and nothing called it until now.
+  ///
+  /// Customer side only, because the function is — it reads
+  /// `sales_documents` and `receipts`. The menu does not offer it to a
+  /// supplier.
+  Future<void> _downloadBroughtForward() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(repoProvider);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    if (repo == null || org == null || widget.contactId == null) return;
+
+    final today = DateTime.now();
+    final suggested = statementDefaultPeriod(today);
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDateRange: DateTimeRange(
+        start: suggested.from,
+        end: suggested.to,
+      ),
+      helpText: 'Statement period',
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _statementBusy = true);
+    try {
+      final contact = await repo.contact(widget.contactId!);
+      final lines = await repo.statementOfAccount(
+        contactId: widget.contactId!,
+        from: picked.start,
+        to: picked.end,
+      );
+
+      // Checked before the document is written, not after it is sent.
+      // The running balance comes down from the database and the page
+      // prints it; if it disagrees with the movements printed beside
+      // it, the customer is being asked for a figure nothing on the
+      // page explains, and the right response is to say so rather than
+      // to produce the document anyway.
+      if (!statementAddsUp(lines)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The running balance does not agree with the transactions '
+              'under it, so the statement was not produced. Please report '
+              'this.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final bytes = await buildBroughtForwardPdf(
+        org: org,
+        contact: contact,
+        lines: lines,
+        from: picked.start,
+        to: picked.end,
+        logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed,
+      );
+
+      final stem = contact.code
+          .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+          .toLowerCase();
+      final saved = await exportBytesFile(
+        ref,
+        'statement-$stem-${Fmt.iso(picked.start)}-to-'
+            '${Fmt.iso(picked.end)}.pdf',
+        'application/pdf',
+        bytes,
+        what: 'Statement of account',
+        detail: '${contact.name}, '
+            '${statementPeriodLabel(picked.start, picked.end)}',
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            saved
+                ? 'Downloaded'
+                : 'PDF download is only available in the browser',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _statementBusy = false);
+    }
+  }
+
   Contact _build() => Contact(
     id: widget.contactId ?? '',
     code: _c('code').text.trim(),
@@ -629,14 +730,56 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
           // Suppliers get one too — theirs lists what we owe them, for
           // checking against the statement they send us, which is the
           // half of the reconciliation that used to have no document.
+          //
+          // A customer gets a CHOICE of the two, because there are two
+          // and they are not substitutes: the open-item one lists what
+          // is still unpaid, the brought-forward one lists everything
+          // that happened in a period with a balance carried down. A
+          // supplier gets the one button, because
+          // `report_statement_of_account` reads the sales side only and
+          // there is no supplier form of the second document to offer.
           if (widget.contactId != null)
-            IconButton(
-              tooltip: _contactType == 'supplier'
-                  ? 'Statement of what we owe'
-                  : 'Statement of account',
-              icon: const Icon(Icons.request_quote_outlined, size: 20),
-              onPressed: _statementBusy ? null : _downloadStatement,
-            ),
+            if (_contactType == 'supplier')
+              IconButton(
+                key: const ValueKey('contact-statement'),
+                tooltip: 'Statement of what we owe',
+                icon: const Icon(Icons.request_quote_outlined, size: 20),
+                onPressed: _statementBusy ? null : _downloadStatement,
+              )
+            else
+              PopupMenuButton<String>(
+                key: const ValueKey('contact-statement-menu'),
+                tooltip: 'Statement of account',
+                icon: const Icon(Icons.request_quote_outlined, size: 20),
+                enabled: !_statementBusy,
+                onSelected: (v) => v == 'open'
+                    ? _downloadStatement()
+                    : _downloadBroughtForward(),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    key: ValueKey('statement-open-item'),
+                    value: 'open',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('What is still unpaid'),
+                      subtitle: Text('Open-item statement, as at today'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    key: ValueKey('statement-brought-forward'),
+                    value: 'brought',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Everything in a period'),
+                      subtitle: Text(
+                        'Brought-forward statement, with a running balance',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
