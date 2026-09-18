@@ -98,6 +98,17 @@ jobs:
         working-directory: .
         run: python3 scripts/check_web_plugin_registrant.py
 
+      # The other half of passkeys on a phone, and the half that fails
+      # SILENTLY. A passkey is bound to a domain, the operating system
+      # verifies the binding by fetching one file, and every way of
+      # getting that wrong presents identically: a button that does
+      # nothing. Absent is allowed — neither file can be written without
+      # the Play App Signing SHA-256 or the Apple team id, and a
+      # placeholder is worse than nothing. Present and wrong is refused.
+      - name: Check the passkey association is not half-configured
+        working-directory: .
+        run: python3 scripts/check_passkey_association.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
 
