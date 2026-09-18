@@ -772,6 +772,7 @@ jobs:
                    supabase/tests/pos_einvoice_consolidation.sql \
                    supabase/tests/einvoice_totals_reconcile.sql \
                    supabase/tests/einvoice_signing_certificate.sql \
+                   supabase/tests/received_einvoice.sql \
                    supabase/tests/mia_credentials.sql \
                    supabase/tests/ssm_register_lookup.sql \
                    supabase/tests/ssm_api_tables.sql \

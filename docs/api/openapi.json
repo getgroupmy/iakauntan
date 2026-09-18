@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0649",
+    "version": "0650",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -17374,6 +17374,134 @@
         }
       }
     },
+    "/received_einvoice_lines": {
+      "get": {
+        "operationId": "select_received_einvoice_lines",
+        "summary": "Read received_einvoice_lines",
+        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/received_einvoice_lines"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/received_einvoices": {
+      "get": {
+        "operationId": "select_received_einvoices",
+        "summary": "Read received_einvoices",
+        "description": "A MyInvois document somebody sent US, parsed by _shared/ubl_parse.ts and kept whole. The inbound half of e-Invoice. 0650.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/received_einvoices"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/recurring_documents": {
       "get": {
         "operationId": "select_recurring_documents",
@@ -30343,6 +30471,61 @@
         }
       }
     },
+    "/rpc/create_supplier_from_received_einvoice": {
+      "post": {
+        "operationId": "create_supplier_from_received_einvoice",
+        "summary": "Creates the supplier named by a received document, or links the one already holding that TIN",
+        "description": "Creates the supplier named by a received document, or links the one already holding that TIN. Never creates a second row for a known TIN.\n\n`public.create_supplier_from_received_einvoice(p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/create_ticket": {
       "post": {
         "operationId": "create_ticket",
@@ -32831,6 +33014,61 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/draft_bill_from_received_einvoice": {
+      "post": {
+        "operationId": "draft_bill_from_received_einvoice",
+        "summary": "Drafts a purchase document from a received e-Invoice",
+        "description": "Drafts a purchase document from a received e-Invoice. The totals are recomputed by our own triggers; any difference from the stated payable amount is written into the bill internal notes.\n\n`public.draft_bill_from_received_einvoice(p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -38522,6 +38760,65 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/link_received_einvoice_contact": {
+      "post": {
+        "operationId": "link_received_einvoice_contact",
+        "summary": "Says which supplier a received document is from",
+        "description": "Says which supplier a received document is from. Refuses a contact in another company, and refuses to change one once a bill has been drafted from the document. Null clears the link.\n\n`public.link_received_einvoice_contact(p_id uuid, p_contact_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id",
+                  "p_contact_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/received_einvoices"
                 }
               }
             }
@@ -52935,6 +53232,62 @@
         ]
       }
     },
+    "/rpc/record_received_einvoice": {
+      "post": {
+        "operationId": "record_received_einvoice",
+        "summary": "Keeps a parsed MyInvois document",
+        "description": "Keeps a parsed MyInvois document. Idempotent on the hash of the raw document: a second import returns the first row and says so.\n\n`public.record_received_einvoice(p_org_id uuid, p_parsed jsonb, p_raw jsonb)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_parsed": {},
+                  "p_raw": {}
+                },
+                "required": [
+                  "p_org_id",
+                  "p_parsed",
+                  "p_raw"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/record_statutory_remittance": {
       "post": {
         "operationId": "record_statutory_remittance",
@@ -64778,6 +65131,64 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/set_received_einvoice_status": {
+      "post": {
+        "operationId": "set_received_einvoice_status",
+        "summary": "Moves a received document between received and ignored",
+        "description": "Moves a received document between received and ignored. Refuses any other value, and refuses billed in particular: that means a bill exists, which only draft_bill_from_received_einvoice can make true.\n\n`public.set_received_einvoice_status(p_id uuid, p_status text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_id",
+                  "p_status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/received_einvoices"
                 }
               }
             }
@@ -92347,6 +92758,229 @@
           "receipt_no",
           "contact_id",
           "amount"
+        ]
+      },
+      "received_einvoice_lines": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "received_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "line_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "source_line_no": {
+            "type": "string"
+          },
+          "classification_code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "uom_code": {
+            "type": "string"
+          },
+          "unit_price": {
+            "type": "number"
+          },
+          "discount_amount": {
+            "type": "number"
+          },
+          "tax_type_code": {
+            "type": "string"
+          },
+          "tax_rate": {
+            "type": "number"
+          },
+          "tax_amount": {
+            "type": "number"
+          },
+          "tax_exemption_reason": {
+            "type": "string"
+          },
+          "total_excl_tax": {
+            "type": "number"
+          },
+          "total_incl_tax": {
+            "type": "number"
+          },
+          "product_tariff_code": {
+            "type": "string"
+          },
+          "country_of_origin": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "received_id",
+          "line_no"
+        ]
+      },
+      "received_einvoices": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source": {
+            "type": "string"
+          },
+          "myinvois_uuid": {
+            "type": "string"
+          },
+          "myinvois_long_id": {
+            "type": "string"
+          },
+          "doc_no": {
+            "type": "string"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "issue_time": {
+            "type": "string"
+          },
+          "type_code": {
+            "type": "string"
+          },
+          "einvoice_version": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "exchange_rate": {
+            "type": "number"
+          },
+          "supplier_name": {
+            "type": "string"
+          },
+          "supplier_tin": {
+            "type": "string"
+          },
+          "supplier_id_type": {
+            "type": "string"
+          },
+          "supplier_id_value": {
+            "type": "string"
+          },
+          "supplier_sst_no": {
+            "type": "string"
+          },
+          "supplier_email": {
+            "type": "string"
+          },
+          "supplier_phone": {
+            "type": "string"
+          },
+          "supplier_address": {},
+          "buyer_name": {
+            "type": "string"
+          },
+          "buyer_tin": {
+            "type": "string"
+          },
+          "buyer_id_type": {
+            "type": "string"
+          },
+          "buyer_id_value": {
+            "type": "string"
+          },
+          "buyer_sst_no": {
+            "type": "string"
+          },
+          "buyer_email": {
+            "type": "string"
+          },
+          "buyer_phone": {
+            "type": "string"
+          },
+          "buyer_address": {},
+          "total_excl_tax": {
+            "type": "number"
+          },
+          "total_incl_tax": {
+            "type": "number"
+          },
+          "total_discount": {
+            "type": "number"
+          },
+          "total_charges": {
+            "type": "number"
+          },
+          "total_tax": {
+            "type": "number"
+          },
+          "rounding_amount": {
+            "type": "number"
+          },
+          "payable_amount": {
+            "type": "number"
+          },
+          "original_doc_no": {
+            "type": "string"
+          },
+          "original_uuid": {
+            "type": "string"
+          },
+          "raw": {},
+          "payload_hash": {
+            "type": "string"
+          },
+          "problems": {},
+          "status": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bill_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "raw",
+          "payload_hash"
         ]
       },
       "recurring_documents": {
