@@ -314,6 +314,20 @@ ${[
 
 /// The stylesheet.
 ///
+/// It ends with a named default style -- `<cellStyles>` with "Normal".
+/// Excel opens a workbook without it and so does every reader tried
+/// here, but openpyxl warns "Workbook contains no default style, apply
+/// openpyxl's default", and a real reader complaining about a file this
+/// repository generates is a signal rather than noise.
+/// `scripts/check_xlsx.py` turns that warning into a failure, which is
+/// what stops the element being dropped again by somebody tidying.
+///
+/// The explanation is HERE and not in an XML comment inside the string,
+/// because an XML comment may not contain a double hyphen and this
+/// paragraph is full of them. Writing it there produced a stylesheet
+/// that openpyxl refused to parse at all -- a worse fault than the
+/// warning it was added to remove.
+///
 /// The custom number formats start at 164, which is where OOXML says a
 /// file's own formats begin — 0 to 163 are reserved for the built-in
 /// ones, and a custom format numbered inside that range is either
@@ -346,6 +360,9 @@ const _styles = '''
 <xf numFmtId="167" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="167" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
 </cellXfs>
+<cellStyles count="1">
+<cellStyle name="Normal" xfId="0" builtinId="0"/>
+</cellStyles>
 </styleSheet>''';
 
 String _sheet(XlsxSheet sheet) {

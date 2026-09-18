@@ -101,6 +101,25 @@ jobs:
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
 
+      # The workbook writer, read back by parsers that know nothing
+      # about how it was written. `core/xlsx.dart` builds `.xlsx` by
+      # hand and `app/test/xlsx_test.dart` can only ask it what it
+      # wrote -- one implementation asserting against itself, which on
+      # a file format proves the bytes are what the author intended and
+      # not that they are a workbook. Nothing here can open Excel;
+      # openpyxl is the nearest thing, and the gate REQUIRES it rather
+      # than skipping, because a check that silently does not run is
+      # worse than no check.
+      #
+      # `working-directory: .` because this job defaults to `app` and
+      # the script lives at the root, and the script itself runs
+      # `flutter test` from `app`.
+      - name: Check the generated workbook is a workbook
+        working-directory: .
+        run: |
+          pip install --quiet openpyxl
+          python3 scripts/check_xlsx.py
+
   # =====================================================================
   # The iOS build
   #

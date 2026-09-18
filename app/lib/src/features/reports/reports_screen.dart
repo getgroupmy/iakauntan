@@ -13,6 +13,7 @@ import '../../data/repository.dart';
 import 'report_csv.dart';
 import 'report_pdf.dart';
 import 'report_spec.dart';
+import 'report_xlsx.dart';
 
 class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
@@ -280,6 +281,41 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     );
   }
 
+  /// The same report, as a workbook.
+  ///
+  /// Beside the CSV rather than instead of it. A CSV is what an
+  /// importer wants -- no types, no formats, nothing to parse around --
+  /// and this is what a person wants: figures that are numbers, with
+  /// number formats and column widths on them. `report_xlsx.dart` has
+  /// the argument.
+  ///
+  /// No clipboard fallback, unlike the CSV. A workbook is bytes, and
+  /// there is nothing useful to paste; on a phone, where nothing
+  /// downloads, the honest answer is to say so.
+  Future<void> _downloadXlsx(ReportSpec spec) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await exportBytesFile(
+      ref,
+      '${_stem(spec)}.xlsx',
+      // The full OOXML type. A workbook served as
+      // `application/octet-stream` downloads as a file the browser will
+      // not name properly and Excel opens with a warning.
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      reportXlsx([spec]),
+      what: 'Report',
+      detail: '${spec.title} to ${Fmt.iso(_range.end)}, as a workbook',
+    );
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          saved
+              ? 'Downloaded'
+              : 'Workbook download is only available in the browser',
+        ),
+      ),
+    );
+  }
+
   /// Named for the report and the date it covers, because a folder of
   /// files called "profit-loss.pdf" is a folder of one usable file.
   String _stem(ReportSpec spec) =>
@@ -366,6 +402,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         onTap: spec == null ? null : () => _download(spec),
       ),
       (
+        label: 'Download Excel',
+        icon: Icons.grid_on_outlined,
+        onTap: spec == null ? null : () => _downloadXlsx(spec),
+      ),
+      (
         label: 'Download CSV',
         icon: Icons.table_chart_outlined,
         onTap: spec == null ? null : () => _downloadCsv(spec),
@@ -433,6 +474,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               tooltip: 'Download PDF',
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
               onPressed: spec == null ? null : () => _download(spec),
+            ),
+          if (!narrow)
+            IconButton(
+              key: const ValueKey('report-xlsx'),
+              tooltip: 'Download Excel',
+              icon: const Icon(Icons.grid_on_outlined, size: 20),
+              onPressed: spec == null ? null : () => _downloadXlsx(spec),
             ),
           if (!narrow)
             IconButton(
@@ -927,10 +975,7 @@ final _balanceSheetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
       // `0637`, as with the P&L above: composed from this company's
       // layout rather than grouped on this side.
-      return requireRepo(ref).reportWithLayout(
-        kind: 'balance_sheet',
-        to: asAt,
-      );
+      return requireRepo(ref).reportWithLayout(kind: 'balance_sheet', to: asAt);
     });
 
 /// The ledger, for the chosen range and optionally one account.
