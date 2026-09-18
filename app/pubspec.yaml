@@ -169,6 +169,10 @@ dependencies:
   # is a guess -- the pre-sign-in pages keep their spinner, and so does
   # every button somebody has just pressed.
   skeletonizer: ^3.0.0
+  # The ZIP half of an .xlsx, which is a ZIP of XML. Already present
+  # transitively through `pdf`; named here because `core/xlsx.dart`
+  # imports it directly and a transitive dependency is not a promise.
+  archive: ^4.0.9
   # The signalling socket. Already present transitively through
   # supabase_flutter; named here because `call_engine.dart` imports it
   # directly and a transitive dependency is not a promise.

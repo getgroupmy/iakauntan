@@ -1676,12 +1676,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // On a phone there is no panel, so this is the only
-                // place the mark can appear. Same switch either way.
-                if (!wide && (_showLogo || _showName)) ...[
-                  _Brand(logo: _showLogo, name: _showName),
-                  const SizedBox(height: 32),
-                ],
+                // The mark used to be here, inside the scroller. It is
+                // now a fixed header above it -- see `_brandHeader`.
                 if (_showHeading) ...[
                   Text(
                     _copy?.title ??
@@ -2360,7 +2356,56 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       points: _points,
     );
 
-    if (!wide || hero.isEmpty) return Scaffold(body: form);
+    // On one column the mark sits ABOVE the scroller rather than
+    // inside it, for two reasons that are both visible on a phone.
+    //
+    // THE NOTCH. `Scaffold(body:)` with no app bar lays its child out
+    // under the status bar, so the mark was drawn behind the clock and
+    // through the camera cut-out -- reported from an iPhone, and the
+    // same on any Android with a punch-hole. The header is wrapped in
+    // a `SafeArea`, which is the only thing that knows how tall that
+    // furniture is on the device in somebody's hand. `bottom: false`
+    // because the scroller below owns the other end, and a second
+    // inset there would lift the last field off the keyboard.
+    //
+    // AND IT STAYS. Inside the scroller the mark went up and off the
+    // screen as soon as anybody reached the password -- and on the
+    // sign-up form, which is eleven fields long, it was gone for all
+    // but the first of them. A mark that scrolls away is a page that
+    // stops saying whose it is exactly when somebody is typing a
+    // password into it.
+    final brandHeader = !wide && (_showLogo || _showName)
+        ? SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Space.xl,
+                Space.lg,
+                Space.xl,
+                Space.sm,
+              ),
+              // Centred, and left-aligned on the panel, which is not an
+              // inconsistency: there the mark heads a column of copy and
+              // belongs on the same left edge as the rest of it. Here it
+              // is alone above a form on an otherwise symmetrical page,
+              // and pinned left it reads as a mark that has slipped.
+              child: Center(
+                key: const ValueKey('signin-brand'),
+                child: _Brand(logo: _showLogo, name: _showName),
+              ),
+            ),
+          )
+        : null;
+
+    if (!wide || hero.isEmpty) {
+      return Scaffold(
+        body: brandHeader == null
+            ? form
+            : Column(
+                children: [brandHeader, Expanded(child: form)],
+              ),
+      );
+    }
 
     return Scaffold(
       body: Row(
