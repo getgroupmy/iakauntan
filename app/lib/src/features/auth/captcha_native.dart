@@ -64,6 +64,41 @@ Uri captchaUri(String siteKey, {bool dark = false, String host = captchaHost}) =
   }
 }
 
+/// Whether the webview may follow this navigation.
+///
+/// The challenge page navigates nowhere, and a sign-in screen is the
+/// last place to follow an unexpected navigation — so anything leaving
+/// [host] is refused.
+///
+/// [isMainFrame] is the whole of this function, and leaving it out was
+/// an iOS-ONLY LOCKOUT. Turnstile draws itself in an IFRAME served from
+/// `challenges.cloudflare.com`, and the two platforms disagree about
+/// whether the app is asked:
+///
+///   * `webview_flutter_android` consults the callback only for the
+///     main frame, and says why in its own source — "the client is
+///     only allowed to stop navigations that target the main frame
+///     because overridden URLs are passed to `loadUrl` and `loadUrl`
+///     cannot load a subframe". A subframe never reaches us, so the
+///     iframe loaded and Android was fine.
+///   * `webview_flutter_wkwebview` calls it from
+///     `decidePolicyForNavigationAction` for EVERY navigation action
+///     and passes `isMainFrame` through rather than filtering on it.
+///
+/// So on iPhone the guard cancelled Turnstile's own iframe, the widget
+/// never rendered, and the form printed "the security check could not
+/// load" — correctly, about a page nothing was wrong with.
+///
+/// A subframe is not left unguarded by this: the challenge page's
+/// Content-Security-Policy decides what it may embed, which is where
+/// that belongs and what `scripts/check_csp_allows.py` already asserts.
+bool captchaMayNavigate(
+  String url, {
+  required bool isMainFrame,
+  String host = captchaHost,
+}) =>
+    !isMainFrame || url.startsWith(host);
+
 /// How tall to make the webview.
 ///
 /// Turnstile's widget is 300x65 at its default size, and the page adds
@@ -201,10 +236,14 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
         },
         // The challenge navigates nowhere. Anything trying to is not
         // the challenge, and a sign-in screen is the last place to
-        // follow an unexpected navigation.
-        onNavigationRequest: (r) => r.url.startsWith(captchaHost)
-            ? NavigationDecision.navigate
-            : NavigationDecision.prevent,
+        // follow an unexpected navigation — but see
+        // [captchaMayNavigate] for why the frame has to be asked
+        // about, and why leaving it out shut every iPhone out of
+        // signing in while Android worked.
+        onNavigationRequest: (r) =>
+            captchaMayNavigate(r.url, isMainFrame: r.isMainFrame)
+                ? NavigationDecision.navigate
+                : NavigationDecision.prevent,
       ))
       ..loadRequest(captchaUri(widget.siteKey, dark: dark));
   }

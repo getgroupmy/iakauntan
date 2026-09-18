@@ -179,6 +179,77 @@ void main() {
     });
   });
 
+  /// The guard that shut every iPhone out.
+  ///
+  /// Turnstile draws itself in an iframe from
+  /// `challenges.cloudflare.com`. The two webview plugins disagree
+  /// about whether the app is consulted for a subframe:
+  /// `webview_flutter_android` filters to the main frame and says so
+  /// in its own source; `webview_flutter_wkwebview` calls the callback
+  /// from `decidePolicyForNavigationAction` for EVERY navigation
+  /// action and passes `isMainFrame` through rather than acting on it.
+  ///
+  /// So a guard written as `url.startsWith(host)` is correct on
+  /// Android and cancels the challenge on iOS -- and the form then
+  /// says the check could not load, about a page nothing is wrong
+  /// with. It cannot be caught by running the app on one platform, and
+  /// there is no browser test in CI, so it is pinned here.
+  group('what the webview may follow', () {
+    test('the challenge page itself', () {
+      expect(
+        captchaMayNavigate('https://iakauntan.com/captcha.html?k=x',
+            isMainFrame: true),
+        isTrue,
+      );
+    });
+
+    test('and nothing else in the main frame', () {
+      // The reason the guard exists: a sign-in screen is the last place
+      // to follow a navigation somebody else chose.
+      expect(
+        captchaMayNavigate('https://example.test/phish', isMainFrame: true),
+        isFalse,
+      );
+    });
+
+    test('but a subframe is allowed wherever it points', () {
+      // THE iOS BUG, in one assertion. Cloudflare serves the widget
+      // from its own domain, and refusing this is refusing the
+      // challenge.
+      expect(
+        captchaMayNavigate(
+          'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x',
+          isMainFrame: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('including one that is nowhere near the host', () {
+      // Not left to the CSP by accident -- deliberately. The page's own
+      // `frame-src` decides what it may embed, which is where that
+      // belongs and what `check_csp_allows.py` asserts. A second copy
+      // of the rule here would be a second place for it to drift.
+      expect(
+        captchaMayNavigate('https://anywhere.test/x', isMainFrame: false),
+        isTrue,
+      );
+    });
+
+    test('and the host is the one the widget was configured with', () {
+      expect(
+        captchaMayNavigate('https://books.example/captcha.html',
+            isMainFrame: true, host: 'https://books.example'),
+        isTrue,
+      );
+      expect(
+        captchaMayNavigate('https://iakauntan.com/captcha.html',
+            isMainFrame: true, host: 'https://books.example'),
+        isFalse,
+      );
+    });
+  });
+
   group('the hosted page itself', () {
     // The page is the other half of this contract and ships separately,
     // in web/. If the two drift the challenge silently never reports a

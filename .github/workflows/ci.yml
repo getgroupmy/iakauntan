@@ -2698,6 +2698,14 @@ jobs:
           cp deploy/vercel-output-config.json .vercel/output/config.json
           test -f .vercel/output/static/index.html
           test -f .vercel/output/static/canvaskit/canvaskit.wasm
+          # The phones' half of the security check. It ships in the web
+          # bundle because a Turnstile site key is scoped to domains and
+          # the widget refuses to render anywhere else -- so if this is
+          # missing from the deploy, Android and iOS cannot sign in at
+          # all and the web app is perfectly fine, which is the hardest
+          # direction to notice.
+          test -f .vercel/output/static/captcha.html
+          test -f .vercel/output/static/captcha.js
 
           # A marker the deploy can be checked against afterwards.
           # Written here rather than compiled into the bundle because it
