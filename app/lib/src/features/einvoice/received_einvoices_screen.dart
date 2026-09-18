@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import 'received_einvoice.dart';
 
 /// The e-Invoices suppliers have sent us.
@@ -164,6 +165,64 @@ class _ReceivedEinvoicesScreenState
     _reload();
   }
 
+  /// Pick a supplier already on file.
+  ///
+  /// The other half of linking, and the one `0650` cannot do for
+  /// anybody: it matches on the TIN and the registration number, so a
+  /// supplier who is on file under a DIFFERENT identifier -- or under
+  /// none, which is most of an old contact list -- never matches
+  /// however obvious the name. Without this the only offer is "create",
+  /// and the answer to "we already have them, under a slightly
+  /// different name" would be a second contact row.
+  Future<void> _chooseSupplier(ReceivedEinvoice doc) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    final picked = await showDialog<Contact>(
+      context: context,
+      builder: (context) => const _SupplierPicker(),
+    );
+    if (picked == null || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => repo.linkReceivedEinvoiceContact(doc.id, picked.id),
+      successMessage: 'Linked to ${picked.name}',
+    );
+    _reload();
+  }
+
+  /// Throw a document away.
+  ///
+  /// Separate from Set aside, and the difference is what it means
+  /// rather than how it looks: set aside keeps the record and says "not
+  /// now", delete says "this was never ours". `0650` allows the second
+  /// because the alternative is a list that fills with other people's
+  /// invoices forever -- but it is the one action here that loses
+  /// something, so it asks first and says what goes.
+  Future<void> _delete(ReceivedEinvoice doc) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final sure = await confirm(
+      context,
+      title: 'Delete this document?',
+      message:
+          'The document from ${doc.supplierName ?? 'this supplier'} and '
+          'everything read out of it will be removed. Any bill already '
+          'drafted from it stays. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
+    if (!sure || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => repo.deleteReceivedEinvoice(doc.id),
+      successMessage: 'Deleted',
+    );
+    _reload();
+  }
+
   Future<void> _draftBill(ReceivedEinvoice doc) async {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
@@ -258,8 +317,10 @@ class _ReceivedEinvoicesScreenState
                         itemBuilder: (context, i) => _DocumentTile(
                           doc: rows[i],
                           onLink: () => _linkSupplier(rows[i]),
+                          onChoose: () => _chooseSupplier(rows[i]),
                           onDraft: () => _draftBill(rows[i]),
                           onSetAside: () => _setAside(rows[i]),
+                          onDelete: () => _delete(rows[i]),
                         ),
                       ),
               ),
@@ -275,14 +336,18 @@ class _DocumentTile extends StatelessWidget {
   const _DocumentTile({
     required this.doc,
     required this.onLink,
+    required this.onChoose,
     required this.onDraft,
     required this.onSetAside,
+    required this.onDelete,
   });
 
   final ReceivedEinvoice doc;
   final VoidCallback onLink;
+  final VoidCallback onChoose;
   final VoidCallback onDraft;
   final VoidCallback onSetAside;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -345,7 +410,9 @@ class _DocumentTile extends StatelessWidget {
         key: ValueKey('received-menu-${doc.id}'),
         onSelected: (v) => switch (v) {
           'link' => onLink(),
+          'choose' => onChoose(),
           'draft' => onDraft(),
+          'delete' => onDelete(),
           _ => onSetAside(),
         },
         itemBuilder: (context) => [
@@ -353,6 +420,14 @@ class _DocumentTile extends StatelessWidget {
             const PopupMenuItem(
               value: 'link',
               child: Text('Create and link supplier'),
+            ),
+          // Offered whether or not one is linked: a wrong match is as
+          // likely as a missing one, and the second is only reachable
+          // from here.
+          if (!doc.isBilled)
+            const PopupMenuItem(
+              value: 'choose',
+              child: Text('Choose an existing supplier'),
             ),
           PopupMenuItem(
             value: 'draft',
@@ -368,8 +443,91 @@ class _DocumentTile extends StatelessWidget {
               doc.status == 'ignored' ? 'Move back to Received' : 'Set aside',
             ),
           ),
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
+    );
+  }
+}
+
+
+/// Pick a supplier out of the contact list.
+///
+/// Suppliers and both-ways contacts only: a customer cannot be the
+/// issuer of a bill, and offering the whole contact list would make the
+/// commonest mistake -- linking a document to the customer with a
+/// similar name -- the easiest one to make.
+class _SupplierPicker extends ConsumerStatefulWidget {
+  const _SupplierPicker();
+
+  @override
+  ConsumerState<_SupplierPicker> createState() => _SupplierPickerState();
+}
+
+class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final contacts = ref.watch(
+      contactsProvider((type: 'supplier', search: _search)),
+    );
+
+    return AlertDialog(
+      key: const ValueKey('received-supplier-picker'),
+      title: const Text('Choose a supplier'),
+      content: SizedBox(
+        width: 420,
+        height: 420,
+        child: Column(
+          children: [
+            TextField(
+              key: const ValueKey('received-supplier-search'),
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Search',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (v) => setState(() => _search = v),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: AsyncView<List<Contact>>(
+                value: contacts,
+                skeleton: const ListSkeleton(rows: 5, trailing: false),
+                builder: (rows) => rows.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.person_search_outlined,
+                        title: 'No supplier matches',
+                        message:
+                            'Try part of the name, or close this and create '
+                            'the supplier from what the document says.',
+                      )
+                    : ListView.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (context, i) => ListTile(
+                          key: ValueKey('supplier-${rows[i].id}'),
+                          title: Text(rows[i].name),
+                          subtitle: Text(
+                            [
+                              rows[i].code,
+                              if (rows[i].tin != null) 'TIN ${rows[i].tin}',
+                            ].join(' · '),
+                          ),
+                          onTap: () => Navigator.pop(context, rows[i]),
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }

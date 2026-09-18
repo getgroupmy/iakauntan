@@ -4493,13 +4493,21 @@ class Repo {
   }
 
   /// The lines of one received document, in the order they arrived.
+  ///
+  /// `ascending: true` is not decoration. postgrest-dart declares
+  /// `order(String column, {bool ascending = false})`, so a bare
+  /// `.order('line_no')` is line 9 first -- which is what this said, and
+  /// which the comment above it flatly contradicted. `line_no` is named
+  /// in `scripts/check_order_direction.py` as one of the columns that
+  /// went reversed for five hundred migrations without anybody noticing,
+  /// because a list in the wrong order reads as a list in an odd order.
   Future<List<Map<String, dynamic>>> receivedEinvoiceLines(String id) async =>
       _rows(
         await client
             .from('received_einvoice_lines')
             .select()
             .eq('received_id', id)
-            .order('line_no'),
+            .order('line_no', ascending: true),
       );
 
   /// Hand a MyInvois document to the parser and keep what it makes of it.

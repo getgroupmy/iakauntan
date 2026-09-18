@@ -209,6 +209,93 @@ void main() {
     );
   });
 
+  testWidgets('a supplier already on file can be chosen, not only created', (
+    t,
+  ) async {
+    // The gap this closes: `0650` matches on the TIN and the
+    // registration number, so a supplier on file under a DIFFERENT
+    // identifier -- or under none, which is most of an old contact
+    // list -- never matches however obvious the name. With only
+    // "create", the answer to "we already have them" is a second
+    // contact row.
+    await show(t, _Answers());
+    await t.pump();
+
+    await t.tap(find.byKey(const ValueKey('received-menu-r1')));
+    await t.pumpAndSettle();
+    expect(find.text('Choose an existing supplier'), findsOneWidget);
+  });
+
+  testWidgets('and deleting is offered, separately from setting aside', (
+    t,
+  ) async {
+    // Two different meanings: set aside keeps the record and says "not
+    // now", delete says "this was never ours". Offering only the first
+    // leaves a list that fills with other people's invoices.
+    await show(t, _Answers());
+    await t.pump();
+
+    await t.tap(find.byKey(const ValueKey('received-menu-r1')));
+    await t.pumpAndSettle();
+    expect(
+      find.widgetWithText(PopupMenuItem<String>, 'Delete'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(PopupMenuItem<String>, 'Set aside'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('deleting asks first, and says what goes', (t) async {
+    // The one action here that loses something. It names the supplier,
+    // says a drafted bill survives, and says it cannot be undone --
+    // because "Are you sure?" answers none of those.
+    final repo = _Answers();
+    await show(t, repo);
+    await t.pump();
+
+    await t.tap(find.byKey(const ValueKey('received-menu-r1')));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(PopupMenuItem<String>, 'Delete'));
+    await t.pumpAndSettle();
+
+    expect(find.textContaining('Pembekal Jaya Sdn Bhd'), findsWidgets);
+    expect(find.textContaining('cannot be undone'), findsOneWidget);
+    expect(find.textContaining('bill already drafted'), findsOneWidget);
+
+    // Nothing has happened yet: the confirm is a real gate, not a
+    // notification after the fact.
+    expect(repo.did, isEmpty);
+  });
+
+  testWidgets('a billed document cannot have its supplier swapped', (t) async {
+    // `0650` refuses it, and the menu must not offer what the database
+    // will refuse -- that is the whole argument for draftBillProblem
+    // applied to the other action.
+    await show(
+      t,
+      _Answers(
+        rows: [
+          const ReceivedEinvoice(
+            id: 'r5',
+            status: 'billed',
+            typeCode: '01',
+            currency: 'MYR',
+            contactId: 'c1',
+            billId: 'b1',
+            supplierName: 'Pembekal Jaya Sdn Bhd',
+          ),
+        ],
+      ),
+    );
+    await t.pump();
+
+    await t.tap(find.byKey(const ValueKey('received-menu-r5')));
+    await t.pumpAndSettle();
+    expect(find.text('Choose an existing supplier'), findsNothing);
+  });
+
   testWidgets('the import button is there and is not the only way in', (
     t,
   ) async {
@@ -268,10 +355,23 @@ class _Answers implements Repo {
   /// Every status the screen asked for, in order.
   final List<String> askedFor = [];
 
+  /// What was linked, deleted, or had its status set.
+  final List<String> did = [];
+
   @override
   Future<List<ReceivedEinvoice>> receivedEinvoices({String? status}) async {
     askedFor.add(status ?? 'all');
     return rows;
+  }
+
+  @override
+  Future<void> deleteReceivedEinvoice(String id) async {
+    did.add('delete $id');
+  }
+
+  @override
+  Future<void> linkReceivedEinvoiceContact(String id, String? contactId) async {
+    did.add('link $id -> $contactId');
   }
 
   @override
