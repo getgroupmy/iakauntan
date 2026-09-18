@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,6 +47,95 @@ void main() {
       'search_registers',
       // 0614. What AI SmartScan can recognise a paper as.
       'scan_document_kinds',
+    });
+  });
+
+  /// Coming back from the background.
+  ///
+  /// A Postgres change and a broadcast are both fire and forget. Neither
+  /// is replayed, so a socket that was shut when one was sent never
+  /// learns of it -- and on a phone that is the ordinary case, because
+  /// iOS and Android suspend the process. The providers then hold what
+  /// they were told last, which is a screen that is confidently out of
+  /// date with no reason to refetch.
+  ///
+  /// The trap in the other direction is refreshing too eagerly: an
+  /// incoming call banner, the app switcher and a permission sheet are
+  /// all `inactive`, they last a moment, and the socket stays open
+  /// through every one of them.
+  group('what a resume has to assume', () {
+    test('a suspended app has missed whatever happened', () {
+      expect(
+        platformMissedWhileAway(
+            AppLifecycleState.paused, AppLifecycleState.resumed),
+        isTrue,
+      );
+      expect(
+        platformMissedWhileAway(
+            AppLifecycleState.detached, AppLifecycleState.resumed),
+        isTrue,
+      );
+    });
+
+    test('but a banner or an app switcher has not', () {
+      // `inactive` is moments long with the process running. Refreshing
+      // on it is a round of queries every time somebody glances at a
+      // notification.
+      expect(
+        platformMissedWhileAway(
+            AppLifecycleState.inactive, AppLifecycleState.resumed),
+        isFalse,
+      );
+      expect(
+        platformMissedWhileAway(
+            AppLifecycleState.hidden, AppLifecycleState.resumed),
+        isFalse,
+      );
+    });
+
+    test('and going away is not coming back', () {
+      // Only the arrival at `resumed` counts. Refreshing on the way out
+      // fetches what nobody is looking at and then misses the return.
+      for (final now in [
+        AppLifecycleState.paused,
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.detached,
+      ]) {
+        expect(
+          platformMissedWhileAway(AppLifecycleState.resumed, now),
+          isFalse,
+          reason: 'leaving for $now is not a resume',
+        );
+      }
+    });
+
+    test('and neither is one suspended state following another', () {
+      // The assertion a mutation sweep asked for. Everything above
+      // varies what was BEFORE while holding `resumed` as the arrival,
+      // so a version that dropped the arrival check entirely and read
+      // only the previous state passed all of it -- and would refresh
+      // on the way to `detached`, which is the app being killed. Work
+      // at teardown, for a screen nobody will see again.
+      expect(
+        platformMissedWhileAway(
+            AppLifecycleState.paused, AppLifecycleState.detached),
+        isFalse,
+      );
+      expect(
+        platformMissedWhileAway(
+            AppLifecycleState.paused, AppLifecycleState.hidden),
+        isFalse,
+      );
+    });
+
+    test('and a first state with nothing before it refreshes nothing', () {
+      // Null is app start, where every provider is about to be read for
+      // the first time anyway.
+      expect(
+        platformMissedWhileAway(null, AppLifecycleState.resumed),
+        isFalse,
+      );
     });
   });
 
