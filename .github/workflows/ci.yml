@@ -1123,6 +1123,18 @@ jobs:
       - name: Check no initState invalidates a provider
         run: python3 scripts/check_initstate_ref.py
 
+      # And the last spinner. `core/skeletons.dart` sets out when an
+      # outline is honest and `AsyncView` is where that choice is made
+      # -- a screen that passes `skeleton:` gets bones, one that does
+      # not gets the circle, deliberately. This refuses the third case:
+      # a `loading:` arm that draws a `CircularProgressIndicator`
+      # itself, which is the same decision made where nothing records
+      # it. Four survived a hundred and thirty conversions that way.
+      # A `LinearProgressIndicator` is untouched -- forty-five of them,
+      # and a bar under a heading already drawn claims no shape.
+      - name: Check no loading arm draws a spinner
+        run: python3 scripts/check_loading_spinners.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #
@@ -1813,6 +1825,9 @@ jobs:
 
       - name: The document-type gate's own assertions
         run: python3 scripts/check_document_types_test.py
+
+      - name: The loading-spinner gate's own assertions
+        run: python3 scripts/check_loading_spinners_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py

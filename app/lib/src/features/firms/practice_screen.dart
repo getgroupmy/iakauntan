@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../mia/mia_credential.dart';
@@ -672,10 +673,10 @@ class _AppointDialogState extends ConsumerState<_AppointDialog> {
       content: SizedBox(
         width: 460,
         child: orgs.when(
-          loading: () => const SizedBox(
-            height: 80,
-            child: Center(child: CircularProgressIndicator()),
-          ),
+          // Two boxes and a picker, outlined. The dialog's shape is
+          // decided before the list of companies arrives -- only the
+          // options in the first box are missing.
+          loading: () => const FormSkeleton(fields: 2),
           error: (e, _) => Text('$e'),
           data: (list) => Column(
             mainAxisSize: MainAxisSize.min,

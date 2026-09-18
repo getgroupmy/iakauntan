@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 import 'package:iakauntan/src/core/skeletons.dart';
+import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/core/widgets.dart';
 
 /// An outline of the rows on the way, instead of a spinner.
@@ -242,6 +243,84 @@ void main() {
       );
       expect(skeletonizing(t), isFalse);
       expect(find.byType(ErrorState), findsOneWidget);
+    });
+  });
+
+  /// A card row is not a `ListTile`, and outlining it as one is the
+  /// reflow this whole file exists to avoid -- a `ListTile` with a
+  /// subtitle is 72 tall and the rows it would stand in for are around
+  /// 48, so five of them makes a card half as tall again as the one
+  /// that replaces it. These assertions are about the SHAPE being the
+  /// one that was asked for, because nothing else can check it: the
+  /// outline and the content are never on screen together.
+  group('a card row, which is not a tile', () {
+    /// The `Row` inside row [r] of the outline.
+    ///
+    /// Found through the row's key rather than by taking the first
+    /// `Row` on screen: `MaterialApp` and `Scaffold` build several of
+    /// their own, and an assertion about one of those would pass no
+    /// matter what this widget drew.
+    Row rowAt(WidgetTester t, int r) => t.widget<Row>(
+      find.descendant(
+        of: find.byKey(ValueKey('skeleton-card-row-$r')),
+        matching: find.byType(Row),
+      ),
+    );
+
+    testWidgets('is drawn as bones, in the number asked for', (t) async {
+      await t.pumpWidget(wrap(const CardRowsSkeleton(rows: 5)));
+      expect(skeletonizing(t), isTrue);
+      for (var r = 0; r < 5; r++) {
+        expect(find.byKey(ValueKey('skeleton-card-row-$r')), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('skeleton-card-row-5')), findsNothing);
+    });
+
+    testWidgets('with nothing at the front when nothing goes there',
+        (t) async {
+      // The leading bone and the gap after it come and go together. A
+      // gap left behind when the bone goes indents every line by
+      // sixteen pixels and then they all jump back.
+      await t.pumpWidget(wrap(const CardRowsSkeleton(leading: false)));
+      expect(rowAt(t, 0).children.length, 1);
+
+      await t.pumpWidget(wrap(const CardRowsSkeleton()));
+      expect(rowAt(t, 0).children.length, 3);
+    });
+
+    testWidgets('and a bone for each control at the end', (t) async {
+      // A count and not a flag, because the clock card carries two --
+      // the month button and the punch button -- and outlining one of
+      // them moves the words across by the width of the other.
+      await t.pumpWidget(wrap(const CardRowsSkeleton(trailing: 2)));
+      expect(rowAt(t, 0).children.length, 5);
+    });
+
+    testWidgets('and as many lines of words as the row really has',
+        (t) async {
+      for (final lines in [1, 2, 3]) {
+        await t.pumpWidget(wrap(CardRowsSkeleton(lines: lines)));
+        final expanded = rowAt(t, 0).children.whereType<Expanded>().single;
+        expect((expanded.child as Column).children.length, lines);
+      }
+    });
+
+    testWidgets('and it is the size it was told, not the size of a tile',
+        (t) async {
+      // The whole reason this widget exists. Six to-do rows outlined
+      // as tiles come to well over four hundred pixels; the rows they
+      // stand in for come to about three hundred. The assertion is on
+      // the direction and the order of magnitude, not on a pixel: what
+      // must not happen is the outline being HALF AS TALL AGAIN as the
+      // content.
+      await t.pumpWidget(wrap(const CardRowsSkeleton(rows: 6,
+          leadingSize: 24, rowGap: Space.md)));
+      final ours = t.getSize(find.byType(CardRowsSkeleton)).height;
+
+      await t.pumpWidget(wrap(const ListSkeleton(rows: 6)));
+      final tiles = t.getSize(find.byType(ListSkeleton)).height;
+
+      expect(ours, lessThan(tiles * 0.8));
     });
   });
 }

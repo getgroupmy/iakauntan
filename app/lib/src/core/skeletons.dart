@@ -258,3 +258,115 @@ class FormSkeleton extends StatelessWidget {
     ),
   );
 }
+
+/// Rows on the way, in the shape a CARD draws them.
+///
+/// [ListSkeleton] outlines a `ListTile`, which is 56 pixels tall on its
+/// own and 72 with a second line. Plenty of this app's rows are not
+/// `ListTile`s: a card with a leading icon and two lines of text, or a
+/// list of to-dos built from a `Checkbox` and a `Column`, comes out
+/// around 48. Outlining those with tiles makes a five-row skeleton half
+/// as tall again as the five rows that replace it, and the whole card
+/// jumps the moment the data lands — the flicker a skeleton exists to
+/// remove, in the direction that is easiest to miss because it happens
+/// once and looks like the page settling.
+///
+/// So the geometry is passed in rather than assumed: how big the thing
+/// at the front is, how many lines of words follow it, and how many
+/// controls sit at the end.
+///
+/// It is not pixel-exact and is not meant to be. What it is meant to be
+/// is the same ORDER of height as the content, which a `ListTile` is
+/// not.
+class CardRowsSkeleton extends StatelessWidget {
+  const CardRowsSkeleton({
+    super.key,
+    this.rows = 1,
+    this.leading = true,
+    this.leadingSize = 40,
+    this.lines = 2,
+    this.trailing = 0,
+    this.trailingWidth = 32,
+    this.rowGap = Space.sm,
+  });
+
+  /// How many rows to outline.
+  final int rows;
+
+  /// Whether each row starts with an icon, a checkbox or an avatar.
+  final bool leading;
+
+  /// How big that is, on a side. A checkbox is not an avatar.
+  final double leadingSize;
+
+  /// How many lines of words follow it. One for a bare label, two for
+  /// the usual title-and-detail.
+  final int lines;
+
+  /// How many controls sit at the end of the row. A count rather than a
+  /// flag because a card row often carries two — an icon button and a
+  /// filled one — and outlining one of them moves the words across.
+  final int trailing;
+
+  /// How wide each of those is. A default of 32 outlines an icon
+  /// button; the amount box on a settlement row is 130, and outlining
+  /// it as an icon leaves the words a hundred pixels too wide.
+  final double trailingWidth;
+
+  /// The vertical breathing room around each row.
+  final double rowGap;
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      // As tall as its rows and no taller. A skeleton that takes the
+      // whole of the space it is given is an outline claiming the
+      // content fills the card, and the card shrinks when it does not.
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var r = 0; r < rows; r++)
+          Padding(
+            key: ValueKey('skeleton-card-row-$r'),
+            padding: EdgeInsets.symmetric(vertical: rowGap / 2),
+            child: Row(
+              children: [
+                if (leading) ...[
+                  Bone.square(
+                    size: leadingSize,
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  const SizedBox(width: Space.lg),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < lines; i++)
+                        Padding(
+                          padding: EdgeInsets.only(top: i == 0 ? 0 : 2),
+                          // Varied, and not for decoration: every line
+                          // the same length reads as one repeated
+                          // thing, and rows are not all alike.
+                          child: Bone.text(words: i == 0 ? 2 + r % 3 : 3),
+                        ),
+                    ],
+                  ),
+                ),
+                for (var c = 0; c < trailing; c++)
+                  Padding(
+                    padding: const EdgeInsets.only(left: Space.sm),
+                    child: Bone(
+                      width: trailingWidth,
+                      height: 32,
+                      borderRadius: BorderRadius.circular(Radii.sm),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}

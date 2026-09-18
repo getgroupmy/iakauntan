@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -955,9 +956,18 @@ class _OpenDocumentsState extends ConsumerState<_OpenDocuments> {
 
     return AsyncView(
       value: docs,
-      loading: const Padding(
+      // Outlined rather than spun, and it was doing neither before:
+      // this was a padded copy of `AsyncView`'s own default, which is
+      // the circle. The rows coming are a checkbox, a document number
+      // over an open balance, and a 130-wide amount box.
+      skeleton: const Padding(
         padding: EdgeInsets.all(Space.lg),
-        child: Center(child: CircularProgressIndicator()),
+        child: CardRowsSkeleton(
+          rows: 3,
+          leadingSize: 24,
+          trailing: 1,
+          trailingWidth: 130,
+        ),
       ),
       builder: (list) {
         if (list.isEmpty) {
