@@ -3956,6 +3956,11 @@ class Repo {
   /// receipt is not a document and has no row in this table. They are
   /// on the brought-forward statement (`report_statement_of_account`,
   /// 0624), which is where they belong.
+  ///
+  /// This is the OPEN-ITEM statement: what is still outstanding, one
+  /// line per document. The brought-forward one is a different report
+  /// and both are legitimate; what neither of them is, is a list of
+  /// documents that were never issued.
   Future<List<BusinessDocument>> outstandingFor({
     required DocKind kind,
     required String contactId,
@@ -3977,6 +3982,29 @@ class Repo {
                 ],
         )
         .gt('balance_amount', 0)
+        // POSTED, and not voided. Both were missing, and both reached
+        // the PDF that goes to the customer.
+        //
+        // A DRAFT invoice carries its full `balance_amount` from the
+        // moment its lines are typed -- measured, not assumed -- so a
+        // quote somebody was still working on was sent out as money
+        // due. A VOIDED one keeps its balance too: `void_sales_document`
+        // sets the status and reverses the ledger entry and never
+        // touches the column, because nothing else had ever read it
+        // without also asking whether the document was real.
+        //
+        // These two conditions are `report_ar_aging`'s and
+        // `report_ap_aging`'s, word for word -- `d.gl_entry_id is not
+        // null and d.status <> 'void'`. The ageing report and the
+        // statement are the same open-item question asked twice, and
+        // the day they disagree the customer's ledger disagrees with
+        // ours. `statement_of_account.sql` asserts they do not.
+        //
+        // `purchase_return` needs no separate exclusion: it cannot
+        // post -- `post_purchase_document_internal` refuses it by name
+        // -- so it can never carry a `gl_entry_id` and falls out here.
+        .not('gl_entry_id', 'is', null)
+        .neq('status', 'void')
         .isFilter('deleted_at', null)
         .order('doc_date', ascending: true);
     return _rows(data).map(BusinessDocument.fromJson).toList();

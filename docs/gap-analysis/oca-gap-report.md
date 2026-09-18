@@ -205,14 +205,36 @@ verdicts stand.
 The ranking above is corrected with it. B5 was #1 and is #3, and what
 it names is now finishing a feature rather than starting one.
 
-**A defect found while correcting it.** `Repo.outstandingFor`, which
+**A defect found while correcting it.** ~~`Repo.outstandingFor`, which
 feeds the existing statement, filters `doc_type = 'invoice'`. A credit
 note, a debit note, a refund note and an unapplied receipt are
 therefore absent from a document that goes to the customer — so a
 customer holding a credit note is sent a statement that overstates what
 they owe, and it will not agree with `report_ar_aging`, which signs all
-four correctly. Not fixed here; this audit is read-only, and it is
-written up so the fix is a decision rather than a drive-by.
+four correctly.~~ Fixed: all four types are queried and `statementSign`
+in `features/contacts/statement.dart` signs them, deliberately matching
+`report_ar_aging`'s own `case`.
+
+**And a worse one underneath it, found by going back to check.** The
+same query filtered `balance_amount > 0` and `deleted_at is null` and
+nothing else, while `report_ar_aging` — the same open-item question
+asked in SQL — also requires `d.gl_entry_id is not null` and
+`d.status <> 'void'`.
+
+A DRAFT invoice carries its full `balance_amount` from the moment its
+lines are typed. A VOIDED one keeps its balance as well, because
+`void_sales_document` sets the status and reverses the ledger entry and
+never touches the column. So both went onto the statement PDF as money
+due.
+
+Measured against one customer holding a 5,000 draft, a 3,000 voided
+invoice and a 1,200 real one: **the statement said 9,200 and the
+ageing report said 1,200**. A demand for payment for an invoice that
+was never issued and one that was cancelled.
+
+Fixed, and asserted: `statement_of_account.sql` now builds exactly that
+company and requires the open-item list and the ageing report to agree.
+That file already existed to make two answers agree; this is the third.
 
 ## 5. Incidental findings
 
