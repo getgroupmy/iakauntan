@@ -86,6 +86,37 @@ const captchaBroken =
     'from here. It is blocked by this site rather than by you — please '
     'tell whoever runs it.';
 
+/// The same sentence, plus which of the failures it was.
+///
+/// `web/captcha.js` already distinguishes FOUR of them — no site key,
+/// Cloudflare's script not fetched, the challenge refused, the render
+/// throwing — and the app threw the reason away and printed one
+/// sentence for all four. So a report of "the security check will not
+/// load" could not be told from any other, and the only way to find out
+/// which was to guess and ship a build.
+///
+/// Each line names what somebody would actually do about it. The raw
+/// reason is carried at the end for anything this does not recognise,
+/// because a new reason invented in the page must not become invisible
+/// here — which is exactly the failure this is fixing.
+String captchaBrokenBecause(String? why) {
+  final detail = switch ((why ?? '').trim()) {
+    '' => null,
+    'no site key' =>
+      'No site key reached the app, so there was nothing to draw.',
+    'script blocked' =>
+      "Cloudflare's script could not be fetched — a blocked network, a "
+          'captive portal, or a policy refusing it.',
+    'challenge error' =>
+      'Cloudflare refused the challenge. The commonest cause is a site '
+          'key whose domain list does not include this one.',
+    'render threw' => 'The widget would not draw on this page.',
+    'no webview' => 'This build has no webview to draw it in.',
+    final other => 'The page reported: $other.',
+  };
+  return detail == null ? captchaBroken : '$captchaBroken $detail';
+}
+
 /// The widget itself, or nothing at all when no key is configured.
 ///
 /// [onToken] is called with the token when the challenge passes, and
@@ -122,6 +153,10 @@ class CaptchaField extends StatefulWidget {
 class _CaptchaFieldState extends State<CaptchaField> {
   bool _failed = false;
 
+  /// Which failure it was, for [captchaBrokenBecause]. Null until one
+  /// happens, and null again for a failure that carried no reason.
+  String? _why;
+
   Widget _note(String text) => Padding(
     padding: const EdgeInsets.only(top: 12),
     child: Text(text, style: Theme.of(context).textTheme.bodySmall),
@@ -131,16 +166,19 @@ class _CaptchaFieldState extends State<CaptchaField> {
   Widget build(BuildContext context) {
     if (!captchaOn(widget.siteKey)) return const SizedBox.shrink();
     if (!captchaAvailable) return _note(captchaUnavailable);
-    if (_failed) return _note(captchaBroken);
+    if (_failed) return _note(captchaBrokenBecause(_why));
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: TurnstileWidget(
         siteKey: widget.siteKey!.trim(),
         onToken: widget.onToken,
         controller: widget.controller,
-        onFailed: () {
+        onFailed: (why) {
           if (!mounted || _failed) return;
-          setState(() => _failed = true);
+          setState(() {
+            _failed = true;
+            _why = why;
+          });
           widget.onFailed?.call();
         },
       ),

@@ -148,7 +148,7 @@ class TurnstileWidget extends StatefulWidget {
   final ValueChanged<String?> onToken;
 
   /// Called once when the challenge will not be drawn at all.
-  final VoidCallback onFailed;
+  final ValueChanged<String?> onFailed;
 
   /// Asks for a fresh challenge when a form's attempt has spent the
   /// token it was holding. See [CaptchaController]: a Turnstile token
@@ -210,7 +210,7 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
       case 'failed':
         if (_failed) return;
         setState(() => _failed = true);
-        widget.onFailed();
+        widget.onFailed(m.value.isEmpty ? null : m.value);
     }
   }
 
@@ -262,7 +262,13 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
         onWebResourceError: (e) {
           if (captchaLoadFailed(
               errorCode: e.errorCode, isForMainFrame: e.isForMainFrame)) {
-            _onMessage('{"kind":"failed"}');
+            // The page never ran, so it cannot say why. The webview's
+            // own code is all there is, and printing it beats the
+            // silence that sent two fixes out on a guess.
+            _onMessage(jsonEncode({
+              'kind': 'failed',
+              'value': 'the page did not load (${e.errorCode})',
+            }));
           }
         },
         // The challenge navigates nowhere. Anything trying to is not

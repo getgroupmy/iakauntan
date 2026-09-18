@@ -106,7 +106,11 @@ void main() {
       await t.pump();
 
       expect(t.takeException(), isNull);
-      expect(find.text(captchaBroken), findsOneWidget);
+      // The sentence, plus which failure it was. It used to be exactly
+      // `captchaBroken` for every cause, which is how two fixes went
+      // out on a guess: a report of "the security check will not load"
+      // could not be told from any other.
+      expect(find.text(captchaBrokenBecause('no webview')), findsOneWidget);
       expect(find.text(captchaUnavailable), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     });

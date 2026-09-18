@@ -123,6 +123,7 @@ void main() {
     // takes the whole sign-in screen down rather than one field.
     testWidgets('it reports a failure instead of crashing', (tester) async {
       var failed = 0;
+      String? why = 'untouched';
       String? token = 'stale';
 
       await tester.pumpWidget(MaterialApp(
@@ -130,7 +131,10 @@ void main() {
           body: TurnstileWidget(
             siteKey: 'abc',
             onToken: (t) => token = t,
-            onFailed: () => failed++,
+            onFailed: (w) {
+              failed++;
+              why = w;
+            },
           ),
         ),
       ));
@@ -142,6 +146,13 @@ void main() {
         reason: 'a missing webview must not take the screen down',
       );
       expect(failed, 1, reason: 'the form has to be told it cannot draw');
+      expect(
+        why,
+        'no webview',
+        reason: 'and told WHICH failure it was, or the form prints one '
+            'sentence for four different causes and a report of it '
+            'cannot be told from any other',
+      );
       expect(
         token,
         'stale',
@@ -157,7 +168,7 @@ void main() {
           body: TurnstileWidget(
             siteKey: 'abc',
             onToken: (_) {},
-            onFailed: () => failed++,
+            onFailed: (_) => failed++,
           ),
         ),
       ));
