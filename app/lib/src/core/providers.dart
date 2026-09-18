@@ -39,9 +39,110 @@ final authStateProvider = StreamProvider<AuthState>(
   (ref) => ref.watch(supabaseProvider).auth.onAuthStateChange,
 );
 
+/// Who is signed in, ignoring anything that happens to their token.
+///
+/// A record of the user's id and the moment their record last changed.
+/// It is the KEY [currentUserProvider] is derived from, and it exists
+/// because the obvious version of that provider --
+///
+///     ref.watch(authStateProvider);
+///     return auth.currentUser;
+///
+/// -- re-derives on EVERY auth event, `tokenRefreshed` included, and
+/// returns a fresh `User` object each time. Twelve files watch
+/// `currentUserProvider`, the org context and the module surface among
+/// them, so one token refresh reloaded the whole shell: every
+/// `AsyncValue` went back to its loading branch, every screen was
+/// disposed and rebuilt, and whatever was on it lost its unsaved form
+/// state and its scroll position.
+///
+/// That was already happening once an hour, a minute before the JWT
+/// expires, and it was survivable. WHAT MADE IT A LOOP was `listFactors`
+/// -- see `settings/two_factor_card.dart`. It refreshes the session as a
+/// side effect of reading, it was called from `initState`, and the
+/// rebuild it caused re-created the card that called it. Round and
+/// round: 17 token refreshes measured in one visit to Settings, all
+/// HTTP 200, against a JWT with 57 minutes left on it.
+///
+/// AND IT ENDED IN A SIGN-OUT, which is why this is not a performance
+/// note. `/auth/v1/token` is rate-limited per IP -- 150 in five minutes,
+/// bursting to 30 -- and when the loop drained that bucket the refresh
+/// came back 429. GoTrue treats any non-network `AuthException` on a
+/// refresh as fatal: it drops the session and emits `signedOut`, and
+/// the router puts the person on the sign-in page. Nothing in this
+/// application was signing anybody out. It was asking too often.
+///
+/// Both halves are fixed; either alone stops the loop, and they fix
+/// different things. This half is the one that also stops the hourly
+/// reload.
+///
+/// ## Why a Notifier and not `select`
+///
+/// `authStateProvider.select((s) => s.value?.session?.user.id)` is the
+/// short version and it loses the other thing a consumer needs: a
+/// `userUpdated` event after somebody changes their email address must
+/// reach the screens that print it. Folding the update stamp into the
+/// selector does not work either, because a selector cannot see what it
+/// returned last -- so the stamp appears on the `userUpdated` event and
+/// is gone again on the next `tokenRefreshed`, which is a second change
+/// and a second full reload.
+///
+/// Holding it in state is what makes the value MONOTONIC: it moves when
+/// the person changes or their record changes, and at no other time.
+class UserIdentityNotifier extends Notifier<({String? id, DateTime? updated})> {
+  @override
+  ({String? id, DateTime? updated}) build() {
+    ref.listen(authStateProvider, (_, next) {
+      final auth = next.value;
+      if (auth == null) return;
+      final user = auth.session?.user;
+      final was = state;
+      final next_ = (
+        id: user?.id,
+        // Kept from before unless this event is the one that says the
+        // record moved. A refresh carries a `User` too and its
+        // `updatedAt` is not a promise of anything.
+        updated: auth.event == AuthChangeEvent.userUpdated
+            ? (user?.updatedAt == null
+                  ? DateTime.now()
+                  : DateTime.tryParse(user!.updatedAt!) ?? DateTime.now())
+            : was.updated,
+      );
+      // Records compare by value, so this is the whole of the filter:
+      // a token refresh produces a record equal to the one held and
+      // nothing downstream is told anything.
+      if (next_ != was) state = next_;
+    });
+    // Nothing read from Supabase to seed this, deliberately.
+    // `onAuthStateChange` emits `initialSession` as soon as it is
+    // listened to, so a restored session arrives through the same
+    // listener a moment later and the seed would only be a second copy
+    // of it. Not reading is what lets this be tested against a plain
+    // stream, and it removes a throw: `supabaseProvider` asserts if
+    // Supabase has not been initialised, and a provider that cannot be
+    // built without it is a provider that takes a screen down.
+    //
+    // `currentUserProvider` returns `auth.currentUser` either way, so
+    // no consumer sees a wrong value in the meantime -- only, at worst,
+    // one extra rebuild when `initialSession` lands, which is the same
+    // rebuild it has always had.
+    return (id: null, updated: null);
+  }
+}
+
+final userIdentityProvider =
+    NotifierProvider<UserIdentityNotifier, ({String? id, DateTime? updated})>(
+      UserIdentityNotifier.new,
+    );
+
+/// The signed-in user.
+///
+/// Watches [userIdentityProvider] rather than the auth event stream, so
+/// a token refresh does not reach anything downstream of it. Read the
+/// full sentence there before changing this back.
 final currentUserProvider = Provider<User?>((ref) {
-  ref.watch(authStateProvider);
-  return ref.watch(supabaseProvider).auth.currentUser;
+  ref.watch(userIdentityProvider);
+  return ref.read(supabaseProvider).auth.currentUser;
 });
 
 /// Whether this session belongs to one of the shared demo logins.

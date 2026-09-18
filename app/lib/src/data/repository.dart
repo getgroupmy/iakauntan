@@ -1081,7 +1081,7 @@ class Repo {
         // Named because 0515 added a same-org composite key alongside
         // the plain one, so 'gl_lines' can now be joined to a journal
         // two ways and PostgREST refuses the embed with PGRST201.
-        .select('*, gl_lines!gl_lines_entry_id_fkey(*, accounts(code, name))')
+        .select('*, gl_lines!gl_lines_entry_id_fkey(*, accounts!gl_lines_account_id_fkey(code, name))')
         .eq('org_id', orgId);
     if (from != null) q = q.gte('entry_date', Fmt.iso(from));
     if (to != null) q = q.lte('entry_date', Fmt.iso(to));
@@ -3005,7 +3005,8 @@ class Repo {
             .select(
               '*, items!bills_of_materials_item_id_fkey(code, name), '
               'bom_lines!bom_lines_bom_id_fkey(*, items!bom_lines_item_id_fkey(code, name)), '
-              'bom_operations!bom_operations_bom_id_fkey(*, work_centres(code, name, cost_per_hour))',
+              'bom_operations!bom_operations_bom_id_fkey'
+              '(*, work_centres!bom_operations_work_centre_id_fkey(code, name, cost_per_hour))',
             )
             .eq('id', id)
             .eq('org_id', orgId)
@@ -3164,7 +3165,8 @@ class Repo {
               '(code, name), '
               'warehouses!manufacturing_orders_warehouse_id_fkey(code, name), '
               'mo_components!mo_components_mo_id_fkey(*, items!mo_components_item_id_fkey(code, name)), '
-              'mo_operations!mo_operations_mo_id_fkey(*, work_centres(code, name, cost_per_hour))',
+              'mo_operations!mo_operations_mo_id_fkey'
+              '(*, work_centres!mo_operations_work_centre_id_fkey(code, name, cost_per_hour))',
             )
             .eq('id', id)
             .eq('org_id', orgId)

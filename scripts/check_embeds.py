@@ -32,6 +32,32 @@ embed under one is refused whenever the embedded table can be joined
 more than one way to anything at all: not knowing which table we are on
 is not a reason to allow it, it is a reason the constraint must be
 named.
+
+And the third hole, which is why this paragraph exists: a NESTED embed
+was checked against the wrong table. PostgREST embeds nest, and the
+table an embed hangs off is its PARENT, not the `.from()`:
+
+    client.from('gl_entries').select(
+        '*, gl_lines!gl_lines_entry_id_fkey(*, accounts(code, name))')
+
+`accounts` there is a `gl_lines` embed. This script flattened the column
+list and asked whether `gl_entries` and `accounts` are joinable more
+than one way -- they are not -- and passed. `gl_lines` and `accounts`
+ARE, twice over: `gl_lines_account_id_fkey`, and the composite
+`gl_lines_account_same_org` that `0160` added to close the tenant
+boundary. So the Journals page -- the FIRST item in the sidebar --
+answered PGRST201 on load, and this script called the app clean while
+it did. It was found from a browser network log, not from here.
+
+That is not a one-off waiting to be tidied. The tenant-boundary work put
+a `*_same_org` composite beside nearly every single-column foreign key
+in the schema, which took the number of pairs joinable more than one way
+past five hundred. Every unqualified embed in the app is a candidate,
+and the ones nested inside another embed were the ones nothing was
+looking at.
+
+The column list is walked with a bracket stack now, so every embed is
+checked against the table it actually hangs off.
 """
 
 from __future__ import annotations
@@ -95,6 +121,20 @@ STRING_RE = re.compile(r"'([^']*)'")
 # An embedded resource: an optional `alias:`, the name, an optional
 # `!constraint` disambiguator, then the opening bracket of its column list.
 EMBED_RE = re.compile(r"(?:^|,)\s*(?:\w+:)?([a-z_]+)\s*((?:!\w+)*)\s*\(")
+# The same thing, anchored rather than searched, for the bracket walk in
+# [walk_embeds]. Matches at a position where an embed begins: an
+# optional `alias:`, then either a table name or an `${expression}`,
+# then optional `!hints`, then the opening bracket.
+#
+# NOT anchored on a preceding comma. `gl_lines!fk(*, accounts(...))`
+# opens `accounts` after a comma, but `gl_lines!fk(accounts(...))`
+# opens it straight after a bracket, and a column list may also open one
+# at its very start. The walk is positional, so it does not need the
+# comma to tell an embed from a plain column -- the bracket does that.
+EMBED_HEAD_RE = re.compile(
+    r"(?:\w+:)?(?:(?P<name>[a-z_][a-z0-9_]*)|\$\{[^}]*\})"
+    r"\s*(?P<hints>(?:!\w+)*)\s*\("
+)
 # An embedded resource whose NAME is interpolated: `${kind.lineTable}(*)`.
 # The table cannot be read here, so it cannot be checked -- which is how
 # the second PGRST201 of the day reached a live screen. The convention
@@ -185,6 +225,59 @@ def select_literal(text: str, at: int) -> str | None:
     return "".join(parts) if parts else None
 
 
+#: The sentinel for a parent table this script cannot name — a `.from()`
+#: taking a variable, or an embed whose own name is interpolated. Not
+#: `None`, because `None` is also "no parent", and the two want opposite
+#: treatment: a child of the root with no known root is unknown, while a
+#: child of a known parent is known.
+UNKNOWN = "\0unknown"
+
+
+def walk_embeds(columns: str, root: str | None):
+    """Every embed in a column list, with the table it hangs off.
+
+    Yields `(parent, name, constraint_hints)`. `parent` is the enclosing
+    embed's table, or `root` at the top level, or [UNKNOWN] where the
+    enclosing name could not be read.
+
+    A bracket stack rather than a regex over the flat string, because
+    PostgREST embeds NEST and the flat version checks a nested embed
+    against the `.from()` table -- which is a different question with a
+    different answer, and the answer it happens to give is usually
+    "fine". See the third hole in this module's docstring.
+    """
+    stack: list[str | None] = [root]
+    i = 0
+    n = len(columns)
+    while i < n:
+        # An embed opens with `name(` or `alias:name(` or `${expr}(`,
+        # optionally with `!hints` before the bracket.
+        m = EMBED_HEAD_RE.match(columns, i)
+        if m:
+            name = m.group("name")
+            if name is None:
+                # `${...}(` -- the name is an expression. Its own
+                # legality is judged elsewhere, by the naming
+                # convention; what matters here is that everything
+                # inside it has an unknown parent.
+                yield stack[-1], None, m.group("hints") or ""
+                stack.append(UNKNOWN)
+            else:
+                yield stack[-1], name, m.group("hints") or ""
+                stack.append(name)
+            i = m.end()
+            continue
+        if columns[i] == ")":
+            # Never pop the root: a stray closing bracket in a literal
+            # would otherwise leave the stack empty and the next embed
+            # would raise rather than be reported.
+            if len(stack) > 1:
+                stack.pop()
+            i += 1
+            continue
+        i += 1
+
+
 def strip_schema(name: str) -> str:
     """`public.contacts` and `contacts` are the same table; `auth.users`
     is not `users`, and keeping its schema is what makes the difference
@@ -252,7 +345,12 @@ def scan(
                     f"    {columns[:90]}"
                 )
 
-            for embedded, constraint in EMBED_RE.findall(columns):
+            for parent, embedded, constraint in walk_embeds(columns, table):
+                # The `${...}` embeds are judged by the convention above
+                # rather than here; the walk yields them only so that
+                # what is nested INSIDE one gets an unknown parent.
+                if embedded is None:
+                    continue
                 # `!inner` and `!left` are PostgREST's join-type
                 # modifiers, not constraint names, and they can sit
                 # beside one: `contacts!contacts_org_fkey!inner`. Only
@@ -294,13 +392,19 @@ def scan(
                             f"    {columns[:90]}"
                         )
                     continue
-                if table is None:
+                if parent is None or parent == UNKNOWN:
                     if embedded not in ambiguous_anywhere:
                         continue
+                    where = (
+                        "the `.from()` takes a variable"
+                        if parent is None
+                        else "it is nested inside an embed whose own name "
+                        "is an expression"
+                    )
                     problems.append(
                         f"{path}:{number}\n"
                         f"    embeds '{embedded}' from a table this script "
-                        f"cannot read -- the `.from()` takes a variable.\n"
+                        f"cannot read -- {where}.\n"
                         f"    '{embedded}' is joinable more than one way "
                         f"to at least one table, so this may be PGRST201 "
                         f"at run time on some of the tables it is called "
@@ -311,16 +415,21 @@ def scan(
                         f"    {columns[:90]}"
                     )
                     continue
-                if frozenset((table, embedded)) not in pairs:
+                if frozenset((parent, embedded)) not in pairs:
                     continue
+                nested = (
+                    ""
+                    if parent == table
+                    else f" (nested: the `.from()` is '{table}')"
+                )
                 problems.append(
                     f"{path}:{number}\n"
-                    f"    '{table}' embeds '{embedded}', which can be "
-                    f"joined more than one way.\n"
+                    f"    '{parent}' embeds '{embedded}', which can be "
+                    f"joined more than one way{nested}.\n"
                     f"    PostgREST will refuse this with PGRST201 at run "
                     f"time and the screen will fail.\n"
                     f"    Name the constraint -- {embedded}!"
-                    f"{table}_<column>_fkey(...) -- or drop the embed if "
+                    f"{parent}_<column>_fkey(...) -- or drop the embed if "
                     f"nothing reads it.\n"
                     f"    {columns[:90]}"
                 )

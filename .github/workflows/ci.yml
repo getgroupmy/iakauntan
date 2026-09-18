@@ -921,6 +921,27 @@ jobs:
       # widget tests, passes the SQL tests, and then takes out a whole
       # screen in the browser — it lives inside a string literal, so this
       # is the only place the two halves meet.
+      # The gate's own assertions, and they run FIRST. It has had three
+      # holes — a `.select(` on the next line, a string split across
+      # lines, and a nested embed checked against the `.from()` table
+      # instead of its parent — and each time it reported the app clean
+      # while a screen answered PGRST201 on load. A gate with no test is
+      # a gate that reports what it reports. This needs no database.
+      - name: Check the embeds gate still catches what it claims to
+        run: python3 scripts/check_embeds_test.py
+
+      # Two SDK calls rotate the access token, and one of them does not
+      # say so: `mfa.listFactors()` reads like a getter and refreshes
+      # the session as its first line. From `initState` that is a loop —
+      # the refresh reloads the providers, the widget is re-created, and
+      # it asks again. Settings reloaded itself every two seconds until
+      # the token endpoint's rate limit returned 429 and GoTrue signed
+      # the person out.
+      - name: Check no widget rotates the token while being drawn
+        run: |
+          python3 scripts/check_token_rotators_test.py
+          python3 scripts/check_token_rotators.py
+
       - name: Check the client's embeds resolve against this schema
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
