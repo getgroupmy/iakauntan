@@ -99,6 +99,34 @@ bool captchaMayNavigate(
 }) =>
     !isMainFrame || url.startsWith(host);
 
+/// Whether a webview error means the challenge will not appear.
+///
+/// Not every error does. `NSURLErrorCancelled` — -999 — means a
+/// navigation was SUPERSEDED, not that it failed, and it is raised
+/// routinely: starting a new `loadRequest` while one is in flight
+/// cancels the first, which is exactly what [CaptchaController] does
+/// when a form has spent its token and asks for a fresh challenge.
+///
+/// Treating that as a failure locks the sign-in form permanently, and
+/// the iOS plugin makes it worse in two ways at once: it reports every
+/// navigation error through `didFailProvisionalNavigation` with
+/// `isForMainFrame` HARDCODED to true, so the frame cannot be used to
+/// tell a real failure from a cancelled subframe — and a cancellation
+/// is precisely what our own navigation guard used to produce.
+///
+/// -999 is safe to name: Android's `WebViewClient` error codes run
+/// from -1 to -16, so nothing there collides with it.
+///
+/// A page that genuinely cannot be fetched still fails. That has to
+/// stay: a missing `captcha.html` is a form that must refuse rather
+/// than submit without a token.
+const captchaCancelled = -999;
+
+bool captchaLoadFailed({required int errorCode, bool? isForMainFrame}) {
+  if (errorCode == captchaCancelled) return false;
+  return isForMainFrame ?? true;
+}
+
 /// How tall to make the webview.
 ///
 /// Turnstile's widget is 300x65 at its default size, and the page adds
@@ -232,7 +260,10 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
         // that would report its own failure, so the webview's error is
         // the only signal there is.
         onWebResourceError: (e) {
-          if (e.isForMainFrame ?? true) _onMessage('{"kind":"failed"}');
+          if (captchaLoadFailed(
+              errorCode: e.errorCode, isForMainFrame: e.isForMainFrame)) {
+            _onMessage('{"kind":"failed"}');
+          }
         },
         // The challenge navigates nowhere. Anything trying to is not
         // the challenge, and a sign-in screen is the last place to

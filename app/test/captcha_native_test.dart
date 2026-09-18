@@ -250,6 +250,59 @@ void main() {
     });
   });
 
+  /// Which webview errors mean the challenge will not appear.
+  ///
+  /// The iOS plugin reports every navigation error through
+  /// `didFailProvisionalNavigation` with `isForMainFrame` HARDCODED to
+  /// true, so the frame alone cannot tell a real failure from a
+  /// cancelled subframe. And a cancellation is raised routinely: a new
+  /// `loadRequest` supersedes one in flight, which is what
+  /// `CaptchaController` does every time a form spends its token.
+  /// Treating that as a failure locks the sign-in form for good.
+  group('which errors mean no challenge', () {
+    test('a page that cannot be fetched at all does', () {
+      expect(
+        captchaLoadFailed(errorCode: -1009, isForMainFrame: true),
+        isTrue,
+      );
+    });
+
+    test('but a cancelled navigation does not', () {
+      expect(
+        captchaLoadFailed(errorCode: captchaCancelled, isForMainFrame: true),
+        isFalse,
+      );
+    });
+
+    test('and -999 is the code, not a stand-in for any negative number', () {
+      // Android's WebViewClient codes run -1 to -16, so naming -999 is
+      // safe. An implementation that treated every negative code as a
+      // cancellation would swallow all of them.
+      expect(captchaCancelled, -999);
+      for (final android in [-1, -2, -6, -8, -16]) {
+        expect(
+          captchaLoadFailed(errorCode: android, isForMainFrame: true),
+          isTrue,
+          reason: 'Android error $android is a real failure',
+        );
+      }
+    });
+
+    test('a subframe failure is not the challenge failing', () {
+      expect(
+        captchaLoadFailed(errorCode: -1009, isForMainFrame: false),
+        isFalse,
+      );
+    });
+
+    test('and an unknown frame is treated as the main one', () {
+      // Null means the platform did not say. Refusing the form is the
+      // safe direction: submitting without a token is refused by GoTrue
+      // with nothing on screen to explain it.
+      expect(captchaLoadFailed(errorCode: -1009), isTrue);
+    });
+  });
+
   group('the hosted page itself', () {
     // The page is the other half of this contract and ships separately,
     // in web/. If the two drift the challenge silently never reports a

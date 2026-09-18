@@ -116,6 +116,25 @@ A subframe is not left unguarded by that: the page's own
 Content-Security-Policy decides what it may embed, which is where it
 belongs and what `scripts/check_csp_allows.py` asserts.
 
+### And the error handler it exposed
+
+Cancelling that navigation is how WebKit raised `NSURLErrorCancelled`
+(-999), and the plugin reports EVERY navigation error through
+`didFailProvisionalNavigation` with `isForMainFrame` hardcoded to true
+— so the cancelled iframe arrived at the app as a main-frame failure,
+which is how a widget that was only being refused ended up reported as
+a page that could not load.
+
+That leaves a second fault behind it, independent of the first: -999 is
+raised routinely whenever a new `loadRequest` supersedes one in flight,
+and that is exactly what `CaptchaController` does when a form has spent
+its token and asks for a fresh challenge. Read as a failure it locks
+the sign-in form for good. `captchaLoadFailed` names -999 and lets it
+pass; Android's own codes run -1 to -16, so nothing collides with it. A
+page that genuinely cannot be fetched still fails, because a form that
+submits without a token is refused by GoTrue with nothing on the screen
+to explain it.
+
 ## How wide the box is
 
 Turnstile's default `size` is a fixed 300x65 rectangle. The sign-in
