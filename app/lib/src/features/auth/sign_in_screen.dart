@@ -2842,8 +2842,19 @@ class _SignupConsent extends ConsumerWidget {
                 TextSpan(
                   text: span.text,
                   style: linkStyle,
+                  // PUSH, not go. `go` REPLACES the location, so the
+                  // reader who tapped "terms of service" arrived at a
+                  // page with nothing behind it: the system back button
+                  // and the gesture left the app instead of returning
+                  // to the form they were halfway through filling in.
+                  //
+                  // That matters more here than anywhere else on the
+                  // platform. This link sits under a consent sentence,
+                  // so reading it before pressing the button is the
+                  // behaviour being asked for -- and losing the form
+                  // for doing it is a punishment for reading the terms.
                   recognizer: TapGestureRecognizer()
-                    ..onTap = () => context.go('/${span.slug}'),
+                    ..onTap = () => context.push('/${span.slug}'),
                 ),
           ],
         ),

@@ -885,6 +885,17 @@ jobs:
       - name: Check every ordering says which direction it means
         run: python3 scripts/check_order_direction.py
 
+      # The console tells open clients what it changed by broadcasting
+      # the changed table's NAME to a public topic. From `0322` until
+      # `0652` it broadcast to `landing` while the app subscribed to
+      # `platform`, so every message went to a topic with nobody on it
+      # -- silently, because an empty topic is not an error at either
+      # end. It was reported as "the mobile app only updates when I
+      # relaunch it". Neither half is wrong alone, so only something
+      # reading BOTH languages can see it.
+      - name: Check the broadcast topic is one the app subscribes to
+        run: python3 scripts/check_realtime_topic.py
+
       # `docs/unreachable.md` described this sweep for months as a thing
       # to run when you remember, and this is what that meant: `0559`
       # built the personal-mailbox model and nothing could reach it,

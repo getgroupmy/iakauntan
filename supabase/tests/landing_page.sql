@@ -1432,13 +1432,33 @@ begin
   perform pg_temp.check_true('only the name of the table that changed',
     v_src ~ 'tg_table_name');
 
+  -- 0652. THE TOPIC, which is the whole of whether any of this
+  -- arrives. `realtime.send`'s third argument names the channel the
+  -- message goes to, and the app opens `client.channel('platform')` --
+  -- so a nudge sent anywhere else is delivered to nobody, silently, at
+  -- both ends. It went to 'landing' from 0322 until 0652.
+  --
+  -- Asserted here AND by scripts/check_realtime_topic.py, and the two
+  -- are not redundant: this one says the SQL means what it says, and
+  -- the script is the only thing that reads the Dart as well. Neither
+  -- half is wrong on its own, which is why it survived 330 migrations.
+  perform pg_temp.check_true('the nudge goes to the platform topic',
+    v_src ~ '''platform''');
+  perform pg_temp.check_true('and no longer to the one nobody opened',
+    v_src !~ '''landing''');
+
   -- Every table the payload is built from. One left off is a page that
   -- updates for some edits and not others, which is harder to notice
   -- than one that never updates at all.
+  --
+  -- `site_pages` is 0647's, and it is the one that was reported: its
+  -- only policy is `app.is_platform_admin()`, so Postgres changes reach
+  -- an administrator and nobody else. The nudge is the ONLY way an
+  -- ordinary reader hears that the terms changed.
   foreach v_table in array array[
     'landing_page', 'landing_sections', 'landing_app_links',
     'landing_stats', 'landing_testimonials', 'landing_logos',
-    'platform_modules']
+    'platform_modules', 'site_pages']
   loop
     perform pg_temp.check_eq(format('%s nudges the front page', v_table),
       (select count(*)::int from pg_trigger t

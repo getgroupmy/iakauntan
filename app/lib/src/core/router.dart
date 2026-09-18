@@ -236,6 +236,23 @@ bool? moduleHeldFor(Confinement? door, AsyncValue<Set<String>> enabled) {
 /// from. [currentSurface] says which half that is.
 bool get runningInTheApp => currentSurface.isApp;
 
+/// Whether [path] is one of the pages a stranger may read.
+///
+/// The four the footer links to: the terms somebody is being asked to
+/// agree to, the terms of service, the privacy policy that describes
+/// what happens to them, and the address to write to about all three.
+/// A policy you have to sign in to read is not a policy.
+///
+/// Its own function so it can be asserted without standing a router up.
+/// The bug it exists to stop was invisible from inside [routeFor]: the
+/// clause simply named three slugs where four were linked, and the
+/// fourth bounced to the sign-in form with nothing logged anywhere.
+///
+/// EXACT paths, not prefixes. `/terms-of-services` is not a page and
+/// must not be waved through for starting the same way.
+bool publicPathNeedsNoSession(String path) =>
+    publicSitePageSlugs.any((slug) => path == '/$slug');
+
 /// signed-in visitor is not bounced anywhere.
 String? routeFor({
   required String path,
@@ -308,7 +325,13 @@ String? routeFor({
   // the footer links to all three from the front page — including the
   // front page of a company's own address, where `/` is the sign-in
   // form and these three still are not.
-  if (path == '/terms' || path == '/privacy' || path == '/contact') {
+  //
+  // Read from `publicSitePageSlugs` rather than listed again. This
+  // clause named three of the four after `0651` added the fourth, so
+  // Terms of Service was routed, linked from the footer and from the
+  // consent line under the register button, and then bounced to the
+  // sign-in form by this very function.
+  if (publicPathNeedsNoSession(path)) {
     return null;
   }
 
@@ -620,12 +643,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // The three pages the footer links to. Outside the shell and
       // outside auth for the reason given in `routeFor`: they are read
       // before anybody has an account, and often instead of getting one.
-      for (final slug in const [
-        'terms',
-        'terms-of-service',
-        'privacy',
-        'contact',
-      ])
+      for (final slug in publicSitePageSlugs)
         GoRoute(
           path: '/$slug',
           builder: (_, __) => SitePageScreen(slug: slug),
