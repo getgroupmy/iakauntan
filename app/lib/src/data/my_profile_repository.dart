@@ -31,3 +31,41 @@ final myProfileProvider =
       .maybeSingle();
   return row == null ? null : Map<String, dynamic>.from(row);
 });
+
+/// Change the parts of your own profile that are yours to change.
+///
+/// Through `update_my_profile` (0649) rather than a PATCH on the table.
+/// `profiles_update` is `id = auth.uid()` in both USING and WITH CHECK,
+/// which is the right rule about ROWS and cannot be a rule about
+/// COLUMNS -- so a PATCH from here could also write `email`, which is a
+/// copy of the auth address and would make "Signed in as" disagree with
+/// what actually signs somebody in, and `deleted_at`, which four
+/// membership guards read and nothing in the schema writes.
+///
+/// A null leaves a column alone; an empty string clears it. That is
+/// what lets the screen send only what it has AND still let somebody
+/// empty their telephone box.
+///
+/// Invalidates [myProfileProvider] on the way out, because the row it
+/// holds is now the old one.
+/// Takes a `WidgetRef` rather than a `Ref`: every caller is a screen,
+/// and the point of the argument is the `invalidate` at the end.
+Future<Map<String, dynamic>> saveMyProfile(
+  WidgetRef ref, {
+  String? fullName,
+  String? salutation,
+  String? phone,
+  String? avatarUrl,
+}) async {
+  final data = await ref.read(supabaseProvider).rpc(
+    'update_my_profile',
+    params: {
+      if (fullName != null) 'p_full_name': fullName,
+      if (salutation != null) 'p_salutation': salutation,
+      if (phone != null) 'p_phone': phone,
+      if (avatarUrl != null) 'p_avatar_url': avatarUrl,
+    },
+  );
+  ref.invalidate(myProfileProvider);
+  return Map<String, dynamic>.from(data as Map);
+}

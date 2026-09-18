@@ -246,7 +246,12 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
                 ),
               ),
             const SizedBox(height: 12),
-            if (_usable)
+            // Not offered once the system has said it is not set up for
+            // this. The button cannot succeed until two files are
+            // served from `/.well-known/` -- see `passkeyNotSetUpHere`
+            // -- so leaving it there is a button that fails on every
+            // press, and each press puts another red box under it.
+            if (_usable && !passkeyNotSetUpHere(_error))
               OutlinedButton.icon(
                 key: const ValueKey('add-passkey'),
                 onPressed: _busy ? null : _add,
@@ -270,7 +275,18 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 12),
-              _Banner(message: _error!, color: context.colors.danger),
+              // A CONFIGURATION state is not a fault, and red says it
+              // is. Nothing is wrong with this phone, this account or
+              // the person reading it: the site has not deployed its
+              // association file. `onSurfaceVariant` is the register
+              // for "this is not switched on here".
+              _Banner(
+                key: const ValueKey('passkey-not-configured'),
+                message: _error!,
+                color: passkeyNotSetUpHere(_error)
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : context.colors.danger,
+              ),
             ],
           ],
         ),
@@ -280,7 +296,7 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
 }
 
 class _Banner extends StatelessWidget {
-  const _Banner({required this.message, required this.color});
+  const _Banner({super.key, required this.message, required this.color});
 
   final String message;
   final Color color;

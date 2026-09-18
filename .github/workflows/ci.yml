@@ -633,6 +633,7 @@ jobs:
                    supabase/tests/fs_mapping_is_total.sql \
                    supabase/tests/view_security.sql \
                    supabase/tests/profile_visibility.sql \
+                   supabase/tests/my_profile.sql \
                    supabase/tests/credit_control.sql \
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/stock_transfers.sql \

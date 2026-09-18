@@ -610,6 +610,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           ? (result.message ?? 'That passkey was not accepted.')
           : null;
     });
+    // Once, and then not again. A site with no association file refuses
+    // EVERY press, and each one spent a captcha token and reset the
+    // widget -- so the screen answered a press on a fingerprint button
+    // by greying out the password form as well, and it did that as
+    // often as somebody pressed. Reported from both an iPhone and an
+    // Android. The button goes away instead; `passkeyNotSetUpHere` has
+    // the rest of it.
+    if (passkeyNotSetUpHere(result.message)) {
+      setState(() => _passkeyUsable = false);
+      return;
+    }
+
     // Anything but a success has spent the token, a dismissed prompt
     // included: the call reached GoTrue either way. The button above
     // is disabled until the check passes again, so without this the

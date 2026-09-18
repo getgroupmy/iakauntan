@@ -80,7 +80,8 @@ import 'passkey_stub.dart'
     if (dart.library.js_interop) 'passkey_web.dart'
     if (dart.library.io) 'passkey_native.dart';
 
-export 'passkey_failure.dart' show PasskeyFailure;
+export 'passkey_failure.dart'
+    show PasskeyFailure, passkeyDomainNotAssociated, passkeyNotSetUpHere;
 export 'passkey_stub.dart'
     if (dart.library.js_interop) 'passkey_web.dart'
     if (dart.library.io) 'passkey_native.dart'

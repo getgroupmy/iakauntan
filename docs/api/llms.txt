@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0648` (the highest applied migration).
-729 functions and 346 readable tables, of which
+Schema version `0649` (the highest applied migration).
+730 functions and 346 readable tables, of which
 274 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**589 of 729 functions carry a `comment on
+**590 of 730 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (518)
+### general (519)
 
 Not gated on any module.
 
@@ -873,6 +873,7 @@ Not gated on any module.
 - `unverify_person_identity(p_person uuid)` *(writes)* — Withdraws the identity verification on a director, shareholder or officer — for a document found to be false, or a check done against the wrong person.
 - `update_leave_contact(p_request_id uuid, p_contact text)` *(writes)* — The one field on a live leave request the employee may still change after submitting it.
 - `update_my_phone(p_dial text, p_national text)` *(writes)* — Changes the caller's own mobile number, through the same E.164 rule registration uses.
+- `update_my_profile(p_full_name text, p_salutation text, p_phone text, p_avatar_url text)` *(writes)* — The columns of your own profile row that you may change: name, salutation, telephone and avatar.
 - `update_recurring_template(p_id uuid, p_document_id uuid)` *(writes)* — Re-photographs a recurring schedule's template from an existing document, which must be an invoice for a sales schedule or a bill for a purchase one, not deleted, AND BELONGING TO THE SAME COMPANY -- copying across organizations would put one company's prices into another's billing.
 - `upsert_account(p_code text, p_name text, p_type app.account_type, p_subtype app.account_subtype, p_id uuid, p_parent_id uuid, p_is_group boolean, p_description text, p_org_id uuid)` *(writes)* — Add or change an account.
 - `upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` *(writes)* — Creates or edits one model under a provider, with its context window and whether it is free.

@@ -195,11 +195,12 @@ String _sentenceFor(Object error) => switch (error) {
   // upload key: it then works on the developer's handset and on no
   // device that installed from Play, because Play re-signs with its
   // own certificate.
-  DomainNotAssociatedException() =>
-    'This app is not set up for passkeys on this system yet. It is a '
-        'setting on the site rather than anything you have done — '
-        'please tell whoever runs it, and sign in with your password '
-        'for now.',
+  //
+  // The sentence is a CONSTANT in `passkey_failure.dart` because
+  // `passkeyNotSetUpHere` compares against it: the cards use that to
+  // draw a plain note rather than a red banner, and to stop offering a
+  // button that cannot work until somebody deploys two files.
+  DomainNotAssociatedException() => passkeyDomainNotAssociated,
 
   // Nobody has saved one for this site on this device. Not a fault,
   // and the answer is a sentence rather than silence: the button is

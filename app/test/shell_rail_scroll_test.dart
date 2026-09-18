@@ -83,7 +83,16 @@ void main() {
     // ungated rail grew past it — at which point this was measuring a
     // rail that scrolls, and the assertion below is about one that
     // does not.
-    tester.view.physicalSize = const Size(1400, 1600);
+    //
+    // THEN IT HAPPENED AGAIN, at 1600, when `Your details` was added
+    // beside Settings as a door that needs no company. Twice is a
+    // pattern: every ungated destination makes this number too small,
+    // and the failure is not "the rail is broken" but "this test is
+    // now measuring the other case". 2000 with about 360 of headroom.
+    // If it goes again, raise it again — and if it goes a fourth time,
+    // the number wants deriving from the rail's own height rather than
+    // guessed.
+    tester.view.physicalSize = const Size(1400, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -98,6 +107,6 @@ void main() {
     // wrapping its handful of destinations. That is what `trailing:
     // Expanded` needs a bounded height for, and it is the part the
     // scroll view would otherwise have collapsed.
-    expect(tester.getRect(find.byType(NavigationRail)).bottom, 1600);
+    expect(tester.getRect(find.byType(NavigationRail)).bottom, 2000);
   });
 }

@@ -100,6 +100,7 @@ import '../features/secretarial/entity_screen.dart';
 import '../features/secretarial/people_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
 import '../features/settings/chart_of_accounts_card.dart';
+import '../features/profile/profile_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
 import '../features/hr/ea_forms_screen.dart';
@@ -1136,6 +1137,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             builder: (_, __) => const SettingsScreen(),
+          ),
+          // The person, as opposed to the company. `0649` and
+          // `features/profile/` -- there was no such screen on any
+          // surface until then, and `profiles` has held these columns
+          // since `0001`.
+          GoRoute(
+            path: '/profile',
+            builder: (_, __) => const ProfileScreen(),
           ),
         ],
       ),
