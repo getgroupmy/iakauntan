@@ -126,7 +126,7 @@ impersonation).
 | E1 | Helpdesk with SLA timers | **Have** | `tickets`, `ticket_events`, `ticket_teams`, `sla_policies`, `sla_targets`, `sla_deadlines`, `app.sla_advance`, `ticket_sla_sweep` on pg_cron (0356); routes `/tickets`, `/ticket/:token` | — |
 | E2 | Field service jobs | **Missing** | No match for `fieldservice` or `field_service` | — |
 | E3 | RMA / warranty returns | **Missing** | No match for `rma` or `warranty`. Credit notes exist; a returns workflow does not | — |
-| E4 | Purchase requests and blanket orders | **Missing** | `job_requisitions` is recruitment. No purchase requisition and no blanket order | — |
+| E4 | Purchase requests and blanket orders | **Partial** | `app.purchase_doc_type.purchase_request` with a `DocTypeMeta` in `doc_types.dart` ("Purchase Requisition"), a `PR-` numbering series, a screen and the `purchase_request → purchase_order` transfer; `0646` gates the transfer on an approval rule | No blanket order. The requisition half is built, and `job_requisitions` really is recruitment — the name is what the search matched |
 | E5 | Reorder rules / min-max stock | **Have** | `reorder_point` column (0197) and `app.reorder_point` (0199); route `/forecasting` | — |
 | E6 | Landed costs | **Have** | `landed_cost_runs`, `landed_cost_charges`, `landed_cost_allocations`, `landed_cost_targets`, `app.landed_cost_account`, `cancel_landed_cost_run`; route `/landed-cost` | — |
 | E7 | Lot / expiry tracking | **Have** | `stock_lots` with `expiry_date`, `manufactured_on`, `supplier_lot_ref`; `stock_movement_lots`, `document_line_lots`, `check_movement_lots`, `lot_available`; route `/lots` | — |
@@ -176,6 +176,27 @@ search was too narrow, and a capability that lives entirely in the
 client is exactly the shape it was narrow about. Any other **Missing**
 verdict in Tier 2 or Tier 4 resting on a schema search alone deserves
 the same second look before anything is built on it.
+
+**E4 was first published as Missing and it is Partial**, found the same
+way and worth the same admission. `app.purchase_doc_type` carries
+`purchase_request`; `doc_types.dart` calls it a Purchase Requisition
+and gives it a screen; it has a `PR-` series and the
+`purchase_request → purchase_order` step of the transfer chain. What
+the search found was `job_requisitions`, which is recruitment, and
+the report read the absence of the WORD "requisition" anywhere else as
+the absence of the thing — while the thing was filed under
+"purchase request", which is the name in the report's own row heading.
+
+The blanket-order half of E4 is genuinely missing, so the row is
+Partial rather than Have.
+
+**And the other seventeen were re-checked**, by name against the
+applied schema rather than against this document: A2, A7, A9, A17, B7,
+B14, B15, B17, C7, D1, D2, D3, D5, D6, D13, D14, E2 and E3 have no
+table, view, function or enum label matching what they describe. Some
+of the words appear in prose — `accrual` in ten migrations, `webhook`
+in one, `impersonat` in three — and none of them is an object. Those
+verdicts stand.
 
 The ranking above is corrected with it. B5 was #1 and is #3, and what
 it names is now finishing a feature rather than starting one.
