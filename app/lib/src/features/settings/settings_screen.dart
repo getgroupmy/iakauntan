@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'einvoice_certificate_card.dart';
+import 'fiscal_close.dart';
 import 'module_offer.dart';
 import 'subscription_card.dart';
 import '../../data/ocr_repository.dart';
@@ -1847,7 +1848,7 @@ class _FiscalYearsCard extends ConsumerWidget {
                       children: [
                         _RunwayNotice(years: list),
                         for (final y in list)
-                          _YearTile(year: y, canAdmin: canAdmin),
+                          _YearTile(year: y, all: list, canAdmin: canAdmin),
                       ],
                     ),
             ),
@@ -1920,10 +1921,73 @@ class _RunwayNotice extends StatelessWidget {
   }
 }
 
-class _YearTile extends ConsumerWidget {
-  const _YearTile({required this.year, required this.canAdmin});
+/// Close the year, or reopen it, or say why neither is offered yet.
+///
+/// The reason is carried onto the label rather than left to the
+/// database's refusal, which is what `voidBlockedBecause` and
+/// `transferBlockedBecause` do and for the same argument: being told
+/// after pressing is a worse way to learn than being told on the
+/// control. Both rules are about ORDER and both are enforced in
+/// `0648` as well -- this is the sentence, not the guard.
+class _CloseYearButton extends ConsumerWidget {
+  const _CloseYearButton({required this.year, required this.all});
 
   final FiscalYear year;
+  final List<FiscalYear> all;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final closed = year.status == 'closed';
+    final blocked = closed
+        ? reopenBlockedBecause(year, all)
+        : closeBlockedBecause(year, all);
+
+    return TextButton(
+      key: ValueKey('close-year-${year.id}'),
+      onPressed: blocked != null ? null : () => _act(context, ref, closed),
+      child: Text(blocked ?? (closed ? 'Reopen year' : 'Close the year')),
+    );
+  }
+
+  Future<void> _act(BuildContext context, WidgetRef ref, bool closed) async {
+    if (!closed) {
+      final ok = await confirm(
+        context,
+        title: 'Close ${year.name}?',
+        message: closeYearMessage,
+        confirmLabel: 'Close the year',
+      );
+      if (!ok || !context.mounted) return;
+    }
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    await runWithFeedback(
+      context,
+      action: () => closed
+          ? repo.reopenFiscalYear(year.id)
+          : repo.closeFiscalYear(year.id),
+      successMessage: closed
+          ? 'Reopened, and the closing journal reversed'
+          : 'Closed, and the result moved into equity',
+    );
+    ref.invalidate(fiscalYearsProvider);
+    refreshLedgerData(ref);
+  }
+}
+
+class _YearTile extends ConsumerWidget {
+  const _YearTile({
+    required this.year,
+    required this.all,
+    required this.canAdmin,
+  });
+
+  final FiscalYear year;
+
+  /// The other years, because both rules about closing are about ORDER
+  /// and neither can be answered from one year alone.
+  final List<FiscalYear> all;
   final bool canAdmin;
 
   @override
@@ -1940,6 +2004,16 @@ class _YearTile extends ConsumerWidget {
           const SizedBox(width: Space.sm),
           if (year.covers(DateTime.now()))
             const StatusChip('current', compact: true),
+          if (year.status == 'closed') ...[
+            const SizedBox(width: Space.xs),
+            const StatusChip('closed', compact: true),
+          ],
+          const Spacer(),
+          // The year-end close. `0648` -- and the reason it is here
+          // rather than on a screen of its own is that the periods have
+          // to be open for the closing journal to post, so the decision
+          // belongs beside the buttons that lock them.
+          if (canAdmin) _CloseYearButton(year: year, all: all),
         ],
       ),
       subtitle: Text(

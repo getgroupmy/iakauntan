@@ -20,12 +20,16 @@ deployment.
 
 | Tier | Have | Partial | Missing | N/A | Total |
 |---|---:|---:|---:|---:|---:|
-| 1 — Accounting depth | 8 | 7 | 4 | 0 | 19 |
+| 1 — Accounting depth | 9 | 6 | 4 | 0 | 19 |
 | 2 — Control and management | 9 | 6 | 4 | 0 | 19 |
 | 3 — HR and payroll | 5 | 3 | 1 | 0 | 9 |
 | 4 — Platform | 2 | 5 | 7 | 0 | 14 |
 | 5 — Operations | 4 | 0 | 3 | 0 | 7 |
-| **Total** | **28** | **21** | **19** | **0** | **68** |
+| **Total** | **29** | **21** | **18** | **0** | **68** |
+
+*Moved since first published: **A1** Partial → Have (`0648` writes the
+close the schema had been built for), **B5** Missing → Partial and
+**E4** Missing → Partial, both in §4.*
 
 The shape of it: the **accounting and operations** halves are largely
 built, **HR** is built with the edges unfinished, and **platform**
@@ -42,7 +46,7 @@ impersonation).
 
 | ID | Capability | Status | Evidence | What's missing |
 |---|---|---|---|---|
-| A1 | Year-end closing entries | **Partial** | `fiscal_years`, `fiscal_periods`, `set_fiscal_period_status` (0053); chart seeds `3200 Retained Earnings` and `3300 Current Year Earnings` (0071); `report_changes_in_equity` (0100) is written around "until the closing journal moves it" | Nothing posts the closing journal. The chart and the equity report both anticipate one; it is a manual journal today |
+| A1 | Year-end closing entries | **Have** | `close_fiscal_year` and `reopen_fiscal_year` (0648): every revenue and expense account brought to nil at the year end, the result into `3300 Current Year Earnings`, refused out of order and reversed rather than deleted. `fiscal_years.closing_entry_id` records which journal did it; the button is on the Fiscal years card in Settings | Moving 3300 into 3200 Retained Earnings stays a manual journal, on purpose — an appropriation is a decision, not arithmetic |
 | A2 | Accrual / prepayment cut-off | **Missing** | No table, function or route matching `cutoff`, `accrual`, `prepay` | — |
 | A3 | Lock dates | **Partial** | `fiscal_periods.status` with `open`/`closed`/`locked`, guarded by `set_fiscal_period_status` (0053: "Only an owner or admin may open or close a period") | Per-journal lock dates. The lock is per period for the whole company |
 | A4 | Unrealised forex revaluation | **Have** | `fx_revaluation_preview`, `revalue_foreign_balances`, `realised_fx_on_settlement`, `app.fx_account`; UI in `settings_screen.dart` (`_ForeignBalancesCard`) | — |
@@ -141,7 +145,7 @@ first as instructed. Size is rough: **S** days, **M** a week or two,
 
 | # | ID | Build | Size | Why it ranks here |
 |---|---|---|---|---|
-| 1 | A1 | Year-end closing entry | **S** | Every set of books needs one every year and it is done by hand today. `3300 Current Year Earnings` is already seeded and `report_changes_in_equity` is already written around the closing journal existing |
+| 1 | A1 | ~~Year-end closing entry~~ | **S** | ~~Every set of books needs one every year and it is done by hand today. `3300 Current Year Earnings` is already seeded and `report_changes_in_equity` is already written around the closing journal existing~~ **Built at `0648`.** The S was right and for the reason given: four parts of the schema were already waiting for it — `app.journal_source.year_end_close`, `fiscal_years.closed_at`/`closed_by`, the seeded `3300`, and `report_cash_flow` already excluding that journal source. What took the time was not the arithmetic but proving it does not double-count against `app.fs_cumulative_profit`, which exists precisely because there was no close |
 | 2 | D12 | XLSX export | **S** | Accountants live in Excel. CSV loses number formats, column widths and multiple sheets, and a firm exporting a trial balance re-formats it every time |
 | 3 | B5 | Finish the statement of account | **S** | Not the new build this list first called it — see the correction below. The open-item statement exists; what is missing is the brought-forward form, a period, and emailing it. `0624` has done the database half |
 | 4 | A17 | Inbound e-invoice (UBL 2.1) to draft bill | **M** | MyInvois makes every supplier send one. Receiving is the half this product does not do, and it is the half that removes the most typing |

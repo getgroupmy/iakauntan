@@ -627,6 +627,7 @@ jobs:
                    supabase/tests/timesheets.sql \
                    supabase/tests/collections.sql \
                    supabase/tests/approvals.sql \
+                   supabase/tests/year_end_close.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/fs_mapping_is_total.sql \

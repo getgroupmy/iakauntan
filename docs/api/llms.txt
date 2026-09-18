@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0647` (the highest applied migration).
-727 functions and 346 readable tables, of which
+Schema version `0648` (the highest applied migration).
+729 functions and 346 readable tables, of which
 274 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**587 of 727 functions carry a `comment on
+**589 of 729 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -366,7 +366,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (516)
+### general (518)
 
 Not gated on any module.
 
@@ -458,6 +458,7 @@ Not gated on any module.
 - `clear_platform_ai_key(p_provider text)` *(writes)* — Removes the PLATFORM's key for one AI provider -- ours, not a tenant's.
 - `clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Starts somebody's working day and returns the attendance record.
 - `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Closes the day and returns what it came to — worked, scheduled, overtime split into normal, rest day and holiday, and the lateness from the morning.
+- `close_fiscal_year(p_fiscal_year_id uuid)` *(writes)* — Brings every revenue and expense account to nil at the year end and puts the result in 3300 Current Year Earnings.
 - `close_lead(p_lead uuid, p_reason text)` *(writes)* — Marks a lead lost.
 - `close_matter(p_matter uuid, p_closed_date date, p_note text)` *(writes)* — Closes a file.
 - `close_my_account(p_reason text, p_close_sole_owned boolean)` *(writes)* — Closes the signed-in login.
@@ -729,6 +730,7 @@ Not gated on any module.
 - `rent_preview(p_site_id uuid, p_period_from date, p_period_to date)`
 - `reopen_appraisal(p_appraisal uuid, p_side text)` *(writes)* — Reopens one half of an appraisal -- `self`, `manager` or `final` -- by clearing that half's submission stamp, which is what the guard reads when it refuses a change.
 - `reopen_bank_reconciliation(p_id uuid)` *(writes)* — Reopens a completed bank reconciliation.
+- `reopen_fiscal_year(p_fiscal_year_id uuid)` *(writes)* — Reverses the closing journal and opens the year again.
 - `reopen_lead(p_lead uuid)` *(writes)* — Puts a lost lead back in play.
 - `reopen_matter(p_matter uuid)` *(writes)* — Reopens a closed file.
 - `reopen_opportunity(p_opportunity uuid, p_stage uuid)` *(writes)* — Puts a closed deal back in play, at the stage given or the one it was working in.

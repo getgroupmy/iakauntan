@@ -1052,6 +1052,20 @@ class Repo {
     params: {'p_period_id': periodId, 'p_status': status},
   );
 
+  /// Brings the year's revenue and expenses to nil and puts the result
+  /// in equity. `0648`. Returns nothing: what came back is the journal
+  /// id, and the screen reads the year again rather than the entry.
+  Future<void> closeFiscalYear(String fiscalYearId) => callRpc(
+    'close_fiscal_year',
+    params: {'p_fiscal_year_id': fiscalYearId},
+  );
+
+  /// And reverses it.
+  Future<void> reopenFiscalYear(String fiscalYearId) => callRpc(
+    'reopen_fiscal_year',
+    params: {'p_fiscal_year_id': fiscalYearId},
+  );
+
   /// The ledger itself. Everything in the system posts through
   /// create_gl_entry, so this is the one place an invoice, a payroll run
   /// and a hand-written correction can be compared side by side.
