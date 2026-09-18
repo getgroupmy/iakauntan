@@ -231,4 +231,79 @@ begin
     (select status from public.fiscal_years where id = v_fy), 'open');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And the statement of changes in equity still adds up
+--
+-- `report_changes_in_equity` (0100) shows every equity account's
+-- movement AND, separately, "Profit for the financial period" summed
+-- from the profit and loss accounts. A closing journal moves BOTH of
+-- those at once -- it credits equity and it zeroes the P&L -- so the
+-- result could plausibly come out twice, or not at all.
+--
+-- It comes out once, because the two halves cancel exactly: the
+-- closing entry's P&L legs net the period's trading to nil, so the
+-- separate profit line falls away at the same moment Current Year
+-- Earnings picks the figure up. The audit said this report was
+-- "written around the closing journal existing"; this is the
+-- assertion that it was, and that it still is.
+--
+-- Worth its own block because nothing else would report it. The
+-- statement would simply be wrong by one line, on a document a
+-- director signs.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_fy uuid;
+  v_bank uuid; v_cap uuid; v_sales uuid; v_exp uuid;
+  v_before numeric; v_after numeric; v_lines_before integer;
+  v_profit_line integer; v_equity_line integer;
+begin
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Probe Year End Equity');
+  v_fy := public.create_fiscal_year(v_org, date '2025-01-01');
+
+  v_bank  := pg_temp.yec_acct(v_org, 'bank');
+  v_cap   := pg_temp.yec_acct(v_org, 'share_capital');
+  v_sales := pg_temp.yec_acct(v_org, 'sales');
+  v_exp   := pg_temp.yec_acct(v_org, 'operating_expense');
+
+  perform pg_temp.yec_jv(v_org, 'EQ-1', date '2025-01-02', v_bank, v_cap, 100000);
+  perform pg_temp.yec_jv(v_org, 'EQ-2', date '2025-06-30', v_bank, v_sales, 250000);
+  perform pg_temp.yec_jv(v_org, 'EQ-3', date '2025-06-30', v_exp, v_bank, 180000);
+
+  select coalesce(sum(closing_balance), 0), count(*)
+    into v_before, v_lines_before
+    from public.report_changes_in_equity(v_org, date '2025-01-01',
+                                         date '2025-12-31');
+  perform pg_temp.check_eq('before the close, equity plus the result',
+    v_before::text, '170000.00');
+
+  perform public.close_fiscal_year(v_fy);
+
+  select coalesce(sum(closing_balance), 0) into v_after
+    from public.report_changes_in_equity(v_org, date '2025-01-01',
+                                         date '2025-12-31');
+  perform pg_temp.check_eq('and the same total after it',
+    v_after::text, v_before::text);
+
+  -- Once, and under its own name. Counted rather than summed, because
+  -- a report showing the result twice and a report showing it not at
+  -- all both add up to something -- one to double and one to the bare
+  -- capital -- and only the count says which.
+  select count(*) filter (where name = 'Profit for the financial period'),
+         count(*) filter (where code = '3300')
+    into v_profit_line, v_equity_line
+    from public.report_changes_in_equity(v_org, date '2025-01-01',
+                                         date '2025-12-31');
+  perform pg_temp.check_eq('the result is carried by Current Year Earnings',
+    v_equity_line::text, '1');
+  perform pg_temp.check_eq('and no longer by a separate profit line',
+    v_profit_line::text, '0');
+  perform pg_temp.check_eq('so the statement has the lines it had before',
+    (select count(*)::text from public.report_changes_in_equity(
+       v_org, date '2025-01-01', date '2025-12-31')),
+    v_lines_before::text);
+end $$;
+
 rollback;
