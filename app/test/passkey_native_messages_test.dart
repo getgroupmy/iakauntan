@@ -104,6 +104,49 @@ void main() {
       expect(said, contains('fault on the site'));
     });
 
+    test('and each malformed field says WHICH field', () {
+      // These three were one sentence, and that is why a report of the
+      // real fault -- "Save another passkey" failing on a phone with a
+      // working passkey -- could not be told apart from two other
+      // causes. The sentence on the screen is the whole of what the
+      // next person will have, so it has to carry the difference.
+      final said = {
+        for (final e in <Object>[
+          MalformedBase64UrlChallenge(),
+          MalformedBase64UrlCredentialID(),
+          MalformedBase64UrlUserID(),
+        ])
+          e.runtimeType.toString(): passkeySentenceFor(e),
+      };
+      expect(said.values.toSet(), hasLength(3),
+          reason: 'three causes must not share one wording');
+      expect(said['MalformedBase64UrlChallenge'], contains('challenge'));
+      expect(said['MalformedBase64UrlCredentialID'], contains('saved passkey'));
+      expect(said['MalformedBase64UrlUserID'], contains('account identifier'));
+      // And all three still say whose fault it is and how to get in.
+      for (final s in said.values) {
+        expect(s.toLowerCase(), contains('fault on the site'));
+        expect(s.toLowerCase(), contains('password'));
+      }
+    });
+
+    test('already having one here is not reported as a fault', () {
+      // `ExcludeCredentialsCanNotBeRegisteredException` is what the
+      // platform raises when the device already holds a passkey for
+      // this account -- which is the ordinary outcome of pressing
+      // "Save another passkey" twice. It fell through to the generic
+      // branch, which says to sign in with a password: advice that is
+      // both wrong and faintly insulting to somebody who already has
+      // the thing they were offered.
+      final said = passkeySentenceFor(
+        ExcludeCredentialsCanNotBeRegisteredException(),
+      ).toLowerCase();
+      expect(said, contains('already has a passkey'));
+      expect(said, isNot(contains('fault')));
+      // It offers the way forward that actually exists.
+      expect(said, contains('another phone'));
+    });
+
     test('and anything at all still gets a sentence', () {
       // The branch that matters most in a year's time: the plugin can
       // raise things this file has never heard of, and the default
@@ -131,6 +174,9 @@ void main() {
         PasskeyUnsupportedException('old'),
         TimeoutException('waited'),
         MalformedBase64UrlChallenge(),
+        MalformedBase64UrlCredentialID(),
+        MalformedBase64UrlUserID(),
+        ExcludeCredentialsCanNotBeRegisteredException(),
         Exception('something new'),
       ];
       for (final e in all) {

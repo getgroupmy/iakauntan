@@ -54,6 +54,7 @@ import 'package:passkeys_platform_interface/passkeys_platform_interface.dart';
 import 'package:passkeys_platform_interface/types/types.dart';
 
 import 'passkey_failure.dart';
+import 'passkey_options.dart';
 
 /// The plugin is here, so the ceremony can at least be attempted.
 ///
@@ -136,12 +137,12 @@ Future<Map<String, dynamic>?> getPasskeyAssertion(
 ) async {
   final AuthenticateRequestType request;
   try {
-    request = AuthenticateRequestType.fromJson(options);
+    request = AuthenticateRequestType.fromJson(_forPlugin(options));
   } on Object {
     // Options that will not parse are a server that changed shape, not
     // anything the person pressing the button did. Said plainly rather
     // than as a stack trace on the sign-in screen.
-    throw const PasskeyFailure(_unreadable);
+    throw PasskeyFailure(_unreadableOptions);
   }
 
   try {
@@ -162,9 +163,9 @@ Future<Map<String, dynamic>?> createPasskeyCredential(
 ) async {
   final RegisterRequestType request;
   try {
-    request = RegisterRequestType.fromJson(options);
+    request = RegisterRequestType.fromJson(_forPlugin(options));
   } on Object {
-    throw const PasskeyFailure(_unreadable);
+    throw PasskeyFailure(_unreadableOptions);
   }
 
   try {
@@ -174,6 +175,23 @@ Future<Map<String, dynamic>?> createPasskeyCredential(
   } on Object catch (e) {
     throw PasskeyFailure(_sentenceFor(e));
   }
+}
+
+/// Repair the options before the plugin's parser sees them.
+///
+/// `passkey_options.dart` says what is being repaired and why. The
+/// notes are printed only in a debug build: they name the field that
+/// was wrong, which is the one thing a report from a phone could never
+/// carry, and they are diagnostics rather than anything to show
+/// somebody.
+Map<String, dynamic> _forPlugin(Map<String, dynamic> options) {
+  final fixed = passkeyOptionsForPlugin(options);
+  if (kDebugMode && fixed.notes.isNotEmpty) {
+    for (final note in fixed.notes) {
+      debugPrint('passkey options: $note');
+    }
+  }
+  return fixed.options;
 }
 
 /// What to put in front of somebody when the platform refused.
@@ -236,9 +254,30 @@ String _sentenceFor(Object error) => switch (error) {
     'The passkey prompt timed out. Try again, or sign in with your '
         'password.',
 
-  // A challenge or credential id that is not base64url. The server
-  // sent it, so this is ours to fix and not theirs.
-  MalformedBase64Url() => _unreadable,
+  // Pressing "save another passkey" on a device that already holds
+  // one for this account. Not a fault at all, and the answer is not
+  // "try again": there is nothing to fix and nothing to retry, which
+  // is why it needs its own sentence rather than the generic one.
+  ExcludeCredentialsCanNotBeRegisteredException() =>
+    'This device already has a passkey for this account. Use it to '
+        'sign in, or save one somewhere else — another phone, or a '
+        'security key.',
+
+  // The three ways the plugin refuses a field before it calls the
+  // platform at all. They were ONE sentence here, and that was the
+  // reason the first report of this could not be diagnosed from the
+  // screenshot: three different server faults, one wording, no way to
+  // tell which. `passkey_options.dart` now repairs the common causes,
+  // and what reaches these lines is what it could not repair — so each
+  // one says which field, because the next person reading it has only
+  // this sentence to go on.
+  MalformedBase64UrlChallenge() =>
+    _unreadable('the sign-in challenge was not in the expected format'),
+  MalformedBase64UrlCredentialID() =>
+    _unreadable('a saved passkey was named in a format this app could '
+        'not read'),
+  MalformedBase64UrlUserID() =>
+    _unreadable('the account identifier was not in the expected format'),
 
   // Everything else the platform can raise, including the plugin's
   // `UnhandledAuthenticatorException`. Not silent, and not a stack
@@ -248,8 +287,30 @@ String _sentenceFor(Object error) => switch (error) {
         'password instead.',
 };
 
-const _unreadable =
+/// "The server sent something this app cannot use", with the WHICH.
+///
+/// Four callers, and until this commit they were one sentence between
+/// them. That is why the first report of this could not be diagnosed
+/// from a screenshot: three different server faults and a fourth
+/// failure to parse at all, one wording, no way to tell which had
+/// happened. Every one of them is somebody else's to fix, so the
+/// sentence still says so and still leaves a way in — but it now names
+/// the field, because this sentence is all the next person will have.
+///
+/// [detail] is a clause, lower case and no full stop: it is spliced
+/// into the middle.
+String _unreadable(String detail) =>
     'The security check could not be set up, because this system sent '
-    'something this app could not read. It is a fault on the site '
-    'rather than anything you have done — please tell whoever runs it, '
-    'and sign in with your password for now.';
+    'something this app could not read — $detail. It is a fault on the '
+    'site rather than anything you have done: please tell whoever runs '
+    'it, and sign in with your password for now.';
+
+/// Options that would not parse at all.
+///
+/// Distinct from the three base64url sentences: those come from the
+/// plugin after it has read the options, this one from the read itself
+/// failing. The cause was an `excludeCredentials` entry with no
+/// `transports`, which `passkey_options.dart` now supplies — so
+/// reaching this line again means something else, and saying so is the
+/// point.
+final _unreadableOptions = _unreadable('the sign-in options could not be read');
