@@ -306,4 +306,66 @@ begin
     v_lines_before::text);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And a closed year can still be filed
+--
+-- The statutory one. `fs_balance_check` is what the MBRS screen draws
+-- its verdict from, and `supabase/tests/mbrs.sql` opens by explaining
+-- that it balances IN A LEDGER WITH NO CLOSE -- `app.fs_cumulative_profit`
+-- supplies the result that no equity account is holding yet.
+--
+-- A close moves that result into equity. If both halves then reported
+-- it, a filing would be out by exactly one year's profit, and out in
+-- the direction that reads as a healthier company. This is a document
+-- lodged with SSM.
+--
+-- It is not out, because the two are complementary rather than
+-- additive: the closing entry is posted ON the profit and loss
+-- accounts, so `fs_cumulative_profit` falls to nil at the moment
+-- equity picks the figure up. Asserted at the FILING rather than at
+-- either half, because the filing is the thing somebody signs.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_fy uuid; v_filing uuid;
+  v_bank uuid; v_cap uuid; v_sales uuid; v_exp uuid;
+  b record; a record;
+begin
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Probe Year End Filing');
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'mbrs', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  v_fy := public.create_fiscal_year(v_org, date '2025-01-01');
+
+  v_bank  := pg_temp.yec_acct(v_org, 'bank');
+  v_cap   := pg_temp.yec_acct(v_org, 'share_capital');
+  v_sales := pg_temp.yec_acct(v_org, 'sales');
+  v_exp   := pg_temp.yec_acct(v_org, 'operating_expense');
+
+  perform pg_temp.yec_jv(v_org, 'FL-1', date '2025-01-02', v_bank, v_cap, 100000);
+  perform pg_temp.yec_jv(v_org, 'FL-2', date '2025-06-30', v_bank, v_sales, 250000);
+  perform pg_temp.yec_jv(v_org, 'FL-3', date '2025-06-30', v_exp, v_bank, 180000);
+
+  insert into public.fs_filings
+    (org_id, fy_start, fy_end, framework, audit_status, employee_count)
+  values (v_org, date '2025-01-01', date '2025-12-31', 'mpers', 'audited', 3)
+  returning id into v_filing;
+
+  select * into b from public.fs_balance_check(v_filing);
+  perform pg_temp.check_true('the filing balances before the close', b.balances);
+
+  perform public.close_fiscal_year(v_fy);
+
+  select * into a from public.fs_balance_check(v_filing);
+  perform pg_temp.check_true('and still balances after it', a.balances);
+  perform pg_temp.check_eq('with the same equity, not twice the profit',
+    a.equity::text, b.equity::text);
+  perform pg_temp.check_eq('and the same assets behind it',
+    a.assets::text, b.assets::text);
+  perform pg_temp.check_eq('so the difference is still nil',
+    a.difference::text, '0.00');
+end $$;
+
 rollback;
