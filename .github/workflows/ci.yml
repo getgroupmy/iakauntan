@@ -1136,6 +1136,14 @@ jobs:
       - name: Check no loading arm draws a spinner
         run: python3 scripts/check_loading_spinners.py
 
+      # The app icons, which nothing else looks at. The analyser does
+      # not read an asset catalogue, no test renders one, and a build
+      # succeeds with a wrong-sized image, half a rename, or a "dark"
+      # variant that is a copy of the light one. The first anybody
+      # hears is a home screen.
+      - name: Check the app icons are whole on both phones
+        run: python3 scripts/check_app_icons.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #
@@ -1829,6 +1837,9 @@ jobs:
 
       - name: The loading-spinner gate's own assertions
         run: python3 scripts/check_loading_spinners_test.py
+
+      - name: The icon gate's own assertions
+        run: python3 scripts/check_app_icons_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py
