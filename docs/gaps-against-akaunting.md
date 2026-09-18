@@ -32,10 +32,10 @@ else on this page has been built, and the sections say where.
 - **No ringgit has been through the payment flow.** It is built end to
   end and there is no acquirer sandbox in the environment it was built
   in, so it has never been exercised against a real gateway. Section 3.
-- **Configurable dashboards**, and the argument against building it.
-  Section 10.
 
-That is the whole of it. This document has repeatedly been left saying
+That is the whole of it — one item, since `0527` closed the other. This
+list carried **Configurable dashboards** as the second of two for as
+long as section 10 did, and section 10 was wrong about it. This document has repeatedly been left saying
 a thing was missing for months after it was built — sections 1, 2 and 9
 each did, and section 2 did it twice: it claimed the shareable link was
 missing when `0067` had built it, and then claimed the portal was
@@ -432,27 +432,42 @@ this section went on saying the opposite.
   index `0038` built for exactly that and which nothing had ever used —
   the money allocated against it, and what LHDN said. Nothing new is
   recorded; all of it was already being written and none of it read.
-- **Configurable dashboards and widgets.** `Common/Dashboard.php`,
+- ~~**Configurable dashboards and widgets.** `Common/Dashboard.php`,
   `Common/Widget.php`, and eight widgets a user arranges themselves.
-  iAkauntan's dashboard is fixed — and this is the one item on this
-  page being left open deliberately rather than waiting its turn, so
-  the reason is written down here instead of being rediscovered.
+  iAkauntan's dashboard is fixed~~ — **half closed at `0527`**, and the
+  half that closed is the half this section predicted.
 
-  The dashboard is already filtered by what a company bought (`0137`)
-  and by what a person may reach (`0127`), which is most of what
-  arranging it by hand is for: a warehouse clerk does not see payroll
-  and a company without POS does not see takings. What is left is
-  ordering and hiding, and the cost of that is a widget registry, a
-  layout per user, a drag-and-drop editor and a migration every time a
-  card changes shape — carried permanently, to let somebody move a card
-  they look at once a day.
+  What it argued: the dashboard is already filtered by what a company
+  bought (`0137`) and by what a person may reach (`0127`), which is
+  most of what arranging it by hand is for — a warehouse clerk does not
+  see payroll and a company without POS does not see takings. What was
+  left was ORDERING and HIDING, and the cost of both together is a
+  widget registry, a layout per user, a drag-and-drop editor and a
+  migration every time a card changes shape. So the section ended: "if
+  somebody does, the thing to build is probably 'hide this card', not a
+  layout engine."
 
-  The comparison is not free either. Akaunting has this because its
-  dashboard is one page for every kind of business; here the page is
-  already assembled from what the company actually has. Building it
-  would be copying a feature rather than answering a need, and nobody
-  using this has asked for it. If somebody does, the thing to build is
-  probably "hide this card", not a layout engine.
+  That is what `0527` built. `user_preferences.dashboard_cards` is a
+  `text[]` per PERSON rather than per company; `Settings > Landing
+  page` draws a switch per card under "Turn off what you do not read";
+  and the dashboard asks `cards.contains(...)` before drawing each of
+  the five. A person who has never opened that screen gets the column
+  default, which `supabase/tests/user_preferences.sql` and
+  `app/test/landing_preference_test.dart` hold against the Dart
+  constant, so a bare dashboard is not reachable by doing nothing.
+
+  ORDERING is still not offered, and deliberately: the stored list is
+  read with `contains`, so its order has no effect, and the editor
+  writes it back in the catalogue's order rather than in the order the
+  switches were touched — otherwise the dashboard would rearrange
+  itself as somebody toggled. The argument above is the reason, and it
+  is unchanged. What was wrong was only the claim that the dashboard is
+  fixed.
+
+  The e-Invoice banner is deliberately not one of the five. It is a
+  REFUSAL waiting to be dealt with rather than a panel, and a rejected
+  submission somebody has switched off is one LHDN is still waiting
+  for.
 - ~~**Bulk actions** across a list.~~ Closed at `0500`.
   `bulk_post_documents` and `bulk_email_documents` take up to two
   hundred documents and give a savepoint to each, so the eleventh
