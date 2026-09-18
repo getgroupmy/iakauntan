@@ -192,14 +192,33 @@ serves it as `text/plain` by default, which Apple rejects — a correct file
 served with the wrong type fails in a way that looks identical to a wrong
 file, and Apple's CDN then caches the failure for about a day.
 
-**The files themselves are NOT in this repository, deliberately.** Neither can
-be written from here: `assetlinks.json` needs the SHA-256 of the upload key
-AND of the Play App Signing certificate, and `apple-app-site-association`
-needs the Apple team ID. A placeholder for either is worse than nothing — it
-is a file that says the association is configured while failing every
-ceremony, which is precisely the silent failure the rest of this document is
-about. Write them with the real values, drop them in `app/web/.well-known/`,
-then turn the matching console switch on.
+**`apple-app-site-association` is now in this repository**, at
+`app/web/.well-known/`, carrying team ID `ZFEYTFLA74` and bundle
+`my.iakauntan.iakauntan`. Flutter copies it into the build: the web resource
+loop in `flutter_tools/lib/src/build_system/targets/web.dart` walks `web/`
+recursively with no filter on dot-directories, which was checked in the SDK
+source rather than assumed, because a file that is silently not deployed is
+the same failure as a file that is wrong.
+
+**`assetlinks.json` is still absent**, and deliberately: it needs the SHA-256
+of the upload key AND of the Play App Signing certificate, and neither is in
+this repository. A placeholder is worse than nothing — it is a file that says
+the association is configured while failing every ceremony, which is
+precisely the silent failure the rest of this document is about.
+
+`scripts/check_passkey_association.py` enforces that rather than leaving it
+advisory. Absent is allowed; present and wrong is refused, including a
+placeholder, a team ID of the wrong shape, a bundle or package this
+repository does not build, `applinks` where `webcredentials` was meant, and
+an `assetlinks.json` carrying ONE fingerprint — which is usually the upload
+key alone and works on no device that installed from Play.
+
+**The iOS entitlement is in the repository too**, at
+`app/ios/Runner/Runner.entitlements`, wired into all three Runner build
+configurations. It has a prerequisite this repository cannot satisfy: the App
+ID `my.iakauntan.iakauntan` must have the Associated Domains capability
+enabled in the Apple Developer portal, or the SIGNED build fails at signing.
+CI does not catch that — `ci.yml` builds iOS with `--no-codesign`.
 
 ## When it does not work
 
