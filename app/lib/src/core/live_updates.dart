@@ -69,8 +69,14 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     einvoiceStatusProvider,
     recurringDocumentsProvider,
   ],
+  // 0650's table. A supplier's document lands while nobody is looking,
+  // which is the case the feed exists for.
+  'received_einvoices': [receivedEinvoicesProvider],
   'purchase_documents': [
     documentsProvider,
+    // Drafting a bill from a received document sets `bill_id` on the
+    // row, so the received list is stale the moment a bill appears.
+    receivedEinvoicesProvider,
     documentProvider,
     outstandingProvider,
     dashboardProvider,

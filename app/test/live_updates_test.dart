@@ -23,6 +23,11 @@ void main() {
       {
         'organizations',
         'sales_documents',
+        // 0650. A supplier's document lands while nobody is looking,
+        // and the list it lands in is the only screen that has to
+        // move -- which is what earns it a narrow entry rather than a
+        // whole-screen refetch.
+        'received_einvoices',
         'purchase_documents',
         'receipts',
         'purchase_payments',

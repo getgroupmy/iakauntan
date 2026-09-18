@@ -10,6 +10,7 @@ import '../data/models.dart';
 import '../data/custom_fields_repository.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
+import '../features/einvoice/received_einvoice.dart';
 import 'env.dart';
 import 'push.dart';
 
@@ -836,6 +837,15 @@ final expensesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
 final einvoicesProvider = FutureProvider.autoDispose
     .family<List<EinvoiceDocument>, String>((ref, status) {
       return requireRepo(ref).einvoices(status: status);
+    });
+
+/// The MyInvois documents suppliers have sent us.
+///
+/// `0650`'s table. The inbound half of e-Invoice, and the only one of
+/// the two that is read rather than written.
+final receivedEinvoicesProvider = FutureProvider.autoDispose
+    .family<List<ReceivedEinvoice>, String>((ref, status) {
+      return requireRepo(ref).receivedEinvoices(status: status);
     });
 
 /// Open deals whose figure has drifted from the quotation attached to

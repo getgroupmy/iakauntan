@@ -393,6 +393,18 @@ final _destinations = <_Dest>[
     '/einvoice',
     module: 'einvoice',
   ),
+  // The inbound half, and a separate destination rather than a tab on
+  // the one above: they are opposite jobs. That screen is "what have we
+  // filed"; this one is "what has arrived", and the person doing the
+  // second is usually not the person doing the first.
+  _Dest(
+    'Received',
+    Icons.mark_email_read_outlined,
+    Icons.mark_email_read,
+    '/einvoice/received',
+    module: 'einvoice',
+    short: 'Received',
+  ),
   _Dest('My HR', Icons.badge_outlined, Icons.badge, '/hr/me', module: 'hr'),
   _Dest(
     'People',

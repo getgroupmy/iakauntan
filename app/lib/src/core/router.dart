@@ -42,6 +42,7 @@ import '../features/documents/receipts_screen.dart';
 import '../features/documents/salespeople_screen.dart';
 import '../features/documents/document_list_screen.dart';
 import '../features/einvoice/einvoice_screen.dart';
+import '../features/einvoice/received_einvoices_screen.dart';
 import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
@@ -867,6 +868,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/einvoice',
             builder: (_, __) => const EinvoiceScreen(),
+          ),
+          GoRoute(
+            path: '/einvoice/received',
+            builder: (_, __) => const ReceivedEinvoicesScreen(),
           ),
           GoRoute(
             path: '/journals',

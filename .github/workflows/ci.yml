@@ -1531,6 +1531,12 @@ jobs:
       - run: deno check supabase/functions/_shared/ubl_parse_test.ts
       - run: deno test supabase/functions/_shared/ubl_parse_test.ts
 
+      # The join between the parser above and 0650's table: how the
+      # document arrives, what is stored, and whether it was addressed
+      # to this company at all.
+      - run: deno check supabase/functions/myinvois/receive_test.ts
+      - run: deno test supabase/functions/myinvois/receive_test.ts
+
       # And the client that carries it there. Nothing in this reaches
       # the network -- `fetch` is replaced, which is the only way to see
       # the request the client BUILDS rather than the reply it got, and

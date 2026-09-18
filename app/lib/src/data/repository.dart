@@ -10,6 +10,7 @@ import '../core/format.dart';
 import 'custom_fields_repository.dart';
 import '../features/contacts/brought_forward.dart';
 import '../features/documents/transfer.dart';
+import '../features/einvoice/received_einvoice.dart';
 // `RepoMia` at the foot of this file returns these.
 import '../features/mia/mia_credential.dart';
 import 'models.dart';
@@ -4459,6 +4460,116 @@ class Repo {
 
   Future<Map<String, dynamic>> cancelEinvoice(String id, String reason) =>
       callMyInvois('cancel', {'einvoice_id': id, 'reason': reason});
+
+  // ------------------------------------------------------------------
+  // e-Invoice, inbound
+  // ------------------------------------------------------------------
+
+  /// The MyInvois documents suppliers have sent us.
+  ///
+  /// The supplier is embedded by constraint name. `contacts` and
+  /// `received_einvoices` are joinable two ways -- `contact_id` and the
+  /// `*_same_org` composite `0650` carries for the tenant boundary --
+  /// and an unqualified embed across a pair like that is a PGRST201
+  /// that takes out the whole screen. `scripts/check_embeds.py` is what
+  /// refuses one now; it did not always, and this is one of the pairs
+  /// it counts.
+  Future<List<ReceivedEinvoice>> receivedEinvoices({String? status}) async {
+    var query = client
+        .from('received_einvoices')
+        .select(
+          '*, contacts!received_einvoices_contact_same_org(name), '
+          'received_einvoice_lines(count)',
+        )
+        .eq('org_id', orgId);
+    if (status != null && status != 'all') {
+      query = query.eq('status', status);
+    }
+    final data = await query
+        .order('issue_date', ascending: false, nullsFirst: false)
+        .order('created_at', ascending: false)
+        .limit(200);
+    return _rows(data).map(ReceivedEinvoice.fromJson).toList();
+  }
+
+  /// The lines of one received document, in the order they arrived.
+  Future<List<Map<String, dynamic>>> receivedEinvoiceLines(String id) async =>
+      _rows(
+        await client
+            .from('received_einvoice_lines')
+            .select()
+            .eq('received_id', id)
+            .order('line_no'),
+      );
+
+  /// Hand a MyInvois document to the parser and keep what it makes of it.
+  ///
+  /// [document] is the file's contents: a decoded object, or the text.
+  /// Both are accepted because both arrive.
+  ///
+  /// The parse happens in `supabase/functions/_shared/ubl_parse.ts` and
+  /// not here. It is asserted against the builder that writes the same
+  /// binding, by round trip, and a second implementation in Dart would
+  /// be a contract that drifts -- silently, because both halves would
+  /// go on passing their own tests.
+  Future<Map<String, dynamic>> receiveEinvoice(Object document) =>
+      callMyInvois('receive', {'document': document});
+
+  /// Say which supplier a received document is from.
+  ///
+  /// Null clears it. `0650` refuses a contact in another company and
+  /// refuses any change once a bill has been drafted.
+  Future<void> linkReceivedEinvoiceContact(String id, String? contactId) =>
+      callRpc(
+        'link_received_einvoice_contact',
+        params: {'p_id': id, 'p_contact_id': contactId},
+      );
+
+  /// Move a received document between `received` and `ignored`.
+  ///
+  /// Not to `billed`: that means a bill exists, and only
+  /// [draftBillFromReceivedEinvoice] can make it true.
+  Future<void> setReceivedEinvoiceStatus(String id, String status) => callRpc(
+    'set_received_einvoice_status',
+    params: {'p_id': id, 'p_status': status},
+  );
+
+  /// Create the supplier a received document names, and link it.
+  ///
+  /// Returns the contact id. If a contact already holds that TIN this
+  /// links THAT one instead of making a second row, which is the trap
+  /// this function exists next to.
+  Future<String> createSupplierFromReceivedEinvoice(String id) async {
+    final out = await callRpc(
+      'create_supplier_from_received_einvoice',
+      params: {'p_id': id},
+    );
+    return '$out';
+  }
+
+  /// Draft a purchase document from a received e-Invoice, and return it.
+  ///
+  /// The totals are recomputed from the lines by the same triggers every
+  /// other bill goes through, so they may differ from what the supplier
+  /// stated by a sen of rounding. Where they do, `0650` writes both
+  /// figures into the bill's internal notes rather than losing the
+  /// difference.
+  Future<String> draftBillFromReceivedEinvoice(String id) async {
+    final out = await callRpc(
+      'draft_bill_from_received_einvoice',
+      params: {'p_id': id},
+    );
+    return '$out';
+  }
+
+  /// Throw a received document away.
+  ///
+  /// Allowed, unlike editing one: "this was not for us" is a different
+  /// act from changing what a supplier sent, and the alternative is a
+  /// list that fills with other people's invoices forever.
+  Future<void> deleteReceivedEinvoice(String id) async {
+    await client.from('received_einvoices').delete().eq('id', id);
+  }
 
   Future<Map<String, dynamic>> validateTin({
     required String tin,
