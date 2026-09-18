@@ -1503,6 +1503,22 @@ jobs:
       - run: deno check supabase/functions/_shared/ubl_test.ts
       - run: deno test supabase/functions/_shared/ubl_test.ts
 
+      # And the other direction, which this product has never had:
+      # `einvoice_*` is entirely outbound, and MyInvois makes every
+      # supplier send one. The audit's A17.
+      #
+      # Most of these assertions are a ROUND TRIP against the builder
+      # above — build a document from a known row, read it back, and
+      # every field has to survive. That needs no sample from LHDN, no
+      # credentials and no sandbox, and it fails the moment either side
+      # drifts. The rest are about a document somebody ELSE wrote:
+      # identifiers in a different order, numbers as strings, "NA"
+      # where an identifier should be, and a payload that is not a
+      # document at all. None of them may throw, because the screen
+      # that throws is the one that was going to explain what arrived.
+      - run: deno check supabase/functions/_shared/ubl_parse_test.ts
+      - run: deno test supabase/functions/_shared/ubl_parse_test.ts
+
       # And the client that carries it there. Nothing in this reaches
       # the network -- `fetch` is replaced, which is the only way to see
       # the request the client BUILDS rather than the reply it got, and
