@@ -90,3 +90,37 @@ String? transferProblem(
   }
   return null;
 }
+
+/// Why this document cannot go forward yet, or null when it can.
+///
+/// `0646` reads the approval decision at the TRANSFER as well as at the
+/// posting. That matters because seven of the fifteen document types
+/// never post — quotation, proforma, sales order, delivery order,
+/// purchase requisition, purchase order, purchase return — so until
+/// then a rule covering any of them had nothing to bite on: the chain
+/// ran, somebody signed, and the answer was written to a table nothing
+/// asked.
+///
+/// The reason is carried to the menu item for exactly the reason
+/// `voidBlockedBecause` is, and the editor's own comment beside "Send
+/// for approval" already states it: being told after pressing is a
+/// worse way to learn a signature is needed than being told on the
+/// button.
+///
+/// Takes the row `approval_state` returns, so this is the same answer
+/// the banner above the form is drawn from and the two cannot disagree.
+/// Null — no document saved yet, or the read has not landed — is not
+/// blocked: the database refuses anyway, and greying a button on a
+/// missing read would hide a transfer that is perfectly allowed.
+String? transferBlockedBecause(Map<String, dynamic>? approval) {
+  if (approval == null) return null;
+  if (approval['is_required'] != true) return null;
+  if (approval['is_approved'] == true) return null;
+  // A rejected request leaves `request_id` null again — `approval_state`
+  // joins only the pending one — so a refusal reads as "send it for
+  // approval", which is right: resubmitting is the way forward and the
+  // chain allows it.
+  return approval['request_id'] == null
+      ? 'Send it for approval before transferring'
+      : 'Waiting on an approval before it can be transferred';
+}

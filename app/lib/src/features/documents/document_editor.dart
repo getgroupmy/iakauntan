@@ -771,6 +771,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         .valueOrNull;
   }
 
+  String? get _transferBlocked => transferBlockedBecause(_approval);
+
   String? get _voidBlocked => voidBlockedBecause(
     status: _status,
     paidAmount: _paidAmount,
@@ -1068,7 +1070,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // `canWrite`, not `editable`. A partly transferred document is
       // read-only for editing and must still be transferable, or the
       // second half of a part delivery could never be sent.
-      if (!_isNew && canWrite && !_isPosted)
+      // And nothing goes forward while a signature is outstanding.
+      // `0646` refuses the transfer in the database; this says so on
+      // the item rather than after the press, which is the argument the
+      // comment below makes about Post and is the same argument.
+      // One entry rather than one per target: three menu items all
+      // saying the same refusal is three ways to read the same
+      // sentence.
+      if (!_isNew && canWrite && !_isPosted && canTransfer(widget.docType) &&
+          _transferBlocked != null)
+        (
+          label: _transferBlocked!,
+          icon: Icons.arrow_forward,
+          onTap: null,
+        ),
+      if (!_isNew && canWrite && !_isPosted && _transferBlocked == null)
         for (final target in transferTargets(widget.docType))
           (
             label: 'Transfer to ${metaFor(target).singular.toLowerCase()}',

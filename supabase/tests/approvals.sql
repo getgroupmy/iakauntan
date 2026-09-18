@@ -19,6 +19,14 @@
 --   4. **Being enforced in one posting path and not the others.** The
 --      gate is a trigger on the table rather than a check inside a
 --      posting routine, so it covers the paths nobody has written yet.
+--   5. **Being enforced only where there IS a posting path.** Seven of
+--      the fifteen document types never post at all -- a requisition,
+--      an order, a quotation -- and for four years the only consumer
+--      of an approval decision was the posting trigger. The rule
+--      editor offered those types, the editor drew the banner, the
+--      chain ran, somebody signed, and nothing asked. `0646` reads the
+--      answer at the transfer as well, which is where a document that
+--      does not post becomes an act.
 --
 -- Runs inside a transaction that is rolled back at the end.
 -- =====================================================================
@@ -310,6 +318,193 @@ begin
    where org_id = v_org and module_code = 'approvals';
   perform pg_temp.check_true('renewing restores the chain that was configured',
     app.approval_required(v_org, 'sales_document', 'invoice', 9000));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 5: the documents that never post
+--
+-- `post_purchase_document_internal` accepts bill, purchase credit note
+-- and purchase debit note, and refuses everything else by name. So a
+-- purchase requisition cannot reach the posting trigger however large
+-- it is -- which was the whole of the enforcement until `0646`.
+--
+-- The requisition is the clearest case because it is the document
+-- whose ONLY purpose is to be approved. `doc_types.dart` says so:
+-- "it posts nothing -- a request is not a liability -- which is
+-- exactly why it needs an approval rule rather than a posting gate to
+-- mean anything."
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_boss uuid; v_supp uuid;
+  v_small uuid; v_big uuid; v_order uuid; v_req uuid; v_decision text;
+begin
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.approvals_org('Probe Requisitions');
+  v_boss := pg_temp.another_user('po-boss@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_boss, 'admin') on conflict do nothing;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SU', 'A supplier', 'supplier') returning id into v_supp;
+
+  -- Requisitions at or above RM5,000 need an admin.
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_org, 'purchase_document', 'purchase_request', 5000, 1, 'admin');
+
+  -- The requisition itself is inserted OUTSIDE the block that expects a
+  -- refusal. An exception inside a plpgsql block rolls the block back,
+  -- so a fixture built in the same `begin` as the call that must fail
+  -- is gone by the time anything else looks for it -- which is exactly
+  -- how the first version of this test reported "Document not found"
+  -- from the assertion two lines below rather than from the one it was
+  -- about.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'purchase_request',
+          app.next_document_number_internal(v_org, 'purchase_request'),
+          date '2026-02-01', v_supp, 'MYR', 1, 'draft')
+  returning id into v_big;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price)
+  values (v_org, v_big, 1, 'item', 'Twenty laptops', 20, 450);
+
+  -- It cannot post, and that is not a bug -- it is the reason the rule
+  -- had nothing to bite on.
+  begin
+    perform app.post_purchase_document_internal(v_big);
+    raise exception 'a purchase requisition posted, which it must not';
+  exception when raise_exception then
+    if sqlerrm = 'a purchase requisition posted, which it must not' then
+      raise;
+    end if;
+    raise notice 'ok   a requisition cannot post, so no posting gate reaches it';
+  end;
+
+  -- The negative control FIRST, as the rest of this file does: a
+  -- requisition under the threshold goes forward untouched. If this
+  -- ever stops working, the gate has started catching documents no
+  -- rule covers, which is the worse failure.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'purchase_request',
+          app.next_document_number_internal(v_org, 'purchase_request'),
+          date '2026-02-01', v_supp, 'MYR', 1, 'draft')
+  returning id into v_small;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price)
+  values (v_org, v_small, 1, 'item', 'Two chairs', 2, 300);
+
+  v_order := public.transfer_document(v_small, 'purchase_order');
+  perform pg_temp.check_true('a requisition under the threshold becomes an order',
+    v_order is not null);
+
+  -- And the one the rule covers does not.
+  begin
+    perform public.transfer_document(v_big, 'purchase_order');
+    raise exception 'an unapproved requisition became a purchase order';
+  exception when insufficient_privilege then
+    raise notice 'ok   and one over it cannot, unapproved';
+  end;
+
+  -- The chain runs exactly as it does for an invoice.
+  v_req := public.submit_for_approval('purchase_document', v_big);
+  perform pg_temp.check_eq('one rule, one step',
+    (select count(*) from public.approval_steps where request_id = v_req), 1);
+
+  -- Still refused while it is only PENDING. The gate reads
+  -- `is_approved`, and a request somebody has looked at and not yet
+  -- signed is not an approval -- which is the mistake a gate written
+  -- against "has a request" would make.
+  begin
+    perform public.transfer_document(v_big, 'purchase_order');
+    raise exception 'a requisition awaiting a signature became an order';
+  exception when insufficient_privilege then
+    raise notice 'ok   and a request that is only pending is not an approval';
+  end;
+
+  perform pg_temp.sign_in_as(v_boss);
+  v_decision := public.decide_approval(v_req, true, 'Fine');
+  perform pg_temp.check_eq('the admin signs it', v_decision, 'approved');
+
+  perform pg_temp.sign_in_as(v_owner);
+  v_order := public.transfer_document(v_big, 'purchase_order');
+  perform pg_temp.check_true('and then it becomes a purchase order',
+    v_order is not null);
+  perform pg_temp.check_eq('carrying what was asked for',
+    (select quantity from public.purchase_document_lines
+      where document_id = v_order), 20);
+
+  raise notice 'approvals: the seven that never post are gated at the transfer';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And a rejection is not a lapse
+--
+-- The failure a gate written against `status <> 'rejected'` would have:
+-- a rejected requisition is refused for the same reason an unsubmitted
+-- one is -- nobody approved it -- and the sentence must not suggest
+-- waiting.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_boss uuid; v_supp uuid;
+  v_doc uuid; v_req uuid; v_decision text;
+begin
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.approvals_org('Probe Refused Requisition');
+  v_boss := pg_temp.another_user('po-refuser@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_boss, 'admin') on conflict do nothing;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SU', 'A supplier', 'supplier') returning id into v_supp;
+
+  -- No document type on the rule: "any purchase document over the
+  -- amount". This is the configuration `0646` changes the behaviour of,
+  -- so it is the one asserted.
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_org, 'purchase_document', null, 5000, 1, 'admin');
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'purchase_order',
+          app.next_document_number_internal(v_org, 'purchase_order'),
+          date '2026-02-01', v_supp, 'MYR', 1, 'draft')
+  returning id into v_doc;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price)
+  values (v_org, v_doc, 1, 'item', 'A press', 1, 40000);
+
+  perform pg_temp.check_true('a rule naming no type covers a purchase order',
+    app.approval_required(v_org, 'purchase_document', 'purchase_order', 40000));
+
+  v_req := public.submit_for_approval('purchase_document', v_doc);
+  perform pg_temp.sign_in_as(v_boss);
+  -- Its own statement, not an argument to `check_eq`. A volatile
+  -- function in a plpgsql simple expression can be evaluated twice, and
+  -- the second call would refuse with "that request was already
+  -- rejected" -- an assertion failing on the strength of the assertion.
+  v_decision := public.decide_approval(v_req, false, 'Not this quarter');
+  perform pg_temp.check_eq('the admin refuses it', v_decision, 'rejected');
+
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    perform public.transfer_document(v_doc, 'goods_received');
+    raise exception 'a refused purchase order was received against';
+  exception when insufficient_privilege then
+    raise notice 'ok   a refused order cannot be received against either';
+  end;
 end $$;
 
 rollback;
