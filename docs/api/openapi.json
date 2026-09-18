@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0650",
+    "version": "0651",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -46012,8 +46012,8 @@
     "/rpc/platform_save_site_page": {
       "post": {
         "operationId": "platform_save_site_page",
-        "summary": "Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about",
-        "description": "Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about. A slug outside those six is refused BY NAME -- the check constraint would catch it too, with a message about a constraint, and an operator who mistyped a slug wants to be told which six there are. An emptied box stores null, so clearing a field restores what the screen ships with rather than showing a blank. Note `site_pages()` serves signin, signup and login whether or not they are published, because they carry the terms somebody is asked to agree to while registering.\n\n`public.platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` Writes. Requires a signed-in user.",
+        "summary": "Writes one of the seven pages around the product",
+        "description": "Writes one of the seven pages around the product. Platform administrators only; an empty title or body clears it back to the copy the screen ships with.\n\n`public.platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -72688,7 +72688,7 @@
       "get": {
         "operationId": "select_site_pages",
         "summary": "Read site_pages",
-        "description": "The five pages around the product: the two auth screens' wording, and Terms, Privacy and Contact. Null title or body means the screen uses the copy it ships with.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "The seven pages around the product: the three auth screens' wording, and Terms of Use, Terms of Service, Privacy and Contact. Null title or body means the screen uses the copy it ships with.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],

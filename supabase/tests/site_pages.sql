@@ -1,16 +1,18 @@
 -- =====================================================================
--- iAkauntan :: the six pages around the product
+-- iAkauntan :: the seven pages around the product
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/site_pages.sql
 --
 -- `0334` gives the console the pages beside the landing page: the
--- wording on the two auth screens, and Terms, Privacy and Contact.
+-- wording on the auth screens, and Terms of Use, Privacy and Contact.
+-- `0348` added `login` and `0651` added Terms of Service.
 --
 -- Three of the things it does are silent when they break:
 --
---   * the gate. Terms, Privacy and Contact only travel once somebody
---     has published them — a privacy policy half written is not one,
---     and a draft leaking is worse than a missing link;
+--   * the gate. Terms of Use, Terms of Service, Privacy and Contact
+--     only travel once somebody has published them — a privacy policy
+--     half written is not one, and a draft leaking is worse than a
+--     missing link;
 --   * the ungate. The two auth screens always draw, so their wording
 --     has to come back whether or not anybody pressed Publish. Gate
 --     them by accident and every visitor gets a blank heading over the
@@ -26,31 +28,94 @@ begin;
 \i supabase/tests/_helpers.sql
 
 -- ---------------------------------------------------------------------
--- Six rows, and the table will not hold a seventh kind
+-- Seven rows, and the table will not hold an eighth kind
 --
--- The slugs are fixed because six screens read them. A row nothing
+-- The slugs are fixed because seven screens read them. A row nothing
 -- renders is a row somebody spends an afternoon looking for.
 --
 -- `login` is `0348`: the same form at a company's own address, with
--- its own words over it.
+-- its own words over it. `terms-of-service` is `0651`, and it is a
+-- SEPARATE document from `terms` rather than a rename -- one is the
+-- rules for the site, the other the contract for the service.
 -- ---------------------------------------------------------------------
 do $$
 declare v_n integer; v_refused boolean := false;
 begin
   select count(*) into v_n from public.site_pages;
-  perform pg_temp.check_eq('the six pages are there to open', v_n, 6);
+  perform pg_temp.check_eq('the seven pages are there to open', v_n, 7);
 
   select count(*) into v_n from public.site_pages
-   where slug in ('signin', 'signup', 'login', 'terms', 'privacy',
-                  'contact');
-  perform pg_temp.check_eq('and they are the six the screens read', v_n, 6);
+   where slug in ('signin', 'signup', 'login', 'terms', 'terms-of-service',
+                  'privacy', 'contact');
+  perform pg_temp.check_eq('and they are the seven the screens read',
+                           v_n, 7);
+
+  -- Adding one must not have taken the other. The two live side by
+  -- side, which is the whole point of a new slug over a rename.
+  perform pg_temp.check_true('terms of use and terms of service are both '
+                             'there',
+    exists (select 1 from public.site_pages where slug = 'terms') and
+    exists (select 1 from public.site_pages where slug = 'terms-of-service'));
 
   begin
     insert into public.site_pages (slug) values ('about');
   exception when check_violation then v_refused := true;
   end;
-  perform pg_temp.check_true('a seventh slug is refused by the table',
+  perform pg_temp.check_true('an eighth slug is refused by the table',
                              v_refused);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Terms of Service is gated, and the writer will take it
+--
+-- `0651`. Both halves, because either one alone is a page that does not
+-- work: gated with no writer is a page nobody can fill in, and a writer
+-- with no gate publishes a blank contract to every visitor.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_n integer;
+  v_title text;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  -- Unpublished out of the box, and therefore invisible. A legal page
+  -- nobody has written must not be reachable.
+  select count(*) into v_n from public.site_pages()
+   where slug = 'terms-of-service';
+  perform pg_temp.check_eq('an unwritten terms of service does not travel',
+                           v_n, 0);
+
+  perform public.platform_save_site_page(
+    'terms-of-service', 'Syarat Perkhidmatan', 'The contract.', true);
+
+  select count(*) into v_n from public.site_pages()
+   where slug = 'terms-of-service';
+  perform pg_temp.check_eq('and a published one does', v_n, 1);
+
+  select p.title into v_title
+    from public.site_pages p where p.slug = 'terms-of-service';
+  perform pg_temp.check_eq('the console wrote it', v_title,
+                           'Syarat Perkhidmatan');
+
+  -- And writing it did not touch the terms of use, which is the failure
+  -- a rename would have produced.
+  select count(*) into v_n from public.site_pages
+   where slug = 'terms' and title is null;
+  perform pg_temp.check_eq('the terms of use are untouched', v_n, 1);
+
+  -- The writer still names its own list, and refuses for the RIGHT
+  -- reason. `check_refused` rather than a bare `when others`, which
+  -- would pass just as well on a typo in the statement under test --
+  -- and which `scripts/check_blind_catches.py` counts against a budget
+  -- for exactly that reason.
+  perform pg_temp.check_refused(
+    'and it still refuses a slug no screen reads',
+    $q$select public.platform_save_site_page('about', 'x')$q$,
+    '%seven pages%', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------

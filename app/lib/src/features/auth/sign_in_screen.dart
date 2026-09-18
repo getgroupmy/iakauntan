@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show TapGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
@@ -22,6 +24,7 @@ import 'confirmation_resend.dart';
 import 'password_rules.dart';
 import 'phone_number.dart';
 import 'reset_cooldown.dart';
+import 'signup_consent.dart';
 import 'demo_accounts.dart';
 
 /// The password, asked in a box of its own.
@@ -2159,6 +2162,20 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                               : (_signInLabel ?? 'Sign in'),
                         ),
                 ),
+                // What pressing that button means. Only on the sign-up
+                // half -- "By clicking Create account" under a Sign in
+                // button would be a sentence about something else.
+                //
+                // Under the button rather than over it, which is where
+                // it was asked for and also where it reads: the act
+                // comes first and the consequence follows it.
+                if (_isSignUp) ...[
+                  const SizedBox(height: 12),
+                  _SignupConsent(
+                    buttonLabel: _brand?.registerLabel ?? 'Create account',
+                    brand: _brand?.wordmark ?? Env.appName,
+                  ),
+                ],
                 // `0579`. A passkey instead of a password, and only
                 // when all three are true: the console switch is on,
                 // the build can reach an authenticator, and the person
@@ -2761,6 +2778,78 @@ class _SecondFactorDialogState extends State<_SecondFactorDialog> {
         ),
         FilledButton(onPressed: _submit, child: const Text('Continue')),
       ],
+    );
+  }
+}
+
+
+/// The consent line under the register button.
+///
+/// `signup_consent.dart` decides what it says; this only draws it. The
+/// split is what lets the wording be asserted without a widget, and
+/// there is a lot to assert: the button's name, the platform's name,
+/// and which of the two pages are published enough to link to.
+class _SignupConsent extends ConsumerWidget {
+  const _SignupConsent({required this.buttonLabel, required this.brand});
+
+  final String buttonLabel;
+  final String brand;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final pages = ref.watch(sitePagesProvider).valueOrNull ?? const {};
+    // `site_pages()` already withholds an unpublished Terms or Privacy,
+    // so anything that came back is readable -- but the flag is checked
+    // too, because the two auth pages come back regardless and a future
+    // ungating would otherwise quietly turn this into a link to a draft.
+    final published = {
+      for (final e in pages.entries)
+        if (e.value.isPublished) e.key,
+    };
+
+    final spans = signupConsent(
+      buttonLabel: buttonLabel,
+      brand: brand,
+      published: published,
+    );
+
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final linkStyle = style?.copyWith(
+      color: theme.colorScheme.primary,
+      decoration: TextDecoration.underline,
+      decorationColor: theme.colorScheme.primary,
+    );
+
+    return Semantics(
+      // The whole sentence as one label. A screen reader walking five
+      // separate spans reads a legal notice as fragments.
+      label: signupConsentText(
+        buttonLabel: buttonLabel,
+        brand: brand,
+        published: published,
+      ),
+      excludeSemantics: true,
+      child: Text.rich(
+        TextSpan(
+          children: [
+            for (final span in spans)
+              if (span.slug == null)
+                TextSpan(text: span.text, style: style)
+              else
+                TextSpan(
+                  text: span.text,
+                  style: linkStyle,
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => context.go('/${span.slug}'),
+                ),
+          ],
+        ),
+        key: const ValueKey('signup-consent'),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 }

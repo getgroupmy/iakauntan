@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0650` (the highest applied migration).
+Schema version `0651` (the highest applied migration).
 735 functions and 348 readable tables, of which
 274 functions only read.
 
@@ -681,7 +681,7 @@ Not gated on any module.
 - `platform_save_promotion(p_id uuid, p_name text, p_module_code text, p_org_id uuid, p_kind text, p_trial_days integer, p_percent_off numeric, p_fixed_price numeric, p_starts_on date, p_ends_on date, p_is_active boolean, p_notes text)` *(writes)* — Create or change a promotion.
 - `platform_save_scan_kind(p_code text, p_label text, p_label_my text, p_destination text, p_hint text, p_sort_order integer, p_is_active boolean)` *(writes)* — Adds or amends a kind of document a scan can be recognised as.
 - `platform_save_search_register(p_code text, p_name text, p_registers text, p_can_search boolean, p_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Adds or amends a register Entity Search offers.
-- `platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` *(writes)* — Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about.
+- `platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` *(writes)* — Writes one of the seven pages around the product.
 - `platform_security_log(p_since timestamp with time zone, p_limit integer)` *(writes)* — The reads and refusals recorded against no organization, which is where `platform_audit_trail` files the record of its own use.
 - `platform_set_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)* — Grants or withdraws one module for one company.
 - `platform_set_ocr_provider(p_code text, p_name text, p_kind text, p_endpoint text, p_model text, p_price numeric, p_is_active boolean, p_blurb text)` *(writes)* — Creates or edits a document-scanning provider in the platform's catalogue.

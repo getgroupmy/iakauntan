@@ -109,6 +109,7 @@ const _nothingYet =
 /// heading at all is a page that looks broken.
 String defaultSitePageTitle(String slug) => switch (slug) {
   'terms' => 'Terms of Use',
+  'terms-of-service' => 'Terms of Service',
   'privacy' => 'Privacy Policy',
   'contact' => 'Contact us',
   'signin' => 'Welcome back',

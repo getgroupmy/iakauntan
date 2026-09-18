@@ -620,7 +620,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       // The three pages the footer links to. Outside the shell and
       // outside auth for the reason given in `routeFor`: they are read
       // before anybody has an account, and often instead of getting one.
-      for (final slug in const ['terms', 'privacy', 'contact'])
+      for (final slug in const [
+        'terms',
+        'terms-of-service',
+        'privacy',
+        'contact',
+      ])
         GoRoute(
           path: '/$slug',
           builder: (_, __) => SitePageScreen(slug: slug),

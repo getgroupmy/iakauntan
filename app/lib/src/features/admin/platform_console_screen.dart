@@ -240,6 +240,18 @@ const platformConsoleSections = <ConsoleSection>[
     primary: false,
     page: SitePageTab(slug: 'terms'),
   ),
+  // `0651`. Below Terms of Use, which is where it was asked for and
+  // also where it belongs: the two are read in that order, and a
+  // contract for the service sits under the rules for the site.
+  (
+    group: 'Website & brand',
+    label: 'Terms of Service',
+    icon: Icons.handshake_outlined,
+    selectedIcon: Icons.handshake,
+    path: '/admin/page/terms-of-service',
+    primary: false,
+    page: SitePageTab(slug: 'terms-of-service'),
+  ),
   (
     group: 'Website & brand',
     label: 'Privacy Policy',

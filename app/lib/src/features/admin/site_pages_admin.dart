@@ -61,8 +61,12 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
   /// The three auth pages are wording on a screen that always draws —
   /// `login` joined them in `0348`, and gating it would leave a blank
   /// heading over the form at every company address at once.
-  bool get _gated =>
-      const {'terms', 'privacy', 'contact'}.contains(widget.slug);
+  bool get _gated => const {
+    'terms',
+    'terms-of-service',
+    'privacy',
+    'contact',
+  }.contains(widget.slug);
 
   @override
   Widget build(BuildContext context) {
@@ -215,6 +219,7 @@ String sitePageLabel(String slug) => switch (slug) {
   'signin' => 'Sign in page',
   'signup' => 'Sign up page',
   'terms' => 'Terms of Use',
+  'terms-of-service' => 'Terms of Service',
   'privacy' => 'Privacy Policy',
   'contact' => 'Contact us',
   _ => slug,
@@ -231,6 +236,10 @@ String sitePageHint(String slug) => switch (slug) {
   'terms' =>
     'Linked from the footer once published, and reachable at '
         '/terms.',
+  'terms-of-service' =>
+    'Linked from the footer once published, and reachable at '
+        '/terms-of-service. Separate from Terms of Use: this is the '
+        'contract for the service, that one is the rules for the site.',
   'privacy' =>
     'Linked from the footer once published, and reachable at '
         '/privacy.',
