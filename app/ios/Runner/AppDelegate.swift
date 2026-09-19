@@ -101,10 +101,15 @@ import UserNotifications
     pushChannel?.invokeMethod("remoteTokenError", arguments: error.localizedDescription)
     super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
-}
 
-extension AppDelegate: UNUserNotificationCenterDelegate {
-  func userNotificationCenter(
+  // `FlutterAppDelegate` already conforms to `UNUserNotificationCenterDelegate`
+  // and already implements this method, which is why this is `override`
+  // rather than a fresh conformance in an extension -- CI's iOS build
+  // (macOS, the only place this Swift is actually compiled) refused the
+  // first version of this file on exactly that: "Overriding declaration
+  // requires an 'override' keyword" and "Redundant conformance ... to
+  // protocol 'UNUserNotificationCenterDelegate'".
+  override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
