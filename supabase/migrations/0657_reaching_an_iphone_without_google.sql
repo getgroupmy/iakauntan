@@ -228,8 +228,16 @@ end; $function$;
 -- refuses a write function without one, on the argument that a
 -- parameter list tells a caller nothing about what the function
 -- refuses. It caught this within the minute.
+--
+-- `anon` and `authenticated` BY NAME, not just `public`. A hosted
+-- project's default privileges hand a newly created function in this
+-- schema an EXECUTE grant held directly by those roles, and revoking
+-- from the PUBLIC pseudo-role does not touch a direct grant. `0141`
+-- and `0143` both write all three out; the first version of this
+-- migration wrote only `public` and CI refused it -- see the note in
+-- `supabase/tests/_local_stack.sql`, which this failure settled.
 revoke all on function public.register_device(
-  text, text, text, text, text, text) from public;
+  text, text, text, text, text, text) from public, anon;
 grant execute on function public.register_device(
   text, text, text, text, text, text) to authenticated;
 
@@ -293,7 +301,12 @@ as $function$
    order by d.last_seen_at desc;
 $function$;
 
-revoke all on function public.push_targets(uuid, uuid) from public;
+-- All three named, exactly as `0141` and `0143` name them. The sender
+-- reads this with the service role and a client must not read it at
+-- all; a default grant left in place would hand every signed-in user
+-- the list of everybody's handsets.
+revoke all on function public.push_targets(uuid, uuid)
+  from public, anon, authenticated;
 grant execute on function public.push_targets(uuid, uuid) to service_role;
 
 

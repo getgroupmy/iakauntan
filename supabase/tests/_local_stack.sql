@@ -84,7 +84,7 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
 -- ---------------------------------------------------------------------
--- An open question about FUNCTIONS, left open on purpose
+-- An open question about FUNCTIONS, still open -- but narrower now
 --
 -- There is no default privilege for functions here, and `c2d2d15` is
 -- the record of why: one was added on the strength of `0165`'s comment,
@@ -98,16 +98,36 @@ alter default privileges for role postgres in schema public
 -- function to `authenticated` alone and `0181` replaces it granting
 -- nothing, so no migration in this repository put it there.
 --
--- So a `public` function on the hosted project carries at least a
--- `service_role` grant these migrations did not write, and this file
--- does not reproduce it. The difference is in the safe direction --
--- this machine is stricter, so a missing grant fails here first -- and
--- it is written down rather than guessed at, because guessing is what
--- c2d2d15 was.
+-- CI RUN 1941 IS THE THIRD PIECE OF EVIDENCE, and it is the strongest.
+-- `0657` DROPPED `public.push_targets`, created it again, revoked it
+-- `from public` alone, and then asked
+-- `has_function_privilege('authenticated', ...)`. On the hosted project
+-- the answer was TRUE and the migration refused itself; on this machine
+-- the same migration applied without complaint.
 --
--- Settling it needs `\df+` on the hosted project against a function
--- created after 0165 and granted to nobody. Until then, do not add a
--- line here on the strength of this note either.
+-- A dropped function takes its grants with it, so that new object began
+-- life with an EXECUTE grant no statement in the migration wrote, held
+-- DIRECTLY by `authenticated` -- which is exactly why revoking from the
+-- PUBLIC pseudo-role did not remove it. A default privilege is the only
+-- thing that explains it.
+--
+-- So the hosted project almost certainly has
+-- `grant execute on functions to authenticated` (run 1941) and
+-- `service_role` (0621). WHY IT IS STILL NOT WRITTEN HERE: adding those
+-- two lines was tried while fixing 0657 and it fails
+-- `function_grants.sql` and `trigger_reachable_grants.sql`, both of
+-- which assert that a function created NOW is callable by nobody --
+-- `0165`'s event trigger strips PUBLIC, and those tests were written
+-- against this machine's silence about direct role grants. Making this
+-- file match the hosted project means deciding what those two files
+-- should assert instead, which is its own piece of work and not a line
+-- to slip into a migration fix.
+--
+-- Until somebody does that, the difference stays in the safe direction
+-- -- this machine is stricter, so a missing grant fails here first --
+-- and the cost is the one 0657 paid: a missing REVOKE fails in CI
+-- instead. Every migration should therefore write
+-- `from public, anon, authenticated` in full, as `0141` and `0143` do.
 -- ---------------------------------------------------------------------
 
 -- The second entry, which governs only what `supabase_admin` creates
