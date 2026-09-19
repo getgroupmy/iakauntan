@@ -1728,4 +1728,134 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0653: the small print at the bottom of an app's door
+--
+-- Eight switches and a picture. What is asserted is what a wrong
+-- default or a careless patch would cost:
+--
+--   * the six legal-link switches ship ON, unlike every other switch
+--     added since 0579, because they offer nothing until the page
+--     behind them is published -- and a migration that shipped them
+--     off would mean an operator publishing a privacy policy and then
+--     wondering why an app store still cannot see it;
+--   * the two demo-page switches ship OFF, and that pair is the one
+--     with a consequence: what they open is a password compiled into
+--     the app bundle;
+--   * every one of the eight is INDEPENDENT of the other seven and of
+--     the web's, which is the whole of "separately for android and
+--     ios". A patch that wrote one column by clearing its neighbours
+--     would take a required link out of a build on the day somebody
+--     switched on the other store's;
+--   * `splash_image_url` is blankable, because clearing it is how an
+--     operator asks for the logo back, and a coalesced column would
+--     hand back the picture they just removed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+  v_col text;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  -- Out of the box: six on, two off.
+  v_out := public.landing_page();
+  foreach v_col in array array['signin_show_terms_ios',
+                               'signin_show_terms_android',
+                               'signin_show_terms_of_service_ios',
+                               'signin_show_terms_of_service_android',
+                               'signin_show_privacy_ios',
+                               'signin_show_privacy_android']
+  loop
+    perform pg_temp.check_eq(
+      format('%s is offered out of the box', v_col),
+      v_out -> 'brand' ->> v_col, 'true');
+  end loop;
+  perform pg_temp.check_eq('the demo page is not offered on iOS',
+    v_out -> 'brand' ->> 'signin_show_demo_page_ios', 'false');
+  perform pg_temp.check_eq('nor on Android',
+    v_out -> 'brand' ->> 'signin_show_demo_page_android', 'false');
+
+  -- One at a time, both ways. Turning the privacy link off on iOS must
+  -- leave it on for Android, because the two stores ask different
+  -- questions at review and are not answered on the same day.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_privacy_ios', false));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('iOS can stop linking the privacy policy',
+    v_out -> 'brand' ->> 'signin_show_privacy_ios', 'false');
+  perform pg_temp.check_eq('while Android goes on linking it',
+    v_out -> 'brand' ->> 'signin_show_privacy_android', 'true');
+  perform pg_temp.check_eq('and the terms of service are untouched',
+    v_out -> 'brand' ->> 'signin_show_terms_of_service_ios', 'true');
+  perform pg_temp.check_eq('as are the terms of use',
+    v_out -> 'brand' ->> 'signin_show_terms_ios', 'true');
+
+  -- The pair that matters. Offering the demo page on one platform must
+  -- not offer it on the other: the password it opens is in the bundle.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_demo_page_android', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('Android can be offered the demo page alone',
+    v_out -> 'brand' ->> 'signin_show_demo_page_android', 'true');
+  perform pg_temp.check_eq('and iOS is still not offered it',
+    v_out -> 'brand' ->> 'signin_show_demo_page_ios', 'false');
+  -- And it did not quietly turn the demo on at all. These are ANDed
+  -- with `demo_accounts_enabled`, never a way round it.
+  perform pg_temp.check_eq('and the demo itself is still switched off',
+    v_out -> 'brand' ->> 'demo_accounts_enabled', 'false');
+
+  -- Back off again. A switch that can only be turned on is a switch an
+  -- operator cannot undo after a store changes its mind.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_demo_page_android', false,
+                       'signin_show_privacy_ios', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the demo page can be taken back off',
+    v_out -> 'brand' ->> 'signin_show_demo_page_android', 'false');
+  perform pg_temp.check_eq('and the privacy link put back',
+    v_out -> 'brand' ->> 'signin_show_privacy_ios', 'true');
+
+  -- The splash picture. Absent by default -- the app draws the logo --
+  -- settable, and CLEARABLE, which is the half a coalesce would break.
+  perform pg_temp.check_eq('no splash picture until somebody uploads one',
+    coalesce(v_out -> 'brand' ->> 'splash_image_url', '(null)'), '(null)');
+  perform public.platform_save_landing_page(
+    jsonb_build_object('splash_image_url', 'https://example.test/splash.png'));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the picture reaches the apps',
+    v_out -> 'brand' ->> 'splash_image_url',
+    'https://example.test/splash.png');
+  perform public.platform_save_landing_page(
+    jsonb_build_object('splash_image_url', ''));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('and clearing it asks for the logo back',
+    coalesce(v_out -> 'brand' ->> 'splash_image_url', '(null)'), '(null)');
+
+  -- In `brand` rather than in `page`, and this is the assertion that
+  -- would catch somebody moving it: the splash is the FIRST screen an
+  -- app draws, and on most deployments nothing is published.
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('splash_image_url', 'https://example.test/s.png'));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('an unpublished site still has a splash picture',
+    v_out -> 'brand' ->> 'splash_image_url', 'https://example.test/s.png');
+  perform pg_temp.check_eq('and still links its terms in the apps',
+    v_out -> 'brand' ->> 'signin_show_terms_ios', 'true');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('rina@example.test'));
+  perform pg_temp.check_refused(
+    'and only a platform administrator may change any of it',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_demo_page_ios', true)),
+    '%front door%', '42501');
+end $$;
+
 rollback;

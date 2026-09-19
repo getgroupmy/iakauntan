@@ -373,6 +373,21 @@ class LandingContent {
     this.signinShowRegisterMobile = true,
     this.signinShowMagicLink = false,
     this.signinShowGoogle = false,
+    // `0653`. Six that ship ON, for the reason `signin_links.dart`
+    // gives: an unpublished page is not linked whatever these say, so
+    // off by default would only mean a second switch to find after
+    // pressing Publish.
+    this.signinShowTermsIos = true,
+    this.signinShowTermsAndroid = true,
+    this.signinShowTermsOfServiceIos = true,
+    this.signinShowTermsOfServiceAndroid = true,
+    this.signinShowPrivacyIos = true,
+    this.signinShowPrivacyAndroid = true,
+    // And two that ship off, because what is behind them is a password
+    // compiled into the bundle.
+    this.signinShowDemoPageIos = false,
+    this.signinShowDemoPageAndroid = false,
+    this.splashImageUrl,
     this.turnstileSiteKey,
     this.signinPoints = const [],
     this.signinEmailLabel,
@@ -708,6 +723,60 @@ class LandingContent {
   /// of Dart; see `0645`.
   final bool signinShowGoogle;
 
+  /// `0653`. Whether the iOS app links Terms of Use at the foot of the
+  /// sign-in screen.
+  ///
+  /// Six switches for three documents, one per document per platform,
+  /// for the reason `0638` split the passkey switch in two: the two
+  /// stores' review rules are different rules changed on different
+  /// days, and one switch between them means the store that is not
+  /// ready gets whatever the store that is ready needed.
+  ///
+  /// All six ship TRUE, against the habit every switch added since
+  /// `0579` follows, and they still offer nothing out of the box — a
+  /// link is drawn only where the page behind it is published, and
+  /// nothing is published on a fresh deployment.
+  final bool signinShowTermsIos;
+
+  /// `0653`. The same link in the Android app.
+  final bool signinShowTermsAndroid;
+
+  /// `0653`. Terms of Service at the foot of the form, iOS.
+  final bool signinShowTermsOfServiceIos;
+
+  /// `0653`. Terms of Service at the foot of the form, Android.
+  final bool signinShowTermsOfServiceAndroid;
+
+  /// `0653`. The privacy policy at the foot of the form, iOS.
+  ///
+  /// The one of the three a store asks about by name.
+  final bool signinShowPrivacyIos;
+
+  /// `0653`. The privacy policy at the foot of the form, Android.
+  final bool signinShowPrivacyAndroid;
+
+  /// `0653`. Whether the iOS app offers the way to the demo logins
+  /// page.
+  ///
+  /// Ships FALSE, and is the third of four gates rather than a
+  /// replacement for any of them: `demoModeEnabled` is compiled in,
+  /// [demoAccountsEnabled] is the console's, this is the platform's,
+  /// and the screen still refuses at a company's own door and halfway
+  /// through registering. `demo_accounts.dart` says why the chain is
+  /// this long — the demo password ships inside the bundle.
+  final bool signinShowDemoPageIos;
+
+  /// `0653`. The same on Android.
+  final bool signinShowDemoPageAndroid;
+
+  /// `0653`. The picture the apps' splash screen draws.
+  ///
+  /// Null is not "no splash": it means use the logo, on white in light
+  /// mode and on black in dark, which is what `core/splash.dart` does
+  /// with it. Every deployment has a logo and almost none will upload a
+  /// separate splash.
+  final String? splashImageUrl;
+
   /// Cloudflare Turnstile's site key, or null where no captcha is
   /// configured (`0556`).
   ///
@@ -911,6 +980,19 @@ LandingContent parseLandingContent(Object? raw) {
           brandBoolUnlessOff('signin_show_register_mobile'),
       signinShowMagicLink: brandBool('signin_show_magic_link'),
       signinShowGoogle: brandBool('signin_show_google'),
+      signinShowTermsIos: brandBoolUnlessOff('signin_show_terms_ios'),
+      signinShowTermsAndroid: brandBoolUnlessOff('signin_show_terms_android'),
+      signinShowTermsOfServiceIos: brandBoolUnlessOff(
+        'signin_show_terms_of_service_ios',
+      ),
+      signinShowTermsOfServiceAndroid: brandBoolUnlessOff(
+        'signin_show_terms_of_service_android',
+      ),
+      signinShowPrivacyIos: brandBoolUnlessOff('signin_show_privacy_ios'),
+      signinShowPrivacyAndroid: brandBoolUnlessOff('signin_show_privacy_android'),
+      signinShowDemoPageIos: brandBool('signin_show_demo_page_ios'),
+      signinShowDemoPageAndroid: brandBool('signin_show_demo_page_android'),
+      splashImageUrl: brandStr('splash_image_url'),
       turnstileSiteKey: brandStr('turnstile_site_key'),
       signinPoints: blocks('signin_points'),
       signinEmailLabel: brandStr('signin_email_label'),
@@ -1146,6 +1228,19 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowRegisterMobile: brandBoolUnlessOff('signin_show_register_mobile'),
     signinShowMagicLink: brandBool('signin_show_magic_link'),
     signinShowGoogle: brandBool('signin_show_google'),
+    signinShowTermsIos: brandBoolUnlessOff('signin_show_terms_ios'),
+    signinShowTermsAndroid: brandBoolUnlessOff('signin_show_terms_android'),
+    signinShowTermsOfServiceIos: brandBoolUnlessOff(
+      'signin_show_terms_of_service_ios',
+    ),
+    signinShowTermsOfServiceAndroid: brandBoolUnlessOff(
+      'signin_show_terms_of_service_android',
+    ),
+    signinShowPrivacyIos: brandBoolUnlessOff('signin_show_privacy_ios'),
+    signinShowPrivacyAndroid: brandBoolUnlessOff('signin_show_privacy_android'),
+    signinShowDemoPageIos: brandBool('signin_show_demo_page_ios'),
+    signinShowDemoPageAndroid: brandBool('signin_show_demo_page_android'),
+    splashImageUrl: brandStr('splash_image_url'),
     turnstileSiteKey: brandStr('turnstile_site_key'),
     signinPoints: blocks('signin_points'),
     signinEmailLabel: brandStr('signin_email_label'),

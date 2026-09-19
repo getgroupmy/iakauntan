@@ -15,6 +15,7 @@ import 'branding_admin.dart';
 import 'closed_accounts_admin.dart';
 import 'credit_admin.dart';
 import 'landing_cms.dart';
+import 'mobile_app_admin.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'scan_kinds_admin.dart';
@@ -269,6 +270,20 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/page/contact',
     primary: false,
     page: SitePageTab(slug: 'contact'),
+  ),
+  // `0653`. Asked for as a page where the mobile settings are done.
+  // Under Website & brand rather than in a group of its own: it is
+  // about what the product LOOKS like to somebody outside it, which is
+  // what every other page in this run is about, and one page does not
+  // make a section.
+  (
+    group: 'Website & brand',
+    label: 'Mobile Application',
+    icon: Icons.phone_iphone_outlined,
+    selectedIcon: Icons.phone_iphone,
+    path: '/admin/mobile',
+    primary: false,
+    page: MobileAppAdminTab(),
   ),
   (
     group: 'Website & brand',

@@ -148,6 +148,15 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                     ),
                   ),
                 ),
+                // `0653`. Whether the apps link this page at the foot
+                // of the sign-in screen, one switch per platform, on
+                // the page's own tab rather than collected elsewhere:
+                // this is a fact about Terms of Use, and the place
+                // somebody who has just published it is standing.
+                if (signinLinkColumns(widget.slug) != null) ...[
+                  const SizedBox(height: Space.lg),
+                  _AppLinkCard(slug: widget.slug),
+                ],
                 if (widget.slug == 'signin') ...[
                   const SizedBox(height: Space.lg),
                   const _SigninPanelCard(),
@@ -270,6 +279,127 @@ String sitePageBodyHelp(String slug) => switch (slug) {
         'at". Your name is added after it.',
   _ => 'Left empty, the screen uses the wording the product ships with.',
 };
+
+/// The columns that say whether the apps link a page from the sign-in
+/// screen, or null for a page they never link.
+///
+/// One map rather than a `switch` in three places. `0653`.
+({String ios, String android})? signinLinkColumns(String slug) =>
+    switch (slug) {
+      'terms' => (
+        ios: 'signin_show_terms_ios',
+        android: 'signin_show_terms_android',
+      ),
+      'terms-of-service' => (
+        ios: 'signin_show_terms_of_service_ios',
+        android: 'signin_show_terms_of_service_android',
+      ),
+      'privacy' => (
+        ios: 'signin_show_privacy_ios',
+        android: 'signin_show_privacy_android',
+      ),
+      // Contact us is not one of them. The three above are what an app
+      // store asks a build about; an address to write to is not, and a
+      // switch nobody would ever move is worse than an absent one.
+      _ => null,
+    };
+
+/// Whether the two apps link this page from the foot of the sign-in
+/// screen.
+///
+/// `0653`. Two switches for one link, because the two stores' review
+/// rules are different rules changed on different days -- the same
+/// argument `0638` makes for splitting the passkey switch.
+///
+/// Both ship ON, unlike nearly everything else in this console, and the
+/// card says why: a link is drawn only where the page is PUBLISHED, so
+/// on a deployment that has not pressed Publish these offer nothing at
+/// all. Shipping them off would only mean a second switch to find.
+class _AppLinkCard extends ConsumerStatefulWidget {
+  const _AppLinkCard({required this.slug});
+
+  final String slug;
+
+  @override
+  ConsumerState<_AppLinkCard> createState() => _AppLinkCardState();
+}
+
+class _AppLinkCardState extends ConsumerState<_AppLinkCard> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = signinLinkColumns(widget.slug)!;
+    final row = ref.watch(landingPageAdminProvider).valueOrNull;
+    // Absent reads as ON here, the way `signin_show_register_mobile`
+    // is read: a payload saved before the column existed, or still in
+    // flight, must not draw a switch in the off position for a
+    // deployment nobody has switched anything off on.
+    bool on(String key) => row?[key] != false;
+    final label = sitePageLabel(widget.slug);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'At the bottom of the sign-in screen in the apps',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'The website already links this from the footer on every '
+              'page. The apps have no footer and no landing page, so '
+              'without these the only way to it in an app is the '
+              'consent line under the Register button — which somebody '
+              'signing in never sees.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: Space.sm),
+            _Switch(
+              value: on(columns.ios),
+              busy: _busy,
+              title: 'Link $label in the iOS app',
+              subtitle:
+                  'Drawn only once this page is published, whichever '
+                  'way this is set — a link to a page that answers '
+                  '"not written yet" is worse than no link.',
+              onChanged: (v) => _save({columns.ios: v}),
+            ),
+            _Switch(
+              value: on(columns.android),
+              busy: _busy,
+              title: 'Link $label in the Android app',
+              subtitle:
+                  'One switch per store, because the two stores ask '
+                  'for different things at review and change their '
+                  'minds on different days.',
+              onChanged: (v) => _save({columns.android: v}),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save(Map<String, dynamic> patch) async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingPage(patch),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      ref.invalidate(landingPageAdminProvider);
+      // The sign-in screen reads `landing_page()`, not the table.
+      invalidatePlatformTable(ref, 'landing_page');
+    }
+  }
+}
 
 /// The one-tap demo logins, switched on and off.
 ///

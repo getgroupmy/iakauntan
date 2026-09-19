@@ -335,6 +335,18 @@ String? routeFor({
     return null;
   }
 
+  // `0653`. And the demo page, which is not a document but a way IN --
+  // twelve one-tap logins into a demonstration company, linked from the
+  // foot of the sign-in screen in the apps.
+  //
+  // Signed out is the whole of who it is for, so it is let past here
+  // rather than by the clause below, which would send a native build to
+  // `/signin` and a browser to the front page. What happens to somebody
+  // who already has a session is decided with the two doors further
+  // down: pressing this with an account is asking to become somebody
+  // else, and the picker would do exactly that.
+  if (path == '/demo' && !signedIn) return null;
+
   // And the fifth, which is not about a token at all: the corporate
   // landing page, which is now the address itself. Somebody who typed
   // what is on the business card has not come to sign in — they have
@@ -461,7 +473,7 @@ String? routeFor({
   // them off it, which they watch happen. Once the answer is in, the
   // hop to the dashboard and the hop from there to the till resolve as
   // one chain and nothing in between is ever drawn.
-  if (path == '/signin' || path == '/login') {
+  if (path == '/signin' || path == '/login' || path == '/demo') {
     if (!doorKnown) return null;
     // The dashboard while the preference is still being read, and NOT a
     // hold. Holding would be tidier -- it would avoid the hop from the
@@ -650,6 +662,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       // 0342. Outside the shell, because the shell is a menu of places
       // this address does not open.
+      // `0653`. The demo logins, on a page rather than under the form.
+      //
+      // `SignInScreen` with the form left out, deliberately: signing in
+      // as a demo account runs the same vetting as any other sign-in
+      // and holds the router while it does, and a screen of its own
+      // would have been a second copy of that.
+      GoRoute(
+        path: '/demo',
+        builder: (_, __) => const SignInScreen(demoOnly: true),
+      ),
       GoRoute(path: '/no-access', builder: (_, __) => const NoAccessScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // The same form, at an address the redirect does not send anybody
