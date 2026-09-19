@@ -84,51 +84,80 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
 -- ---------------------------------------------------------------------
--- An open question about FUNCTIONS, still open -- but narrower now
+-- And FUNCTIONS, which took three migrations and two CI runs to settle
 --
--- There is no default privilege for functions here, and `c2d2d15` is
--- the record of why: one was added on the strength of `0165`'s comment,
--- it made this machine more generous than the hosted project, and it
--- was reverted.
+-- Supabase ships
 --
--- `0621` found evidence pointing the other way and could not settle it
--- either. Its apply-time check asserted that `public.set_sst_registration`
--- is NOT executable by `service_role` -- true here, and it failed four
--- times against the hosted project, where it is. `0145` grants that
--- function to `authenticated` alone and `0181` replaces it granting
--- nothing, so no migration in this repository put it there.
+--     alter default privileges in schema public
+--       grant all on functions to anon, authenticated, service_role
 --
--- CI RUN 1941 IS THE THIRD PIECE OF EVIDENCE, and it is the strongest.
--- `0657` DROPPED `public.push_targets`, created it again, revoked it
--- `from public` alone, and then asked
--- `has_function_privilege('authenticated', ...)`. On the hosted project
--- the answer was TRUE and the migration refused itself; on this machine
--- the same migration applied without complaint.
+-- so a new function in `public` arrives executable by all three, and
+-- `0165`'s event trigger then strips PUBLIC and `anon` -- leaving
+-- `authenticated` and `service_role`. In schema `app` there is no such
+-- default, so a new function there arrives callable by nobody. Both are
+-- reproduced below.
 --
--- A dropped function takes its grants with it, so that new object began
--- life with an EXECUTE grant no statement in the migration wrote, held
--- DIRECTLY by `authenticated` -- which is exactly why revoking from the
--- PUBLIC pseudo-role did not remove it. A default privilege is the only
--- thing that explains it.
+-- ## Why this took so long, and it is worth knowing
 --
--- So the hosted project almost certainly has
--- `grant execute on functions to authenticated` (run 1941) and
--- `service_role` (0621). WHY IT IS STILL NOT WRITTEN HERE: adding those
--- two lines was tried while fixing 0657 and it fails
--- `function_grants.sql` and `trigger_reachable_grants.sql`, both of
--- which assert that a function created NOW is callable by nobody --
--- `0165`'s event trigger strips PUBLIC, and those tests were written
--- against this machine's silence about direct role grants. Making this
--- file match the hosted project means deciding what those two files
--- should assert instead, which is its own piece of work and not a line
--- to slip into a migration fix.
+-- Because CI has TWO databases and nobody said which was being read.
+-- `supabase start` brings up the CLI's local stack, and that is where
+-- `function_grants.sql` and every other file in this directory runs.
+-- The migrations are pushed to the LINKED HOSTED PROJECT, in a
+-- different job. The two do not have the same default privileges.
 --
--- Until somebody does that, the difference stays in the safe direction
--- -- this machine is stricter, so a missing grant fails here first --
--- and the cost is the one 0657 paid: a missing REVOKE fails in CI
--- instead. Every migration should therefore write
--- `from public, anon, authenticated` in full, as `0141` and `0143` do.
+-- Every piece of evidence in the argument is correct about the database
+-- it came from:
+--
+--   * `0165` said it verified the default against the hosted project,
+--     and it did: after revoking PUBLIC from sixteen functions, the
+--     nine in `public` were still reachable by `anon` and the seven in
+--     `app` were not -- which is precisely a default that covers
+--     `public` and not `app`.
+--   * `0617` believed `0165`, taught this file the same default, and
+--     **CI refused it** -- against the CLI stack, where the default ACL
+--     really is `{postgres=X/postgres}`.
+--   * `0618` read that refusal as proof that `0165` had misread itself,
+--     and wrote the strict rule down twice. It was reading the CLI
+--     stack.
+--   * `0621`'s apply-time check failed four times against the hosted
+--     project because `set_sst_registration` is executable there by
+--     `service_role`, which no migration in this repository granted.
+--   * CI run 1941: `0657` DROPPED `public.push_targets`, created it
+--     again, revoked it `from public` alone, and its own self-check
+--     found `authenticated` could still execute it. A dropped function
+--     takes its grants with it, so that grant was written by nothing
+--     but a default privilege.
+--
+-- Three hosted observations against one local one. `0618`'s conclusion
+-- is the one that was wrong, and the two files that encode it --
+-- `function_grants.sql` and `trigger_reachable_grants.sql` -- are
+-- corrected in the same commit as these lines.
+--
+-- ## What it does NOT mean
+--
+-- It does not mean anything is open that was thought closed. Counted
+-- both ways on this machine, with the default and without it, **738 of
+-- the 760 functions in `public` are executable by `authenticated`
+-- either way**: the default adds nothing, because every function here
+-- already carries an explicit grant or an explicit revoke. The twenty-two
+-- that are closed are closed by a revoke, and they stay closed.
+--
+-- What it changes is the GATE. Until now a migration that forgot to
+-- revoke could not fail on this machine, because there was no grant to
+-- fail against -- so `0657` passed 333 local files and was refused by
+-- CI twenty minutes later. Now it fails here first, which is the
+-- direction every other line in this section exists to get right.
+--
+-- `0141` and `0143` write `from public, anon, authenticated` in full,
+-- and every migration should: revoking from the PUBLIC pseudo-role does
+-- not touch a grant held directly by a role.
 -- ---------------------------------------------------------------------
+alter default privileges for role postgres in schema public
+  grant execute on functions to anon, authenticated, service_role;
+-- And deliberately NOT in schema `app`, which is the half of `0165`'s
+-- observation that pins the shape: the seven functions it revoked there
+-- were not reachable by `anon` afterwards, and the nine in `public`
+-- were.
 
 -- The second entry, which governs only what `supabase_admin` creates
 -- and therefore governs nothing in this schema. Here so that a check

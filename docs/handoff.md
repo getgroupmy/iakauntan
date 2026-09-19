@@ -141,11 +141,13 @@ in the commit message — read those rather than the diff.
    actions wired to the flow `IncomingCallWatcher` already runs.
 
    **Android push is still nothing**, and is blocked above on Firebase.
-2. **Make the local stack match the hosted project on function
-   privileges.** See the trap below. It is a real gap that let a
-   security-relevant mistake reach CI, and closing it means deciding
-   what `function_grants.sql` and `trigger_reachable_grants.sql` should
-   assert instead. Deliberately left as its own piece of work.
+2. ~~Make the local stack match the hosted project on function
+   privileges.~~ **Done.** `_local_stack.sql` now reproduces Supabase's
+   `grant all on functions to anon, authenticated, service_role`, and
+   the two files that encoded the opposite are corrected. The cause was
+   that CI has TWO databases — `supabase start` for the SQL assertions,
+   the linked hosted project for the migrations — and nobody had said
+   which was being measured.
 3. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
    from here. Do not start without the user.
 4. Older backlog, not to be started unprompted: `close_fiscal_year`
@@ -248,14 +250,20 @@ from the PUBLIC pseudo-role leaves it. `0141` and `0143` write
 and CI refused the migration on its own self-check. **Write all three
 roles out, every time.**
 
-**And the local run does not catch that**, because
-`supabase/tests/_local_stack.sql` deliberately reproduces no default
-privilege for functions. The note in that file now carries the evidence
-— CI run 1941 was a controlled experiment: the function was *dropped*
-and recreated and still came back executable by `authenticated`, which
-only a default privilege explains. Adding the two lines locally fails
-`function_grants.sql` and `trigger_reachable_grants.sql`. That is open
-work item 2.
+**The local run catches it now, and did not before.**
+`_local_stack.sql` reproduces the default privilege as of this branch,
+and reintroducing `0657`'s missing two words makes the migration refuse
+itself on this machine with CI's exact error. Before that it passed 333
+local files and was refused by CI twenty minutes later.
+
+**CI has TWO databases and it is easy to measure the wrong one.**
+`supabase start` brings up the CLI's local stack, which is where every
+file in `supabase/tests/` runs. The migrations are pushed to the
+*linked hosted project*, in a different job. They do not have the same
+default privileges for functions, and three migrations plus two CI runs
+were spent arguing past each other because nobody said which database
+an observation came from. When an assertion about privileges behaves
+differently in two places, ask that question first.
 
 **Dropping a function drops its COMMENT**, and
 `check_undocumented_writes.py` refuses a write function without one.

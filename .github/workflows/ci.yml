@@ -1025,22 +1025,26 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_undocumented_writes.py "$DB"
 
-      # The seam `0618` came in through. A new function in `public` is
-      # executable by postgres and nobody else -- PostgreSQL grants
-      # PUBLIC on creation and 0165's event trigger revokes it -- so
-      # every caller needs an explicit grant in the migration, and
-      # forgetting one is invisible: PostgREST answers 42501, the edge
-      # function catches it with everything else, and the feature simply
-      # never happens.
+      # The seam `0618` came in through: a function whose caller cannot
+      # reach it, which is invisible everywhere else. PostgREST answers
+      # 42501, the edge function catches it with everything else, and
+      # the feature simply never happens.
       #
-      # It cost months. 0618 found ten functions whose callers could not
-      # reach them, including both RPCs `send-push` needs, which means
-      # no push notification had ever been delivered, and both halves of
-      # a customer paying an invoice they were sent. Then the pattern
-      # spread by being copied: 0612 and 0616 repeated it.
+      # 0618 found ten of them, including both RPCs `send-push` needs
+      # and both halves of a customer paying an invoice they were sent,
+      # and the pattern then spread by being copied: 0612 and 0616
+      # repeated it. Its diagnosis was read off `supabase start`, which
+      # is NOT the database those functions run in -- the hosted project
+      # has a default privilege granting `service_role` EXECUTE on
+      # everything created in `public`, so how much of that was a real
+      # outage is not established by the evidence 0618 had. The grants
+      # it wrote are right either way: a feature must not depend on a
+      # default nobody in this repository wrote down.
+      # `supabase/tests/_local_stack.sql` has the whole argument.
       #
       # `function_grants.sql` asserts the other direction -- nothing in
-      # `public` callable by nobody -- and cannot see the more specific
+      # `public` callable by nobody, and nothing reachable by a stranger
+      # that is not on a named list -- and cannot see the more specific
       # fault, a function granted to `authenticated` and called by the
       # service role or the reverse. This reads the CALL, so it can.
       #
