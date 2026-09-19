@@ -158,6 +158,17 @@ alter default privileges for role postgres in schema public
 -- observation that pins the shape: the seven functions it revoked there
 -- were not reachable by `anon` afterwards, and the nine in `public`
 -- were.
+--
+-- `for role postgres` is load-bearing, and CI run 1947 is the evidence.
+-- A default ACL governs only what ONE role creates, and a check that
+-- reads `pg_default_acl` without filtering on `defaclrole` reads
+-- somebody else's: `supabase start` has a row for functions in `public`
+-- that mentions `authenticated`, under a role that is not the one
+-- applying the migrations, and a new function there is still callable
+-- by nobody. The note about `supabase_admin` above says the same thing
+-- about TABLES and `0498` is the migration that learned it. So a test
+-- that wants to know what a new function arrives with must CREATE one
+-- and look, which is what `function_grants.sql` now does.
 
 -- The second entry, which governs only what `supabase_admin` creates
 -- and therefore governs nothing in this schema. Here so that a check

@@ -29,10 +29,11 @@
 -- `supabase/tests/_local_stack.sql` carries the whole argument and the
 -- three hosted observations that settle it, including CI run 1941.
 --
--- So the first block below READS the default privilege out of
--- `pg_default_acl` and asserts the end state that follows from what it
--- found, printing which. Writing one answer down is the mistake this
--- file has now made in both directions.
+-- So the first block below MEASURES what a new function arrives with,
+-- prints it, and asserts only what holds on all three. Writing one
+-- answer down is the mistake this file has now made in both
+-- directions; reading it out of `pg_default_acl` was a third, and the
+-- block says why.
 --
 -- Two consequences for what is below.
 --
@@ -67,88 +68,97 @@ begin;
 -- this is the premise every other assertion in the file rests on and it
 -- has been wrong twice.
 --
--- ## Why this block asks the catalog which database it is on
+-- ## Why this block MEASURES rather than asks
 --
--- Because it runs on two, and they differ. In CI it runs against
+-- Because it runs on two databases that differ. In CI it runs against
 -- `supabase start`; `run_locally.sh` runs it against a throwaway
 -- Postgres that reproduces the HOSTED project's default privileges,
 -- and the migrations themselves are applied to the hosted project in a
 -- third place. Writing one answer down is what `0617` and `0618` each
--- did, in opposite directions, and between them they cost three
--- migrations and two CI runs.
+-- did, in opposite directions.
 --
--- So the default privilege is READ rather than assumed, the end state
--- is asserted against what was read, and which one was found is
--- printed. A reader of a CI log should be able to see which database
--- this ran on without knowing any of the above.
+-- The first attempt at a fix read `pg_default_acl` and branched on it.
+-- **That was wrong too, and wrong in a way this repository has already
+-- paid for once.** A default ACL belongs to the ROLE whose creations it
+-- governs, and reading the rows without filtering on `defaclrole` reads
+-- somebody else's. `supabase start` answered PRESENT and then produced
+-- a function `authenticated` could not execute -- an entry exists there
+-- under a role that is not the one applying the migrations. The note
+-- about `supabase_admin` in `_local_stack.sql` says this about tables,
+-- and `0498` is the migration that learned it.
 --
--- What is asserted unconditionally is everything that holds on both:
--- `0165`'s trigger takes `anon` away from a new `public` function,
--- schema `app` has no default at all, and an explicit grant reaches
--- either.
+-- So nothing is read from the catalog. A probe function is created and
+-- what it ARRIVES with is observed, which is the fact itself rather
+-- than a proxy for it, and it is printed so a reader of a CI log can
+-- see which database the run was against.
+--
+-- What is then ASSERTED holds on any of the three:
+--
+--   * `0165`'s trigger takes `anon` away from a new `public` function;
+--   * the two client roles arrive together or not at all -- a database
+--     that granted one and not the other is a third shape nobody has
+--     reasoned about;
+--   * schema `app` has no default under any role;
+--   * an explicit grant reaches either schema;
+--   * and `revoke ... from public` does not remove a grant held
+--     directly by a role, which is the whole of `0657` and is asserted
+--     against a grant written HERE so it does not depend on a default
+--     at all.
 -- =====================================================================
 do $$
 declare
-  v_default boolean;
+  v_authed boolean;
+  v_svc    boolean;
 begin
-  -- Supabase ships this for `public`; the CLI's local stack does not.
-  select exists (
-    select 1
-      from pg_default_acl d
-      join pg_namespace n on n.oid = d.defaclnamespace
-     where n.nspname = 'public' and d.defaclobjtype = 'f'
-       and array_to_string(d.defaclacl, ',') like '%authenticated=X%')
-    into v_default;
-
-  raise notice 'function default privilege in public: %',
-    case when v_default then 'PRESENT (as on the hosted project)'
-         else 'ABSENT (as on the supabase start stack)' end;
-
   create function public.pg_temp_probe_function() returns integer
     language sql as 'select 1';
 
+  v_authed := has_function_privilege(
+    'authenticated', 'public.pg_temp_probe_function()', 'execute');
+  v_svc := has_function_privilege(
+    'service_role', 'public.pg_temp_probe_function()', 'execute');
+
+  raise notice
+    'a new function in public arrives with authenticated=%, service_role=% '
+    '(the hosted project grants both; the supabase start stack neither)',
+    v_authed, v_svc;
+
   -- `0165`'s trigger, which is the only thing between a new function in
-  -- this schema and an unauthenticated request. True on both databases,
-  -- and the more important half of the two.
+  -- this schema and an unauthenticated request. PostgREST exposes
+  -- `public`, and `anon` is who a request with no session is.
   perform pg_temp.check_true(
     'a new function in public is never callable by a stranger',
     not has_function_privilege(
       'anon', 'public.pg_temp_probe_function()', 'execute'));
 
-  if v_default then
-    perform pg_temp.check_true(
-      'and where the default privilege exists it arrives callable by a '
-      'signed-in user and the service role',
-      has_function_privilege(
-        'authenticated', 'public.pg_temp_probe_function()', 'execute')
-      and has_function_privilege(
-        'service_role', 'public.pg_temp_probe_function()', 'execute'));
+  -- Either both client roles or neither. A database that handed out one
+  -- and not the other is a shape nobody in this repository has reasoned
+  -- about, and every rule below assumes it does not exist.
+  perform pg_temp.check_true(
+    'and the two client roles arrive together or not at all',
+    v_authed = v_svc);
 
-    -- The statement `0657` wrote, and the reason it was not enough.
-    -- This is the assertion the whole correction exists for.
-    revoke execute on function public.pg_temp_probe_function() from public;
-    perform pg_temp.check_true(
-      'revoking from PUBLIC alone leaves a direct grant untouched',
-      has_function_privilege(
-        'authenticated', 'public.pg_temp_probe_function()', 'execute'));
+  -- And now the assertion the whole correction exists for, made against
+  -- a grant written HERE so that it holds whether or not this database
+  -- has a default. `0657` wrote exactly the first of these two
+  -- statements and shipped a function returning every handset of
+  -- everybody in a conversation to any signed-in user.
+  grant execute on function public.pg_temp_probe_function() to authenticated;
+  revoke execute on function public.pg_temp_probe_function() from public;
+  perform pg_temp.check_true(
+    'revoking from PUBLIC alone leaves a direct grant untouched',
+    has_function_privilege(
+      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
 
-    revoke execute on function public.pg_temp_probe_function()
-      from public, anon, authenticated;
-    perform pg_temp.check_true(
-      'and naming the roles is what actually closes it',
-      not has_function_privilege(
-        'authenticated', 'public.pg_temp_probe_function()', 'execute'));
-  else
-    perform pg_temp.check_true(
-      'and where it does not, a new function is callable by nobody',
-      not has_function_privilege(
-        'authenticated', 'public.pg_temp_probe_function()', 'execute')
-      and not has_function_privilege(
-        'service_role', 'public.pg_temp_probe_function()', 'execute'));
-  end if;
+  revoke execute on function public.pg_temp_probe_function()
+    from public, anon, authenticated;
+  perform pg_temp.check_true(
+    'and naming the roles is what actually closes it',
+    not has_function_privilege(
+      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
 
-  -- And a grant reaches it either way, so the assertions above are
-  -- about defaults rather than about privileges being broken outright.
+  -- And a grant reaches it again, so the line above is about the revoke
+  -- rather than about privileges being broken outright.
   grant execute on function public.pg_temp_probe_function() to service_role;
   perform pg_temp.check_true(
     'and an explicit grant is what makes it callable',

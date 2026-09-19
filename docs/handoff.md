@@ -265,6 +265,15 @@ were spent arguing past each other because nobody said which database
 an observation came from. When an assertion about privileges behaves
 differently in two places, ask that question first.
 
+**A default ACL belongs to ONE role, and `pg_default_acl` will happily
+show you somebody else's.** Filter on `defaclrole` or do not read it at
+all. `supabase start` has a function default for `public` naming
+`authenticated` under a role that is not the migration runner, so a
+check that read the rows unfiltered answered "present" and then watched
+a new function arrive callable by nobody. `0498` learned this for
+tables; CI run 1947 relearned it for functions. When a test needs to
+know what a new object arrives with, CREATE one and look.
+
 **Dropping a function drops its COMMENT**, and
 `check_undocumented_writes.py` refuses a write function without one.
 Re-state the comment whenever you drop and recreate.
