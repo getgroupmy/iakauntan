@@ -18,15 +18,21 @@
 -- default and a new function is callable by nobody.
 --
 -- **This file used to assert the opposite**, and was right about the
--- wrong database. CI has two: `supabase start` brings up the CLI's
--- local stack, which is where this file runs and where the default ACL
--- really is `{postgres=X/postgres}`; the migrations are pushed to the
--- LINKED HOSTED PROJECT in a different job, and that one has the
--- default. `0617` modelled the hosted behaviour, CI refused it against
--- the CLI stack, and `0618` concluded the hosted evidence had been
--- misread. It had not. `supabase/tests/_local_stack.sql` carries the
--- whole argument and the three hosted observations that settle it,
--- including CI run 1941.
+-- wrong database. There are three, and they do not agree: `supabase
+-- start` brings up the CLI's local stack, which is where this file
+-- runs IN CI and where the default ACL really is `{postgres=X/postgres}`;
+-- `run_locally.sh` uses a throwaway Postgres that reproduces the hosted
+-- defaults; and the migrations are applied to the LINKED HOSTED
+-- PROJECT, which has them. `0617` modelled the hosted behaviour, CI
+-- refused it against the CLI stack, and `0618` concluded the hosted
+-- evidence had been misread. It had not.
+-- `supabase/tests/_local_stack.sql` carries the whole argument and the
+-- three hosted observations that settle it, including CI run 1941.
+--
+-- So the first block below READS the default privilege out of
+-- `pg_default_acl` and asserts the end state that follows from what it
+-- found, printing which. Writing one answer down is the mistake this
+-- file has now made in both directions.
 --
 -- Two consequences for what is below.
 --
@@ -59,55 +65,107 @@ begin;
 --
 -- Asserted on functions created here and now, in both schemas, because
 -- this is the premise every other assertion in the file rests on and it
--- has been wrong twice. The two schemas differ, and the difference is
--- the evidence: the default privilege names `public` and not `app`.
+-- has been wrong twice.
+--
+-- ## Why this block asks the catalog which database it is on
+--
+-- Because it runs on two, and they differ. In CI it runs against
+-- `supabase start`; `run_locally.sh` runs it against a throwaway
+-- Postgres that reproduces the HOSTED project's default privileges,
+-- and the migrations themselves are applied to the hosted project in a
+-- third place. Writing one answer down is what `0617` and `0618` each
+-- did, in opposite directions, and between them they cost three
+-- migrations and two CI runs.
+--
+-- So the default privilege is READ rather than assumed, the end state
+-- is asserted against what was read, and which one was found is
+-- printed. A reader of a CI log should be able to see which database
+-- this ran on without knowing any of the above.
+--
+-- What is asserted unconditionally is everything that holds on both:
+-- `0165`'s trigger takes `anon` away from a new `public` function,
+-- schema `app` has no default at all, and an explicit grant reaches
+-- either.
 -- =====================================================================
 do $$
+declare
+  v_default boolean;
 begin
+  -- Supabase ships this for `public`; the CLI's local stack does not.
+  select exists (
+    select 1
+      from pg_default_acl d
+      join pg_namespace n on n.oid = d.defaclnamespace
+     where n.nspname = 'public' and d.defaclobjtype = 'f'
+       and array_to_string(d.defaclacl, ',') like '%authenticated=X%')
+    into v_default;
+
+  raise notice 'function default privilege in public: %',
+    case when v_default then 'PRESENT (as on the hosted project)'
+         else 'ABSENT (as on the supabase start stack)' end;
+
   create function public.pg_temp_probe_function() returns integer
     language sql as 'select 1';
 
-  -- The default privilege, surviving `0165`'s trigger.
+  -- `0165`'s trigger, which is the only thing between a new function in
+  -- this schema and an unauthenticated request. True on both databases,
+  -- and the more important half of the two.
   perform pg_temp.check_true(
-    'a new function in public arrives callable by a signed-in user',
-    has_function_privilege(
-      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
-  perform pg_temp.check_true(
-    'and by the service role',
-    has_function_privilege(
-      'service_role', 'public.pg_temp_probe_function()', 'execute'));
-
-  -- And `0165`'s trigger, which is the only thing standing between a
-  -- new function in this schema and the open internet. PostgREST
-  -- exposes `public`, and `anon` is who an unauthenticated request is.
-  perform pg_temp.check_true(
-    'but NOT by a stranger, because 0165 revokes anon at creation',
+    'a new function in public is never callable by a stranger',
     not has_function_privilege(
       'anon', 'public.pg_temp_probe_function()', 'execute'));
 
-  -- So closing one takes an explicit revoke, and `from public` alone is
-  -- not it. This is the exact statement `0657` wrote, and the exact
-  -- reason it was not enough.
-  revoke execute on function public.pg_temp_probe_function() from public;
-  perform pg_temp.check_true(
-    'revoking from PUBLIC alone leaves a direct grant untouched',
-    has_function_privilege(
-      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
+  if v_default then
+    perform pg_temp.check_true(
+      'and where the default privilege exists it arrives callable by a '
+      'signed-in user and the service role',
+      has_function_privilege(
+        'authenticated', 'public.pg_temp_probe_function()', 'execute')
+      and has_function_privilege(
+        'service_role', 'public.pg_temp_probe_function()', 'execute'));
 
-  revoke execute on function public.pg_temp_probe_function()
-    from public, anon, authenticated;
+    -- The statement `0657` wrote, and the reason it was not enough.
+    -- This is the assertion the whole correction exists for.
+    revoke execute on function public.pg_temp_probe_function() from public;
+    perform pg_temp.check_true(
+      'revoking from PUBLIC alone leaves a direct grant untouched',
+      has_function_privilege(
+        'authenticated', 'public.pg_temp_probe_function()', 'execute'));
+
+    revoke execute on function public.pg_temp_probe_function()
+      from public, anon, authenticated;
+    perform pg_temp.check_true(
+      'and naming the roles is what actually closes it',
+      not has_function_privilege(
+        'authenticated', 'public.pg_temp_probe_function()', 'execute'));
+  else
+    perform pg_temp.check_true(
+      'and where it does not, a new function is callable by nobody',
+      not has_function_privilege(
+        'authenticated', 'public.pg_temp_probe_function()', 'execute')
+      and not has_function_privilege(
+        'service_role', 'public.pg_temp_probe_function()', 'execute'));
+  end if;
+
+  -- And a grant reaches it either way, so the assertions above are
+  -- about defaults rather than about privileges being broken outright.
+  grant execute on function public.pg_temp_probe_function() to service_role;
   perform pg_temp.check_true(
-    'and naming the roles is what actually closes it',
-    not has_function_privilege(
-      'authenticated', 'public.pg_temp_probe_function()', 'execute'));
+    'and an explicit grant is what makes it callable',
+    has_function_privilege(
+      'service_role', 'public.pg_temp_probe_function()', 'execute'));
 
   drop function public.pg_temp_probe_function();
 end $$;
 
 do $$
 begin
-  -- `app` is not in the default privilege, so a function there arrives
-  -- with PUBLIC only, which `0165` strips. Callable by nobody.
+  -- `app` is in no default privilege on either database, so a function
+  -- there arrives with PUBLIC only, which `0165` strips. This is the
+  -- other half of `0165`'s own evidence: the seven it revoked in `app`
+  -- were not reachable by `anon` afterwards and the nine in `public`
+  -- were, which is what says the default names one schema and not the
+  -- other.
   create function app.pg_temp_probe_function() returns integer
     language sql as 'select 1';
 
@@ -120,8 +178,6 @@ begin
     and not has_function_privilege(
       'service_role', 'app.pg_temp_probe_function()', 'execute'));
 
-  -- And a grant reaches it, so the assertion above is about the absence
-  -- of a default rather than about privileges being broken outright.
   grant execute on function app.pg_temp_probe_function() to authenticated;
   perform pg_temp.check_true(
     'and an explicit grant is what makes it callable',
