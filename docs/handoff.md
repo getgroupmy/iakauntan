@@ -34,15 +34,19 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/new-session-9rvhar` (a fresh container's designated branch; continues from `claude/iakauntan-accounting-crm-8snun0` at `9ce1d22`, which is this file's previous version) |
-| Head at time of writing | `e0328e0` |
-| CI | not yet checked for this push — watch it |
+| Head at time of writing | `85064bd` |
+| CI | not yet checked for this push — watch it. **This push touches `app/ios/`, so `ci.yml`'s `ios` job (macOS, ~45 minutes) will run** — the first real compile check on the Swift in `85064bd`, since nothing on this Linux container can compile it |
 | Migrations | `0658` is the highest; `0658` is this session's |
-| Live database | **`0650`–`0657` are applied; `0658` is not, until this push's CI run goes green.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has it |
+| Live database | **`0650`–`0658` are applied**, confirmed by CI run 1944 going green on `993aaec`. CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has it |
 
 Counts to expect from a clean run: **41** gates, **333** SQL files,
-**29** deno tests, **5,095** widget tests with 1 skipped, analyser clean
-— **not independently re-verified this session** for the Flutter/deno
-counts; see the new container note below.
+**29** deno tests, **5,099** widget tests with 1 skipped (was 5,095;
+`85064bd` added four), analyser clean — all independently re-verified
+this session on a real Flutter SDK installed fresh into this container
+(see the environment section below), except the **29 deno tests**,
+which this session never ran: nothing here needed the edge functions
+touched, so `check_locally.sh` was not re-run and that count is carried
+over from the previous session's handoff rather than confirmed.
 
 ### The working agreement
 
@@ -71,6 +75,8 @@ touched without the other.
 
 | SHA | What |
 | --- | --- |
+| `85064bd` | iOS registers a device for push, over `UNUserNotificationCenter` — open work item 1, below, partly resolved (the ordinary alert path; PushKit's VoIP token is deliberately still open) |
+| `993aaec` | Update the handoff for the fix below and this container's gaps |
 | `e0328e0` | Close the leaked default: `authenticated` and `service_role` on functions (`0658`) — open work item 2, below, resolved |
 
 ### The previous session's commits, for reference
@@ -126,24 +132,36 @@ touched without the other.
 
 ## Open work, ranked
 
-1. **The Flutter half of push.** `0657` gave iOS a sender that needs no
-   Firebase; nothing in the app registers a device token, so
-   `PushStatus` answers `unsupported` on a phone. iOS needs no
-   third-party package — `UNUserNotificationCenter` and
-   `didRegisterForRemoteNotificationsWithDeviceToken` over a
-   MethodChannel, plus `PKPushRegistry` for the VoIP token, which is a
-   second token against the same row shape. Register with
-   `transport: 'apns'`. Android needs Firebase and is blocked above.
-   Next real thing to pick up.
-2. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
+1. **PushKit's VoIP token, and the CallKit reporting that has to come
+   with it.** `85064bd` registered the ordinary alert path — a message
+   now reaches an iPhone — and deliberately left this half alone: Apple
+   requires every VoIP push to be reported to CallKit before the
+   delegate method that receives it returns, or the OS starts killing
+   the app for it and can revoke the VoIP entitlement outright.
+   Registering `PKPushRegistry`'s token without that handler built would
+   make a call go from "does not ring" to "arrives and gets the app
+   punished for not answering it" — worse, not better. Building it
+   properly means `PKPushRegistry` for the token (a second
+   `register_device` row, same shape, distinguished from the ordinary
+   one only by which token value it carries), a minimal `CXProvider` that
+   reports every VoIP push before doing anything else with it, and a
+   decision about what "answer" then does — a real feature, not an
+   afternoon of token plumbing. See "iOS's PushKit VoIP token is
+   deliberately still missing" in `docs/push-notifications.md` for the
+   detail on why the two tokens coexisting safely (and a wrong-topic
+   send failing loudly rather than silently) is not itself the hazard.
+2. **Android's half of push** needs Firebase and is blocked above
+   (`FCM_SERVICE_ACCOUNT`, `google-services.json`).
+3. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
    from here. Do not start without the user.
-3. Older backlog, not to be started unprompted: `close_fiscal_year`
+4. Older backlog, not to be started unprompted: `close_fiscal_year`
    sweeping to 3200 vs 3300; stripping the posting redirect out of
    `0635`; P14 per-document rounding; G3(b) relaxation flag.
 
 Resolved this session: **make the local stack match the hosted project
-on function privileges** — see `0658` and the trap below, which the old
-list pointed at as "still open."
+on function privileges** (`0658`, see the trap below); **the Flutter
+half of push for iOS's ordinary alert path** (`85064bd`) — its VoIP half
+is the new item 1 above, not a leftover of the old one.
 
 ## The environment, exactly
 
@@ -174,10 +192,24 @@ was last written from is gone and this one was provisioned fresh.
 missing outright at `/opt/flutter-3.47.4/bin` (or wherever the PATH
 line above points) until a real SDK is installed there — nothing
 short of that makes `check_xlsx.py`, `check_android_compile_sdk.py` or
-`check_web_boots.py` pass, and none of the three is a reason to stall
-on a change that never touches Dart: this session's did not, and left
-them failing for that reason alone, confirmed against `run_locally.sh`
-before the previous run without them.
+`check_web_boots.py` pass. Installed this session with:
+
+```bash
+git clone --depth 1 --branch 3.47.4 \
+  https://github.com/flutter/flutter.git /opt/flutter-3.47.4
+export PATH="/opt/flutter-3.47.4/bin:$PATH"
+flutter --version        # bootstraps the tool and the Dart SDK, ~1 minute
+cd app && flutter pub get
+```
+
+Cheap enough (a few minutes, no disk pressure worth noting) that there
+is no reason to stall a Dart-touching change on "this container has no
+Flutter" the way an earlier draft of this file did — do this first,
+not last. Two Python packages the gates need are also not on a fresh
+container: `pip install --break-system-packages openpyxl
+websocket-client` (`check_xlsx.py` and `check_web_boots.py`
+respectively; both fail with a plain `pip install X` sentence naming
+themselves, so this is not a hunt).
 
 ### The gates, in the order that finds faults soonest
 
@@ -320,6 +352,44 @@ errors on every run reports a clean sweep. `docs/widget-tests.md` lists
 ten ways a green test covers a broken screen. For Deno there is no
 equivalent harness; do it by hand with `sed`/`python3` and restore
 afterwards.
+
+**`mutate.py` has no timeout, and a mutant can make the test hang
+rather than fail.** `subscribeToPush` under a mutant that removes its
+`denied` guard reaches a real 10-second `Future.timeout` — fine on its
+own, except `testWidgets` runs on a fake clock that never advances a
+real `Timer` unless something pumps it, so without `tester.runAsync`
+the wait never ends and `mutate.py`'s bare `subprocess.run` (no
+timeout) sits there indefinitely. Run it under an external `timeout
+300 python3 scripts/mutate.py ...` every time, and if it ever does hang
+and gets killed, **the source is left mutated** — `mutate.py`'s own
+`finally` that restores it never runs under `kill -9`, only under a
+normal exit. Diff against the backup it leaves at
+`$TMPDIR/<basename>.orig` before trusting the file again; that is
+exactly what caught it here, as a test that mysteriously started taking
+ten real seconds on ordinary, unmutated code.
+
+**`debugDefaultTargetPlatformOverride` must be reset INSIDE the test
+body, not in `tearDown`.** `TestWidgetsFlutterBinding`'s own invariant
+check (`debugAssertAllFoundationVarsUnset`) runs immediately after the
+test body returns and before any registered `tearDown` callback fires,
+so a reset that lives only in `tearDown` still reads as "changed by the
+test" and fails **every subsequent test in the file**, reported against
+whichever test happens to run next rather than the one that actually
+set it. Wrap the set/reset in a `try`/`finally` around the test body's
+own logic instead.
+
+**Running `dart format` on an existing file can reformat far more than
+you touched, and quietly invent a lint failure.** This container's
+`dart format` (from a freshly cloned SDK) disagrees with whatever
+produced this repository's committed style on long-line wrapping;
+running it on `providers.dart` and `repository.dart` rewrote over 650
+unrelated lines and turned one `if (x) return y;` into a bare
+one-liner that then failed `curly_braces_in_flow_control_structures`
+under `--fatal-infos`. Diff before staging anything `dart format`
+touched; if the diff is bigger than the edit, revert the file with
+`git checkout --` and re-apply the actual change by hand instead.
+Safe on a file this session created outright (`push_io.dart`), where
+there is no prior style to disagree with.
 
 ## Things the database already knows that are easy to re-derive wrongly
 
