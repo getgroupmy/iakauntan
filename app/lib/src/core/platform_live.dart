@@ -49,6 +49,7 @@ import '../data/site_pages_repository.dart';
 import '../data/platform_catalog_repository.dart';
 import '../features/landing/landing_content.dart';
 import 'providers.dart';
+import 'socket_resume.dart';
 
 /// Which providers go stale when a platform table changes.
 ///
@@ -160,29 +161,12 @@ void invalidatePlatformTable(WidgetRef ref, String table) {
 /// Whether coming back to [now] from [was] means a change may have been
 /// missed.
 ///
-/// A Postgres change and a broadcast are both FIRE AND FORGET: neither
-/// is replayed, and a socket that was not open when one was sent never
-/// learns of it. On a browser tab that barely matters — the tab stays
-/// alive. On a phone it is the ordinary case: iOS and Android suspend
-/// the process, the socket dies, and every console change made in that
-/// window is gone. The providers then hold what they were told last,
-/// which is a screen that is confidently out of date and has no reason
-/// to refetch.
-///
-/// So resuming from a state where the socket cannot have been alive is
-/// treated as "assume something happened". [AppLifecycleState.paused]
-/// and [AppLifecycleState.detached] are those states.
-///
-/// [AppLifecycleState.inactive] is deliberately NOT one. It is what a
-/// phone reports for an incoming call banner, the app switcher, a
-/// permission sheet — moments long, with the process running and the
-/// socket open. Refreshing on those would be several queries every time
-/// somebody glanced at their notifications.
-bool platformMissedWhileAway(AppLifecycleState? was, AppLifecycleState now) {
-  if (now != AppLifecycleState.resumed) return false;
-  return was == AppLifecycleState.paused ||
-      was == AppLifecycleState.detached;
-}
+/// Kept as a name here because this file's callers and its tests use
+/// it, and delegating rather than holding the rule: `socket_resume.dart`
+/// has the one copy, because `live_updates.dart` needs exactly the same
+/// judgement and a second copy of it is a second thing to refine.
+bool platformMissedWhileAway(AppLifecycleState? was, AppLifecycleState now) =>
+    missedWhileAway(was, now);
 
 /// Long enough to collect a burst, short enough to feel immediate.
 ///
