@@ -33,14 +33,16 @@ it has to be committed.
 
 | | |
 | --- | --- |
-| Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `895ae59` |
-| CI | green, run 1942 |
-| Migrations | `0657` is the highest; `0650`–`0657` are this session's |
-| Live database | **`0650`–`0657` are applied.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has them |
+| Branch | `claude/new-session-9rvhar` (a fresh container's designated branch; continues from `claude/iakauntan-accounting-crm-8snun0` at `9ce1d22`, which is this file's previous version) |
+| Head at time of writing | `e0328e0` |
+| CI | not yet checked for this push — watch it |
+| Migrations | `0658` is the highest; `0658` is this session's |
+| Live database | **`0650`–`0657` are applied; `0658` is not, until this push's CI run goes green.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has it |
 
 Counts to expect from a clean run: **41** gates, **333** SQL files,
-**29** deno tests, **5,095** widget tests with 1 skipped, analyser clean.
+**29** deno tests, **5,095** widget tests with 1 skipped, analyser clean
+— **not independently re-verified this session** for the Flutter/deno
+counts; see the new container note below.
 
 ### The working agreement
 
@@ -61,7 +63,17 @@ or anything else pushed to the repository.
 ## This session's commits
 
 Newest first. Each is a self-contained piece of work with its reasoning
-in the commit message — read those rather than the diff.
+in the commit message — read those rather than the diff. Only this
+session's own commit is listed under this heading now; everything below
+`9ce1d22` is the previous session's and is unchanged — `git log` has the
+rest, and repeating it here would drift the moment either list is
+touched without the other.
+
+| SHA | What |
+| --- | --- |
+| `e0328e0` | Close the leaked default: `authenticated` and `service_role` on functions (`0658`) — open work item 2, below, resolved |
+
+### The previous session's commits, for reference
 
 | SHA | What |
 | --- | --- |
@@ -122,16 +134,16 @@ in the commit message — read those rather than the diff.
    MethodChannel, plus `PKPushRegistry` for the VoIP token, which is a
    second token against the same row shape. Register with
    `transport: 'apns'`. Android needs Firebase and is blocked above.
-2. **Make the local stack match the hosted project on function
-   privileges.** See the trap below. It is a real gap that let a
-   security-relevant mistake reach CI, and closing it means deciding
-   what `function_grants.sql` and `trigger_reachable_grants.sql` should
-   assert instead. Deliberately left as its own piece of work.
-3. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
+   Next real thing to pick up.
+2. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
    from here. Do not start without the user.
-4. Older backlog, not to be started unprompted: `close_fiscal_year`
+3. Older backlog, not to be started unprompted: `close_fiscal_year`
    sweeping to 3200 vs 3300; stripping the posting redirect out of
    `0635`; P14 per-document rounding; G3(b) relaxation flag.
+
+Resolved this session: **make the local stack match the hosted project
+on function privileges** — see `0658` and the trap below, which the old
+list pointed at as "still open."
 
 ## The environment, exactly
 
@@ -153,6 +165,19 @@ than debugging the gates:
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/tmp/pgdata \
   -o '-k /var/tmp -p 5599' -l /var/tmp/pg.log start"
 ```
+
+**A brand-new container has neither `pg_cron` nor `flutter` at all** —
+not "not on PATH," genuinely not installed, because the container this
+was last written from is gone and this one was provisioned fresh.
+`pg_ctl start` fails with `could not access file "pg_cron"` until
+`apt-get install -y postgresql-16-cron` is run once. `flutter` is
+missing outright at `/opt/flutter-3.47.4/bin` (or wherever the PATH
+line above points) until a real SDK is installed there — nothing
+short of that makes `check_xlsx.py`, `check_android_compile_sdk.py` or
+`check_web_boots.py` pass, and none of the three is a reason to stall
+on a change that never touches Dart: this session's did not, and left
+them failing for that reason alone, confirmed against `run_locally.sh`
+before the previous run without them.
 
 ### The gates, in the order that finds faults soonest
 
@@ -231,12 +256,30 @@ roles out, every time.**
 
 **And the local run does not catch that**, because
 `supabase/tests/_local_stack.sql` deliberately reproduces no default
-privilege for functions. The note in that file now carries the evidence
-— CI run 1941 was a controlled experiment: the function was *dropped*
-and recreated and still came back executable by `authenticated`, which
-only a default privilege explains. Adding the two lines locally fails
-`function_grants.sql` and `trigger_reachable_grants.sql`. That is open
-work item 2.
+privilege for functions. The note in that file carries the evidence —
+CI run 1941 was a controlled experiment: the function was *dropped* and
+recreated and still came back executable by `authenticated`, which only
+a default privilege explains.
+
+**Resolved this session, by `0658`, without touching the two test
+files.** Adding the default privilege locally, on the strength of that
+evidence, would have failed `function_grants.sql` and
+`trigger_reachable_grants.sql` — both assert that a function created
+now is callable by nobody, which is the behaviour this machine has
+always had and the hosted project did not. Rather than loosen the
+tests to tolerate what the hosted project was doing, `0658` fixes the
+hosted project to match: it revokes the leftover default privilege
+itself (so nothing created after it depends on remembering), revokes
+`authenticated` from the twenty-two functions that had it without a
+matching explicit revoke, and sweeps `service_role` back to exactly the
+list this repository's own local stack already said should hold it —
+read off `has_function_privilege` on this machine, which has never been
+able to hold a grant that no `grant execute` statement wrote, and
+cross-checked against every `.rpc()` call site with
+`check_rpc_grants.py` before being written into the migration. Its own
+self-checks are what prove it against the hosted project; this
+machine's checks staying green throughout is what proves the two now
+agree instead of one being quietly loosened to match the other.
 
 **Dropping a function drops its COMMENT**, and
 `check_undocumented_writes.py` refuses a write function without one.
