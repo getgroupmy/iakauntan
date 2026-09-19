@@ -8,11 +8,12 @@ arrived only where somebody was already looking. Since the reason to ring
 somebody is that they are doing something else, that is close to saying
 it did not work.
 
-**Browsers work today and need no account anywhere.** iOS has a sender
-that needs only a `.p8` from the Apple developer account and no Firebase
-project at all (`0657`); what it is still waiting for is the Flutter
-half that registers a device token. Android needs Firebase. The bottom
-of this page says what each is missing.
+**Browsers and iPhones both work today and need no third-party
+account.** iOS is reached directly with a `.p8` from the Apple developer
+account and no Firebase project at all (`0657`, and the app half that
+registers a device token for it). Android needs Firebase. A CallKit
+incoming-call ring over PushKit is the one iOS half still missing — see
+"What is left" below for why that is deliberate rather than forgotten.
 
 | Piece | Where |
 | --- | --- |
@@ -27,6 +28,7 @@ of this page says what each is missing.
 | Which service a token belongs to | `supabase/migrations/0657_reaching_an_iphone_without_google.sql` |
 | The service worker that draws the notification | `app/web/push_sw.js` |
 | Subscribing, from the browser | `app/lib/src/core/push_web.dart` |
+| Registering, from an iPhone | `app/lib/src/core/push_io.dart`, over a MethodChannel to `app/ios/Runner/AppDelegate.swift` |
 | The switch somebody presses | Settings → Notifications |
 
 ## How a notification happens
@@ -288,10 +290,11 @@ response, and the 503 names which secret is missing for whoever was
 actually in the room — a half-configured system that *looks* like it
 worked is the failure this whole function is arranged to avoid.
 
-What does not exist yet on either phone platform is the **Flutter
-half**: nothing in the app registers a device token, so `PushStatus`
-answers `unsupported` there rather than offering a switch that would
-register a device no sender can reach.
+What did not exist on either phone platform until this half of it was
+built: nothing in the app registered a device token, so `PushStatus`
+answered `unsupported` on a phone rather than offering a switch that
+would register a device no sender could reach. iOS now does — see
+below for what iOS still does not do.
 
 ## What is left
 
@@ -299,15 +302,39 @@ register a device no sender can reach.
   `FirebaseOptions` passed from Dart, plus the registration call. It is
   the one platform where a call can ring the way people expect, via a
   high-priority data message and a full-screen intent.
-- **iOS** has its sender now (`0657`): APNs directly, with a `.p8` and
-  no Firebase, sending a PushKit VoIP push for a call and an ordinary
-  alert for a message. What is missing is the app half — registering
-  for remote notifications and handing the device token to
-  `register_device` with `transport: 'apns'`. That needs no third-party
-  package: it is `UNUserNotificationCenter` and
-  `didRegisterForRemoteNotificationsWithDeviceToken` over a
-  MethodChannel, plus `PKPushRegistry` for the VoIP token, which is a
-  second token registered against the same row shape.
+- **iOS's ordinary alert push is done.** `push_io.dart` asks
+  `UNUserNotificationCenter` for authorization over a MethodChannel to
+  `AppDelegate.swift`, registers for remote notifications, and hands the
+  hex-encoded APNs token to `register_device` with `platform: 'ios',
+  transport: 'apns'` — the same `PushSubscriptionInfo` shape
+  `providers.dart` already used for a browser, now carrying which
+  platform and transport it is instead of that being hardcoded to
+  `web`. A message notification reaches an iPhone end to end now.
+- **iOS's PushKit VoIP token is deliberately still missing**, and this
+  is not the same kind of "missing" as Android above. Apple requires
+  every VoIP push to be reported to CallKit before the delegate method
+  that receives it returns; miss that consistently and the OS starts
+  terminating the app for it, and can revoke the VoIP entitlement
+  outright. Registering `PKPushRegistry`'s token without that reporting
+  built would trade "a call does not ring" — today's failure, and a
+  quiet one — for "a call arrives and the app is punished for not
+  answering it", which is worse and harder to undo. Building it means:
+  `PKPushRegistry` for the token (a second `register_device` row,
+  `platform: 'ios', transport: 'apns'`, distinguished from the ordinary
+  one only by which token value it carries — `push_targets` already
+  returns both, and a wrong-topic delivery is a loud `DeviceTokenNotFor-
+  Topic` from Apple rather than a silent misfire, so the two coexisting
+  is not itself a hazard); a minimal `CXProvider` set up to report every
+  VoIP push it receives, on iOS 13's terms, before doing anything else
+  with it; and a decision about what pressing "answer" then does, which
+  is a real feature and not a token-plumbing afternoon. Until that
+  exists, a call still does not ring on iOS: `apnsPushType` in
+  `send-push/index.ts` decides `voip` from the message being a call, not
+  from which token a row carries, so with only the ordinary token
+  registered a call is now attempted as `apns-push-type: voip` against a
+  token that was never obtained through PushKit — and Apple refuses that
+  as `DeviceTokenNotForTopic` rather than delivering it. Loud rather
+  than silent, which is progress, but still no ring.
 - **Safari** needs the app installed to the home screen as a PWA before
   it will subscribe at all. Chrome, Edge and Firefox work from an
   ordinary tab. The app detects this by feature rather than by user

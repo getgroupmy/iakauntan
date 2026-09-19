@@ -1415,8 +1415,13 @@ Future<PushStatus> enablePush(Repo? repo, {bool ask = true}) async {
 
   await repo.registerDevice(
     token: subscription.endpoint,
-    platform: 'web',
-    label: 'This browser',
+    platform: subscription.platform,
+    transport: subscription.transport,
+    label: switch (subscription.platform) {
+      'web' => 'This browser',
+      'ios' => 'This iPhone',
+      _ => 'This device',
+    },
     p256dh: subscription.p256dh,
     auth: subscription.auth,
   );

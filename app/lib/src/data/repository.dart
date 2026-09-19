@@ -3604,13 +3604,16 @@ class Repo {
   ///
   /// `p256dh` and `auth` are a browser's encryption keys and belong only
   /// to a web registration; 0143 refuses a web row without them and a
-  /// Firebase token with them.
+  /// Firebase token with them. `transport` (0657) says which service the
+  /// token belongs to — absent, it means what the platform has always
+  /// meant: `web` for a browser, `fcm` for anything else.
   Future<void> registerDevice({
     required String token,
     required String platform,
     String? label,
     String? p256dh,
     String? auth,
+    String? transport,
   }) => callRpc(
     'register_device',
     params: {
@@ -3619,6 +3622,7 @@ class Repo {
       if (label != null) 'p_label': label,
       if (p256dh != null) 'p_p256dh': p256dh,
       if (auth != null) 'p_auth': auth,
+      if (transport != null) 'p_transport': transport,
     },
   );
 

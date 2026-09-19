@@ -54,5 +54,32 @@
 	<array>
 		<string>webcredentials:iakauntan.com</string>
 	</array>
+
+	<!--
+	  Push Notifications, which is what lets AppDelegate.swift call
+	  registerForRemoteNotifications() and receive a real APNs token
+	  rather than didFailToRegisterForRemoteNotificationsWithError.
+
+	  development here, not production: Xcode requires this string to
+	  match the provisioning profile a signed build uses, and the only
+	  builds this repository can currently produce are development
+	  ones, since there is no App Store or TestFlight build yet (see
+	  docs/handoff.md, "blocked on the user"). A distribution build's
+	  own profile carries production, and Xcode's automatic signing
+	  changes this value to match at archive time when it does; this is
+	  the value for every build this project's own CI or a developer's
+	  machine can actually produce today, not a claim about what a
+	  future release build will use.
+
+	  CI is unaffected the same way the domain entitlement above is:
+	  ci.yml builds with codesigning off, so this value is never
+	  checked against a profile there. The first place a mismatch can
+	  be caught is a real signed build.
+
+	  (No double hyphen appears in this comment, and that is
+	  deliberate, for the same reason the note above this one gives.)
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>

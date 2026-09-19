@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,15 +11,15 @@ import '../../core/widgets.dart';
 /// Turning on the notification that arrives when the app is closed.
 ///
 /// Unlike everything else on this screen it is not company
-/// configuration: permission belongs to this browser on this machine,
-/// and switching it on here does nothing for the same person on their
-/// phone. So it says which device it is talking about.
+/// configuration: permission belongs to this device, and switching it on
+/// here does nothing for the same person on their other one. So it says
+/// which device it is talking about.
 ///
-/// The button asks the browser for permission, and it only exists as a
-/// button because of Safari: the prompt has to come from something the
-/// person pressed, and a browser that has refused once will not be asked
-/// again by anybody. Asking on start-up would spend that one chance on
-/// somebody who had not yet decided they wanted it.
+/// The button asks for permission, and it only exists as a button
+/// because a browser needs the prompt to come from something the person
+/// pressed and iOS needs the same for the same reason: a refusal is not
+/// asked again by anybody, so asking on start-up would spend that one
+/// chance on somebody who had not yet decided they wanted it.
 class NotificationsCard extends ConsumerWidget {
   const NotificationsCard({super.key});
 
@@ -70,14 +72,17 @@ class _BodyState extends ConsumerState<_Body> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
-          PushStatus.on => 'This browser will be notified',
+          PushStatus.on => 'This device will be notified',
           // Said as its own sentence rather than folded into a generic
-          // failure: the browser will not ask again, and the only way
-          // back is its own site settings.
+          // failure: it will not ask again, and the only way back is
+          // outside this app.
           PushStatus.denied =>
-            'This browser refused. Allow notifications for this site in '
-                'the browser\'s own settings, then try again.',
-          _ => 'Could not turn notifications on for this browser',
+            defaultTargetPlatform == TargetPlatform.iOS
+                ? 'This iPhone refused. Allow notifications for this app in '
+                      'Settings, then try again.'
+                : 'This browser refused. Allow notifications for this site '
+                      'in the browser\'s own settings, then try again.',
+          _ => 'Could not turn notifications on for this device',
         }),
       ),
     );
@@ -101,8 +106,9 @@ class _BodyState extends ConsumerState<_Body> {
         icon: Icons.notifications_off_outlined,
         text:
             'This device cannot be notified while the app is closed. '
-            'Notifications work in Chrome, Edge and Firefox, and on '
-            'Safari once the app has been added to the home screen.',
+            'Notifications work in Chrome, Edge and Firefox, on Safari '
+            'once the app has been added to the home screen, and on '
+            'iPhone. Not yet on Android.',
       ),
       PushStatus.notConfigured => const _Note(
         icon: Icons.build_outlined,
@@ -110,19 +116,22 @@ class _BodyState extends ConsumerState<_Body> {
             'Notifications are not switched on for this installation. '
             'It needs a VAPID key pair — see docs/push-notifications.md.',
       ),
-      PushStatus.denied => const _Note(
+      PushStatus.denied => _Note(
         icon: Icons.block,
-        text:
-            'This browser has refused notifications for this site. It '
-            'will not ask again, so it has to be changed in the '
-            'browser\'s own site settings.',
+        text: defaultTargetPlatform == TargetPlatform.iOS
+            ? 'This iPhone has refused notifications for this app. It '
+                  'will not ask again, so it has to be turned back on in '
+                  'Settings → Notifications.'
+            : 'This browser has refused notifications for this site. It '
+                  'will not ask again, so it has to be changed in the '
+                  'browser\'s own site settings.',
       ),
       PushStatus.askable => Row(
         children: [
           const Expanded(
             child: Text(
-              'Be told about messages and calls when this browser is in '
-              'the background. The notification says who it is from and '
+              'Be told about messages and calls when this app is in the '
+              'background. The notification says who it is from and '
               'never what it says.',
               style: TextStyle(fontSize: 12),
             ),
@@ -146,7 +155,7 @@ class _BodyState extends ConsumerState<_Body> {
           const SizedBox(width: Space.sm),
           const Expanded(
             child: Text(
-              'This browser will be notified about messages and calls.',
+              'This device will be notified about messages and calls.',
               style: TextStyle(fontSize: 12),
             ),
           ),

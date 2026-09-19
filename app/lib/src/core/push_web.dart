@@ -136,6 +136,8 @@ Future<PushSubscriptionInfo?> subscribeToPush(
     endpoint: subscription.endpoint,
     p256dh: _b64url(p256dh.toDart.asUint8List()),
     auth: _b64url(auth.toDart.asUint8List()),
+    platform: 'web',
+    transport: 'web',
   );
 }
 
