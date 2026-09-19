@@ -283,6 +283,19 @@ final _destinations = <_Dest>[
     '/dashboard',
     primary: true,
   ),
+  // `0656`. The route has existed since `0526` and nothing in the menu
+  // opened it -- the only ways in were the dashboard card's "see all"
+  // and typing the address. Reported as "why is to do not listed".
+  //
+  // No module: a to-do list is the workspace rather than the product,
+  // like Dashboard and Settings. A company that has put every module
+  // away still has people with things to remember.
+  _Dest(
+    'To do',
+    Icons.checklist_outlined,
+    Icons.checklist,
+    '/todos',
+  ),
   _Dest(
     'Sales',
     Icons.receipt_long_outlined,

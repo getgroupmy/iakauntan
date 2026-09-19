@@ -313,4 +313,67 @@ begin
     pg_temp.cd_alive(v_keep), 'there');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A note somebody wrote about a contact is not a reason to keep it
+-- ---------------------------------------------------------------------
+--
+-- `0656` gives a to-do a `contact_id`, and `app.contact_blockers` reads
+-- every non-cascading key out of the catalogue -- so without saying
+-- otherwise, "ring Ramli back" left on somebody's private list would
+-- refuse the deletion of Ramli, and nobody else could see the note to
+-- know why.
+--
+-- The exemption names one table. These assertions are what stops it
+-- quietly becoming a pattern: `gl_lines` is checked in the same breath,
+-- because a change that exempted "tables with a user_id" would pass
+-- the first assertion and lose the second.
+do $$
+declare
+  v_org uuid;
+  v_id uuid;
+  v_todo uuid;
+  v_me uuid;
+begin
+  v_me := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_me);
+  v_org := pg_temp.test_org('Nota Peribadi Sdn Bhd');
+  v_id := pg_temp.cd_contact(v_org, 'C-2026-00001', 'Ramli Enterprise');
+
+  insert into public.todos (org_id, user_id, title, contact_id)
+  values (v_org, v_me, 'Ring Ramli back', v_id)
+  returning id into v_todo;
+
+  perform pg_temp.check_eq('a to-do does not count as transaction data',
+    app.contact_blockers(v_id)::text, '{}');
+  perform pg_temp.check_eq('so the contact deletes',
+    public.delete_contact(v_id) ->> 'deleted', 'true');
+
+  -- The note survives, and loses its party rather than going with it.
+  -- A cascade here would delete somebody's private list because an
+  -- unrelated contact was tidied up.
+  perform pg_temp.check_eq('and the note is still there',
+    (select title from public.todos where id = v_todo), 'Ring Ramli back');
+  perform pg_temp.check_eq('with its party cleared',
+    coalesce((select contact_id::text from public.todos where id = v_todo),
+             '(null)'), '(null)');
+
+  -- The control on the exemption. One table is named, and the
+  -- surrounding rule is untouched -- a ledger line still blocks.
+  v_id := pg_temp.cd_contact(v_org, 'C-2026-00002', 'Still Blocked');
+  insert into public.todos (org_id, user_id, title, contact_id)
+  values (v_org, v_me, 'And a note about this one too', v_id);
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-7', app.today(), v_id, 'MYR', 1,
+          10, 10, 10, 'draft');
+  perform pg_temp.check_eq('an invoice still counts',
+    app.contact_blockers(v_id) ->> 'sales_documents', '1');
+  perform pg_temp.check_eq('and the note beside it still does not',
+    coalesce(app.contact_blockers(v_id) ->> 'todos', '(absent)'), '(absent)');
+  perform pg_temp.check_refused('so the deletion is still refused',
+    format('select public.delete_contact(%L)', v_id),
+    '%1 sales document%', '23503');
+end $$;
+
 rollback;

@@ -1525,6 +1525,8 @@ class Todo {
     this.priority = 'normal',
     this.doneAt,
     this.link,
+    this.contactId,
+    this.contactName,
   });
 
   factory Todo.fromJson(Map<String, dynamic> json) => Todo(
@@ -1539,6 +1541,24 @@ class Todo {
         ? null
         : DateTime.parse(json['done_at'] as String),
     link: json['link'] as String?,
+    contactId: json['contact_id'] as String?,
+    contactName: json['contact_name'] as String?,
+  );
+
+  /// The same item with its party's name filled in.
+  ///
+  /// The name is not on `todos` -- it is on `contacts`, where a rename
+  /// belongs -- so the repository reads it separately and puts it here.
+  Todo withContactName(String? name) => Todo(
+    id: id,
+    title: title,
+    notes: notes,
+    dueDate: dueDate,
+    priority: priority,
+    doneAt: doneAt,
+    link: link,
+    contactId: contactId,
+    contactName: name,
   );
 
   final String id;
@@ -1555,6 +1575,19 @@ class Todo {
 
   /// Where in the app this is about, if anywhere.
   final String? link;
+
+  /// The customer or supplier this is about, if any. `0656`.
+  ///
+  /// Separate from [link], which is a route to a SCREEN: this is a
+  /// party. "Chase Ramli" is about a party, and a route could not say
+  /// which one without being parsed.
+  final String? contactId;
+
+  /// That party's name, read alongside rather than stored.
+  ///
+  /// Null while it has not been looked up, which is not the same as
+  /// having no party -- [contactId] is what says that.
+  final String? contactName;
 
   bool get isDone => doneAt != null;
 

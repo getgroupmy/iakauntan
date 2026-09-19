@@ -4847,7 +4847,41 @@ class Repo {
         .order('due_date', ascending: true, nullsFirst: false)
         .order('created_at', ascending: true)
         .limit(limit);
-    return _rows(data).map(Todo.fromJson).toList();
+    final items = _rows(data).map(Todo.fromJson).toList();
+
+    // `0656`. The party's name, read separately rather than embedded.
+    //
+    // A PostgREST embed would be one round trip, and `todos_contact_id`
+    // is a COMPOSITE key -- `(org_id, contact_id)` per `0511` -- which
+    // is exactly the shape that makes an embed's hint ambiguous and
+    // fails at run time on a screen rather than here. One extra select
+    // over at most a hundred rows is the cheaper certainty.
+    //
+    // A name that cannot be read is left null, not an error: a to-do is
+    // a private note and it still says what it says.
+    final ids = {
+      for (final t in items)
+        if (t.contactId != null) t.contactId!,
+    };
+    if (ids.isEmpty) return items;
+    try {
+      final rows = _rows(
+        await client
+            .from('contacts')
+            .select('id, name')
+            .eq('org_id', orgId)
+            .inFilter('id', ids.toList()),
+      );
+      final names = {
+        for (final r in rows) r['id'] as String: r['name']?.toString(),
+      };
+      return [
+        for (final t in items)
+          t.contactId == null ? t : t.withContactName(names[t.contactId]),
+      ];
+    } catch (_) {
+      return items;
+    }
   }
 
   Future<void> addTodo({
@@ -4856,6 +4890,7 @@ class Repo {
     DateTime? dueDate,
     String priority = 'normal',
     String? link,
+    String? contactId,
   }) async {
     final uid = client.auth.currentUser?.id;
     if (uid == null) return;
@@ -4867,6 +4902,7 @@ class Repo {
       if (dueDate != null) 'due_date': Fmt.iso(dueDate),
       'priority': priority,
       if (link != null && link.isNotEmpty) 'link': link,
+      if (contactId != null) 'contact_id': contactId,
     });
   }
 
@@ -4877,6 +4913,12 @@ class Repo {
     DateTime? dueDate,
     bool clearDueDate = false,
     String? priority,
+    String? contactId,
+
+    /// `0656`. Taking the party off is a thing somebody does, and
+    /// `contactId: null` cannot say it -- absent and "clear this" are
+    /// the same value. The same split `clearDueDate` already makes.
+    bool clearContact = false,
   }) async {
     await client
         .from('todos')
@@ -4888,6 +4930,10 @@ class Repo {
           else if (dueDate != null)
             'due_date': Fmt.iso(dueDate),
           if (priority != null) 'priority': priority,
+          if (clearContact)
+            'contact_id': null
+          else if (contactId != null)
+            'contact_id': contactId,
         })
         .eq('id', id);
   }
