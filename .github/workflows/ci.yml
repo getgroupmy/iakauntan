@@ -2928,11 +2928,28 @@ jobs:
 
           # --yes so a first deploy into a fresh project cannot sit waiting
           # on a confirmation prompt that nobody is there to answer.
+          #
+          # Wrapped in `retry.sh` for the reason that script was written:
+          # CI must not cry wolf. Run 1951 went red here on `Error: fetch
+          # failed` AFTER the upload had finished — one lost packet
+          # talking to Vercel's API, on a commit whose diff was Swift and
+          # Dart. Eleven of twelve jobs had already passed.
+          #
+          # Retrying a deploy is safe in the way that matters, and it is
+          # worth writing down because it is NOT safe in the way `db
+          # push` is. A retry does not resume the first attempt, it makes
+          # a second deployment — but from the same prebuilt output of
+          # the same commit, so the two are identical and the alias ends
+          # up on whichever succeeded. The cost is a duplicate row in the
+          # deployments list, which is cheaper than a red branch nobody
+          # reads.
           if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
-            url="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")"
+            url="$(scripts/ci/retry.sh -o /tmp/vercel-url.txt \
+                     vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")"
             echo "### Deployed to production" >> "$GITHUB_STEP_SUMMARY"
           else
-            url="$(vercel deploy --prebuilt --yes --token="$VERCEL_TOKEN")"
+            url="$(scripts/ci/retry.sh -o /tmp/vercel-url.txt \
+                     vercel deploy --prebuilt --yes --token="$VERCEL_TOKEN")"
             echo "### Preview deploy" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "$url" >> "$GITHUB_STEP_SUMMARY"
