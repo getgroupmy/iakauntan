@@ -698,6 +698,21 @@ class Repo {
     return _rows(data).map(Contact.fromJson).toList();
   }
 
+  /// Deletes a contact, or throws saying what still points at it.
+  ///
+  /// `0654`. An RPC rather than `.from('contacts').delete()`, and the
+  /// difference is not tidiness: nineteen of the foreign keys on
+  /// `contacts.id` are ON DELETE SET NULL, `gl_lines.contact_id` among
+  /// them. A plain delete against a customer whose only history is in
+  /// the ledger succeeds without a word and detaches every posted line
+  /// from the party it was posted against.
+  ///
+  /// The refusal comes back as `23503` with the counts in its message.
+  /// See `contact_delete.dart` for what is made of it.
+  Future<void> deleteContact(String id) async {
+    await callRpc('delete_contact', params: {'p_id': id});
+  }
+
   Future<Contact> contact(String id) async {
     final data = await client.from('contacts').select().eq('id', id).single();
     return Contact.fromJson(data);

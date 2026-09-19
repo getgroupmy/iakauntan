@@ -716,6 +716,7 @@ jobs:
                    supabase/tests/contact_types.sql \
                    supabase/tests/credit_hold_is_visible.sql \
                    supabase/tests/contact_records.sql \
+                   supabase/tests/contact_delete.sql \
                    supabase/tests/prospect_quotation.sql \
                    supabase/tests/contact_import_codes.sql \
                    supabase/tests/document_numbering.sql \

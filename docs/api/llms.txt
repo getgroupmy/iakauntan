@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0653` (the highest applied migration).
-735 functions and 348 readable tables, of which
+Schema version `0654` (the highest applied migration).
+736 functions and 348 readable tables, of which
 274 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**595 of 735 functions carry a `comment on
+**596 of 736 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -101,6 +101,12 @@ Refused unless the company has the `accounting` module switched on and the calle
 - `set_budget_lines(p_budget uuid, p_lines jsonb)` *(writes)* — Replaces a budget's lines wholesale and returns how many were written.
 - `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)* — Creates or renames a budget for a financial year.
 - `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)* — Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or bill has yet recorded -- so the thirteen-week forecast can include it.
+
+### contacts (1)
+
+Refused unless the company has the `contacts` module switched on and the caller may use it.
+
+- `delete_contact(p_id uuid)` *(writes)* — Deletes a contact, or refuses with errcode 23503 naming what still points at it.
 
 ### crm (1)
 

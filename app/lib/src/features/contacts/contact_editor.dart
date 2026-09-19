@@ -31,6 +31,7 @@ import '../shared/ssm_query_hints.dart';
 import 'brought_forward.dart';
 import 'brought_forward_pdf.dart';
 import 'statement_pdf.dart';
+import 'contact_delete.dart';
 import 'contact_extras.dart';
 import 'customer_portal_card.dart';
 import 'tax_details_card.dart';
@@ -600,6 +601,25 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     }
   }
 
+  /// `0654`. Delete this contact, having asked.
+  ///
+  /// Leaves the screen only when it actually went. A refusal keeps the
+  /// form open with everything on it: the likeliest next thing somebody
+  /// does after "3 sales documents point at this" is go and look at
+  /// them, and dropping them back on a list first would be a step
+  /// taken away rather than one saved.
+  Future<void> _delete() async {
+    final gone = await confirmAndDeleteContact(
+      context,
+      ref,
+      id: widget.contactId!,
+      name: _c('name').text,
+    );
+    if (!gone || !mounted) return;
+    ref.invalidate(contactsProvider);
+    Navigator.of(context).maybePop();
+  }
+
   /// Asks SSM's register who this company is.
   ///
   /// Seeded with whatever is already on the form — a registration
@@ -781,6 +801,18 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                   ),
                 ],
               ),
+          // `0654`. The same delete as the one on the row in the list,
+          // through the same warning and the same refusal, and only on
+          // a contact that has been saved -- there is nothing to
+          // delete before that, and the button would be a second
+          // Cancel.
+          if (widget.contactId != null && ref.watch(canWriteProvider))
+            IconButton(
+              key: const ValueKey('contact-delete'),
+              tooltip: 'Delete this contact',
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: _saving ? null : _delete,
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
