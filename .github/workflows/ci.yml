@@ -1427,6 +1427,20 @@ jobs:
       - run: deno check supabase/functions/_shared/web_push_test.ts
       - run: deno test --allow-read supabase/functions/_shared/web_push_test.ts
 
+      # APNs, for the iPhones that do not go through Firebase. `0657`.
+      #
+      # `--allow-env` because the last assertion is about what
+      # `apnsFromEnv` does with four secrets that have to agree: all
+      # four, none, or the half-configured case that has to throw rather
+      # than quietly report iPhones as skipped.
+      #
+      # The signature is verified against its own public key rather than
+      # a stored vector, unlike web push above. ES256 is randomised, so
+      # two correct signings of one string differ and a byte vector
+      # could only have asserted that the randomness had stopped.
+      - run: deno check supabase/functions/_shared/apns_test.ts
+      - run: deno test --allow-env supabase/functions/_shared/apns_test.ts
+
       # Billplz, and the one thing that has to be right.
       #
       # `billplz-callback` is the only function deployed without

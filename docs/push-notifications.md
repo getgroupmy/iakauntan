@@ -8,8 +8,11 @@ arrived only where somebody was already looking. Since the reason to ring
 somebody is that they are doing something else, that is close to saying
 it did not work.
 
-**Browsers work today and need no account anywhere.** Android and iOS do
-not, and the bottom of this page says why.
+**Browsers work today and need no account anywhere.** iOS has a sender
+that needs only a `.p8` from the Apple developer account and no Firebase
+project at all (`0657`); what it is still waiting for is the Flutter
+half that registers a device token. Android needs Firebase. The bottom
+of this page says what each is missing.
 
 | Piece | Where |
 | --- | --- |
@@ -19,6 +22,9 @@ not, and the bottom of this page says why.
 | The sender | `supabase/functions/send-push/` |
 | Web push itself — VAPID and RFC 8291 | `supabase/functions/_shared/web_push.ts` |
 | Its assertions, against the reference implementation | `supabase/functions/_shared/web_push_test.ts` (runs in CI) |
+| APNs direct, for iPhones without Firebase | `supabase/functions/_shared/apns.ts` |
+| Its assertions | `supabase/functions/_shared/apns_test.ts` (runs in CI) |
+| Which service a token belongs to | `supabase/migrations/0657_reaching_an_iphone_without_google.sql` |
 | The service worker that draws the notification | `app/web/push_sw.js` |
 | Subscribing, from the browser | `app/lib/src/core/push_web.dart` |
 | The switch somebody presses | Settings → Notifications |
@@ -93,6 +99,59 @@ old code — but applied to the push worker it would cancel the browser's
 subscription, and notifications would stop with nothing on screen
 saying why. The push worker serves no assets and caches nothing, so it
 cannot cause the problem the eviction is there to solve.
+
+## APNs, and why it is not Firebase either
+
+An iPhone can be addressed directly, with a `.p8` auth key from the
+Apple developer account and nothing else in the middle. Two reasons, and
+only the first is about features.
+
+**PushKit.** A VoIP push is a different `apns-push-type`, sent to a
+different topic (`<bundle>.voip`), carrying a different token — and it
+is the only thing that produces a full-screen CallKit ring rather than a
+banner somebody has to notice and tap. FCM has no way to send one: it is
+not an option Google withholds, it is not in the protocol FCM speaks to
+Apple. So an app that rings the way people expect a phone to ring cannot
+go through Firebase.
+
+**One fewer party.** Everything else here is arranged so that nobody has
+to be trusted or paid. A Firebase project for iOS would put Google in
+the middle of an Apple conversation, carrying the notifications of an
+application whose chat mentions payslips.
+
+Android still needs Firebase. There is no direct equivalent — that is
+Google's transport all the way down.
+
+### The two traps, both silent
+
+**The provider token must be REUSED.** APNs rate-limits token
+*generation*, not requests: minting a fresh JWT per notification earns
+`TooManyProviderTokenUpdates` as soon as two people are in a
+conversation. It also refuses one older than an hour. So one is minted
+and cached for fifty minutes — the middle of a window that is narrow at
+both ends — and `apns_test.ts` asserts both edges.
+
+**The host is not one host.** A token from a development build is
+meaningless to the production host and vice versa, and the answer either
+way is `400 BadDeviceToken`, which reads as "the handset is gone".
+`isDeadToken` deliberately does **not** treat it as death: acting on it
+would quietly unregister every iPhone on a deployment whose
+`APNS_PRODUCTION` is wrong, leaving nothing to notice once somebody
+fixed it. Only `410 Unregistered` removes a row.
+
+### Which service a row is for
+
+`0657` adds `device_tokens.transport` — `web`, `fcm` or `apns`. It is a
+column rather than something inferred at send time, because an iOS row
+is now either and the tokens are not interchangeable: each is refused
+forever by the other service, and both refusals are silent. The token's
+*shape* is diagnostic — an APNs token is hexadecimal, an FCM one is not
+— and that is used as a CHECK and in `register_device`'s refusal, which
+is the right place for it. A router that guessed would misroute the
+first Firebase token that happened to be hex, silently.
+
+Existing rows were backfilled to what they already were, so the
+migration moved nobody.
 
 ## The rules, and where they live
 
@@ -187,22 +246,52 @@ again with nothing telling them why they stopped being notified.
 Until the keys are set the app says push is not configured, which is
 true, and registers nothing.
 
-### Android and iOS — not built
+### iOS — a `.p8`, and no Firebase project
+
+| Name | What it is |
+| --- | --- |
+| `APNS_KEY_P8` | the whole `.p8` file, PEM, including its BEGIN and END lines |
+| `APNS_KEY_ID` | the 10-character Key ID it was downloaded with |
+| `APNS_TEAM_ID` | the 10-character Apple team identifier |
+| `APNS_TOPIC` | the app's bundle identifier |
+| `APNS_PRODUCTION` | `true` for `api.push.apple.com`, otherwise the sandbox |
+
+Made under **Certificates, Identifiers & Profiles → Keys** with *Apple
+Push Notification service* ticked. Apple issues several kinds of `.p8`
+and only that one is this one; the others are refused with a sentence
+saying so rather than a 403 from Apple explaining nothing.
+
+All four or none. Three of them set is somebody halfway through a job,
+and answering "not configured" would leave them hunting for why iPhones
+are being skipped — so a half-configured deployment throws.
+
+Leave `APNS_PRODUCTION` unset while testing. It defaults to the sandbox,
+because a production host refuses every token a development build
+registered.
+
+### Android — Firebase
 
 | Name | What it is |
 | --- | --- |
 | `FCM_SERVICE_ACCOUNT` | the whole Firebase service account JSON, including `project_id` |
 
-The sender handles Firebase already; what does not exist is the Flutter
-half. Nothing in the app registers an FCM token, so `PushStatus` answers
-`unsupported` on a phone rather than offering a switch that would
-register a device no sender can reach.
+Also the fallback for iOS, for a deployment that would rather have one
+Google project than an Apple key — `register_device` takes `fcm` for an
+iOS handset and the sender routes on it. What that costs is PushKit: a
+call arrives as a banner rather than a ringing phone.
 
-The two transports are configured independently and neither is required.
-A deployment with only the VAPID pair reaches every browser and reports
-the phones as `skipped` in the response — a half-configured system that
-*looks* like it worked is the failure this whole function is arranged to
-avoid.
+### None of the three is required
+
+They are configured independently. A deployment with only the VAPID pair
+reaches every browser and reports the phones as `skipped` in the
+response, and the 503 names which secret is missing for whoever was
+actually in the room — a half-configured system that *looks* like it
+worked is the failure this whole function is arranged to avoid.
+
+What does not exist yet on either phone platform is the **Flutter
+half**: nothing in the app registers a device token, so `PushStatus`
+answers `unsupported` there rather than offering a switch that would
+register a device no sender can reach.
 
 ## What is left
 
@@ -210,11 +299,15 @@ avoid.
   `FirebaseOptions` passed from Dart, plus the registration call. It is
   the one platform where a call can ring the way people expect, via a
   high-priority data message and a full-screen intent.
-- **iOS** can be reached without Firebase at all, by addressing APNs
-  directly with a token-based `.p8` key — and should be, because FCM
-  cannot send the **PushKit** VoIP push that a real CallKit incoming-call
-  screen needs. What FCM can do on iOS is a time-sensitive banner the
-  person taps.
+- **iOS** has its sender now (`0657`): APNs directly, with a `.p8` and
+  no Firebase, sending a PushKit VoIP push for a call and an ordinary
+  alert for a message. What is missing is the app half — registering
+  for remote notifications and handing the device token to
+  `register_device` with `transport: 'apns'`. That needs no third-party
+  package: it is `UNUserNotificationCenter` and
+  `didRegisterForRemoteNotificationsWithDeviceToken` over a
+  MethodChannel, plus `PKPushRegistry` for the VoIP token, which is a
+  second token registered against the same row shape.
 - **Safari** needs the app installed to the home screen as a PWA before
   it will subscribe at all. Chrome, Edge and Firefox work from an
   ordinary tab. The app detects this by feature rather than by user
