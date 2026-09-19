@@ -352,23 +352,23 @@ register a device no sender can reach.
   `FirebaseOptions` passed from Dart, plus the registration call. It is
   the one platform where a call can ring the way people expect, via a
   high-priority data message and a full-screen intent.
-- **iOS** is built as far as alerts. `0657` is the sender, `0658` is the
-  register, and `app/ios/Runner/AppDelegate.swift` with
-  `app/lib/src/core/push_native.dart` is the app half: permission,
-  `didRegisterForRemoteNotificationsWithDeviceToken`, and the token
-  handed to `register_device` with `transport: 'apns'` and a
-  `device_id`. No third-party package.
+- **iOS is built**, alerts and calls. `0657` is the sender, `0658` is
+  the register, and `app/ios/Runner/AppDelegate.swift` with
+  `app/lib/src/core/push_native.dart` and
+  `app/lib/src/core/callkit.dart` is the app half: permission, both
+  Apple tokens, a `CXProvider` that reports every VoIP push, and the
+  answer routed into the flow `IncomingCallWatcher` already ran. No
+  third-party package for any of it.
 
-  **CallKit is what is left.** `PKPushRegistry` is deliberately *not*
-  registered yet, and the reason is in `AppDelegate.swift`'s header: iOS
-  kills an app that receives a VoIP push without reporting it to
-  CallKit, so half of this is worse than none of it. Everything else is
-  ready for it — `apns_voip` is stored, `appleDelivery` routes to it,
-  and `push_native.dart` passes a `voip` token through the moment the
-  native side produces one. What that commit has to add is a
-  `CXProvider`, `reportNewIncomingCall` on the push, and answer and end
-  actions wired to the flow `IncomingCallWatcher` already runs. Until
-  then a call reaches a closed iPhone as a banner rather than a ring.
+  **One part is written from documentation rather than from a device:
+  the audio session.** `didActivate` sets the category and leaves
+  activation to the system. If a real handset answers a call into
+  silence, the next step is the `RTCAudioSession.audioSessionDidActivate`
+  handshake `flutter_webrtc` expects — deliberately not in the file,
+  because importing `WebRTC` would tie it to a CocoaPods module name
+  and a rename there would break the iOS build for everybody rather
+  than producing a quiet audio bug for one person. It is one line in
+  each of two methods for whoever has a phone to try it on.
 - **Safari** needs the app installed to the home screen as a PWA before
   it will subscribe at all. Chrome, Edge and Firefox work from an
   ordinary tab. The app detects this by feature rather than by user

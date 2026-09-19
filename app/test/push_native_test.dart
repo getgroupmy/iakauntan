@@ -84,9 +84,10 @@ void main() {
 
     test('the alert token alone, when PushKit has not answered yet',
         () async {
-      // The state this build is actually in: `AppDelegate.swift`
-      // registers for alerts and deliberately not for PushKit, so
-      // `voip` is an absent key rather than a null one.
+      // An ordinary moment rather than a broken one: the two tokens
+      // come from two Apple services and arrive separately, so a
+      // registration made between them carries one. The next start
+      // carries both.
       nativeSide({
         'authorization': 'authorized',
         'alert': alert,

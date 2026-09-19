@@ -1,4 +1,7 @@
+import AVFoundation
+import CallKit
 import Flutter
+import PushKit
 import UIKit
 import UserNotifications
 
@@ -25,24 +28,38 @@ import UserNotifications
 /// settings screen that says notifications are not on rather than an
 /// error nobody can act on.
 ///
-/// ## PushKit is deliberately NOT here yet
+/// ## PushKit, and why it could not come one commit earlier
 ///
-/// `0658` has a transport for the PushKit token, `send-push` routes to
-/// it, and `push_native.dart` will pass one through the moment this
-/// file produces one. It does not produce one, on purpose.
+/// A VoIP push is the only thing that makes a locked iPhone ring the
+/// way people expect a phone to ring. It is also the most dangerous
+/// thing an app can register for: iOS requires that EVERY VoIP push be
+/// reported to CallKit, in the same turn of the run loop, with
+/// `reportNewIncomingCall`. An app that takes one and does not is
+/// killed, and killed often enough has its PushKit registration
+/// revoked — so the failure is not a dropped call, it is a handset that
+/// stops receiving calls permanently.
 ///
-/// iOS requires that every VoIP push an app receives be reported to
-/// CallKit, synchronously, with `reportNewIncomingCall`. An app that
-/// takes a PushKit push and does not is KILLED, and killed often enough
-/// has its PushKit registration revoked — so registering for VoIP
-/// pushes before there is a `CXProvider` to report them to would not
-/// degrade gracefully, it would break the app's ability to receive
-/// calls at all, permanently, on handsets that had worked.
+/// So `reportIncoming` reports FIRST and asks questions afterwards. A
+/// push whose payload is unreadable still produces a reported call,
+/// which is then ended immediately: the alternative is not "nothing
+/// happens", it is the operating system killing the process.
 ///
-/// So PushKit lands with CallKit and not before. Nothing else waits on
-/// it: alerts work on their own, a call already reaches anybody with
-/// the app open through `IncomingCallWatcher`, and with this file in
-/// place a call reaches a closed app as a banner.
+/// ## What is written from documentation rather than from a device
+///
+/// The audio session. `didActivate` sets the category and nothing more,
+/// because activation is the system's job under CallKit. If a real
+/// device answers a call into silence, the next step is the documented
+/// `RTCAudioSession.audioSessionDidActivate(_:)` handshake that
+/// `flutter_webrtc` expects — deliberately NOT here, because importing
+/// `WebRTC` would make this file depend on a CocoaPods module name, and
+/// a rename there would break the iOS build for everybody rather than
+/// producing a quiet audio bug for one person. It is one line in each
+/// of the two `didActivate`/`didDeactivate` methods when somebody has a
+/// handset to try it on.
+///
+/// Everything else here is reachable from `callkit.dart`'s tests: the
+/// queue, the event shapes and the routing are asserted there, and this
+/// file's job is to produce them.
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   /// How long `register` waits for Apple before answering without a
@@ -61,11 +78,40 @@ import UserNotifications
   /// Application ID change has to touch at once.
   private static let channelName = "my.iakauntan.iakauntan/push"
 
+  /// The second channel, for calls. Separate because the two have
+  /// different lifetimes: push registration is asked for by a screen,
+  /// and a call arrives whether or not anything is listening.
+  private static let callChannelName = "my.iakauntan.iakauntan/calls"
+
   private var pushChannel: FlutterMethodChannel?
+  private var callChannel: FlutterMethodChannel?
 
   /// The APNs device token for alerts, as hexadecimal. Nil until Apple
   /// has issued one, and again once it is given back.
   private var alertToken: String?
+
+  /// The PushKit token, which is a different token from a different
+  /// Apple service and is registered under `apns_voip`. See `0658`.
+  private var voipToken: String?
+
+  private var voipRegistry: PKPushRegistry?
+  private var callProvider: CXProvider?
+
+  /// The CallKit identity of each ringing call, by the id the database
+  /// knows it as. CallKit speaks UUIDs and `chat_calls` speaks its own
+  /// ids, and a call has to be findable from either side: from a push
+  /// (by call id) and from an answer action (by UUID).
+  private var callUuids: [String: UUID] = [:]
+  private var callIds: [UUID: String] = [:]
+
+  /// Answers and hang-ups that happened before Dart was listening.
+  ///
+  /// A VoIP push can launch this process from cold, and CallKit can
+  /// report an answer before the Flutter engine has run a line of the
+  /// application. Sending on a channel nobody is listening to drops the
+  /// message silently, so every event is QUEUED and Dart drains the
+  /// queue; the channel is only ever a nudge to drain it sooner.
+  private var pendingCallEvents: [[String: Any]] = []
 
   /// Everybody who called `register` and is still waiting for Apple.
   private var waiting: [FlutterResult] = []
@@ -86,7 +132,22 @@ import UserNotifications
         self?.handle(call, result: result)
       }
       pushChannel = channel
+
+      let calls = FlutterMethodChannel(
+        name: AppDelegate.callChannelName,
+        binaryMessenger: controller.binaryMessenger
+      )
+      calls.setMethodCallHandler { [weak self] call, result in
+        self?.handleCall(call, result: result)
+      }
+      callChannel = calls
     }
+
+    // Both started here rather than when somebody asks for them, and
+    // that is the point: a VoIP push may be the reason this process is
+    // running at all, and there would be nothing to receive it if
+    // PushKit were registered from a settings screen.
+    startCallKit()
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -114,6 +175,12 @@ import UserNotifications
     case "unregister":
       UIApplication.shared.unregisterForRemoteNotifications()
       alertToken = nil
+      // The PushKit registry is NOT torn down. Its token has already
+      // been taken off the register by the caller, so nothing will be
+      // sent to it — but an app that stops being able to report an
+      // incoming call while a push is in flight is an app iOS kills.
+      // Dropping the registration is not this switch's business.
+      voipToken = nil
       result(nil)
 
     default:
@@ -136,9 +203,7 @@ import UserNotifications
     ]
     if let authorization = authorization { answer["authorization"] = authorization }
     if let alertToken = alertToken { answer["alert"] = alertToken }
-    // "voip" is deliberately never set. See the note on PushKit above:
-    // the Dart side already reads it, and this file will set it in the
-    // same commit that gives CallKit something to report to.
+    if let voipToken = voipToken { answer["voip"] = voipToken }
     if let vendor = UIDevice.current.identifierForVendor?.uuidString {
       answer["deviceId"] = vendor
     }
@@ -220,19 +285,156 @@ import UserNotifications
         withTimeInterval: AppDelegate.tokenDeadline,
         repeats: false
       ) { [weak self] _ in
-        self?.flush()
+        self?.flushWaiting()
       }
     }
     UIApplication.shared.registerForRemoteNotifications()
   }
 
   /// Answer everybody waiting, once, and stop the clock.
-  private func flush() {
+  fileprivate func flushWaiting() {
     deadline?.invalidate()
     deadline = nil
     let pending = waiting
     waiting = []
     for callback in pending { callback(nil) }
+  }
+
+  // MARK: - Calls
+
+  /// PushKit and CallKit, started together because neither is safe
+  /// without the other.
+  private func startCallKit() {
+    let configuration = CXProviderConfiguration()
+    configuration.supportsVideo = true
+    configuration.maximumCallsPerCallGroup = 1
+    configuration.maximumCallGroups = 1
+    // Generic, not `.phoneNumber` or `.emailAddress`. The handle is a
+    // person's name as the conversation knows it, and telling iOS it is
+    // a phone number would put a "call back" button in Recents that
+    // dials nothing.
+    configuration.supportedHandleTypes = [.generic]
+
+    let provider = CXProvider(configuration: configuration)
+    provider.setDelegate(self, queue: nil)
+    callProvider = provider
+
+    // `.main`, so `didReceiveIncomingPushWith` runs on the thread that
+    // may report a call. PushKit is strict about the reporting
+    // happening before the completion handler returns.
+    let registry = PKPushRegistry(queue: .main)
+    registry.delegate = self
+    registry.desiredPushTypes = [.voIP]
+    voipRegistry = registry
+  }
+
+  private func handleCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "drain":
+      // Read and cleared together. An event delivered twice would
+      // answer a call somebody had already declined.
+      let events = pendingCallEvents
+      pendingCallEvents = []
+      result(events)
+
+    case "end":
+      // The app finished the call — somebody hung up inside it, or it
+      // was never joined. CallKit does not find out by itself, and a
+      // call it still believes is running is a green bar across the top
+      // of the phone that nothing will clear.
+      guard let id = (call.arguments as? [String: Any])?["call_id"] as? String
+      else {
+        result(nil)
+        return
+      }
+      endCall(id, reason: .remoteEnded)
+      result(nil)
+
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  /// Queue an event and nudge Dart to come and get it.
+  ///
+  /// The queue is the delivery mechanism and the channel is only the
+  /// doorbell. A `invokeMethod` on a channel nobody is listening to is
+  /// dropped without a word, and "nobody is listening" is the ordinary
+  /// case here: a VoIP push can start this process from cold and
+  /// CallKit can report an answer before Dart has run.
+  private func emit(_ event: [String: Any]) {
+    pendingCallEvents.append(event)
+    callChannel?.invokeMethod("wake", arguments: nil)
+  }
+
+  /// Tell CallKit a call is over, from whichever side ended it.
+  private func endCall(_ id: String, reason: CXCallEndedReason) {
+    guard let uuid = callUuids[id] else { return }
+    callUuids[id] = nil
+    callIds[uuid] = nil
+    callProvider?.reportCall(with: uuid, endedAt: nil, reason: reason)
+  }
+
+  /// Report an incoming call, whatever the payload turns out to be.
+  ///
+  /// Reporting comes first and validation second, and the order is the
+  /// whole safety property: a push that is not reported costs the app
+  /// its life. A payload this cannot read still produces a call, ended
+  /// on the next line, which is a moment of ringing rather than a
+  /// terminated process.
+  private func reportIncoming(_ payload: [AnyHashable: Any], then done: @escaping () -> Void) {
+    let id = payload["call_id"] as? String
+    let caller = payload["sender_name"] as? String
+    let room = payload["title"] as? String
+    let video = payload["video"] as? Bool ?? false
+
+    let uuid = UUID()
+    let update = CXCallUpdate()
+    update.localizedCallerName = caller ?? room ?? "iAkauntan"
+    update.hasVideo = video
+    update.supportsGrouping = false
+    update.supportsUngrouping = false
+    update.supportsHolding = false
+    update.remoteHandle = CXHandle(type: .generic, value: id ?? "iAkauntan")
+
+    // Set BEFORE the ring rather than on answer. Apple's own guidance,
+    // and the reason is that the category decides whether the ringtone
+    // ducks other audio; changing it afterwards is already too late.
+    try? AVAudioSession.sharedInstance().setCategory(
+      .playAndRecord, mode: .voiceChat, options: [.allowBluetooth])
+
+    guard let provider = callProvider else {
+      done()
+      return
+    }
+
+    provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] error in
+      guard let self = self else {
+        done()
+        return
+      }
+      if error != nil || id == nil {
+        // Reported, and immediately over. Either the system refused it
+        // (Do Not Disturb, or a blocked caller) or the payload did not
+        // say which call this is, and there is nothing to answer.
+        provider.reportCall(with: uuid, endedAt: nil, reason: .failed)
+        done()
+        return
+      }
+      let id = id!
+      self.callUuids[id] = uuid
+      self.callIds[uuid] = id
+      // So the app can show the right screen the moment it is looked
+      // at, whether or not anybody presses answer.
+      self.emit([
+        "event": "ringing",
+        "call_id": id,
+        "video": video,
+        "caller": caller as Any,
+        "title": room as Any,
+      ])
+      done()
+    }
   }
 
   // MARK: - Apple's answers
@@ -245,7 +447,7 @@ import UserNotifications
     // itself takes in the request path, and the form `0658`'s shape
     // check is written against.
     alertToken = deviceToken.map { String(format: "%02x", $0) }.joined()
-    flush()
+    flushWaiting()
     super.application(
       application,
       didRegisterForRemoteNotificationsWithDeviceToken: deviceToken
@@ -261,10 +463,107 @@ import UserNotifications
     // useful consequence is the same as a token that never arrived:
     // this device is not registered, and the settings screen says so.
     alertToken = nil
-    flush()
+    flushWaiting()
     super.application(
       application,
       didFailToRegisterForRemoteNotificationsWithError: error
     )
+  }
+}
+
+// MARK: - PushKit
+
+extension AppDelegate: PKPushRegistryDelegate {
+  func pushRegistry(
+    _ registry: PKPushRegistry,
+    didUpdate pushCredentials: PKPushCredentials,
+    for type: PKPushType
+  ) {
+    guard type == .voIP else { return }
+    voipToken = pushCredentials.token.map { String(format: "%02x", $0) }.joined()
+    // The same queue the alert token drains: a `register` call waiting
+    // for Apple takes whichever token arrives, and both are handed back
+    // together whenever it finishes.
+    flushWaiting()
+  }
+
+  func pushRegistry(
+    _ registry: PKPushRegistry,
+    didInvalidatePushTokenFor type: PKPushType
+  ) {
+    guard type == .voIP else { return }
+    // Apple has withdrawn it. Forgotten here so that the next
+    // registration does not put a dead token back on the register; the
+    // row itself is dropped by `send-push` when Apple answers 410.
+    voipToken = nil
+  }
+
+  func pushRegistry(
+    _ registry: PKPushRegistry,
+    didReceiveIncomingPushWith payload: PKPushPayload,
+    for type: PKPushType,
+    completion: @escaping () -> Void
+  ) {
+    guard type == .voIP else {
+      completion()
+      return
+    }
+    reportIncoming(payload.dictionaryPayload, then: completion)
+  }
+}
+
+// MARK: - CallKit
+
+extension AppDelegate: CXProviderDelegate {
+  /// The system has thrown away every call it knew about.
+  ///
+  /// Not an error: it happens when the provider is reconfigured or the
+  /// system decides to reset. What matters is that this side agrees,
+  /// because a call id left in the map would never be findable again
+  /// and `end` would silently do nothing for the rest of the session.
+  func providerDidReset(_ provider: CXProvider) {
+    callUuids.removeAll()
+    callIds.removeAll()
+  }
+
+  func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    guard let id = callIds[action.callUUID] else {
+      action.fail()
+      return
+    }
+    emit(["event": "answered", "call_id": id])
+    // Fulfilled immediately rather than when the app has joined. CallKit
+    // gives an action a few seconds and then fails it on the app's
+    // behalf, and joining a call means a round trip for credentials —
+    // so the alternative is a call that CallKit gives up on while the
+    // app is still connecting to it.
+    action.fulfill()
+  }
+
+  func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+    if let id = callIds[action.callUUID] {
+      callUuids[id] = nil
+      callIds[action.callUUID] = nil
+      // Declined, or hung up from the system's own call screen. Dart
+      // decides which of `chat_decline_call` and `chat_leave_call` that
+      // means, because only it knows whether the call was ever joined.
+      emit(["event": "ended", "call_id": id])
+    }
+    action.fulfill()
+  }
+
+  /// The session is ours to use.
+  ///
+  /// Category only. Activation is CallKit's, and the WebRTC handshake
+  /// that `flutter_webrtc` documents is deliberately not here — see the
+  /// note at the top of this file for why, and for what to add if a
+  /// real handset answers into silence.
+  func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+    try? audioSession.setCategory(
+      .playAndRecord, mode: .voiceChat, options: [.allowBluetooth])
+  }
+
+  func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+    // Nothing to undo while the category is all this file sets.
   }
 }

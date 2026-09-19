@@ -40,14 +40,13 @@
 /// direction the person meant it rather than the direction the platform
 /// happens to enforce.
 ///
-/// ## And the native side does not yet hand one over
+/// ## And the native side now hands both over
 ///
-/// `AppDelegate.swift` registers for alerts and NOT for PushKit, and
-/// its header says why at length: iOS kills an app that receives a VoIP
-/// push without reporting it to CallKit, so PushKit ships in the commit
-/// that brings a `CXProvider` and not before. The `apns_voip` branch
-/// here is not speculative — `0658` stores it, `send-push` routes it,
-/// and the tests below drive it — it simply has no producer yet.
+/// `AppDelegate.swift` registers for PushKit at launch, beside a
+/// `CXProvider` that reports every VoIP push it receives. The two went
+/// in together on purpose — iOS kills an app that takes a VoIP push
+/// without reporting it to CallKit — and `callkit.dart` is what the
+/// app does with the answer.
 ///
 /// ## `currentSurface`, not `Platform.isIOS`
 ///

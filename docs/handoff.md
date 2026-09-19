@@ -125,22 +125,24 @@ in the commit message — read those rather than the diff.
 
 ## Open work, ranked
 
-1. **CallKit, and the PushKit token that goes with it.** The alert half
-   of iOS push is built: `AppDelegate.swift` registers, and
-   `push_native.dart` puts the token on the register as `apns` with a
-   `device_id`. `PKPushRegistry` is deliberately **not** registered,
-   because iOS kills an app that takes a VoIP push without reporting it
-   to CallKit and revokes the registration if it keeps happening — half
-   of this is worse than none of it.
+1. **Try iOS push and calls on a real handset.** The code is all here
+   — `AppDelegate.swift`, `push_native.dart`, `callkit.dart`, `0657`,
+   `0658`, `send-push/routing.ts` — and none of it has ever run on a
+   phone, because there has been no build (blocker 5) and no APNs
+   secrets (blocker 6). Two things to check first, in this order:
 
-   Everything else is ready: `0658` stores `apns_voip`, `appleDelivery`
-   in `send-push/routing.ts` routes to it and keeps the same handset's
-   banner quiet, and `push_native.dart` passes a `voip` token straight
-   through when the native side produces one. What is left is Swift: a
-   `CXProvider`, `reportNewIncomingCall` on the push, and answer/end
-   actions wired to the flow `IncomingCallWatcher` already runs.
+   * **does a call make a sound?** `didActivate` sets the audio
+     category and nothing else. If the ring connects to silence, add
+     the `RTCAudioSession.audioSessionDidActivate(_:)` /
+     `audioSessionDidDeactivate(_:)` handshake `flutter_webrtc`
+     documents. It is not in the file on purpose: importing `WebRTC`
+     ties `AppDelegate.swift` to a CocoaPods module name, and a rename
+     would break the iOS build for everybody rather than being a quiet
+     audio bug for one person.
+   * **does `APNS_PRODUCTION` agree with the build's
+     `aps-environment`?** Crossed, every notification comes back
+     `BadDeviceToken`, which reads as a dead handset and is not one.
 
-   **Android push is still nothing**, and is blocked above on Firebase.
 2. ~~Make the local stack match the hosted project on function
    privileges.~~ **Done.** `_local_stack.sql` now reproduces Supabase's
    `grant all on functions to anon, authenticated, service_role`, and
