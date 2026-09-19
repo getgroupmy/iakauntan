@@ -422,6 +422,52 @@ class Repo {
     return data as String;
   }
 
+  /// Files a new account under an existing one.
+  ///
+  /// `0655`. Not [upsertAccount] with a parent: that one requires the
+  /// parent to be a heading ALREADY, which every account somebody
+  /// actually wants to break up is not. This promotes the parent, and
+  /// refuses where promoting it would cost something — see
+  /// [subAccountRefusal].
+  ///
+  /// Returns the row the server built: `id`, `code`, `parent_code` and
+  /// `parent_promoted`, the last of which is what lets the screen say
+  /// that the account somebody was posting to has become a heading.
+  Future<Map<String, dynamic>> addSubAccount({
+    required String parentId,
+    required String name,
+    String? code,
+    String? subtype,
+    String? description,
+    String? currency,
+  }) async {
+    final data = await callRpc(
+      'add_sub_account',
+      params: {
+        'p_parent_id': parentId,
+        'p_name': name,
+        'p_code': code,
+        'p_subtype': subtype,
+        'p_description': description,
+        'p_currency': currency,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Why this account cannot take a sub-account, or null if it can.
+  ///
+  /// Asked BEFORE the button is offered, so somebody does not find out
+  /// by filling in a dialog and having it refused. The write asks the
+  /// same question again — this is a courtesy, not the rule.
+  Future<String?> subAccountRefusal(String accountId) async {
+    final data = await callRpc(
+      'sub_account_refusal',
+      params: {'p_parent_id': accountId},
+    );
+    return data as String?;
+  }
+
   /// The ledger by account: balance brought forward, every posted line,
   /// balance carried down. What the trial balance is made of.
   ///

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0654` (the highest applied migration).
-736 functions and 348 readable tables, of which
-274 functions only read.
+Schema version `0655` (the highest applied migration).
+738 functions and 348 readable tables, of which
+275 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**596 of 736 functions carry a `comment on
+**597 of 738 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (524)
+### general (526)
 
 Not gated on any module.
 
@@ -380,6 +380,7 @@ Not gated on any module.
 - `accept_invitation(p_token text)` *(writes)* — Takes up an invitation.
 - `activate_report_layout(p_layout_id uuid)` *(writes)* — Makes one layout the one this company's report uses.
 - `add_fixed_public_holidays(p_org_id uuid, p_year integer)` *(writes)* — Adds the four fixed-date national holidays — Labour Day, National Day, Malaysia Day, Christmas — to a year's calendar, and returns how many were actually added.
+- `add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` *(writes)* — Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while the parent has nothing posted to it, no opening balance, and is not a code the ledger posts to by number.
 - `adjust_attendance(p_record uuid, p_clock_in timestamp with time zone, p_clock_out timestamp with time zone, p_reason text)` *(writes)* — Corrects a day's clock times, recording who changed it and why.
 - `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)* — Records that a company has adopted a constitution, on the date it did.
 - `ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` *(writes)* — Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies.
@@ -862,6 +863,7 @@ Not gated on any module.
 - `stock_on_hand(p_org_id uuid, p_warehouse_id uuid)`
 - `strata_arrears(p_scheme_id uuid, p_as_at date)`
 - `strata_charge_preview(p_scheme_id uuid, p_period_from date, p_period_to date)`
+- `sub_account_refusal(p_parent_id uuid)`
 - `submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` *(writes)* — Opens an approval request over a sales document, a purchase document or a journal, and builds one step per matching rule in the rules' own step order.
 - `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)* — Files a leave request and HOLDS THE DAYS against the balance while it waits — which is what stops two requests each passing a check the pair of them would fail.
 - `submit_manager_appraisal(p_appraisal uuid, p_rating numeric, p_comments text, p_increment numeric, p_bonus numeric, p_promotion boolean, p_development_plan text)` *(writes)* — The reviewer's half.

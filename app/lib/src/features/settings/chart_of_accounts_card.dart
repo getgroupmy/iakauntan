@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'chart_export.dart';
+import 'sub_account_dialog.dart';
 
 /// The company's own chart of accounts.
 ///
@@ -270,7 +271,14 @@ class _TypeGroup extends ConsumerWidget {
         for (final a in accounts)
           ListTile(
             dense: true,
-            contentPadding: const EdgeInsets.only(left: 8),
+            // `0655`. Indented by how deep the number goes, so a
+            // chart broken down four levels reads as a shape rather
+            // than as a column of increasingly long numbers. The list
+            // is in code order, which already puts a child under its
+            // parent; this is what makes that visible.
+            contentPadding: EdgeInsets.only(
+              left: 8 + 16.0 * chartIndentDepth(a.code),
+            ),
             onTap: canEdit ? () => onEdit(a) : null,
             title: Text(
               '${a.code}  ${a.name}',
@@ -286,13 +294,44 @@ class _TypeGroup extends ConsumerWidget {
             subtitle: a.isActive
                 ? null
                 : const Text('Retired', style: TextStyle(fontSize: 11)),
-            trailing: canEdit && !a.isGroup
-                ? IconButton(
-                    tooltip: 'Retire this account',
-                    icon: const Icon(Icons.remove_circle_outline, size: 18),
-                    onPressed: a.isActive
-                        ? () => _retire(context, ref, a)
-                        : null,
+            trailing: canEdit
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // `0655`. Break an account down: `1120` Bank
+                      // accounts, then Maybank and CIMB under it. The
+                      // server decides whether this parent may take
+                      // one -- it cannot once anything has been posted
+                      // to it -- and the dialog asks before it draws a
+                      // form, so a refusal is not something somebody
+                      // discovers after typing.
+                      IconButton(
+                        key: ValueKey('sub-account-${a.id}'),
+                        tooltip: 'Add a sub-account under this',
+                        icon: const Icon(Icons.subdirectory_arrow_right,
+                            size: 18),
+                        onPressed: a.isActive
+                            ? () async {
+                                final added = await showSubAccountDialog(
+                                  context,
+                                  parent: a,
+                                );
+                                if (added != null) {
+                                  ref.invalidate(accountsProvider);
+                                }
+                              }
+                            : null,
+                      ),
+                      if (!a.isGroup)
+                        IconButton(
+                          tooltip: 'Retire this account',
+                          icon: const Icon(Icons.remove_circle_outline,
+                              size: 18),
+                          onPressed: a.isActive
+                              ? () => _retire(context, ref, a)
+                              : null,
+                        ),
+                    ],
                   )
                 : null,
           ),

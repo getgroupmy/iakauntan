@@ -15,6 +15,7 @@ import '../../data/ocr_repository.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 import '../settings/new_account_dialog.dart';
+import '../settings/sub_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import '../shared/scan_runner.dart';
 import 'expense_split.dart';
@@ -457,6 +458,26 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     }
   }
 
+  /// `0655`. Break the chosen expense account down, and select the
+  /// child that comes back.
+  ///
+  /// Selecting it is the point: somebody who has just made "Flights"
+  /// under 6100 Travel meant to post THIS receipt to it, and leaving
+  /// the parent chosen would be a step done and then undone.
+  ///
+  /// The parent may also have stopped being choosable -- filing
+  /// something under it turns it into a heading -- so leaving it
+  /// selected would leave the form holding an account the server will
+  /// refuse.
+  Future<void> _addSubAccount(List<Account> accounts) async {
+    final parent = accounts.where((a) => a.id == _accountId).firstOrNull;
+    if (parent == null) return;
+    final added = await showSubAccountDialog(context, parent: parent);
+    if (added == null || !mounted) return;
+    ref.invalidate(accountsProvider);
+    setState(() => _accountId = added);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Only expense accounts are sensible here.
@@ -544,10 +565,36 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _startSplit,
-                      icon: const Icon(Icons.call_split, size: 18),
-                      label: const Text('Split across accounts'),
+                    child: Wrap(
+                      spacing: 4,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _startSplit,
+                          icon: const Icon(Icons.call_split, size: 18),
+                          label: const Text('Split across accounts'),
+                        ),
+                        // `0655`. "Add account" in the picker above
+                        // makes a new heading at the top of the chart;
+                        // this breaks the one already chosen down --
+                        // 6100 Travel, and Flights under it. Both are
+                        // reached from the same receipt, and which one
+                        // somebody wants depends on whether the chart
+                        // already has a home for it.
+                        //
+                        // Disabled with nothing chosen, because "under
+                        // what?" has no answer then. The server refuses
+                        // a parent that has been posted to, and the
+                        // dialog asks it before drawing a form.
+                        TextButton.icon(
+                          key: const ValueKey('expense-sub-account'),
+                          onPressed: _accountId == null
+                              ? null
+                              : () => _addSubAccount(accounts),
+                          icon: const Icon(
+                              Icons.subdirectory_arrow_right, size: 18),
+                          label: const Text('Add a sub-account'),
+                        ),
+                      ],
                     ),
                   ),
                 ] else

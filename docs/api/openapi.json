@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0654",
+    "version": "0655",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -19270,6 +19270,102 @@
                   "type": "string",
                   "format": "uuid"
                 }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/add_sub_account": {
+      "post": {
+        "operationId": "add_sub_account",
+        "summary": "Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while\u2026",
+        "description": "Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while the parent has nothing posted to it, no opening balance, and is not a code the ledger posts to by number. See 0655.\n\n`public.add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_parent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_name": {
+                    "type": "string"
+                  },
+                  "p_code": {
+                    "type": "string"
+                  },
+                  "p_subtype": {
+                    "type": "string",
+                    "enum": [
+                      "current_asset",
+                      "bank",
+                      "cash",
+                      "accounts_receivable",
+                      "inventory",
+                      "fixed_asset",
+                      "accumulated_depreciation",
+                      "other_asset",
+                      "current_liability",
+                      "accounts_payable",
+                      "tax_payable",
+                      "long_term_liability",
+                      "other_liability",
+                      "share_capital",
+                      "retained_earnings",
+                      "reserves",
+                      "drawings",
+                      "sales",
+                      "other_income",
+                      "cost_of_sales",
+                      "operating_expense",
+                      "payroll_expense",
+                      "depreciation_expense",
+                      "finance_cost",
+                      "tax_expense",
+                      "other_expense"
+                    ]
+                  },
+                  "p_description": {
+                    "type": "string"
+                  },
+                  "p_currency": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_parent_id",
+                  "p_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -67297,6 +67393,60 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/sub_account_refusal": {
+      "post": {
+        "operationId": "sub_account_refusal",
+        "summary": "Sub account refusal",
+        "description": "`public.sub_account_refusal(p_parent_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_parent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_parent_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
