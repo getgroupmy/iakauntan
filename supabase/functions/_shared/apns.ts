@@ -57,9 +57,12 @@
  * rings.
  *
  * `apns_test.ts` verifies the JWT against its own public key rather than
- * against a stored vector, because ES256 signatures are randomised and
- * two correct signings of one string differ. A byte vector would only
- * have asserted that the randomness was stuck.
+ * against a stored vector. Not because the bytes vary — Deno's ECDSA
+ * turns out to be DETERMINISTIC, and two signings of one string with
+ * one key are identical, which is the opposite of what this paragraph
+ * said until a mutation survived and proved it — but because a stored
+ * vector would assert that this implementation still produces the same
+ * bytes, and what is worth asserting is that Apple could verify them.
  *
  * Secrets, which live only in Edge Functions → Secrets:
  *   APNS_KEY_P8      the whole .p8 file, PEM, including BEGIN/END lines

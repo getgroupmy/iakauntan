@@ -48,7 +48,7 @@ Future<PushStatus> pushStatus(String vapidPublicKey) async {
   // Granted is not the same as subscribed: permission survives a
   // subscription the browser has since dropped, and a person looking at
   // "on" with no subscription is looking at a lie.
-  return await currentPushEndpoint() == null
+  return (await currentPushTokens()).isEmpty
       ? PushStatus.askable
       : PushStatus.on;
 }
@@ -75,13 +75,17 @@ Future<web.ServiceWorkerRegistration?> _registration({
   }
 }
 
-/// The endpoint this browser is currently subscribed with, if any.
-Future<String?> currentPushEndpoint() async {
-  if (!_capable) return null;
+/// The endpoint this browser is currently subscribed with.
+///
+/// A list of at most one, because the two halves of `push.dart` share a
+/// signature and an iPhone holds two tokens — see `push_native.dart`.
+Future<List<String>> currentPushTokens() async {
+  if (!_capable) return const [];
   final registration = await _registration(create: false);
-  if (registration == null) return null;
+  if (registration == null) return const [];
   final subscription = await registration.pushManager.getSubscription().toDart;
-  return subscription?.endpoint;
+  final endpoint = subscription?.endpoint;
+  return endpoint == null ? const [] : [endpoint];
 }
 
 /// Subscribe, asking for permission only when told to.
@@ -91,21 +95,21 @@ Future<String?> currentPushEndpoint() async {
 /// refuses once will not be asked again — so the app never asks on
 /// start-up. It asks when somebody presses the button in Settings, and
 /// on every start after that it re-subscribes silently.
-Future<PushSubscriptionInfo?> subscribeToPush(
+Future<List<PushRegistration>> subscribeToPush(
   String vapidPublicKey, {
   bool ask = false,
 }) async {
-  if (!_capable || vapidPublicKey.isEmpty) return null;
+  if (!_capable || vapidPublicKey.isEmpty) return const [];
 
   var permission = web.Notification.permission;
   if (permission != 'granted') {
-    if (!ask || permission == 'denied') return null;
+    if (!ask || permission == 'denied') return const [];
     permission = (await web.Notification.requestPermission().toDart).toDart;
-    if (permission != 'granted') return null;
+    if (permission != 'granted') return const [];
   }
 
   final registration = await _registration();
-  if (registration == null) return null;
+  if (registration == null) return const [];
 
   final web.PushSubscription subscription;
   try {
@@ -125,18 +129,23 @@ Future<PushSubscriptionInfo?> subscribeToPush(
     // earlier subscription was made with, which browsers refuse rather
     // than replace.
     await unsubscribeFromPush();
-    return null;
+    return const [];
   }
 
   final p256dh = subscription.getKey('p256dh');
   final auth = subscription.getKey('auth');
-  if (p256dh == null || auth == null) return null;
+  if (p256dh == null || auth == null) return const [];
 
-  return PushSubscriptionInfo(
-    endpoint: subscription.endpoint,
-    p256dh: _b64url(p256dh.toDart.asUint8List()),
-    auth: _b64url(auth.toDart.asUint8List()),
-  );
+  return [
+    PushRegistration(
+      token: subscription.endpoint,
+      platform: 'web',
+      transport: 'web',
+      label: 'This browser',
+      p256dh: _b64url(p256dh.toDart.asUint8List()),
+      auth: _b64url(auth.toDart.asUint8List()),
+    ),
+  ];
 }
 
 Future<void> unsubscribeFromPush() async {

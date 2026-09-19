@@ -1435,11 +1435,25 @@ jobs:
       # than quietly report iPhones as skipped.
       #
       # The signature is verified against its own public key rather than
-      # a stored vector, unlike web push above. ES256 is randomised, so
-      # two correct signings of one string differ and a byte vector
-      # could only have asserted that the randomness had stopped.
+      # a stored vector, unlike web push above — because what is worth
+      # asserting is that Apple could verify it, not that this
+      # implementation still emits the same bytes. (It does: Deno's
+      # ECDSA is deterministic, which a surviving mutant proved and the
+      # comment that used to sit here denied.)
       - run: deno check supabase/functions/_shared/apns_test.ts
       - run: deno test --allow-env supabase/functions/_shared/apns_test.ts
+
+      # Which of an iPhone's two Apple tokens a given notification may
+      # go to. `0658`.
+      #
+      # Pure, and executed rather than only type-checked, because every
+      # way of getting it wrong is silent: Apple refuses a misrouted
+      # push in a JSON body nobody reads, and a PushKit push delivered
+      # to an app with nothing to report it to CallKit gets that app
+      # killed by iOS and its registration revoked. What somebody would
+      # notice is that their phone stopped ringing.
+      - run: deno check supabase/functions/send-push/routing_test.ts
+      - run: deno test supabase/functions/send-push/routing_test.ts
 
       # Billplz, and the one thing that has to be right.
       #

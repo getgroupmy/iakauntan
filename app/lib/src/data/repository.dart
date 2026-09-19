@@ -3605,12 +3605,21 @@ class Repo {
   /// `p256dh` and `auth` are a browser's encryption keys and belong only
   /// to a web registration; 0143 refuses a web row without them and a
   /// Firebase token with them.
+  ///
+  /// `transport` says which service the token belongs to — 0657 — and
+  /// `deviceId` says which handset it came from, so that an iPhone's
+  /// alert token and its PushKit token can be recognised as one phone
+  /// rather than two. Both are omitted where the platform has nothing
+  /// to say, and the function then behaves exactly as it did before
+  /// they existed. See 0658.
   Future<void> registerDevice({
     required String token,
     required String platform,
     String? label,
     String? p256dh,
     String? auth,
+    String? transport,
+    String? deviceId,
   }) => callRpc(
     'register_device',
     params: {
@@ -3619,6 +3628,8 @@ class Repo {
       if (label != null) 'p_label': label,
       if (p256dh != null) 'p_p256dh': p256dh,
       if (auth != null) 'p_auth': auth,
+      if (transport != null) 'p_transport': transport,
+      if (deviceId != null) 'p_device_id': deviceId,
     },
   );
 

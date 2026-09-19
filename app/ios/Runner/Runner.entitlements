@@ -54,5 +54,34 @@
 	<array>
 		<string>webcredentials:iakauntan.com</string>
 	</array>
+	<!--
+	  Push notifications. Without this entitlement
+	  registerForRemoteNotifications() fails, quietly, on the delegate
+	  callback nobody watches, and the settings screen simply never
+	  moves off "not on".
+
+	  The value is the APNs HOST the token will be valid at, and it is
+	  half of a pair with APNS_PRODUCTION in the function secrets. They
+	  have to agree: a token registered against one host is refused by
+	  the other with BadDeviceToken, which reads as a dead handset and
+	  is not one. _shared/apns.ts deliberately does NOT unregister on
+	  that reason for exactly this reason.
+
+	  development, not production, and that is the normal contents of a
+	  checked-in entitlements file: Xcode substitutes production when
+	  the app is archived for distribution. A file that said production
+	  would break every development build instead.
+
+	  ## A prerequisite outside this repository
+
+	  The App ID my.iakauntan.iakauntan needs the Push Notifications
+	  capability enabled under Certificates, Identifiers and Profiles,
+	  exactly as it needs Associated Domains above. Without it the
+	  provisioning profile does not carry this entitlement and a signed
+	  build fails at signing. CI is unaffected: it builds iOS with
+	  codesigning off.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>

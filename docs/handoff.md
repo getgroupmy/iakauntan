@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `895ae59` |
-| CI | green, run 1942 |
-| Migrations | `0657` is the highest; `0650`–`0657` are this session's |
-| Live database | **`0650`–`0657` are applied.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has them |
+| Head at time of writing | `9ce1d22`, plus the iOS push commit below |
+| CI | green, run 1943 |
+| Migrations | `0658` is the highest; `0650`–`0658` are this session's |
+| Live database | **`0650`–`0658` are applied.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has them |
 
 Counts to expect from a clean run: **41** gates, **333** SQL files,
-**29** deno tests, **5,095** widget tests with 1 skipped, analyser clean.
+**30** deno tests, **5,114** widget tests with 1 skipped, analyser clean.
 
 ### The working agreement
 
@@ -65,6 +65,8 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| — | iOS registers for push (`0658`): the app half, the fourth transport, and the handset pairing |
+| `9ce1d22` | This file |
 | `895ae59` | Fix: revoke from `anon`/`authenticated` by name, not just `PUBLIC` |
 | `32599dd` | APNs direct transport (`0657`), so an iPhone needs no Firebase |
 | `7e59db5` | To-do in the menu, list-and-detail page, bigger notes, contact link (`0656`) |
@@ -83,14 +85,18 @@ in the commit message — read those rather than the diff.
 
 1. **The new Application ID.** They chose "change the Application ID
    itself" (current: `my.iakauntan.iakauntan`) and never named a
-   replacement. Eight places must change together:
+   replacement. Ten places must change together:
    `app/android/app/build.gradle.kts` (namespace **and** applicationId),
    `MainActivity.kt`'s package line **and its directory path**,
    `project.pbxproj` (3 Runner + 3 RunnerTests),
    `app/web/.well-known/apple-app-site-association`,
    `doc_scanner_io.dart`'s MethodChannel — **which must match
    MainActivity's or document scanning breaks silently** —
-   `Runner.entitlements`, and `docs/passkeys.md`.
+   `push_native.dart`'s `pushChannel` and `AppDelegate.swift`'s
+   `channelName`, **which must match each other or push registration
+   breaks the same silent way** — `Runner.entitlements`, and
+   `docs/passkeys.md`. And `APNS_TOPIC` in the function secrets, which
+   is the bundle identifier and lives outside the repository.
    Also still unanswered: is the app published on either store? That
    decides whether the ID can change at all.
 2. **The upload key SHA-256** for `assetlinks.json`, and which
@@ -101,7 +107,10 @@ in the commit message — read those rather than the diff.
    developer's handset and nowhere else. Whether App Links is wanted at
    all is also open.
 3. **Associated Domains** enabled on the App ID in the Apple developer
-   portal.
+   portal — and now also **Push Notifications**, for the same App ID in
+   the same place. Without it the provisioning profile carries no
+   `aps-environment` and a signed build fails at signing. CI builds iOS
+   with codesigning off, so neither shows up until a real release.
 4. **Publish Terms of Use, Terms of Service and Privacy** in the
    platform console. Until then the consent line names them without
    linking, and the new app footer links draw nothing — by design, but
@@ -110,18 +119,28 @@ in the commit message — read those rather than the diff.
 6. For push on a phone: the five `APNS_*` secrets (iOS) and
    `FCM_SERVICE_ACCOUNT` + `google-services.json` (Android). See
    `docs/push-notifications.md`. `google-services.json` cannot live in
-   this repository.
+   this repository. `APNS_PRODUCTION` must agree with the build's
+   `aps-environment`; crossed, every notification is `BadDeviceToken`,
+   which reads as a dead handset and is not one.
 
 ## Open work, ranked
 
-1. **The Flutter half of push.** `0657` gave iOS a sender that needs no
-   Firebase; nothing in the app registers a device token, so
-   `PushStatus` answers `unsupported` on a phone. iOS needs no
-   third-party package — `UNUserNotificationCenter` and
-   `didRegisterForRemoteNotificationsWithDeviceToken` over a
-   MethodChannel, plus `PKPushRegistry` for the VoIP token, which is a
-   second token against the same row shape. Register with
-   `transport: 'apns'`. Android needs Firebase and is blocked above.
+1. **CallKit, and the PushKit token that goes with it.** The alert half
+   of iOS push is built: `AppDelegate.swift` registers, and
+   `push_native.dart` puts the token on the register as `apns` with a
+   `device_id`. `PKPushRegistry` is deliberately **not** registered,
+   because iOS kills an app that takes a VoIP push without reporting it
+   to CallKit and revokes the registration if it keeps happening — half
+   of this is worse than none of it.
+
+   Everything else is ready: `0658` stores `apns_voip`, `appleDelivery`
+   in `send-push/routing.ts` routes to it and keeps the same handset's
+   banner quiet, and `push_native.dart` passes a `voip` token straight
+   through when the native side produces one. What is left is Swift: a
+   `CXProvider`, `reportNewIncomingCall` on the push, and answer/end
+   actions wired to the flow `IncomingCallWatcher` already runs.
+
+   **Android push is still nothing**, and is blocked above on Firebase.
 2. **Make the local stack match the hosted project on function
    privileges.** See the trap below. It is a real gap that let a
    security-relevant mistake reach CI, and closing it means deciding

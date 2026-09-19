@@ -141,17 +141,54 @@ fixed it. Only `410 Unregistered` removes a row.
 
 ### Which service a row is for
 
-`0657` adds `device_tokens.transport` — `web`, `fcm` or `apns`. It is a
-column rather than something inferred at send time, because an iOS row
-is now either and the tokens are not interchangeable: each is refused
-forever by the other service, and both refusals are silent. The token's
-*shape* is diagnostic — an APNs token is hexadecimal, an FCM one is not
-— and that is used as a CHECK and in `register_device`'s refusal, which
-is the right place for it. A router that guessed would misroute the
-first Firebase token that happened to be hex, silently.
+`0657` adds `device_tokens.transport` — `web`, `fcm` or `apns` — and
+`0658` adds the fourth value, `apns_voip`. It is a column rather than
+something inferred at send time, because an iOS row is any of three and
+the tokens are not interchangeable: each is refused forever by the
+others' service, and every refusal is silent. The token's *shape* is
+diagnostic — an APNs token is hexadecimal, an FCM one is not — and that
+is used as a CHECK and in `register_device`'s refusal, which is the
+right place for it. A router that guessed would misroute the first
+Firebase token that happened to be hex, silently.
 
 Existing rows were backfilled to what they already were, so the
 migration moved nobody.
+
+### One iPhone, two Apple tokens, one `device_id`
+
+An iPhone reached directly holds **two** tokens from two Apple
+services, and `0658` exists because nothing about either says which it
+is — both are 32 hexadecimal bytes:
+
+| | issued by | addressed to | carries | needs permission |
+|---|---|---|---|---|
+| `apns` | `didRegisterForRemoteNotificationsWithDeviceToken` | `<bundle>` | alerts | yes |
+| `apns_voip` | `PKPushRegistry` | `<bundle>.voip` | VoIP pushes | no |
+
+Sending to the wrong one is worse than sending nothing. A VoIP push to
+the alert token is `DeviceTokenNotForTopic` and the call never rings; an
+alert to the VoIP token is `TopicDisallowed`; and a VoIP push that *does*
+arrive at an app which then fails to report an incoming call to CallKit
+gets the app **killed** by iOS, and killed often enough gets its PushKit
+registration revoked. Routing wrongly costs the ability to receive calls
+at all, not one notification.
+
+They are two rows rather than two columns because the two tokens have
+independent lives — either can be rotated or revoked without the other —
+and `0141`'s one-row-per-token is what lets `forget_device_token` drop
+exactly the registration Apple said was dead.
+
+What two rows cost is that nothing joins them, and the sender needs them
+joined: a handset being rung through CallKit must not also be sent a
+banner about the same call. So both registrations write `device_id`
+(`identifierForVendor`), and `appleDelivery` in
+`supabase/functions/send-push/routing.ts` is the whole decision. Pairing
+is by handset rather than by person on purpose: somebody may carry one
+iPhone on a build that registers PushKit and one on a build that does
+not, and suppressing by user would silence the second one's only chance
+of hearing about the call. A row with no `device_id` cannot be paired
+and gets the banner — a duplicate notification is a smaller harm than a
+missed call.
 
 ## The rules, and where they live
 
@@ -269,6 +306,22 @@ Leave `APNS_PRODUCTION` unset while testing. It defaults to the sandbox,
 because a production host refuses every token a development build
 registered.
 
+**`APNS_PRODUCTION` and `aps-environment` are one setting in two
+places.** `app/ios/Runner/Runner.entitlements` carries
+`aps-environment: development`, which is what a checked-in entitlements
+file says — Xcode substitutes `production` when the app is archived for
+distribution. The secret has to follow the build. Crossed, every
+notification is refused with `BadDeviceToken`, which reads as a dead
+handset and is not one; `isDeadToken` deliberately does not unregister
+on it, so a crossed pair is recoverable rather than a slow wipe of the
+register.
+
+And the App ID needs the **Push Notifications** capability enabled under
+*Certificates, Identifiers & Profiles*, the way it needs Associated
+Domains for passkeys. Without it the provisioning profile carries no
+`aps-environment` and a signed build fails at signing. CI builds iOS
+with codesigning off, so this first shows up on a real release build.
+
 ### Android — Firebase
 
 | Name | What it is |
@@ -299,15 +352,23 @@ register a device no sender can reach.
   `FirebaseOptions` passed from Dart, plus the registration call. It is
   the one platform where a call can ring the way people expect, via a
   high-priority data message and a full-screen intent.
-- **iOS** has its sender now (`0657`): APNs directly, with a `.p8` and
-  no Firebase, sending a PushKit VoIP push for a call and an ordinary
-  alert for a message. What is missing is the app half — registering
-  for remote notifications and handing the device token to
-  `register_device` with `transport: 'apns'`. That needs no third-party
-  package: it is `UNUserNotificationCenter` and
-  `didRegisterForRemoteNotificationsWithDeviceToken` over a
-  MethodChannel, plus `PKPushRegistry` for the VoIP token, which is a
-  second token registered against the same row shape.
+- **iOS** is built as far as alerts. `0657` is the sender, `0658` is the
+  register, and `app/ios/Runner/AppDelegate.swift` with
+  `app/lib/src/core/push_native.dart` is the app half: permission,
+  `didRegisterForRemoteNotificationsWithDeviceToken`, and the token
+  handed to `register_device` with `transport: 'apns'` and a
+  `device_id`. No third-party package.
+
+  **CallKit is what is left.** `PKPushRegistry` is deliberately *not*
+  registered yet, and the reason is in `AppDelegate.swift`'s header: iOS
+  kills an app that receives a VoIP push without reporting it to
+  CallKit, so half of this is worse than none of it. Everything else is
+  ready for it — `apns_voip` is stored, `appleDelivery` routes to it,
+  and `push_native.dart` passes a `voip` token through the moment the
+  native side produces one. What that commit has to add is a
+  `CXProvider`, `reportNewIncomingCall` on the push, and answer and end
+  actions wired to the flow `IncomingCallWatcher` already runs. Until
+  then a call reaches a closed iPhone as a banner rather than a ring.
 - **Safari** needs the app installed to the home screen as a PWA before
   it will subscribe at all. Chrome, Edge and Firefox work from an
   ordinary tab. The app detects this by feature rather than by user

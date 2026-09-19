@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0657` (the highest applied migration).
+Schema version `0658` (the highest applied migration).
 738 functions and 348 readable tables, of which
 275 functions only read.
 
@@ -732,7 +732,7 @@ Not gated on any module.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)* — The same as the eleven-argument `record_pdc`, and THE ONE TO CALL: the extra `p_idempotency_key` makes a retry return the cheque the first attempt recorded rather than recording a second one.
 - `record_received_einvoice(p_org_id uuid, p_parsed jsonb, p_raw jsonb)` *(writes)* — Keeps a parsed MyInvois document.
 - `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)* — Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period.
-- `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text)` *(writes)* — Records a device to send push notifications to, and returns its row.
+- `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text, p_device_id text)` *(writes)* — Puts the calling user's device on the push register, or moves an existing token to them.
 - `register_time_terminal(p_org_id uuid, p_name text, p_branch_id uuid, p_device_ref text)` *(writes)* — Adds a clock and returns its secret, once.
 - `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
 - `reissue_terminal_secret(p_terminal_id uuid)` *(writes)* — Replaces a terminal's secret and returns the new one, once.

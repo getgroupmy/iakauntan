@@ -17,10 +17,14 @@ import 'call_screen.dart';
 /// `chat_incoming_calls` keys on this participant's state rather than on
 /// the call's.
 ///
-/// What it does not do is ring while the app is closed. That needs a
-/// push notification and a platform channel per operating system, and
-/// neither exists yet; until then a call reaches somebody who has the
-/// app open.
+/// What it does not do is ring while the app is closed. A call does
+/// now REACH a closed app — `send-push` sends one, and on iOS
+/// `AppDelegate.swift` registers the device that receives it — but it
+/// arrives as a banner somebody has to notice and tap, not as a phone
+/// ringing. The full-screen CallKit ring needs a PushKit token and a
+/// `CXProvider`, which `0658` and the sender are ready for and the
+/// native side deliberately does not yet register: see the note in
+/// `AppDelegate.swift` on why half of that is worse than none of it.
 class IncomingCallWatcher extends ConsumerStatefulWidget {
   const IncomingCallWatcher({super.key, required this.child});
 

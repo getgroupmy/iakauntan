@@ -712,4 +712,105 @@ begin
     (select count(*) from public.device_tokens where token = v_tok), 1);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0658: the OTHER token the same iPhone has
+-- ---------------------------------------------------------------------
+--
+-- One handset, two Apple tokens, and every way of confusing them fails
+-- silently on the handset rather than loudly here -- so it is refused
+-- here. The pairing is the point: `device_id` is what lets the sender
+-- ring a phone through CallKit without also sending it a banner about
+-- the same call.
+do $$
+declare
+  v_ali   uuid := pg_temp.another_user('ali-voip@push.test');
+  v_org   uuid;
+  v_alert text := repeat('a1b2c3d4', 8);
+  v_voip  text := repeat('f0e1d2c3', 8);
+  v_fcm   text := 'fMEP0vJq:APA91bF-voip-shaped';
+  v_said  text;
+  v_phone text := 'E621E1F8-C36C-495A-93FC-0C247A3E6E5F';
+begin
+  v_org := pg_temp.push_org('PushKit Sdn Bhd', v_ali);
+  perform pg_temp.sign_in_as(v_ali);
+
+  perform public.register_device(v_alert, 'ios', 'An iPhone', null, null,
+                                 'apns', v_phone);
+  perform public.register_device(v_voip, 'ios', 'An iPhone', null, null,
+                                 'apns_voip', v_phone);
+
+  perform pg_temp.check_eq('an iPhone can hold a PushKit token',
+    (select transport from public.device_tokens where token = v_voip),
+    'apns_voip');
+  perform pg_temp.check_eq('beside its alert token',
+    (select transport from public.device_tokens where token = v_alert),
+    'apns');
+  perform pg_temp.check_eq('as two rows, because they are two tokens',
+    (select count(*) from public.device_tokens
+      where token in (v_alert, v_voip)), 2);
+  -- The whole reason `device_id` exists. Without this the sender cannot
+  -- tell one iPhone holding two tokens from two iPhones holding one
+  -- each, and the difference decides whether a ringing phone also
+  -- buzzes about the same call.
+  perform pg_temp.check_eq('paired, so the sender knows it is one phone',
+    (select count(distinct device_id) from public.device_tokens
+      where token in (v_alert, v_voip)), 1);
+
+  -- `0657` wrote `transport <> 'apns'` on the shape check. Written that
+  -- way a Firebase token registered as `apns_voip` would have gone
+  -- straight in, and a PushKit push to it is refused by Apple forever
+  -- with nothing anywhere saying so.
+  begin
+    perform public.register_device(v_fcm, 'ios', null, null, null,
+                                   'apns_voip', v_phone);
+    perform pg_temp.check_true(
+      'a Firebase token cannot be registered as a PushKit one', false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true(
+      'a Firebase token cannot be registered as a PushKit one',
+      v_said like '%not an APNs device token%');
+  end;
+
+  -- PushKit is Apple's alone, and somebody registering an Android call
+  -- token has a wrong belief rather than a typo.
+  begin
+    perform public.register_device(v_voip || 'aa', 'android', null, null,
+                                   null, 'apns_voip', v_phone);
+    perform pg_temp.check_true('only an iPhone has a VoIP token', false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('only an iPhone has a VoIP token',
+      v_said like '%Only an iPhone has a VoIP token%');
+  end;
+
+  -- An older build re-presents a token it has always had and says
+  -- nothing about the handset. Forgetting the pairing already recorded
+  -- would unpair a phone that is still perfectly paired -- and the
+  -- symptom would be one duplicate banner, months later, on a call.
+  perform public.register_device(v_alert, 'ios', null, null, null, 'apns');
+  perform pg_temp.check_eq('a caller that says nothing keeps the pairing',
+    (select device_id from public.device_tokens where token = v_alert),
+    v_phone);
+
+  -- And the control: a caller that DOES name a handset moves it, which
+  -- is what happens when a phone is restored from a backup onto another
+  -- and identifierForVendor changes.
+  perform public.register_device(v_alert, 'ios', null, null, null, 'apns',
+    '11111111-2222-3333-4444-555555555555');
+  perform pg_temp.check_eq('but a caller that names one is believed',
+    (select device_id from public.device_tokens where token = v_alert),
+    '11111111-2222-3333-4444-555555555555');
+
+  -- The sender pairs on this column, so it has to survive `push_targets`
+  -- being restated -- which is exactly where it would be lost.
+  perform pg_temp.check_true(
+    'and the sender is told which tokens share a handset',
+    exists (
+      select 1 from pg_proc p
+      cross join lateral unnest(p.proargnames, p.proargmodes) as a(name, mode)
+      where p.oid = 'public.push_targets(uuid, uuid)'::regprocedure
+        and a.mode = 't' and a.name = 'device_id'));
+end $$;
+
 rollback;

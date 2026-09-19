@@ -53,9 +53,15 @@
  * `_shared/apns.ts` address APNs directly with a `.p8`, which is both
  * one fewer party in the middle and the only way to send the PushKit
  * VoIP push a real CallKit incoming-call screen needs — FCM cannot, and
- * a banner is not a ringing phone. Which of the two an iOS row uses is
+ * a banner is not a ringing phone. Which service an iOS row uses is
  * `device_tokens.transport`, because the tokens are not interchangeable
  * and sending one to the other service fails silently.
+ *
+ * Apple is TWO of those transports, not one. `apns` is the alert token
+ * and `apns_voip` is the PushKit token, one handset holds both, and
+ * which of them a given notification may go to is `appleDelivery` — see
+ * `0658`, and see that function for why sending to the wrong one costs
+ * more than a dropped notification.
  *
  * Android is Firebase and nothing else. There is no direct equivalent.
  *
@@ -93,30 +99,9 @@ import {
   sendApns,
 } from "../_shared/apns.ts";
 
+import { appleDelivery, Target, transportOf } from "./routing.ts";
+
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
-
-interface Target {
-  user_id: string;
-  token: string;
-  platform: "android" | "ios" | "web";
-  /**
-   * Which service this token belongs to. `0657`.
-   *
-   * Read rather than inferred from the platform, because an iOS row is
-   * either — and defaulted here only so a payload from a database that
-   * predates `0657` behaves as it did, which is Firebase for anything
-   * that is not a browser.
-   */
-  transport?: "web" | "fcm" | "apns";
-  /** Browsers only: what the payload is encrypted to. See 0143. */
-  p256dh: string | null;
-  auth: string | null;
-}
-
-/** The service a row goes to, with the pre-`0657` default applied. */
-function transportOf(target: Target): "web" | "fcm" | "apns" {
-  return target.transport ?? (target.platform === "web" ? "web" : "fcm");
-}
 
 /**
  * One Firebase message, shaped per platform.
@@ -334,7 +319,19 @@ serveFunction("send-push.failed", async (req: Request) => {
     // `0657`. Firebase and APNs are both "a phone", and which one a row
     // is on is the row's own business rather than its platform's.
     const mobile = list.filter((t) => transportOf(t) === "fcm");
-    const apple = list.filter((t) => transportOf(t) === "apns");
+    // `0658`. Both Apple transports need the same four secrets, so they
+    // are one question for configuration and two for routing.
+    const apple = list.filter(
+      (t) => transportOf(t) === "apns" || transportOf(t) === "apns_voip",
+    );
+    // The handsets that will be rung through CallKit, so the alert row
+    // belonging to each of them can stay quiet about the same call.
+    const ringing = new Set(
+      list
+        .filter((t) => transportOf(t) === "apns_voip")
+        .map((t) => t.device_id)
+        .filter((id): id is string => Boolean(id)),
+    );
 
     if (
       (web.length === 0 || !vapid) &&
@@ -383,6 +380,12 @@ serveFunction("send-push.failed", async (req: Request) => {
     // than counted as sent, so a half-configured deployment is visible
     // in the response instead of looking like it worked.
     let skipped = 0;
+    // `0658`. A registration that exists and is healthy but is the
+    // wrong token for THIS notification: a PushKit token during a
+    // message, or the alert token of a handset already being rung.
+    // Counted separately from `skipped`, which means nobody configured
+    // the transport, because the two need opposite responses.
+    let unsuited = 0;
 
     const isCall = kind === "call";
 
@@ -471,8 +474,11 @@ serveFunction("send-push.failed", async (req: Request) => {
      * the app to draw a full-screen CallKit ring. FCM cannot send one,
      * so through Firebase the best an iPhone gets is a banner.
      */
-    const toApple = async (target: Target) => {
-      const pushType = apnsPushType(kind);
+    const toApple = async (target: Target, delivery: "alert" | "voip") => {
+      // `0658`. Not `apnsPushType(kind)`: what this row can carry is
+      // decided by which of Apple's two services issued its token, and
+      // a call reaching an alert token is a banner rather than a ring.
+      const pushType = delivery === "voip" ? apnsPushType("call") : "alert";
       const result = await sendApns(
         apns!,
         target.token,
@@ -485,7 +491,11 @@ serveFunction("send-push.failed", async (req: Request) => {
             aps: {
               alert: {
                 title: payload.title,
-                body: `${payload.sender_name} sent a message`,
+                // A handset with no PushKit token still hears about the
+                // call, and "sent a message" would be a lie about it.
+                body: isCall
+                  ? `${payload.sender_name} is calling`
+                  : `${payload.sender_name} sent a message`,
               },
               sound: "default",
             },
@@ -521,7 +531,7 @@ serveFunction("send-push.failed", async (req: Request) => {
           event: "push.refused",
           status: result.status,
           platform: target.platform,
-          transport: "apns",
+          transport: transportOf(target),
           // Apple's own word, and worth logging by name: half of them
           // are configuration rather than the handset. `BadDeviceToken`
           // in particular means the sandbox and production hosts have
@@ -542,18 +552,27 @@ serveFunction("send-push.failed", async (req: Request) => {
     await Promise.all(
       list.map(async (target) => {
         const transport = transportOf(target);
+        const isApple = transport === "apns" || transport === "apns_voip";
         const ready = transport === "web"
           ? Boolean(vapid && target.p256dh)
-          : transport === "apns"
+          : isApple
           ? Boolean(apns)
           : Boolean(accessToken);
         if (!ready) {
           skipped += 1;
           return;
         }
+        // Decided before the send rather than inside it, so that "this
+        // token is not for this" is an outcome of its own rather than a
+        // rejection from Apple that reads like a broken handset.
+        const delivery = isApple ? appleDelivery(target, isCall, ringing) : null;
+        if (isApple && delivery === null) {
+          unsuited += 1;
+          return;
+        }
         try {
           if (transport === "web") await toBrowser(target);
-          else if (transport === "apns") await toApple(target);
+          else if (isApple) await toApple(target, delivery!);
           else await toMobile(target, accessToken!);
         } catch (error) {
           failed += 1;
@@ -569,7 +588,14 @@ serveFunction("send-push.failed", async (req: Request) => {
       }),
     );
 
-    return json({ sent, failed, forgotten, skipped, targets: list.length });
+    return json({
+      sent,
+      failed,
+      forgotten,
+      skipped,
+      unsuited,
+      targets: list.length,
+    });
   } catch (error) {
     return failUnexpected(error, "send-push.failed", req);
   }

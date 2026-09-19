@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0657",
+    "version": "0658",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -53650,8 +53650,8 @@
     "/rpc/register_device": {
       "post": {
         "operationId": "register_device",
-        "summary": "Records a device to send push notifications to, and returns its row",
-        "description": "Records a device to send push notifications to, and returns its row. Keyed ON THE TOKEN, not on the pair of user and token: one handset is one row, belonging to whoever is signed in on it now, so a colleague signing in on a shared tablet takes the row over rather than adding a second and getting the first person's notifications (0141). A browser subscription must bring its `p256dh` and `auth` keys or there is nothing to encrypt the notification to, and a phone must not bring them; on a re-subscribe the keys are REPLACED rather than merged, because a browser that re-subscribes has thrown the old keypair away. Platform is android, ios or web. Transport (0657) is web, fcm or apns and says which service the token belongs to: absent it is web for a browser and fcm for anything else, which is what every caller written before 0657 meant. A browser must be web and Android must be fcm; only iOS has the choice. An apns token has to be at least 64 hexadecimal characters, because a Firebase token registered as an APNs one is refused by Apple on every notification and says nothing here.\n\n`public.register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text)` Writes. Requires a signed-in user.",
+        "summary": "Puts the calling user's device on the push register, or moves an existing token to them",
+        "description": "Puts the calling user's device on the push register, or moves an existing token to them. Refuses: anybody not signed in; a blank token; a platform that is not android, ios or web; a browser without both encryption keys, and a non-browser with either; a transport that does not belong to the platform (web push is only for browsers, Firebase is the only way to Android, PushKit is only on iOS); and a token whose shape says it belongs to the other Apple service. Absent transport means web for a browser and Firebase for anything else, which is what every caller written before 0657 meant. One row per token, so one directly-reached iPhone holds two \u2014 apns for alerts, apns_voip for calls \u2014 and p_device_id is what pairs them so the sender does not banner a phone about a call it is already ringing.\n\n`public.register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text, p_device_id text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -53682,6 +53682,9 @@
                     "type": "string"
                   },
                   "p_transport": {
+                    "type": "string"
+                  },
+                  "p_device_id": {
                     "type": "string"
                   }
                 },
@@ -80924,6 +80927,9 @@
             "type": "string"
           },
           "transport": {
+            "type": "string"
+          },
+          "device_id": {
             "type": "string"
           }
         },

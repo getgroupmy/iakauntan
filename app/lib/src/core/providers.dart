@@ -1398,40 +1398,54 @@ final pushStatusProvider = FutureProvider.autoDispose<PushStatus>((ref) {
   return pushStatus(Env.webPushPublicKey);
 });
 
-/// Subscribe this browser and put it on the register.
+/// Subscribe this device and put it on the register.
 ///
 /// `ask` decides whether the permission prompt may appear. Safari
-/// requires that prompt to come from a user gesture and a browser that
-/// has refused once will not be asked again, so the app only ever asks
-/// from a button — see `keepPushRegistered` for what happens on start.
-/// Takes the repository rather than a ref, because `Ref` and `WidgetRef`
-/// have no common supertype and this is called from both a provider and
-/// a button. Whoever calls it refreshes [pushStatusProvider].
+/// requires that prompt to come from a user gesture, and neither a
+/// browser nor iOS will ask a second time once refused, so the app only
+/// ever asks from a button — see [pushRegistrarProvider] for what
+/// happens on start. Takes the repository rather than a ref, because
+/// `Ref` and `WidgetRef` have no common supertype and this is called
+/// from both a provider and a button. Whoever calls it refreshes
+/// [pushStatusProvider].
+///
+/// A list, not one registration, and that is the whole reason this
+/// reads the way it does: an iPhone hands back an alert token and a
+/// PushKit token, from two Apple services, and both have to go on the
+/// register under their own transport or a call cannot ring. See 0658.
 Future<PushStatus> enablePush(Repo? repo, {bool ask = true}) async {
   if (repo == null) return PushStatus.unsupported;
 
-  final subscription = await subscribeToPush(Env.webPushPublicKey, ask: ask);
-  if (subscription == null) return pushStatus(Env.webPushPublicKey);
+  final registrations = await subscribeToPush(Env.webPushPublicKey, ask: ask);
+  if (registrations.isEmpty) return pushStatus(Env.webPushPublicKey);
 
-  await repo.registerDevice(
-    token: subscription.endpoint,
-    platform: 'web',
-    label: 'This browser',
-    p256dh: subscription.p256dh,
-    auth: subscription.auth,
-  );
-  return PushStatus.on;
+  for (final device in registrations) {
+    await repo.registerDevice(
+      token: device.token,
+      platform: device.platform,
+      label: device.label,
+      p256dh: device.p256dh,
+      auth: device.auth,
+      transport: device.transport,
+      deviceId: device.deviceId,
+    );
+  }
+  // Not unconditionally `on`. An iPhone whose owner refused the prompt
+  // still hands back a PushKit token — calls ring, messages do not —
+  // and calling that "on" would be a lie on the settings screen.
+  return pushStatus(Env.webPushPublicKey);
 }
 
 /// Re-register on every start, without ever prompting.
 ///
-/// The endpoint is not stable: a browser may rotate it at any time, and
-/// the register would then hold one nobody can send to while the person
-/// sees notifications as switched on. Re-registering is cheap — 0143
-/// keys on the token, so an unchanged endpoint updates one row — and it
-/// is the only thing that catches a rotation.
+/// No token is stable: a browser may rotate its endpoint at any time
+/// and Apple may reissue a device token, and the register would then
+/// hold one nobody can send to while the person sees notifications as
+/// switched on. Re-registering is cheap — 0143 keys on the token, so an
+/// unchanged one updates a single row — and it is the only thing that
+/// catches a rotation.
 ///
-/// Silent by construction: `ask: false` means a browser that has never
+/// Silent by construction: `ask: false` means a device that has never
 /// been asked stays unasked, and one that refused is not nagged.
 final pushRegistrarProvider = FutureProvider<void>((ref) async {
   final user = ref.watch(currentUserProvider);
@@ -1440,14 +1454,18 @@ final pushRegistrarProvider = FutureProvider<void>((ref) async {
   await enablePush(ref.read(repoProvider), ask: false);
 });
 
-/// Take this browser off the register, on the way out.
+/// Take this device off the register, on the way out.
+///
+/// Every token it holds, because an iPhone holds two and leaving the
+/// PushKit one behind would leave it ringing for calls after somebody
+/// switched notifications off.
 ///
 /// Best effort by nature — an app that is force-quit never gets here —
-/// which is why the sender also drops endpoints the push service
-/// rejects.
+/// which is why the sender also drops tokens the push service rejects.
 Future<void> disablePush(Repo? repo) async {
-  final endpoint = await currentPushEndpoint();
-  if (endpoint != null) await repo?.unregisterDevice(endpoint);
+  for (final token in await currentPushTokens()) {
+    await repo?.unregisterDevice(token);
+  }
   await unsubscribeFromPush();
 }
 
