@@ -95,3 +95,40 @@ export function runsFrom(payload: unknown): RunSummary[] {
     };
   });
 }
+
+/**
+ * What to say when GitHub refuses to start the build.
+ *
+ * One case deserves its own sentence, because the raw answer sends
+ * somebody looking in the wrong place entirely:
+ *
+ *     422 {"message":"Workflow does not have 'workflow_dispatch' trigger"}
+ *
+ * The workflow DOES have one. What it does not have is a copy on the
+ * repository's DEFAULT BRANCH, and that is where GitHub reads a
+ * workflow's triggers from — a `workflow_dispatch` on a file that
+ * exists only on a feature branch cannot be started by anybody,
+ * through this function or from the Actions tab. Reading that message
+ * at face value leads to editing a trigger that is already correct.
+ *
+ * Everything else is passed through with its status, because the
+ * status is the useful part and guessing at the rest would be this
+ * function inventing a diagnosis.
+ */
+export function dispatchRefusal(status: number, said: string): string {
+  if (status === 422 && said.includes("workflow_dispatch")) {
+    return "GitHub will not start this build because " +
+      `${WORKFLOW} is not on the repository's default branch. ` +
+      "A workflow_dispatch trigger is only registered from there, so " +
+      "the file has to be merged to the default branch before the " +
+      "button can work — see docs/ios-release.md.";
+  }
+  if (status === 404) {
+    return `GitHub cannot find ${WORKFLOW} in this repository. Check ` +
+      "GITHUB_REPOSITORY, and that the token can see it.";
+  }
+  const tail = said.trim();
+  return `GitHub refused to start the build (${status}).${
+    tail ? ` ${tail}` : ""
+  }`;
+}

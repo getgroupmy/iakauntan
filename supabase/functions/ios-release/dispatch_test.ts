@@ -6,9 +6,10 @@
  * this company's name. Everything it takes from a browser is checked
  * against a list, and these are the assertions that say so.
  */
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
   dispatchBody,
+  dispatchRefusal,
   laneOf,
   noteOf,
   runsFrom,
@@ -122,4 +123,46 @@ Deno.test("and a payload that is not a run list is simply nothing", () => {
   assertEquals(runsFrom({}), []);
   assertEquals(runsFrom({ workflow_runs: "no" }), []);
   assertEquals(runsFrom({ message: "Bad credentials" }), []);
+});
+
+Deno.test("a 422 about workflow_dispatch names the real cause", () => {
+  // The one refusal worth translating. GitHub says the workflow has no
+  // `workflow_dispatch` trigger; the file plainly does have one. What
+  // it lacks is a copy on the DEFAULT BRANCH, which is the only place
+  // GitHub reads triggers from — so the message sends somebody to edit
+  // a trigger that was never wrong.
+  const said = dispatchRefusal(
+    422,
+    '{"message":"Workflow does not have \'workflow_dispatch\' trigger"}',
+  );
+  assertStringIncludes(said, "default branch");
+  assertStringIncludes(said, WORKFLOW);
+  // And it must not simply repeat GitHub's wording, which is the
+  // behaviour being replaced.
+  assertEquals(said.includes("does not have"), false);
+});
+
+Deno.test("but another 422 is not given that explanation", () => {
+  // `lane` is a `choice` input, so an unrecognised value is also a 422.
+  // Telling somebody to merge a branch for that would be worse than
+  // saying nothing.
+  const said = dispatchRefusal(422, '{"message":"Unexpected inputs"}');
+  assertStringIncludes(said, "422");
+  assertEquals(said.includes("default branch"), false);
+});
+
+Deno.test("a 404 points at the repository and the token", () => {
+  const said = dispatchRefusal(404, "");
+  assertStringIncludes(said, "GITHUB_REPOSITORY");
+  assertStringIncludes(said, WORKFLOW);
+});
+
+Deno.test("and anything else keeps its status and whatever was said", () => {
+  assertStringIncludes(dispatchRefusal(500, "boom"), "500");
+  assertStringIncludes(dispatchRefusal(500, "boom"), "boom");
+  // No trailing space when GitHub said nothing at all.
+  assertEquals(
+    dispatchRefusal(503, "   "),
+    "GitHub refused to start the build (503).",
+  );
 });

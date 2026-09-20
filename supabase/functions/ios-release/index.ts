@@ -34,7 +34,14 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
-import { dispatchBody, laneOf, noteOf, runsFrom, WORKFLOW } from "./dispatch.ts";
+import {
+  dispatchBody,
+  dispatchRefusal,
+  laneOf,
+  noteOf,
+  runsFrom,
+  WORKFLOW,
+} from "./dispatch.ts";
 
 const API = "https://api.github.com";
 
@@ -114,10 +121,7 @@ serveFunction("ios-release", async (req) => {
     // rather than being given an id here.
     if (res.status !== 204) {
       const said = await res.text().catch(() => "");
-      return fail(
-        `GitHub refused to start the build (${res.status}). ${said}`.trim(),
-        502,
-      );
+      return fail(dispatchRefusal(res.status, said), 502);
     }
 
     return json({ started: true, lane, ref });

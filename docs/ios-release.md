@@ -104,7 +104,8 @@ posture `APNS_KEY_P8` has.
 
 ## Setting it up, step by step
 
-Four parts. **Part 1 alone makes the card work** — it lists builds and
+Five parts, numbered from zero. **Part 0 is a one-time merge and
+nothing works without it.** **Part 1 alone makes the card work** — it lists builds and
 lights the button. Parts 2 and 3 are what a build actually needs, and
 they are the slow ones because Apple is involved. Part 4 is pressing
 it.
@@ -112,6 +113,28 @@ it.
 Nothing here is reversible in the sense of being wasted: every secret
 below is re-creatable, and every one of them can be replaced later
 without touching this repository.
+
+### Part 0 — the workflow has to be on the default branch
+
+**`.github/workflows/ios-release.yml` must exist on `main`.** Not on
+the branch it was written on — on the repository's default branch.
+
+GitHub registers a workflow's triggers from the default branch and
+nowhere else, so a `workflow_dispatch` on a file that lives only on a
+feature branch cannot be started by anybody: not by this function, not
+from the Actions tab, not by `gh`. The API answers
+
+    422 {"message":"Workflow does not have 'workflow_dispatch' trigger"}
+
+which is misleading — the trigger is right there in the file. What is
+missing is the file, where GitHub looks for it.
+
+Note that this is about the workflow's LOCATION, not what it builds.
+`GITHUB_RELEASE_REF` still chooses the commit to build, and defaults to
+`main`; set it if releases should be cut from elsewhere.
+
+Reading the run list works before this is done, which is why the card
+can say "Nothing yet" and the button can still refuse.
 
 ### Part 1 — two secrets, and the card works (10 minutes)
 
@@ -359,6 +382,7 @@ submit it. **Neither lane submits for review**, and nothing here could.
 | Card: "Not set up yet" | Part 1 is not done, or the token expired |
 | Card: "GitHub answered 403" | the token lacks **Actions: read and write**, or an org owner has not approved it |
 | Card: "GitHub answered 404" | `GITHUB_REPOSITORY` is wrong, or the token cannot see that repository |
+| `422 Workflow does not have 'workflow_dispatch' trigger` | Part 0: `ios-release.yml` is not on the default branch. The trigger is fine; the file is in the wrong place |
 | Run summary: "Not set up yet" with a list | those Actions secrets are missing. The run is green because nothing failed |
 | `The profile is for X, not my.iakauntan.iakauntan` | the profile in 2.5 was made against the wrong App ID |
 | `security import` fails | the `.p12` base64 wrapped (Linux needs `-w0`; macOS `base64 -i` does not wrap), or the password is wrong, or OpenSSL 3 on Linux needs `-legacy` — LibreSSL on macOS does not and rejects the flag |
