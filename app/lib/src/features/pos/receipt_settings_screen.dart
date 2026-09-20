@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'receipt_view.dart';
@@ -146,6 +147,7 @@ class _ReceiptSettingsScreenState
       body: AsyncView<List<Map<String, dynamic>>>(
         value: outlets,
         onRetry: () => ref.invalidate(posOutletsProvider),
+        skeleton: const ListSkeleton(rows: 3, subtitle: false),
         builder: (shops) {
           if (shops.isEmpty) {
             return const EmptyState(
@@ -168,6 +170,7 @@ class _ReceiptSettingsScreenState
           return AsyncView<Map<String, dynamic>>(
             value: settings,
             onRetry: () => ref.invalidate(posReceiptSettingsProvider(outlet)),
+            skeleton: const FormSkeleton(fields: 6),
             builder: (row) {
               if (_loadedFor != outlet) {
                 _loadedFor = outlet;
@@ -382,6 +385,8 @@ class _Preview extends ConsumerWidget {
         return AsyncView<String>(
           value: text,
           onRetry: () => ref.invalidate(posReceiptTextProvider(saleId)),
+          skeleton: const CardRowsSkeleton(
+              rows: 8, leading: false, lines: 1),
           builder: (paper) => Card(
             child: Padding(
               padding: const EdgeInsets.all(12),

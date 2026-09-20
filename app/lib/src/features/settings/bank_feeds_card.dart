@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -32,6 +33,7 @@ class BankFeedsCard extends ConsumerWidget {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: accounts,
           onRetry: () => ref.invalidate(bankAccountsProvider),
+          skeleton: const CardRowsSkeleton(rows: 3, trailing: 1),
           builder: (rows) {
             final live = [
               for (final r in rows)
@@ -241,6 +243,8 @@ class _RunsDialog extends ConsumerWidget {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: runs,
           onRetry: () => ref.invalidate(bankFeedRunsProvider(bankAccountId)),
+          skeleton: const CardRowsSkeleton(
+              rows: 3, leading: false, trailing: 2),
           builder: (rows) {
             if (rows.isEmpty) {
               return const Text('Nothing has been pulled yet.');
