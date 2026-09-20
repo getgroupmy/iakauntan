@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/push.dart';
 import '../../core/surface.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -82,7 +83,17 @@ class NotificationsCard extends ConsumerWidget {
             AsyncView(
               value: status,
               onRetry: () => ref.invalidate(pushStatusProvider),
-              loading: const LinearProgressIndicator(),
+              // One row, whatever the answer turns out to be: a
+              // sentence about where notifications stand and a button
+              // to change it. Which sentence and which button depend on
+              // the status; that there is one of each does not.
+              skeleton: const CardRowsSkeleton(
+                rows: 1,
+                leading: false,
+                lines: 1,
+                trailing: 1,
+                trailingWidth: 96,
+              ),
               builder: (state) => _Body(state: state, surface: surface),
             ),
           ],

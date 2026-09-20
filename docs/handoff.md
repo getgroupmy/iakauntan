@@ -34,13 +34,17 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `9ce1d22`, plus the iOS push commit below |
-| CI | green, run 1943 |
-| Migrations | `0658` is the highest; `0650`–`0658` are this session's |
+| Head at time of writing | `0e69d4d`, plus the two commits below it |
+| CI | green through run 1968 (`7078fc6`); 1969 was still in the queue |
+| Migrations | `0658` is the highest. **Nothing since has touched SQL** — the recent work is all Dart |
 | Live database | **`0650`–`0658` are applied.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has them |
 
-Counts to expect from a clean run: **41** gates, **333** SQL files,
-**30** deno tests, **5,114** widget tests with 1 skipped, analyser clean.
+Counts to expect from a clean run: **41** gates, **335** SQL files,
+**31** deno tests, **5,147** widget tests with 1 skipped, analyser clean.
+
+The branch carries `main`'s history — PR #3 merged `main` INTO it — so
+`git log 9ce1d22..HEAD` prints hundreds of commits that are not this
+work. Use `--first-parent`.
 
 ### The working agreement
 
@@ -65,21 +69,30 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
-| — | iOS registers for push (`0658`): the app half, the fourth transport, and the handset pairing |
-| `9ce1d22` | This file |
-| `895ae59` | Fix: revoke from `anon`/`authenticated` by name, not just `PUBLIC` |
-| `32599dd` | APNs direct transport (`0657`), so an iPhone needs no Firebase |
-| `7e59db5` | To-do in the menu, list-and-detail page, bigger notes, contact link (`0656`) |
-| `d8b0190` | Multi-level sub-accounts (`0655`) + quick-add from Record expense |
-| `3052799` | Contact delete with a referential guard (`0654`) |
-| `dfabf56` | Sign-in legal links, demo page, 5-second splash, Mobile Application console page (`0653`) |
-| `f455e99` | Org live-feed lifecycle observer — the other half of the realtime fix |
-| `40f0054` | Realtime broadcast topic (`0652`), public path for `/terms-of-service` |
-| `9aff58a` | Terms of Service page + the consent line (`0651`) |
-| `b3298d7` | Fix: `.order()` came back descending; two unreachable methods |
-| `f804595` | Received e-Invoice screen |
-| `3fcef9c` | The second passkey, which no device would save |
-| `cb0a06c` | Received e-Invoices schema (`0650`) |
+| `0e69d4d` | Eleven more skeletons; four dialogs that all open from a figure |
+| `7078fc6` | Nine more; the stock card is the second real `TableSkeleton` |
+| `0e64536` | **Fix: `functions.invoke` throws, so the release card's refusal handling never ran** |
+| `4eb1c59` | Nine on the team and document screens |
+| `3c9ac2e` | Twelve across HR, including the editor that is also a new-record screen |
+| `d596c44` | The settings cards; `CardRowsSkeleton` gains `leadingHeight` |
+| `da3211f` | Ten on the platform console; six screens deliberately left alone |
+| `3cde124` | Eleven, two of them tables rather than lists |
+| `717b29d` | **A button that builds the iOS app on a Mac it does not own** |
+| `3635e0c` | Eleven, the first that is a grid |
+| `4a16d1f` | Eight, and two that were right as they were |
+| `c996304` | Six, and the grep that had been missing a third of the call sites |
+| `c4b83c0` | Seven, and one that already had a skeleton |
+| `a5be72e` | Twenty-five screens outline what is coming |
+| `339d463` | A deploy that fails on one lost packet should not redden a branch |
+| `842fed5` | A phone that rings like a phone — CallKit and PushKit |
+| `24adf7e` | Create one and look, rather than asking the catalog about it |
+| `551dc7f` | Ask the catalog which database this is |
+| `6256953` | CI has two databases, and three migrations argued about the wrong one |
+| `7b8a39e` | An iPhone that registers itself (`0658`) |
+| `9ce1d22` | The previous version of this file |
+
+Everything older is in the git history with its reasoning in the
+message. Read those rather than the diffs.
 
 ## Blocked on the user — nothing can proceed without these
 
@@ -118,6 +131,25 @@ in the commit message — read those rather than the diff.
    app — but it needs the secrets in open work item 2 first, and it is
    iOS only. Android still has no equivalent, because it has no
    Firebase project either.
+
+   **The button was pressed on 2026-09-20 and the card said "Not set
+   up yet".** That is correct behaviour and not a fault: the two
+   function secrets below do not exist, so the function answers 503
+   with a sentence. Two secrets make the card list builds and the
+   button live, and they are the smallest step that moves this
+   forward:
+
+   | Supabase → Edge Functions → Secrets | |
+   | --- | --- |
+   | `GITHUB_RELEASE_TOKEN` | a fine-grained PAT on `getgroupmy/iakauntan` with **Actions: read and write** and nothing else |
+   | `GITHUB_REPOSITORY` | `getgroupmy/iakauntan` |
+
+   Starting a build then needs the six Apple secrets in GitHub
+   Actions, and the workflow stops with a list of whichever are
+   missing rather than failing. **`docs/ios-release.md` now carries a
+   step-by-step walkthrough** — including a `.p8`-and-`openssl` route
+   to the distribution certificate that needs no Mac, which is the
+   step that otherwise blocks anybody without one.
 6. For push on a phone: the five `APNS_*` secrets (iOS) and
    `FCM_SERVICE_ACCOUNT` + `google-services.json` (Android). See
    `docs/push-notifications.md`. `google-services.json` cannot live in
@@ -126,6 +158,36 @@ in the commit message — read those rather than the diff.
    which reads as a dead handset and is not one.
 
 ## Open work, ranked
+
+0. ~~The skeleton pass.~~ **Done, and it should not be "finished" any
+   further.** 276 of 313 `AsyncView` call sites carry a `skeleton:`.
+   The 37 left are deliberate, and forcing bones onto them would break
+   the rule the whole pass followed — `core/skeletons.dart`'s own: a
+   skeleton belongs where the LAYOUT is already decided and only the
+   values are missing. They fall into four groups:
+
+   * **a payload that chooses a whole surface** — the till, the diary,
+     the kiosk board and the floor plan all pick a register and then
+     draw an entirely different screen depending on the answer; a
+     matter, a filing, a forecast and a manufacturing order each
+     choose between "not found" and a full page; `reports_screen` and
+     `group_reports_screen` build their layout from a spec COMPUTED
+     from the rows.
+   * **a `loading:` fallback already better than bones** —
+     `matter_detail_screen`'s AppBar falls back to the word "Matter",
+     which is not waiting for anything.
+   * **a block usually absent entirely** — `tax_details_card`'s second
+     site resolves to `const SizedBox.shrink()`.
+   * **`core/widgets.dart` itself**, four of them, where `AsyncView` is
+     defined.
+
+   `landing_cms`'s preview is the one to re-read if this is ever
+   revisited: `core/page_waiting.dart` argues that a skeleton over an
+   operator-edited page is a guess at a shape the payload is about to
+   decide, and it is still right.
+
+   Eleven `LinearProgressIndicator`s were removed along the way, all of
+   them a `loading:` that `skeleton:` had made unreachable.
 
 1. **Try iOS push and calls on a real handset.** The code is all here
    — `AppDelegate.swift`, `push_native.dart`, `callkit.dart`, `0657`,
@@ -321,6 +383,32 @@ is the right answer anyway.
 for code found the migration header quoting the code it was fixing.
 `check_passkey_association.py` and `check_realtime_topic.py` both did
 it; the latter strips whole-line `--` comments now.
+
+**`functions.invoke` THROWS on a non-2xx — it does not return a
+response with a status.** Code shaped like
+
+    final res = await client.functions.invoke('...');
+    if (res.status >= 400) { ... }
+
+is a branch that can never run, and whatever is inside it never
+happens. This shipped in `iosReleases()` and the console drew a raw
+`FunctionException(status: 503, details: {...})` under the words
+"Something went wrong" at somebody whose only mistake was not having
+added a secret. `ssm_search_service.dart` and `ssm_repository.dart`
+both had it right first. Catch `FunctionException` and read
+`e.details`.
+
+**And a refusal is not always an error.** The same fix is worth more
+than the catch: a 503 meaning "nobody has set this up" belongs in the
+DATA arm, not the error arm, or the screen shouts at somebody who has
+done nothing wrong. `iosReleases()` returns a result type for that
+reason.
+
+**`Bone` is abstract and its concrete classes are private**, so
+`find.byType(Bone)` in a widget test matches nothing at all — it does
+not fail loudly, it finds zero widgets. Key the bone and find it by
+key. `CardRowsSkeleton`'s leading bone is keyed
+`skeleton-card-row-$r-leading` for exactly this.
 
 **A widget test that passes has proved nothing.** Break the source on
 purpose and watch it fail — `python3 scripts/mutate.py <source> <test>

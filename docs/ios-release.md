@@ -102,6 +102,193 @@ uses the token. The signing certificate and the App Store key are read
 by a job running on GitHub's runner and by nothing else — the same
 posture `APNS_KEY_P8` has.
 
+## Setting it up, step by step
+
+Four parts. **Part 1 alone makes the card work** — it lists builds and
+lights the button. Parts 2 and 3 are what a build actually needs, and
+they are the slow ones because Apple is involved. Part 4 is pressing
+it.
+
+Nothing here is reversible in the sense of being wasted: every secret
+below is re-creatable, and every one of them can be replaced later
+without touching this repository.
+
+### Part 1 — two secrets, and the card works (10 minutes)
+
+**1.1 Make a GitHub token.**
+
+GitHub → your avatar → **Settings** → **Developer settings** →
+**Personal access tokens** → **Fine-grained tokens** → **Generate new
+token**.
+
+| Field | What to put |
+| --- | --- |
+| Token name | `iakauntan ios release` |
+| Expiration | your choice; a year is usual. It has to be replaced when it expires, and the card will say 502 when it does |
+| Resource owner | **`getgroupmy`** — not your personal account |
+| Repository access | **Only select repositories** → `getgroupmy/iakauntan` |
+| Permissions → Repository permissions → **Actions** | **Read and write** |
+
+Nothing else. `Metadata: Read-only` switches itself on and is required;
+leave it. Generate, and copy the `github_pat_…` string — GitHub shows
+it once.
+
+> If `getgroupmy` is an organization with fine-grained tokens
+> restricted, the token is created in a *pending* state and an owner
+> has to approve it. Until then every call answers 403 and the card
+> says so. Organization settings → Personal access tokens → Pending
+> requests.
+
+**1.2 Put it in Supabase.**
+
+Supabase dashboard → the project → **Edge Functions** → **Secrets**
+(older dashboards: Project Settings → Edge Functions → Secrets) → **Add
+new secret**, twice:
+
+| Name | Value |
+| --- | --- |
+| `GITHUB_RELEASE_TOKEN` | the `github_pat_…` string |
+| `GITHUB_REPOSITORY` | `getgroupmy/iakauntan` |
+
+Optionally a third, `GITHUB_RELEASE_REF`, naming the branch to build.
+It defaults to `main`, so set it if you want releases cut from
+somewhere else.
+
+**1.3 Check.** Reload Mobile Application in the console. "Not set up
+yet" becomes either a list of runs or **Nothing yet** — both mean it is
+working — and **Start the build** stops being greyed out.
+
+Pressing it now will start a workflow that stops politely with a list
+of the Apple secrets it still needs. That is a legitimate way to check
+Part 1 without doing Part 2 first, and it costs about a minute of
+runner time.
+
+### Part 2 — Apple, once (the slow part)
+
+**2.1 Apple Developer Program**, US$99 a year, at
+developer.apple.com/programs. Everything below needs the membership
+active. An organization membership needs a D-U-N-S number and takes
+days; an individual one is usually same-day.
+
+**2.2 The App ID.** developer.apple.com → **Certificates, Identifiers &
+Profiles** → **Identifiers** → **+** → App IDs → App.
+
+* Bundle ID: **Explicit**, `my.iakauntan.iakauntan` — exactly this. The
+  workflow reads the bundle ID out of the profile and refuses anything
+  else, because a profile for the wrong identifier is the commonest
+  signing failure there is.
+* Capabilities: tick **Push Notifications** and **Associated Domains**.
+  Neither is needed to build, both are needed for features already
+  written — see `docs/push-notifications.md` and `docs/passkeys.md`.
+
+**2.3 The app record.** appstoreconnect.apple.com → **My Apps** → **+**
+→ **New App**. Platform iOS, pick the bundle ID from 2.2, give it a
+name and an SKU (any string you will recognise). Without this record
+the upload is rejected with a message about the app not existing.
+
+**2.4 The distribution certificate.** This is the one that normally
+wants a Mac. It does not have to.
+
+*On a Mac:* Keychain Access → Certificate Assistant → **Request a
+Certificate From a Certificate Authority**, save to disk. Then
+developer.apple.com → Certificates → **+** → **Apple Distribution** →
+upload the CSR → download the `.cer` → double-click to install →
+find it in Keychain Access under **My Certificates** → right-click →
+**Export** → `.p12`, and set a password. Remember the password.
+
+*Anywhere with `openssl` — Linux, WSL, a container, a cloud shell:*
+
+```bash
+openssl genrsa -out dist.key 2048
+openssl req -new -key dist.key -out dist.csr \
+  -subj "/emailAddress=you@example.com/CN=iAkauntan/C=MY"
+```
+
+Upload `dist.csr` at Certificates → **+** → **Apple Distribution**,
+download `distribution.cer`, then:
+
+```bash
+openssl x509 -in distribution.cer -inform DER -out dist.pem -outform PEM
+openssl pkcs12 -export -inkey dist.key -in dist.pem -out dist.p12
+```
+
+It asks for an export password twice. That password is
+`IOS_DIST_CERT_PASSWORD` below. **Keep `dist.key`** — losing it means
+revoking the certificate and starting 2.4 again.
+
+> Newer OpenSSL 3 exports with a cipher older tooling rejects. If the
+> runner later fails to import the `.p12`, re-export with
+> `-legacy` added to the `pkcs12` line.
+
+**2.5 The provisioning profile.** developer.apple.com → **Profiles** →
+**+** → Distribution → **App Store Connect** → App ID from 2.2 →
+certificate from 2.4 → name it → **Download**. You get a
+`.mobileprovision` file.
+
+This is the piece that has to be re-made whenever the certificate
+changes, and it expires after a year.
+
+**2.6 The App Store Connect API key.** appstoreconnect.apple.com →
+**Users and Access** → **Integrations** → **App Store Connect API** →
+**Team Keys** → **+**.
+
+* Name it, Access: **App Manager**.
+* Generate. The page then shows an **Issuer ID** (a UUID, at the top of
+  the list) and a **Key ID** (10 characters).
+* Download `AuthKey_XXXXXXXXXX.p8`. **It downloads exactly once.** If
+  you lose it, revoke the key and make another.
+
+### Part 3 — six secrets in GitHub Actions
+
+`github.com/getgroupmy/iakauntan` → **Settings** → **Secrets and
+variables** → **Actions** → **New repository secret**, six times.
+
+Two of them are base64 of a binary file, and one is a text file pasted
+whole. Getting that distinction wrong is the likeliest mistake in this
+whole page.
+
+| Secret | Value | How |
+| --- | --- | --- |
+| `IOS_DIST_CERT_P12` | base64 of `dist.p12` | `base64 -w0 dist.p12` (Linux) or `base64 -i dist.p12` (macOS) |
+| `IOS_DIST_CERT_PASSWORD` | the password from 2.4 | as typed |
+| `IOS_PROVISIONING_PROFILE` | base64 of the `.mobileprovision` | same command |
+| `APP_STORE_CONNECT_KEY_ID` | the 10-character Key ID | as shown |
+| `APP_STORE_CONNECT_ISSUER_ID` | the issuer UUID | as shown |
+| `APP_STORE_CONNECT_KEY_P8` | **the `.p8` file's text, NOT base64** | `cat AuthKey_XXXXXXXXXX.p8` and paste all of it, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines |
+
+`base64` without `-w0` on Linux wraps at 76 characters and the newlines
+make the decode fail on the runner. macOS `base64 -i` does not wrap.
+
+### Part 4 — press it
+
+Console → **Mobile Application** → **Release the iOS app** → pick a
+lane → **Start the build** → confirm.
+
+Twenty to thirty minutes. The card polls, and each row links to its
+log.
+
+**The two lanes upload the same thing.** Both export with
+`method: app-store` and both call `xcrun altool --upload-app`; the lane
+changes only what the run summary says. That is not a shortcut being
+taken — a TestFlight build and an App Store build ARE the same binary
+in the same place. What differs is what you do in App Store Connect
+afterwards: leave it for your testers, or add it to a version and
+submit it. **Neither lane submits for review**, and nothing here could.
+
+### When it goes wrong
+
+| What you see | What it is |
+| --- | --- |
+| Card: "Not set up yet" | Part 1 is not done, or the token expired |
+| Card: "GitHub answered 403" | the token lacks **Actions: read and write**, or an org owner has not approved it |
+| Card: "GitHub answered 404" | `GITHUB_REPOSITORY` is wrong, or the token cannot see that repository |
+| Run summary: "Not set up yet" with a list | those Actions secrets are missing. The run is green because nothing failed |
+| `The profile is for X, not my.iakauntan.iakauntan` | the profile in 2.5 was made against the wrong App ID |
+| `security import` fails | the `.p12` base64 wrapped (use `-w0`), or the password is wrong, or OpenSSL 3 needs `-legacy` |
+| Upload rejected, app not found | 2.3 was skipped |
+| Upload rejected, duplicate build number | should not happen — `github.run_number` never repeats — unless a build was uploaded by hand with a number above it |
+
+
 ## Two things that go wrong, and what they look like
 
 **The profile is for the wrong bundle identifier.** The commonest

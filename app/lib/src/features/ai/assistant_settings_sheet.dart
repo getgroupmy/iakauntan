@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // `RepoAiSettings` is an extension, and a Dart extension is only in
@@ -66,6 +67,10 @@ class _AssistantSettingsSheetState
     return AsyncView<Map<String, dynamic>>(
       value: status,
       onRetry: () => ref.invalidate(aiStatusProvider),
+      // A settings sheet: which provider, which model, and the boxes
+      // that go with them. Drawn before the saved answers arrive to
+      // fill them, which is what a form skeleton is for.
+      skeleton: const FormSkeleton(fields: 4),
       builder: (s) {
         _seed(s);
         final live = [
