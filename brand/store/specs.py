@@ -29,7 +29,155 @@ def _variance(v):
             'success' if v >= 0 else 'danger')
 
 
-def _docs(route, prefix, parties, statuses, n=9, lo=800, hi=48000):
+# Six stages, because an iPad in landscape has room for six and a board
+# with three columns floating in the left third advertises a narrower
+# product than this one. Amounts in ringgit; the column headings are summed
+# from them in _pipeline().
+PIPELINE = [
+    ('Lead', 'grey', [
+        ('Syarikat Maju Trading', 'Inbound · e-Invoice enquiry', 24000, 'SN'),
+        ('Klinik Sri Puteri', 'Referral · single company', 9600, 'LC'),
+        ('Gerai Pak Samad', 'Walk-in · till only', 4800, 'TW'),
+        ('Bengkel Auto Tiga', 'Web form · stock and bills', 14200, 'RK'),
+        ('Tadika Ceria', 'Referral · payroll only', 7200, 'NA'),
+        ('Warisan Batik Enterprise', 'Trade show · POS + stock', 18400, 'SN')]),
+    ('Qualified', 'info', [
+        ('Kilang Serbaguna', 'Annual licence · 40 seats', 84000, 'NA'),
+        ('Desa Murni Catering', 'POS + payroll', 32400, 'TW'),
+        ('Lim Heng Hardware', 'Stock module', 18600, 'RK'),
+        ('Pantai Selatan Marine', 'Fleet costing', 46500, 'LC'),
+        ('Kedai Runcit Harmoni', 'Two branches · till', 21800, 'SN'),
+        ('Perabot Indah Sdn Bhd', 'Manufacturing + stock', 38900, 'NA')]),
+    ('Proposal', 'warning', [
+        ('Pantai Timur Logistics', 'Fleet + e-Invoice', 128000, 'SN'),
+        ('Amanah Teknik', 'Migration from spreadsheets', 61200, 'NA'),
+        ('Prisma Digital', 'Practice portfolio', 54800, 'LC'),
+        ('Ladang Sawit Murni', 'Estate payroll · 180 staff', 96400, 'TW'),
+        ('Klinik Mesra Group', 'Six clinics · one ledger', 72300, 'RK'),
+        ('Hotel Seri Malam', 'Front desk + accounts', 58700, 'SN')]),
+    ('Negotiation', 'violet', [
+        ('Koperasi Warga Sejahtera', 'Audit pack · board approval due', 112000, 'NA'),
+        ('Tenaga Jaya Enterprise', 'Three companies · one licence', 88600, 'LC'),
+        ('Restoran Selera Kampung', 'Eight outlets · till and stock', 74200, 'TW'),
+        ('Bina Prima Construction', 'Project costing · legal review', 134500, 'RK'),
+        ('Farmasi Sihat Sdn Bhd', 'Stock batches and expiry', 42900, 'SN')]),
+    ('Won', 'success', [
+        ('Bumi Hijau Agro', 'Signed 12 Sep', 176000, 'TW'),
+        ('Sentosa Marine', 'Signed 4 Sep', 88400, 'RK'),
+        ('Koperasi Warga Sejahtera', 'Signed 1 Sep · pilot', 47900, 'SN'),
+        ('Percetakan Damai', 'Signed 28 Aug', 36200, 'NA'),
+        ('Angkut Laju Trucking', 'Signed 21 Aug', 64800, 'LC'),
+        ('Kedai Emas Wira', 'Signed 14 Aug', 29500, 'TW')]),
+    ('Lost', 'danger', [
+        ('Megah Elektrik', 'Stayed on their own system', 58000, 'RK'),
+        ('Pusat Tuisyen Bijak', 'Price · went to a cheaper till', 12400, 'SN'),
+        ('Logistik Utara', 'Bought from an incumbent', 91000, 'NA'),
+        ('Butik Anggun', 'No decision this year', 8600, 'LC')]),
+]
+
+
+def _pipeline():
+    """Each column heading is the deals beneath it added up, so a deal moved
+    between stages cannot leave two headings claiming the same money."""
+    out = []
+    for name, tone, deals in PIPELINE:
+        out.append(dict(
+            name=name, tone=tone,
+            value=f'RM {round(sum(d[2] for d in deals) / 1000):,}k',
+            cards=[dict(title=t, sub=sub, amount=f'RM {amt:,}', who=who)
+                   for t, sub, amt, who in deals]))
+    return out
+
+
+def _money(v):
+    """Accounting presentation: thousands separated, negatives in brackets."""
+    return f'({abs(v):,.2f})' if v < 0 else f'{v:,.2f}'
+
+
+def _sme_tax(profit):
+    """Corporate tax at the resident-SME bands -- 15% on the first
+    RM150,000 of chargeable income, 17% on the next RM450,000, 24% above
+    RM600,000.
+
+    Struck on the accounting profit, because a mockup has no tax
+    computation standing behind it. The real thing adds back what is not
+    deductible before it gets here.
+    """
+    tax, left = 0.0, max(profit, 0.0)
+    for size, rate in ((150_000.0, 0.15), (450_000.0, 0.17)):
+        take = min(left, size)
+        tax += take * rate
+        left -= take
+    return tax + left * 0.24
+
+
+def _pnl():
+    """A profit and loss whose totals are summed here rather than typed.
+
+    Nine lines were added to this statement to fill an iPad, and typing
+    the totals again would have been nine chances to leave gross profit
+    saying something that does not follow from the lines above it.
+    """
+    revenue = [('Sales — Trading', 3914280.00, 3402110.00),
+               ('Sales — Services', 612450.00, 548900.00),
+               ('Other operating income', 41180.00, 28640.00)]
+    cost_of_sales = [('Opening stock', 412900.00, 388400.00),
+                     ('Purchases', 2481330.00, 2210760.00),
+                     ('Carriage inwards', 38620.00, 33180.00),
+                     ('Closing stock', -455120.00, -412900.00)]
+    expenses = [('Salaries and wages', 1104220.00, 998300.00),
+                ('EPF, SOCSO and EIS', 168940.00, 151220.00),
+                ('Rental of premises', 144000.00, 132000.00),
+                ('Utilities', 61380.00, 58120.00),
+                ('Depreciation', 88410.00, 79900.00),
+                ('Professional fees', 42600.00, 38900.00),
+                ('Motor vehicle running', 57240.00, 52480.00),
+                ('Repairs and maintenance', 33820.00, 29640.00),
+                ('Insurance', 24180.00, 22400.00),
+                ('Bank charges and interest', 18950.00, 21380.00)]
+
+    def total(block, i):
+        return sum(row[i] for row in block)
+
+    rows = []
+
+    def add(block):
+        for label, now, prev in block:
+            rows.append(dict(label=label, value=_money(now), prev=_money(prev)))
+
+    def rule(label, now, prev, colour=None):
+        r = dict(kind='total', label=label, value=_money(now), prev=_money(prev))
+        if colour:
+            r['colour'] = colour
+        rows.append(r)
+
+    rows.append(dict(kind='head', label='Revenue'))
+    add(revenue)
+    rule('Total revenue', total(revenue, 1), total(revenue, 2))
+    rows.append(dict(kind='head', label='Cost of sales'))
+    add(cost_of_sales)
+    gross = [total(revenue, i) - total(cost_of_sales, i) for i in (1, 2)]
+    rule('Gross profit', gross[0], gross[1], SUCCESS)
+    rows.append(dict(kind='head', label='Operating expenses'))
+    add(expenses)
+    pbt = [gross[i] - total(expenses, i + 1) for i in (0, 1)]
+    rule('Profit before tax', pbt[0], pbt[1], SUCCESS)
+    rows.append(dict(kind='head', label='Taxation'))
+    tax = [_sme_tax(p) for p in pbt]
+    rows.append(dict(label='Income tax at SME rates', value=_money(-tax[0]),
+                     prev=_money(-tax[1])))
+    rule('Profit for the period', pbt[0] - tax[0], pbt[1] - tax[1], SUCCESS)
+
+    pct = lambda v: f'{v / total(revenue, 1) * 100:.1f}%'
+    tiles = [('Gross margin', pct(gross[0]), 'of total revenue', 'success'),
+             ('Operating costs', pct(total(expenses, 1)), 'of total revenue', 'warning'),
+             ('Profit before tax', pct(pbt[0]), f'RM {_money(pbt[0])}', 'accent'),
+             ('Tax at SME rates', f'RM {_money(tax[0])}', '15% / 17% / 24% bands',
+              'info')]
+    return rows, tiles
+
+
+def _docs(route, prefix, parties, statuses, n=18, lo=800, hi=48000):
     r = C.rng(route)
     rows = []
     for i in range(n):
@@ -45,7 +193,7 @@ def _docs(route, prefix, parties, statuses, n=9, lo=800, hi=48000):
     return rows
 
 
-def _people(route, subs, n=9, amounts=None, statuses=None):
+def _people(route, subs, n=18, amounts=None, statuses=None):
     r = C.rng(route)
     rows = []
     for i in range(n):
@@ -118,6 +266,23 @@ def hero(route, spec):
                  amount='RM 3,208.00', status='Part paid', tone='warning', icon='clock'),
             dict(title='INV-2026-0398', sub='Prisma Digital Sdn Bhd · draft',
                  amount='RM 9,750.00', status='Draft', tone='grey', icon='doc'),
+            dict(title='INV-2026-0397', sub='Sentosa Marine Services · 29 Aug 2026',
+                 amount='RM 11,290.00', status='Overdue', tone='danger',
+                 amount_colour=DANGER, icon='clock'),
+            dict(title='INV-2026-0394', sub='Koperasi Warga Sejahtera · 27 Aug 2026',
+                 amount='RM 7,420.00', status='Paid', tone='success', icon='checkcircle'),
+            dict(title='INV-2026-0391', sub='Kilang Serbaguna Sdn Bhd · 24 Aug 2026',
+                 amount='RM 21,340.00', status='Overdue', tone='danger',
+                 amount_colour=DANGER, icon='clock'),
+            dict(title='INV-2026-0388', sub='Tenaga Jaya Enterprise · 21 Aug 2026',
+                 amount='RM 4,860.00', status='Sent', tone='info', icon='doc'),
+            dict(title='INV-2026-0385', sub='Pantai Timur Logistics · 18 Aug 2026',
+                 amount='RM 15,720.00', status='Paid', tone='success', icon='checkcircle'),
+            dict(title='INV-2026-0382', sub='Syarikat Maju Trading · 15 Aug 2026',
+                 amount='RM 2,140.00', status='Paid', tone='success', icon='checkcircle'),
+            dict(title='INV-2026-0379', sub='Bumi Hijau Agro Sdn Bhd · 12 Aug 2026',
+                 amount='RM 33,600.00', status='Validated', tone='success',
+                 icon='checkcircle'),
         ])
     elif route == '/einvoice':
         spec.update(kind='stats', tabs=['Outgoing', 'Received', 'Consolidated'],
@@ -136,7 +301,39 @@ def hero(route, spec):
             dict(title='INV-2026-0396 · DS302', sub='Classification code missing on line 3',
                  status='Fix', tone='danger', icon='warning'),
             dict(title='CN-2026-0044 · CF364', sub='Original invoice UUID not found',
-                 status='Fix', tone='warning', icon='clock')])
+                 status='Fix', tone='warning', icon='clock'),
+            dict(title='INV-2026-0391 · CF345', sub='Buyer SST number not registered',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0388 · DS303', sub='Unit price and quantity disagree '
+                                                    'with the line total',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0385 · CF366', sub='Supplier MSIC code not in the '
+                                                    'LHDN list',
+                 status='Fix', tone='warning', icon='clock'),
+            dict(title='CN-2026-0041 · CF321', sub='Buyer TIN fails checksum',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0377 · DS302', sub='Classification code missing on '
+                                                    'line 1',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0374 · CF401', sub='Currency code not ISO 4217',
+                 status='Fix', tone='warning', icon='clock'),
+            dict(title='DN-2026-0012 · CF364', sub='Original invoice UUID not found',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0369 · DS304', sub='Tax amount and tax rate disagree '
+                                                    'on line 2',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0366 · CF321', sub='Buyer TIN fails checksum',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='INV-2026-0361 · CF348', sub='Buyer address missing a state code',
+                 status='Fix', tone='warning', icon='clock'),
+            dict(title='INV-2026-0358 · DS302', sub='Classification code missing on '
+                                                    'line 4',
+                 status='Fix', tone='danger', icon='warning'),
+            dict(title='CN-2026-0038 · CF366', sub='Supplier MSIC code not in the '
+                                                   'LHDN list',
+                 status='Fix', tone='warning', icon='clock'),
+            dict(title='INV-2026-0352 · CF345', sub='Buyer SST number not registered',
+                 status='Fix', tone='danger', icon='warning')])
     elif route == '/hr/payroll':
         spec.update(kind='stats', tabs=['September', 'August', 'History'],
                     actions=('download', 'bell'), search=None, fab='Run payroll',
@@ -155,33 +352,44 @@ def hero(route, spec):
             dict(title='Tan Wei Ming', sub='Operations Manager · EPF 11%',
                  amount='RM 9,180.00', status='Paid', tone='success', icon='person'),
             dict(title='Ravi Kumar Suppiah', sub='Site Supervisor · overtime 12h',
-                 amount='RM 5,640.50', status='Paid', tone='success', icon='person')])
+                 amount='RM 5,640.50', status='Paid', tone='success', icon='person'),
+            dict(title='Siti Nadia Hamzah', sub='Payroll Executive · EPF 11%',
+                 amount='RM 6,280.00', status='Paid', tone='success', icon='person'),
+            dict(title='Lee Chun Kit', sub='Storekeeper · EPF 11%',
+                 amount='RM 3,940.75', status='Paid', tone='success', icon='person'),
+            dict(title='Muhammad Firdaus Ali', sub='Driver · overtime 6h',
+                 amount='RM 3,120.00', status='Paid', tone='success', icon='person'),
+            dict(title='Chong Mei Ling', sub='Account Assistant · EPF 11%',
+                 amount='RM 4,510.00', status='Paid', tone='success', icon='person'),
+            dict(title='Arun Vijayan', sub='Technician · joined 4 Aug',
+                 amount='RM 4,860.00', status='Paid', tone='success', icon='person'),
+            dict(title='Hafiz Zulkifli', sub='Sales Executive · commission RM 1,240',
+                 amount='RM 7,090.30', status='Paid', tone='success', icon='person'),
+            dict(title='Yap Su Lin', sub='HR Executive · EPF 11%',
+                 amount='RM 5,775.00', status='Paid', tone='success', icon='person'),
+            dict(title='Farah Iskandar', sub='Marketing Executive · EPF 11%',
+                 amount='RM 5,240.00', status='Paid', tone='success', icon='person'),
+            dict(title='Gopal Menon', sub='Warehouse Assistant · overtime 9h',
+                 amount='RM 3,415.60', status='Paid', tone='success', icon='person'),
+            dict(title='Wong Kar Hoe', sub='Site Foreman · EPF 11%',
+                 amount='RM 6,120.00', status='Paid', tone='success', icon='person'),
+            dict(title='Zainab Othman', sub='Admin Clerk · EPF 11%',
+                 amount='RM 2,980.00', status='Paid', tone='success', icon='person'),
+            dict(title='Lim Wei Xuan', sub='Junior Accountant · joined 1 Sep',
+                 amount='RM 3,660.00', status='Paid', tone='success', icon='person'),
+            dict(title='Nazrin Shah Idris', sub='Delivery Driver · overtime 14h',
+                 amount='RM 3,285.40', status='Paid', tone='success', icon='person'),
+            dict(title='Kalaivani Raju', sub='Customer Service · EPF 11%',
+                 amount='RM 3,870.00', status='Paid', tone='success', icon='person'),
+            dict(title='Amir Hakimi Osman', sub='Storeman · unpaid leave 2 days',
+                 amount='RM 2,745.20', status='Paid', tone='success', icon='person')])
     elif route == '/reports':
         spec.update(kind='report', tabs=['Profit and loss', 'Balance sheet', 'Trial balance'],
                     actions=('download', 'filter'), search=None, fab=None, nav=5, rail=6,
                     report_title='Profit and loss',
                     report_sub='Demo Sdn Bhd · 1 Jan – 30 Sep 2026 · MYR',
                     cols=['2025', '2026'],
-                    report_rows=[
-            dict(kind='head', label='Revenue'),
-            dict(label='Sales — Trading', value='3,914,280.00', prev='3,402,110.00'),
-            dict(label='Sales — Services', value='612,450.00', prev='548,900.00'),
-            dict(kind='total', label='Total revenue', value='4,526,730.00',
-                 prev='3,951,010.00'),
-            dict(kind='head', label='Cost of sales'),
-            dict(label='Opening stock', value='412,900.00', prev='388,400.00'),
-            dict(label='Purchases', value='2,481,330.00', prev='2,210,760.00'),
-            dict(label='Closing stock', value='(455,120.00)', prev='(412,900.00)'),
-            dict(kind='total', label='Gross profit', value='2,087,620.00',
-                 prev='1,764,750.00', colour=SUCCESS),
-            dict(kind='head', label='Operating expenses'),
-            dict(label='Salaries and wages', value='1,104,220.00', prev='998,300.00'),
-            dict(label='EPF, SOCSO and EIS', value='168,940.00', prev='151,220.00'),
-            dict(label='Rental of premises', value='144,000.00', prev='132,000.00'),
-            dict(label='Utilities', value='61,380.00', prev='58,120.00'),
-            dict(label='Depreciation', value='88,410.00', prev='79,900.00'),
-            dict(kind='total', label='Profit before tax', value='520,670.00',
-                 prev='345,210.00', colour=SUCCESS)])
+                    report_rows=_PNL_ROWS, report_tiles=_PNL_TILES)
     elif route == '/ask':
         spec.update(kind='ask', tabs=None, actions=('clock', 'more'), search=None,
                     fab=None, nav=4, rail=9,
@@ -198,36 +406,30 @@ def hero(route, spec):
                                 'wages, and it is up 6.4% on the quarter before because '
                                 'two people joined in August.')],
                     chips=['Show my cash flow', 'Unpaid bills', 'Explain this variance'])
+        spec['messages'] = [
+            dict(who='user', text='How much SST do I owe for this taxable period?'),
+            dict(who='ai', text='RM 27,406.80 on the September–October period, due '
+                                '30 November. That is output tax on RM 456,780 of '
+                                'taxable sales, less nothing claimable — SST has no '
+                                'input credit.'),
+            dict(who='user', text='Is any of my stock sitting still?'),
+            dict(who='ai', text='Eleven items have not moved in 90 days, RM 68,240 at '
+                                'cost. Roof Sheet 0.42mm is the largest at RM 21,900.',
+                 table=[('Roof Sheet 0.42mm', 'RM 21,900.00'),
+                        ('Wire Mesh A7', 'RM 14,380.00'),
+                        ('PVC Pipe 4\" 6m', 'RM 9,640.00')]),
+        ] + spec['messages']
     elif route == '/crm':
         spec.update(kind='board', tabs=['Pipeline', 'Forecast', 'Activity'],
-                    actions=('filter', 'bell'), search=None, fab='New deal', nav=3, rail=5,
-                    columns=[
-            dict(name='Qualified', value='RM 186k', tone='info', cards=[
-                dict(title='Kilang Serbaguna', sub='Annual licence · 40 seats',
-                     amount='RM 84,000', who='NA'),
-                dict(title='Desa Murni Catering', sub='POS + payroll', amount='RM 32,400',
-                     who='TW'),
-                dict(title='Lim Heng Hardware', sub='Stock module', amount='RM 18,600',
-                     who='RK')]),
-            dict(name='Proposal', value='RM 244k', tone='warning', cards=[
-                dict(title='Pantai Timur Logistics', sub='Fleet + e-Invoice',
-                     amount='RM 128,000', who='SN'),
-                dict(title='Amanah Teknik', sub='Migration from spreadsheets',
-                     amount='RM 61,200', who='NA'),
-                dict(title='Prisma Digital', sub='Practice portfolio', amount='RM 54,800',
-                     who='LC')]),
-            dict(name='Won', value='RM 312k', tone='success', cards=[
-                dict(title='Bumi Hijau Agro', sub='Signed 12 Sep', amount='RM 176,000',
-                     who='TW'),
-                dict(title='Sentosa Marine', sub='Signed 4 Sep', amount='RM 88,400',
-                     who='RK'),
-                dict(title='Koperasi Warga', sub='Signed 1 Sep', amount='RM 47,900',
-                     who='SN')])])
+                    actions=('filter', 'bell'), search=None, fab='New deal', nav=3,
+                    rail=5, columns=_pipeline())
     elif route == '/till':
         spec.update(kind='grid', tabs=['All', 'Food', 'Drinks', 'Sets'],
                     actions=('search', 'more'), search=None, fab=None, nav=5, rail=1)
     return spec
 
+
+_PNL_ROWS, _PNL_TILES = _pnl()
 
 HEROES = ['/dashboard', '/sales/invoice', '/einvoice', '/hr/payroll',
           '/reports', '/ask', '/crm', '/till']
@@ -544,7 +746,33 @@ def generic(module, area, label, route, spec):
                           dict(title='Register of Members', sub='Updated 12 Aug 2026',
                                status='Current', tone='success', icon='clipboard'),
                           dict(title='Register of Charges', sub='One charge registered',
-                               status='Review', tone='warning', icon='clipboard')])
+                               status='Review', tone='warning', icon='clipboard'),
+                          dict(title='Register of Secretaries', sub='Updated 4 Sep 2026',
+                               status='Current', tone='success', icon='clipboard'),
+                          dict(title='Annual Return 2025 · lodged',
+                               sub='Section 68 · lodged 9 Dec 2025',
+                               status='Filed', tone='success', icon='checkcircle'),
+                          dict(title='Financial statements FY2025',
+                               sub='Section 259 · lodged 28 Jun 2026',
+                               status='Filed', tone='success', icon='checkcircle'),
+                          dict(title='Change of director · Form 49',
+                               sub='Resignation of Lee Chun Kit · draft',
+                               status='Draft', tone='grey', icon='person'),
+                          dict(title='Transfer of shares · Form 32A',
+                               sub='20,000 ordinary shares · stamped 14 Aug 2026',
+                               status='Filed', tone='success', icon='checkcircle'),
+                          dict(title='Registered office change',
+                               sub='Section 46 · lodged 3 Mar 2026',
+                               status='Filed', tone='success', icon='building'),
+                          dict(title='Board resolution · dividend',
+                               sub='Interim RM 0.08 per share · 22 Jul 2026',
+                               status='Signed', tone='info', icon='doc'),
+                          dict(title='Beneficial ownership register',
+                               sub='Section 60B · updated 12 Aug 2026',
+                               status='Current', tone='success', icon='shield'),
+                          dict(title='Statutory audit appointment',
+                               sub='Section 267 · reappointed 30 Jun 2026',
+                               status='Filed', tone='success', icon='checkcircle')])
     elif route == '/legal':
         spec.update(kind='list', tabs=['Open', 'Closed'], nav=5, rail=6,
                     search='Search matters', fab='New matter',

@@ -6,8 +6,15 @@ way to the bitmap, so a phone at 1080x1920 and a 10-inch tablet at
 2560x1440 are the same code and not two drawings that have to be kept
 agreeing with each other by hand.
 """
-import math
+import math, os, sys
 from PIL import Image, ImageDraw, ImageFilter
+
+# mark.py is the package above this one. Without this, `python3
+# brand/store/build.py` -- the command this module's own README gives --
+# puts only brand/store on the path and the rail's mark raises.
+_BRAND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BRAND not in sys.path:
+    sys.path.insert(0, _BRAND)
 import ui
 from ui import (ACCENT, ACCENT_DK, ACCENT_SOFT, BG, CARD, BORDER, BORDER_SOFT,
                 INK, INK2, INK3, SUCCESS, WARNING, DANGER, INFO, VIOLET, SOFT, blend)
@@ -25,11 +32,15 @@ RAIL = [('Dashboard', 'dashboard'), ('Sales', 'receipt'), ('Purchases', 'bag'),
 
 
 class Frame:
-    def __init__(self, px_w, px_h, dp_w, mode='phone'):
+    def __init__(self, px_w, px_h, dp_w, mode='phone', platform='android'):
         self.w, self.h = px_w, px_h
         self.u = px_w / dp_w
         self.dw, self.dh = dp_w, px_h / self.u
         self.mode = mode
+        # Only the two bars the operating system draws differ between the
+        # platforms; app_shell.dart builds NavigationBar and NavigationRail
+        # on both, so everything below the status bar is the same drawing.
+        self.platform = platform
         self.img = Image.new('RGB', (px_w, px_h), BG)
         self.d = ImageDraw.Draw(self.img)
 
@@ -118,31 +129,54 @@ class Frame:
         self.d = ImageDraw.Draw(self.img)
 
     # --- chrome -----------------------------------------------------------
-    def status_bar(self, h=26, bg=CARD, fg=INK):
-        self.rect([0, 0, self.dw, h], fill=bg)
-        self.text((16, h / 2), '9:41', 12, 'b', fg, anchor='lm')
-        x = self.dw - 16
-        # battery
-        self.d.rounded_rectangle(self._b([x - 21, h / 2 - 5, x - 3, h / 2 + 5]),
+    def _radios(self, x, cy, fg, bg):
+        """Signal, wifi and battery, right-aligned at x."""
+        self.d.rounded_rectangle(self._b([x - 21, cy - 5, x - 3, cy + 5]),
                                  radius=2.4 * self.u, outline=fg,
                                  width=max(1, round(1.2 * self.u)))
-        self.d.rounded_rectangle(self._b([x - 19.2, h / 2 - 3.2, x - 8, h / 2 + 3.2]),
+        self.d.rounded_rectangle(self._b([x - 19.2, cy - 3.2, x - 8, cy + 3.2]),
                                  radius=1.2 * self.u, fill=fg)
-        self.d.rounded_rectangle(self._b([x - 2.4, h / 2 - 2, x - 0.6, h / 2 + 2]),
+        self.d.rounded_rectangle(self._b([x - 2.4, cy - 2, x - 0.6, cy + 2]),
                                  radius=1 * self.u, fill=fg)
-        # wifi
-        for i, r in enumerate((8.4, 5.6, 2.8)):
-            self.d.arc(self._b([x - 36 - r + 4.4, h / 2 + 3 - r, x - 36 + r + 4.4,
-                                h / 2 + 3 + r]), 215, 325, fill=fg,
+        for r in (8.4, 5.6, 2.8):
+            self.d.arc(self._b([x - 36 - r + 4.4, cy + 3 - r, x - 36 + r + 4.4,
+                                cy + 3 + r]), 215, 325, fill=fg,
                        width=max(1, round(1.7 * self.u)))
-        self.d.ellipse(self._b([x - 32.8, h / 2 + 2.2, x - 30.4, h / 2 + 4.6]), fill=fg)
-        # signal
+        self.d.ellipse(self._b([x - 32.8, cy + 2.2, x - 30.4, cy + 4.6]), fill=fg)
         for i in range(4):
             bh = 2.6 + i * 2.4
             self.d.rounded_rectangle(
-                self._b([x - 58 + i * 4.2, h / 2 + 5 - bh, x - 55.4 + i * 4.2, h / 2 + 5]),
+                self._b([x - 58 + i * 4.2, cy + 5 - bh, x - 55.4 + i * 4.2, cy + 5]),
                 radius=0.8 * self.u, fill=fg if i < 3 else blend(fg, bg, .55))
+
+    def status_bar(self, h=26, bg=CARD, fg=INK):
+        self.rect([0, 0, self.dw, h], fill=bg)
+        self.text((16, h / 2), '9:41', 12, 'b', fg, anchor='lm')
+        self._radios(self.dw - 16, h / 2, fg, bg)
         return h
+
+    def ios_status_bar(self, h=47, bg=CARD, fg=INK):
+        """The iOS bar: clock in the left ear, radios in the right.
+
+        Nothing is drawn in the middle. The notch is a hole in the glass,
+        not a hole in the capture -- a screenshot off the device is the
+        full 1,284 x 2,778 rectangle with the status bar painted across it.
+        """
+        self.rect([0, 0, self.dw, h], fill=bg)
+        cy = h * 0.63
+        self.text((self.dw * 0.135, cy), '9:41', 15.5, 'x', fg, anchor='mm')
+        self._radios(self.dw - 18, cy, fg, bg)
+        return h
+
+    def home_indicator(self, h=34, bg=CARD):
+        """The strip iOS keeps clear at the bottom, and the pill in it."""
+        y = self.dh - h
+        self.rect([0, y, self.dw, self.dh], fill=bg)
+        w = min(self.dw * 0.31, 320)
+        self.d.rounded_rectangle(
+            self._b([(self.dw - w) / 2, self.dh - 13, (self.dw + w) / 2, self.dh - 8]),
+            radius=2.5 * self.u, fill=(26, 32, 31))
+        return y
 
     def app_bar(self, y, title, actions=('search', 'bell'), back=False, sub=None,
                 h=54, bg=CARD, x0=0, x1=None):
@@ -201,8 +235,8 @@ class Frame:
             x += w + 7
         return y + h
 
-    def bottom_bar(self, active=0, h=62):
-        y = self.dh - h
+    def bottom_bar(self, active=0, h=62, safe=0):
+        y = self.dh - h - safe
         self.rect([0, y, self.dw, self.dh], fill=CARD)
         self.hline(0, self.dw, y, BORDER, 1)
         step = self.dw / len(BAR)
@@ -216,10 +250,12 @@ class Frame:
                       ACCENT if on else INK3, 1.8)
             self.text((cx, y + 40), label, 10, 'b' if on else 'm',
                       ACCENT if on else INK3, anchor='mm')
-        # gesture bar
-        self.d.rounded_rectangle(self._b([self.dw / 2 - 45, self.dh - 7,
-                                          self.dw / 2 + 45, self.dh - 4.2]),
-                                 radius=1.5 * self.u, fill=(200, 208, 206))
+        if safe:
+            self.home_indicator(safe)
+        else:
+            self.d.rounded_rectangle(self._b([self.dw / 2 - 45, self.dh - 7,
+                                              self.dw / 2 + 45, self.dh - 4.2]),
+                                     radius=1.5 * self.u, fill=(200, 208, 206))
         return y
 
     def fab(self, label=None, ico='plus', bottom=None, right=16):
@@ -263,7 +299,7 @@ class Frame:
         self.img.paste(big, (round(b[0]), round(b[1])), big)
         self.d = ImageDraw.Draw(self.img)
 
-    def rail(self, active=0, w=196, org='Demo Sdn Bhd', top=0):
+    def rail(self, active=0, w=196, org='Demo Sdn Bhd', top=0, bottom=0):
         """The tablet navigation rail."""
         self.rect([0, top, w, self.dh], fill=CARD)
         self.line((w, top), (w, self.dh), BORDER, 1)
@@ -278,7 +314,7 @@ class Frame:
         # A rail that does not fit scrolls; it does not shrink its icons to
         # eight dp. Show what fits at a real row height, windowed so the
         # destination the screen is actually on is one of them.
-        avail = self.dh - y - 52
+        avail = self.dh - y - 52 - bottom
         step = 32
         n = max(4, min(len(RAIL), int(avail // step)))
         start = 0 if active < n else min(active - n + 2, len(RAIL) - n)
@@ -294,7 +330,7 @@ class Frame:
                       ACCENT if on else INK2, anchor='lm')
             y += step
         # account footer
-        fy = self.dh - 46
+        fy = self.dh - 46 - bottom
         self.hline(12, w - 12, fy - 6, BORDER_SOFT, 1)
         self.avatar([16, fy, 44, fy + 28], 'NA', 1)
         self.text((52, fy + 9), 'Nurul Aisyah', 12, 'b', INK)

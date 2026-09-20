@@ -75,6 +75,22 @@ def people_rows(f, rect, rows, h=62, gap=8):
     return y
 
 
+def tile_row(f, box, tiles, ch=76):
+    """A row of small labelled figures; two per row where it is narrow."""
+    x0, y, x1 = box
+    cols = len(tiles) if (x1 - x0) > 520 else 2
+    gap = 10
+    cw = (x1 - x0 - gap * (cols - 1)) / cols
+    for i, (label, value, sub, tone) in enumerate(tiles):
+        cx = x0 + (cw + gap) * (i % cols)
+        cy = y + (ch + gap) * (i // cols)
+        f.card([cx, cy, cx + cw, cy + ch], r=12)
+        f.text((cx + 12, cy + 10), label.upper(), 9.5, 'b', INK3, max_w=cw - 24)
+        f.text((cx + 12, cy + 25), value, 17, 'x', SOFT[tone][1], max_w=cw - 24)
+        f.text((cx + 12, cy + ch - 17), sub, 10, 'm', INK3, max_w=cw - 24)
+    return y + ((len(tiles) + cols - 1) // cols) * (ch + gap)
+
+
 # --- archetypes ------------------------------------------------------------
 
 def dashboard(f, spec, rect):
@@ -120,8 +136,73 @@ def dashboard(f, spec, rect):
                  status='Pay', tone='info', icon='shield'),
             dict(title='Annual return due 28 Nov', sub='SSM · Demo Sdn Bhd',
                  status='Prepare', tone='accent', icon='building')]
-    doc_rows(f, [x0 + pad, y, x1 - pad, y1], rows, h=56, gap=8)
+    y = doc_rows(f, [x0 + pad, y, x1 - pad, y1], rows, h=56, gap=8)
+    # A 360dp phone ends here. A 6.5-inch phone has a band spare and an iPad
+    # has most of a page, so the dashboard keeps going rather than leaving
+    # the app looking like it ran out of things to say.
+    ch = min(148, y1 - y - 8)
+    if ch < 100:
+        return y1
+    tight = ch < 136
+    f.card([x0 + pad, y + 4, x1 - pad, y + 4 + ch], r=12)
+    lx = x0 + pad + 14
+    f.text((lx, y + 16), 'NET CASH THIS MONTH', 9.5, 'b', INK3)
+    # Revenue less expenses from the two tiles above, not a third figure
+    # invented alongside them: 486,320 - 291,744.
+    f.text((lx, y + 30), 'RM 194,576', 21, 'x', INK)
+    months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
+    if tight:
+        # Short card: the figure and the bars side by side, because six bars
+        # squeezed into twenty dp say nothing about which month was better.
+        f.text((lx, y + 58), 'money in less out', 10.5, 'm', INK3)
+        bx0, by0 = lx + 148, y + 22
+    else:
+        f.text((lx, y + 58), 'money in less money out · six months to September',
+               10.5, 'm', INK3, max_w=x1 - x0 - pad * 2 - 28)
+        bx0, by0 = lx, y + 76
+    bx1 = x1 - pad - 14
+    f.bars([bx0, by0, bx1, y + 4 + ch - 24],
+           [142.4, 118.9, 165.2, 131.7, 176.3, 194.6], ACCENT,
+           highlight=len(months) - 1)
+    step = (bx1 - bx0) / len(months)
+    for i, m in enumerate(months):
+        f.text((bx0 + step * (i + 0.5), y + 4 + ch - 16), m, 9.5, 'm', INK3, anchor='ma')
+    y += ch + 12
+    if y1 - y < 120:
+        return y1
+    y = section(f, x0 + pad, y + 2, 'Recent activity', 'Open log', x1 - pad) + 2
+    doc_rows(f, [x0 + pad, y, x1 - pad, y1], ACTIVITY, h=56, gap=8)
     return y1
+
+
+# What the company did this week. Events, so none of it has to reconcile
+# with the figures above it -- and where a figure does appear it is the one
+# the screen it came from already shows.
+ACTIVITY = [
+    dict(title='Payment received · RM 12,380.50',
+         sub='Pantai Timur Logistics · INV-2026-0417', status='Matched',
+         tone='success', icon='checkcircle'),
+    dict(title='Invoice validated by LHDN', sub='INV-2026-0418 · Kilang Serbaguna Sdn Bhd',
+         status='Cleared', tone='success', icon='check'),
+    dict(title='Payroll locked · September', sub='24 employees · RM 184,206.45 net',
+         status='Locked', tone='accent', icon='money'),
+    dict(title='Deal won · Bumi Hijau Agro', sub='RM 176,000 · signed 12 Sep',
+         status='Won', tone='success', icon='trending'),
+    dict(title='Bill approved · BILL-2026-0233', sub='Tenaga Jaya Enterprise · due 30 Sep',
+         status='Approved', tone='info', icon='doc'),
+    dict(title='Bank feed reconciled', sub='Maybank current 5142 · 86 lines matched',
+         status='Done', tone='info', icon='bank'),
+    dict(title='Quotation accepted · QUO-2026-0141', sub='Desa Murni Catering · RM 32,400',
+         status='Accepted', tone='success', icon='checkcircle'),
+    dict(title='Credit note issued · CN-2026-0044', sub='Lim Heng Hardware · RM 940.00',
+         status='Sent', tone='warning', icon='receipt'),
+    dict(title='Stock take posted · Warehouse A', sub='312 items counted · 4 variances',
+         status='Review', tone='warning', icon='box'),
+    dict(title='Expense claim approved', sub='Ravi Kumar Suppiah · RM 486.20',
+         status='To pay', tone='grey', icon='wallet'),
+    dict(title='Annual return drafted', sub='SSM · Demo Sdn Bhd · due 28 Nov',
+         status='Draft', tone='grey', icon='building'),
+]
 
 
 def doclist(f, spec, rect):
@@ -154,7 +235,9 @@ def board(f, spec, rect):
     x0, y, x1, y1 = rect
     cols = spec['columns']
     pad = 12
-    visible = min(len(cols), max(2, int((x1 - x0 - pad) // 168)))
+    # 130, not 168: a 6.5-inch phone is wide enough for three columns, and
+    # three whole ones beat two and a sliver.
+    visible = min(len(cols), max(2, int((x1 - x0 - pad) // 130)))
     cw = min(186, (x1 - x0 - pad * 2 - 10 * (visible - 1)) / visible) \
         if visible >= 3 else 158
     x = x0 + pad
@@ -162,8 +245,15 @@ def board(f, spec, rect):
         if x > x1:
             break
         f.card([x, y, x + cw, y1 - 4], r=12, fill=(241, 244, 243), border=BORDER_SOFT)
-        f.text((x + 12, y + 12), col['name'], 12.5, 'b', INK)
-        f.text((x + cw - 12, y + 12), col['value'], 11, 'b', INK3, anchor='ra')
+        # Where the column is too narrow for both, the stage keeps its name
+        # and the total goes: 'Qualifi…  RM 242k' tells you less than
+        # 'Qualified' does.
+        vw = f.tw(col['value'], 11, 'b')
+        if f.tw(col['name'], 12.5, 'b') + vw + 30 <= cw:
+            f.text((x + cw - 12, y + 12), col['value'], 11, 'b', INK3, anchor='ra')
+        else:
+            vw = -8
+        f.text((x + 12, y + 12), col['name'], 12.5, 'b', INK, max_w=cw - 32 - vw)
         f.d.rounded_rectangle(f._b([x + 12, y + 32, x + cw - 12, y + 34]),
                               radius=1 * f.u, fill=SOFT[col['tone']][1])
         cy = y + 42
@@ -184,7 +274,12 @@ def board(f, spec, rect):
 def report(f, spec, rect):
     x0, y, x1, y1 = rect
     pad = 12
-    f.card([x0 + pad, y, x1 - pad, y1 - 4], r=12)
+    # Height of the statement, not of the screen: on an iPad the card would
+    # otherwise run a foot past its last line.
+    need = 78 + sum(26 if r.get('kind') == 'total' else 24
+                    for r in spec['report_rows']) + 16
+    y1c = min(y + need, y1 - 4)
+    f.card([x0 + pad, y, x1 - pad, y1c], r=12)
     ix0, ix1 = x0 + pad + 14, x1 - pad - 14
     f.text((ix0, y + 14), spec['report_title'], 15, 'x', INK)
     f.text((ix0, y + 34), spec['report_sub'], 11, 'm', INK3)
@@ -196,7 +291,7 @@ def report(f, spec, rect):
         f.hline(ix0, ix1, cy + 16, BORDER, 1)
     ry = y + 78
     for row in spec['report_rows']:
-        if ry + 22 > y1 - 20:
+        if ry + 22 > y1c - 14:
             break
         kind = row.get('kind', 'line')
         if kind == 'head':
@@ -215,6 +310,8 @@ def report(f, spec, rect):
         f.text((ix1, ry + 4), row['value'], 12.5 if bold else 12, 'b' if bold else 'm',
                row.get('colour', INK if bold else INK2), anchor='ra')
         ry += 26 if bold else 24
+    if spec.get('report_tiles') and y1 - y1c > 96:
+        tile_row(f, [x0 + pad, y1c + 12, x1 - pad], spec['report_tiles'])
     return y1
 
 
@@ -389,6 +486,22 @@ def grid(f, spec, rect):
         ty += 22 if b else 18
     if wide:
         by = y1 - 56
+        # A till panel is mostly empty under the ticket; what it is not is
+        # empty all the way down to a single button.
+        py = by - 86
+        f.text((tx0 + 14, py - 18), 'HOW THEY ARE PAYING', 9, 'b', INK3)
+        pw = (x1 - pad - 12 - tx0 - 12 - 10) / 2
+        for i, (label, ico) in enumerate([('Cash', 'money'), ('Card', 'card'),
+                                          ('DuitNow QR', 'phone'), ('e-Wallet', 'wallet')]):
+            px = tx0 + 12 + (pw + 10) * (i % 2)
+            pyy = py + (i // 2) * 42
+            on = i == 2
+            f.card([px, pyy, px + pw, pyy + 34], r=10,
+                   fill=ACCENT_SOFT if on else CARD, border=BORDER)
+            f.icon(ico, [px + 10, pyy + 9, px + 26, pyy + 25],
+                   ACCENT if on else INK2, 1.6)
+            f.text((px + 32, pyy + 17), label, 11.5, 'b' if on else 'm',
+                   ACCENT if on else INK2, anchor='lm')
         f.card([tx0 + 12, by, x1 - pad - 12, by + 40], r=12, fill=ACCENT, border=None)
         f.text(((tx0 + x1 - pad) / 2, by + 20), 'Charge RM 36.25', 13.5, 'b', CARD,
                anchor='mm')
@@ -499,9 +612,22 @@ def detail_pane(f, spec, rect):
                                                        '/crm/leads', '/practice')):
         pairs = [('Registration', '202601012345'), ('Tax (TIN)', 'C 2588 4471 0900'),
                  ('Terms', '30 days from invoice'), ('Contact', '+60 12-345 6789')]
+        events = [('Invoice INV-2026-0418 issued', '16 Sep 2026, 09:04'),
+                  ('Payment RM 12,380.50 received', '12 Sep 2026, 14:22'),
+                  ('Statement of account emailed', '1 Sep 2026, 08:00'),
+                  ('Credit limit raised to RM 80,000', '12 Aug 2026, 11:36'),
+                  ('Account opened', '4 Feb 2024')]
     else:
         pairs = [('Issued', '16 Sep 2026'), ('Due', '16 Oct 2026'),
                  ('LHDN UUID', 'F9K2…8D41'), ('Validated', '16 Sep, 09:12')]
+        # The same four timestamps the fields above carry, in the order they
+        # happened -- not a second account of the document's life.
+        events = [('Drafted by Nurul Aisyah', '15 Sep 2026, 16:40'),
+                  ('Issued', '16 Sep 2026, 09:04'),
+                  ('Submitted to MyInvois', '16 Sep 2026, 09:11'),
+                  ('Validated by LHDN · F9K2…8D41', '16 Sep 2026, 09:12'),
+                  ('Emailed to the buyer', '16 Sep 2026, 09:20'),
+                  ('Payment due', '16 Oct 2026')]
     for i, (k, v) in enumerate(pairs):
         cx = ix0 + ((ix1 - ix0) / 2) * (i % 2)
         cy = dy + (i // 2) * 38
@@ -523,6 +649,25 @@ def detail_pane(f, spec, rect):
         f.text((ix0, dy + 15), qty, 10.5, 'm', INK3)
         f.text((ix1, dy + 4), amt, 12, 'b', INK, anchor='ra')
         dy += 32
+    # An iPad is tall enough to leave a hand's width of nothing between the
+    # last line and the totals. The document's own history goes in it --
+    # events, so nothing here has to agree with the arithmetic below.
+    if totals_top - dy > 150:
+        dy += 6
+        f.hline(ix0, ix1, dy - 4, BORDER_SOFT, 1)
+        f.text((ix0, dy + 8), 'HISTORY', 9, 'b', INK3)
+        dy += 28
+        for i, (what, when) in enumerate(events):
+            if dy + 30 > totals_top - 12:
+                break
+            cy = dy + 7
+            f.circle([ix0 + 1, cy - 4, ix0 + 9, cy + 4],
+                     fill=ACCENT if i == 0 else CARD, outline=ACCENT, w=1.4)
+            if i + 1 < len(events) and dy + 30 + 30 <= totals_top - 12:
+                f.line((ix0 + 5, cy + 6), (ix0 + 5, cy + 24), BORDER, 1.2)
+            f.text((ix0 + 20, dy), what, 11.5, 'b', INK, max_w=ix1 - ix0 - 30)
+            f.text((ix0 + 20, dy + 15), when, 10, 'm', INK3)
+            dy += 30
     ty = totals_top
     f.hline(ix0, ix1, ty - 8, BORDER, 1)
     for k, v, b in [('Subtotal', 'RM 7,700.00', False), ('SST 6%', 'RM 462.00', False),

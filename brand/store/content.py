@@ -27,10 +27,18 @@ ITEMS = [('Cement OPC 50kg', 'CEM-050'), ('Steel Bar Y10 6m', 'STL-Y10'),
          ('Sand River m³', 'SND-RIV'), ('Wire Mesh A7', 'WMS-A07'),
          ('Nails 3" 1kg', 'NAL-300'), ('Silicone Sealant', 'SIL-001')]
 
+# Long enough to fill the till on the widest screen in the sets: an iPad
+# Pro in landscape lays out eight columns, and a grid that runs out after
+# twelve tiles advertises a menu with twelve things on it.
 MENU = [('Nasi Lemak Ayam', '12.00'), ('Roti Canai', '2.50'), ('Teh Tarik', '3.20'),
         ('Mee Goreng Mamak', '9.50'), ('Kopi O Ais', '3.50'), ('Char Kuey Teow', '11.00'),
         ('Nasi Kandar Set', '15.50'), ('Milo Dinosaur', '6.80'), ('Curry Puff', '2.00'),
-        ('Cendol Special', '7.00'), ('Ayam Percik', '14.00'), ('Limau Ais', '3.00')]
+        ('Cendol Special', '7.00'), ('Ayam Percik', '14.00'), ('Limau Ais', '3.00'),
+        ('Nasi Goreng Kampung', '10.50'), ('Mee Rebus', '8.50'), ('Sirap Bandung', '3.80'),
+        ('Laksa Johor', '13.00'), ('Roti Telur', '3.50'), ('Nasi Ayam Hainan', '11.50'),
+        ('Teh O Limau', '3.20'), ('Satay Ayam 10 cucuk', '12.00'),
+        ('Rojak Buah', '7.50'), ('Air Kelapa', '5.50'), ('Pisang Goreng', '4.00'),
+        ('Set Nasi Campur', '13.50')]
 
 ACCOUNTS = [('4000', 'Sales — Trading'), ('4100', 'Sales — Services'),
             ('5000', 'Cost of goods sold'), ('6100', 'Salaries and wages'),

@@ -68,3 +68,5 @@ app/screenshots/out/
 # Play asset builds are regenerated, not committed
 brand/store/out/
 brand/store/out.zip
+brand/store/out-ios/
+brand/store/out-ios.zip
