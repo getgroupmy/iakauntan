@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -639,7 +640,7 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
         child: AsyncView(
           value: status,
           onRetry: () => ref.invalidate(ocrStatusProvider),
-          loading: const LinearProgressIndicator(),
+          skeleton: const CardRowsSkeleton(rows: 3, leading: false),
           builder: (ocr) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1211,7 +1212,8 @@ class _ModulesCard extends ConsumerWidget {
             AsyncView(
               value: surface,
               onRetry: () => ref.invalidate(moduleSurfaceProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 6, leadingSize: 24, lines: 1, trailing: 2),
               builder: (modules) {
                 final held = [
                   for (final m in modules)
@@ -1840,7 +1842,8 @@ class _FiscalYearsCard extends ConsumerWidget {
             AsyncView(
               value: years,
               onRetry: () => ref.invalidate(fiscalYearsProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 3, leading: false, trailing: 2),
               builder: (list) => list.isEmpty
                   ? const Text('No fiscal year yet — nothing can be posted.')
                   : Column(
@@ -2123,7 +2126,8 @@ class _TaxCodesCard extends ConsumerWidget {
             AsyncView(
               value: taxCodes,
               onRetry: () => ref.invalidate(taxCodesProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 4, leading: false, trailing: 1),
               builder: (list) => Column(
                 children: [
                   for (final t in list)

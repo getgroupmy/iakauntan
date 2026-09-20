@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
@@ -703,6 +704,7 @@ class _Statements extends ConsumerWidget {
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(fsExportProvider(filingId)),
+      skeleton: const TableSkeleton(columns: 3, rows: 6),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(

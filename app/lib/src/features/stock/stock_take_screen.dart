@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -68,6 +69,7 @@ class _StockTakeScreenState extends ConsumerState<StockTakeScreen> {
       body: AsyncView(
         value: onHand,
         onRetry: () => ref.invalidate(stockOnHandProvider),
+        skeleton: const ListSkeleton(rows: 7),
         builder: (items) {
           if (!_seeded && items.isNotEmpty) {
             _seeded = true;
@@ -480,6 +482,8 @@ class _RecentCounts extends ConsumerWidget {
             AsyncView(
               value: rows,
               onRetry: () => ref.invalidate(stockAdjustmentsProvider),
+              skeleton: const CardRowsSkeleton(
+                  rows: 4, leading: false, trailing: 2),
               builder: (list) {
                 if (list.isEmpty) {
                   return Text(

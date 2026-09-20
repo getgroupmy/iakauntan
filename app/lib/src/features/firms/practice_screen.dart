@@ -36,6 +36,7 @@ class PracticeScreen extends ConsumerWidget {
       body: AsyncView(
         value: firms,
         onRetry: () => ref.invalidate(myFirmsProvider),
+        skeleton: const ListSkeleton(rows: 4),
         builder: (rows) {
           if (rows.isEmpty) return const _NoPractice();
 
@@ -209,6 +210,7 @@ class _ClientsCard extends ConsumerWidget {
         AsyncView(
           value: portfolio,
           onRetry: () => ref.invalidate(firmPortfolioProvider(firmId)),
+          skeleton: const ListSkeleton(rows: 5),
           builder: (rows) {
             if (rows.isEmpty) {
               return const Card(
@@ -316,6 +318,7 @@ class _PeopleCard extends ConsumerWidget {
         AsyncView(
           value: team,
           onRetry: () => ref.invalidate(firmTeamProvider(firmId)),
+          skeleton: const CardRowsSkeleton(rows: 4),
           builder: (rows) => Card(
             child: Column(
               children: [

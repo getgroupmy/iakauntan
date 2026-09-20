@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
@@ -221,6 +222,7 @@ class OfficersTab extends ConsumerWidget {
     return AsyncView(
       value: officers,
       onRetry: () => ref.invalidate(corpOfficersProvider(entityId)),
+      skeleton: const ListSkeleton(rows: 5),
       builder: (list) {
         final current = list.where((o) => o.isCurrent).toList();
         final past = list.where((o) => !o.isCurrent).toList();
@@ -490,7 +492,8 @@ class _Members extends ConsumerWidget {
                       value: members,
                       onRetry: () =>
                           ref.invalidate(corpMembersProvider(entityId)),
-                      loading: const LinearProgressIndicator(),
+                      skeleton: const CardRowsSkeleton(
+                          rows: 4, leading: false, trailing: 2),
                       builder: (list) => list.isEmpty
                           ? const Text('No shares in issue.')
                           : Column(children: [
@@ -533,7 +536,8 @@ class _Members extends ConsumerWidget {
                       value: events,
                       onRetry: () =>
                           ref.invalidate(corpShareEventsProvider(entityId)),
-                      loading: const LinearProgressIndicator(),
+                      skeleton: const CardRowsSkeleton(
+                          rows: 3, leading: false, trailing: 2),
                       builder: (list) => list.isEmpty
                           ? const Text('Nothing recorded.')
                           : Column(children: [
@@ -572,7 +576,8 @@ class _Members extends ConsumerWidget {
                       value: classes,
                       onRetry: () =>
                           ref.invalidate(corpShareClassesProvider(entityId)),
-                      loading: const LinearProgressIndicator(),
+                      skeleton: const CardRowsSkeleton(
+                          rows: 2, leading: false, trailing: 1),
                       builder: (list) => list.isEmpty
                           ? const Text('No class of shares yet.')
                           : Column(children: [
@@ -772,7 +777,7 @@ class _BeneficialOwners extends ConsumerWidget {
           value: owners,
           onRetry: () =>
               ref.invalidate(corpBeneficialOwnersProvider(entityId)),
-          loading: const LinearProgressIndicator(),
+          skeleton: const ListSkeleton(rows: 4),
           builder: (list) {
             final current = list.where((o) => o.isCurrent).toList();
             final ceased = list.where((o) => !o.isCurrent).toList();
@@ -958,7 +963,7 @@ class _Resolutions extends ConsumerWidget {
         child: AsyncView(
           value: resolutions,
           onRetry: () => ref.invalidate(corpResolutionsProvider(entityId)),
-          loading: const LinearProgressIndicator(),
+          skeleton: const CardRowsSkeleton(rows: 4),
           builder: (list) => Card(
             child: Padding(
               padding: const EdgeInsets.all(Space.lg),
@@ -1031,7 +1036,7 @@ class _Charges extends ConsumerWidget {
         child: AsyncView(
           value: charges,
           onRetry: () => ref.invalidate(corpChargesProvider(entityId)),
-          loading: const LinearProgressIndicator(),
+          skeleton: const ListSkeleton(rows: 4),
           builder: (list) {
             final outstanding = list.where((c) => !c.isSatisfied).toList();
             final satisfied = list.where((c) => c.isSatisfied).toList();
@@ -1226,7 +1231,7 @@ class _Documents extends ConsumerWidget {
                   value: docs,
                   onRetry: () =>
                       ref.invalidate(corpDocumentsProvider(entityId)),
-                  loading: const LinearProgressIndicator(),
+                  skeleton: const CardRowsSkeleton(rows: 3),
                   builder: (list) => list.isEmpty
                       ? const Text('Nothing generated yet.')
                       : Column(children: [
@@ -1639,7 +1644,7 @@ class _SignatureBlock extends ConsumerWidget {
         AsyncView(
           value: signatures,
           onRetry: () => ref.invalidate(corpSignaturesProvider(documentId)),
-          loading: const LinearProgressIndicator(),
+          skeleton: const CardRowsSkeleton(rows: 2, leadingSize: 24),
           builder: (list) => list.isEmpty
               ? Text('Not circulated for signature.', style: muted)
               : Column(children: [
