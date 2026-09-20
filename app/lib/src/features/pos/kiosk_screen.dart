@@ -280,6 +280,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       body: SafeArea(
         child: AsyncView<List<Map<String, dynamic>>>(
           value: registers,
+          skeleton: const ListSkeleton(rows: 3, subtitle: false),
           builder: (rows) {
             // Only the kiosks. Pointing this screen at a staff till
             // would be a sale with nobody behind it, and
@@ -450,6 +451,7 @@ class _Ordering extends ConsumerWidget {
                 flex: 2,
                 child: AsyncView<List<Map<String, dynamic>>>(
                   value: menu,
+                  skeleton: const CardRowsSkeleton(rows: 6, trailing: 1),
                   builder: (rows) => _Menu(
                     rows: rows,
                     category: category,

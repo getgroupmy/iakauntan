@@ -394,6 +394,7 @@ class _OverviewTab extends ConsumerWidget {
     return AsyncView(
       value: stats,
       onRetry: () => ref.invalidate(platformStatsProvider),
+      skeleton: const TilesSkeleton(count: 4),
       builder: (s) {
         final width = MediaQuery.sizeOf(context).width;
         final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
@@ -686,6 +687,7 @@ class _SettingsTab extends ConsumerWidget {
     return AsyncView(
       value: settings,
       onRetry: () => ref.invalidate(platformSettingsProvider),
+      skeleton: const FormSkeleton(fields: 6),
       builder: (list) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 860,

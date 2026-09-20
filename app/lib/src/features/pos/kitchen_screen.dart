@@ -133,6 +133,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       ),
       body: AsyncView<List<Map<String, dynamic>>>(
         value: registers,
+        skeleton: const ListSkeleton(rows: 3, subtitle: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -248,6 +249,7 @@ class _Board extends ConsumerWidget {
     final board = ref.watch(kitchenDisplayProvider(stationId));
     return AsyncView<List<Map<String, dynamic>>>(
       value: board,
+      skeleton: const CardRowsSkeleton(rows: 4, trailing: 1),
       builder: (tickets) {
         if (tickets.isEmpty) {
           return const EmptyState(
