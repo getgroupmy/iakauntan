@@ -196,7 +196,24 @@ upload the CSR → download the `.cer` → double-click to install →
 find it in Keychain Access under **My Certificates** → right-click →
 **Export** → `.p12`, and set a password. Remember the password.
 
-*Anywhere with `openssl` — Linux, WSL, a container, a cloud shell:*
+*Anywhere with `openssl` — macOS, Linux, WSL, a container, a cloud
+shell.* This works on a Mac too, and is fewer steps than Keychain
+Access.
+
+> **These are THREE steps with Apple in the middle, not one block to
+> paste.** The `.cer` in step (c) does not exist until Apple has been
+> given the CSR from step (a), so pasting all of it at once fails the
+> last two commands with `No such file or directory` — correctly, and
+> after the first two have already succeeded.
+>
+> Do not mark the middle step with a `#` comment line either. **zsh
+> does not treat `#` as a comment interactively** (`interactive_comments`
+> is off by default), so a pasted comment runs as a command and
+> answers `zsh: command not found: #`. That is noise in the middle of
+> real output, and it is how this gets misread as the whole thing
+> having failed.
+
+**(a)** Make the key and the signing request:
 
 ```bash
 openssl genrsa -out dist.key 2048
@@ -204,8 +221,15 @@ openssl req -new -key dist.key -out dist.csr \
   -subj "/emailAddress=you@example.com/CN=iAkauntan/C=MY"
 ```
 
-Upload `dist.csr` at Certificates → **+** → **Apple Distribution**,
-download `distribution.cer`, then:
+Put your own address in. Apple ignores the subject and issues the
+certificate with one of its own, so nothing depends on it.
+
+**(b)** **Stop here and go to Apple.** developer.apple.com →
+Certificates, Identifiers & Profiles → **Certificates** → **+** →
+**Apple Distribution** → Continue → Choose File → `dist.csr` →
+Continue → **Download**. That gives you `distribution.cer`.
+
+**(c)** Convert it and pair it with the key you kept:
 
 ```bash
 openssl x509 -in distribution.cer -inform DER -out dist.pem -outform PEM
@@ -216,9 +240,12 @@ It asks for an export password twice. That password is
 `IOS_DIST_CERT_PASSWORD` below. **Keep `dist.key`** — losing it means
 revoking the certificate and starting 2.4 again.
 
-> Newer OpenSSL 3 exports with a cipher older tooling rejects. If the
-> runner later fails to import the `.p12`, re-export with
-> `-legacy` added to the `pkcs12` line.
+> **`-legacy` is an OpenSSL 3 flag and macOS does not have it.** macOS
+> ships LibreSSL, which writes the older format the runner wants
+> anyway; adding `-legacy` there is an error, not a fix. On Linux with
+> OpenSSL 3, if the runner later fails to import the `.p12`, re-export
+> with `-legacy` added to the `pkcs12` line. Check which you have with
+> `openssl version`.
 
 **2.5 The provisioning profile.** developer.apple.com → **Profiles** →
 **+** → Distribution → **App Store Connect** → App ID from 2.2 →
@@ -249,12 +276,12 @@ whole page.
 
 | Secret | Value | How |
 | --- | --- | --- |
-| `IOS_DIST_CERT_P12` | base64 of `dist.p12` | `base64 -w0 dist.p12` (Linux) or `base64 -i dist.p12` (macOS) |
+| `IOS_DIST_CERT_P12` | base64 of `dist.p12` | macOS: `base64 -i dist.p12 \| pbcopy`. Linux: `base64 -w0 dist.p12` |
 | `IOS_DIST_CERT_PASSWORD` | the password from 2.4 | as typed |
-| `IOS_PROVISIONING_PROFILE` | base64 of the `.mobileprovision` | same command |
+| `IOS_PROVISIONING_PROFILE` | base64 of the `.mobileprovision` | the same command, on that file |
 | `APP_STORE_CONNECT_KEY_ID` | the 10-character Key ID | as shown |
 | `APP_STORE_CONNECT_ISSUER_ID` | the issuer UUID | as shown |
-| `APP_STORE_CONNECT_KEY_P8` | **the `.p8` file's text, NOT base64** | `cat AuthKey_XXXXXXXXXX.p8` and paste all of it, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines |
+| `APP_STORE_CONNECT_KEY_P8` | **the `.p8` file's text, NOT base64** | macOS: `pbcopy < AuthKey_XXXXXXXXXX.p8`. Otherwise `cat` it and paste all of it, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines |
 
 `base64` without `-w0` on Linux wraps at 76 characters and the newlines
 make the decode fail on the runner. macOS `base64 -i` does not wrap.
@@ -284,8 +311,10 @@ submit it. **Neither lane submits for review**, and nothing here could.
 | Card: "GitHub answered 404" | `GITHUB_REPOSITORY` is wrong, or the token cannot see that repository |
 | Run summary: "Not set up yet" with a list | those Actions secrets are missing. The run is green because nothing failed |
 | `The profile is for X, not my.iakauntan.iakauntan` | the profile in 2.5 was made against the wrong App ID |
-| `security import` fails | the `.p12` base64 wrapped (use `-w0`), or the password is wrong, or OpenSSL 3 needs `-legacy` |
+| `security import` fails | the `.p12` base64 wrapped (Linux needs `-w0`; macOS `base64 -i` does not wrap), or the password is wrong, or OpenSSL 3 on Linux needs `-legacy` — LibreSSL on macOS does not and rejects the flag |
 | Upload rejected, app not found | 2.3 was skipped |
+| `Error opening Certificate distribution.cer` | step (b) has not been done yet — the file comes back FROM Apple |
+| `zsh: command not found: #` | a `#` comment line was pasted; zsh does not honour them interactively. Harmless, and it means the block was pasted whole |
 | Upload rejected, duplicate build number | should not happen — `github.run_number` never repeats — unless a build was uploaded by hand with a number above it |
 
 
