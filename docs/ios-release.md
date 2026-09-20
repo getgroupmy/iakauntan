@@ -336,7 +336,8 @@ submit it. **Neither lane submits for review**, and nothing here could.
 | `security import` fails | the `.p12` base64 wrapped (Linux needs `-w0`; macOS `base64 -i` does not wrap), or the password is wrong, or OpenSSL 3 on Linux needs `-legacy` — LibreSSL on macOS does not and rejects the flag |
 | Upload rejected, app not found | 2.3 was skipped |
 | `Error opening Certificate distribution.cer` | step (b) has not been done yet — the file comes back FROM Apple |
-| `No certificate matches private key` | `dist.key` was regenerated AFTER the CSR was uploaded, usually by running block (a) a second time. Confirm with the two `-modulus` commands below; the matching key is gone, so make a new certificate |
+| `No certificate matches private key` | the `.cer` was not issued from THIS `dist.csr`. Either an existing certificate was downloaded instead of a new one being created from the CSR — check the subject says `Apple Distribution:` and not `Apple Development` — or `dist.key` was regenerated after the upload. Compare timestamps: a `dist.key` NEWER than `dist.csr` means the key was replaced and is unrecoverable; equal timestamps mean the key is fine and only the certificate is wrong. Confirm either way with the two `-modulus` commands below |
+| `dist.p12` exists but is 0 bytes | a failed `pkcs12 -export` still creates its output file. It looks present to `ls` and is empty. Delete it, or it passes for done |
 | `zsh: command not found: #` | a `#` comment line was pasted; zsh does not honour them interactively. Harmless, and it means the block was pasted whole |
 
 **To tell whether a key and a certificate are a pair**, compare their
