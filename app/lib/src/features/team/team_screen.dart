@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/row_actions.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -48,6 +49,10 @@ class TeamScreen extends ConsumerWidget {
       body: AsyncView(
         value: team,
         onRetry: () => ref.invalidate(teamProvider),
+        // `_MemberTile` leads with a CircleAvatar, which is the one
+        // place in this pass where the default 40-pixel circle is
+        // outlining exactly what is there.
+        skeleton: const ListSkeleton(rows: 4),
         builder: (members) => SingleChildScrollView(
           child: PageBody(
             maxWidth: 900,

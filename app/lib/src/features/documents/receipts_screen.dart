@@ -222,6 +222,16 @@ class _SettlementDetail extends ConsumerWidget {
           child: AsyncView(
             value: data,
             onRetry: () => ref.invalidate(settlementProvider(key)),
+            // The receipt itself: what was paid, then a line for each
+            // invoice it was put against, each with an amount at the
+            // end.
+            skeleton: const CardRowsSkeleton(
+              rows: 5,
+              leading: false,
+              lines: 1,
+              trailing: 1,
+              trailingWidth: 88,
+            ),
             builder: (s) => _body(context, s),
           ),
         ),

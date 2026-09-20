@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -118,6 +119,12 @@ class _ShareDialogState extends ConsumerState<_ShareDialog> {
                 value: links,
                 onRetry: () =>
                     ref.invalidate(documentShareLinksProvider(widget.documentId)),
+                skeleton: const CardRowsSkeleton(
+                  rows: 2,
+                  leading: false,
+                  trailing: 2,
+                  rowGap: Space.xs,
+                ),
                 builder: (list) => list.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.symmetric(vertical: Space.md),

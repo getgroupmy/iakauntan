@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // The group-level writes live in an extension on Repo.
@@ -33,6 +34,17 @@ class IntercompanyScreen extends ConsumerWidget {
       body: AsyncView(
         value: inbox,
         onRetry: () => ref.invalidate(intercompanyInboxProvider),
+        // Cards rather than rows: each one is an invoice from another
+        // company in the group, with three lines and something to
+        // press.
+        skeleton: const CardRowsSkeleton(
+          rows: 3,
+          leading: false,
+          lines: 3,
+          trailing: 1,
+          trailingWidth: 96,
+          rowGap: Space.lg,
+        ),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
