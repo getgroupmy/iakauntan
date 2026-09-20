@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -38,6 +39,7 @@ class _OverAgreedFeeDialog extends ConsumerWidget {
           child: AsyncView(
             value: rows,
             onRetry: () => ref.invalidate(mattersOverAgreedFeeProvider),
+            skeleton: const ListSkeleton(rows: 3, leading: false),
             builder: (list) => list.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: Space.lg),

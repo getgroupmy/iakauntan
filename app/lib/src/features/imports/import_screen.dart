@@ -6,6 +6,7 @@ import '../../core/csv.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'file_shape.dart';
@@ -1023,7 +1024,7 @@ class _Progress extends ConsumerWidget {
             AsyncView(
               value: ref.watch(migrationProgressProvider),
               onRetry: () => ref.invalidate(migrationProgressProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const ListSkeleton(rows: 4, leading: false),
               builder: (rows) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

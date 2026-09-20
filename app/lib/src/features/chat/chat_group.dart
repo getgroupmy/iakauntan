@@ -211,6 +211,14 @@ class MembersSheet extends ConsumerWidget {
         child: AsyncView(
           value: members,
           onRetry: () => ref.invalidate(chatMembersProvider(conversationId)),
+          // The thing at the front is a ten-pixel dot saying whether
+          // somebody is there, not a face.
+          skeleton: const CardRowsSkeleton(
+            rows: 4,
+            leadingSize: 10,
+            lines: 1,
+            rowGap: Space.sm,
+          ),
           builder: (list) => Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

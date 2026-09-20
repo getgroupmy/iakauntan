@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -60,6 +61,7 @@ class _TiersDialog extends ConsumerWidget {
               AsyncView(
                 value: tiers,
                 onRetry: () => ref.invalidate(loyaltyTiersProvider),
+                skeleton: const ListSkeleton(rows: 3, leading: false),
                 builder: (list) {
                   if (list.isEmpty) {
                     return const Padding(

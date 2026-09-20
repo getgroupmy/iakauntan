@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -143,6 +144,14 @@ class _ApplyOnAccountState extends ConsumerState<_ApplyOnAccount> {
           onRetry: () => ref.invalidate(outstandingProvider(
             (kind: kind, contactId: widget.contactId),
           )),
+          // A row for each unpaid document with a box to put money in,
+          // which is what the trailing bone stands for.
+          skeleton: const CardRowsSkeleton(
+            rows: 3,
+            leading: false,
+            trailing: 1,
+            trailingWidth: 110,
+          ),
           builder: (docs) {
             if (docs.isEmpty) {
               return EmptyState(

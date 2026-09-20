@@ -1011,6 +1011,7 @@ class _TimesDialogState extends ConsumerState<_TimesDialog> {
                 value: outputs,
                 onRetry: () =>
                     ref.invalidate(itemConversionOutputsProvider(id)),
+                skeleton: const ListSkeleton(rows: 3, leading: false),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return Text('Nothing — nobody said what comes out.',
