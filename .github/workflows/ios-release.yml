@@ -1,0 +1,289 @@
+# =====================================================================
+# Build the iOS app and hand it to App Store Connect.
+#
+# Triggered from the admin console — Mobile Application → Release to the
+# App Store — through `supabase/functions/ios-release`, which is what
+# holds the token that reaches this API. It can also be run by hand from
+# the Actions tab, which is the same thing without the console.
+#
+# ---------------------------------------------------------------------
+# Why a workflow rather than a button that builds
+#
+# Xcode runs on Apple hardware and nowhere else. Neither Supabase nor
+# Vercel — the two places this application's server code lives — can
+# compile an iOS app, so the console cannot DO this. It can only ask a
+# machine that can, and this is that machine.
+#
+# `macos-latest` bills at TEN TIMES an Ubuntu runner, which is why
+# `ci.yml`'s iOS job is gated behind "did anything native change" and
+# why this one only ever runs when somebody asks for it. An archive is
+# twenty to thirty minutes, so each release costs a few hundred
+# Linux-equivalent minutes. That is the price of the feature and it is
+# written here rather than discovered on an invoice.
+#
+# ---------------------------------------------------------------------
+# What this cannot do, and no button anywhere could
+#
+# Skip App Review. `testflight` puts a build in front of your own
+# testers within minutes. `appstore` submits it to Apple, and what
+# happens then takes hours or days and is Apple's. What IS automated is
+# the submission; whether it auto-releases on approval is a setting in
+# App Store Connect rather than anything here.
+#
+# ---------------------------------------------------------------------
+# The secrets, none of which the console ever sees
+#
+# The console holds a token that can start this workflow. Everything
+# below lives in this repository's Actions secrets and is readable only
+# by a job running here — the same posture `APNS_KEY_P8` has in the
+# function secrets.
+#
+#   IOS_DIST_CERT_P12        base64 of the Apple Distribution .p12
+#   IOS_DIST_CERT_PASSWORD   the password that .p12 was exported with
+#   IOS_PROVISIONING_PROFILE base64 of the App Store .mobileprovision
+#   APP_STORE_CONNECT_KEY_ID     the 10-character Key ID
+#   APP_STORE_CONNECT_ISSUER_ID  the issuer UUID
+#   APP_STORE_CONNECT_KEY_P8     the whole AuthKey_XXXX.p8, PEM
+#
+# Absent, the job says which are missing and stops. It does not fail:
+# a release nobody has set up yet is not a broken build, and a red tick
+# on a workflow that was never configured is the "crying wolf" this
+# repository has already argued about once in `scripts/ci/retry.sh`.
+# =====================================================================
+name: iOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Where the build goes
+        type: choice
+        options: [testflight, appstore]
+        default: testflight
+      notes:
+        description: What changed (one line, for your own records)
+        type: string
+        required: false
+
+# One release at a time. Two at once would race for the build number
+# below, and App Store Connect refuses a duplicate — so the second
+# upload would fail after twenty-five minutes of building.
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and upload
+    runs-on: macos-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is this set up yet
+        id: creds
+        working-directory: .
+        env:
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          missing=""
+          for name in IOS_DIST_CERT_P12 IOS_DIST_CERT_PASSWORD \
+                      IOS_PROVISIONING_PROFILE APP_STORE_CONNECT_KEY_ID \
+                      APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_P8; do
+            eval "value=\${$name}"
+            [ -z "$value" ] && missing="$missing $name"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Not set up yet"
+              echo
+              echo "These Actions secrets are missing:"
+              echo
+              for name in $missing; do echo "* \`$name\`"; done
+              echo
+              echo "See \`docs/ios-release.md\` for where each comes from."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          # The same pin `ci.yml` uses, for the reason given there: two
+          # jobs building the same app on two SDKs would make a green
+          # tick mean less than it appears to.
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        if: steps.creds.outputs.ready == 'true'
+        run: flutter pub get
+
+      # A keychain of its own, unlocked, and thrown away at the end.
+      # Importing into the login keychain would leave a distribution
+      # certificate on a runner image — which is shared, and which is
+      # why every guide says to do it this way.
+      - name: Signing identity
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/ios-release.keychain-db"
+          # Random, and never printed. It protects a keychain that
+          # exists for the length of this job.
+          pass=$(uuidgen)
+
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+
+          echo "$IOS_DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$keychain" \
+            -P "$IOS_DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/dist.p12"
+
+          # Without this, codesign stops to ask for the keychain
+          # password — on a machine with nobody at it, which is a job
+          # that hangs until the timeout rather than one that fails.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$pass" "$keychain" > /dev/null
+
+          # Ahead of the login keychain, so the search finds this
+          # identity first.
+          security list-keychains -d user -s "$keychain" \
+            $(security list-keychains -d user | tr -d '"')
+
+          profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles"
+          echo "$IOS_PROVISIONING_PROFILE" | base64 --decode \
+            > "$profiles/release.mobileprovision"
+
+          # The UUID and the app id, read out of the profile rather than
+          # typed here: a profile for the wrong bundle identifier is the
+          # commonest signing failure and this names it in one line.
+          plist=$(security cms -D -i "$profiles/release.mobileprovision")
+          uuid=$(echo "$plist" | plutil -extract UUID raw -)
+          appid=$(echo "$plist" | plutil -extract Entitlements.application-identifier raw -)
+          echo "profile UUID: $uuid"
+          echo "profile app id: $appid"
+          echo "PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
+
+          case "$appid" in
+            *.my.iakauntan.iakauntan) ;;
+            *)
+              echo "::error::The profile is for $appid, not my.iakauntan.iakauntan."
+              exit 1
+              ;;
+          esac
+
+      - name: Archive
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          WEB_PUSH_PUBLIC_KEY: ${{ secrets.WEB_PUSH_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>my.iakauntan.iakauntan</key><string>$PROFILE_UUID</string>
+            </dict>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          # `github.run_number` as the build number, because App Store
+          # Connect refuses one it has seen before and this is the only
+          # counter here that never goes backwards. The marketing
+          # version still comes from pubspec.yaml, where a person sets
+          # it deliberately.
+          flutter build ipa \
+            --release \
+            --build-number="${{ github.run_number }}" \
+            --dart-define=WEB_PUSH_PUBLIC_KEY="${WEB_PUSH_PUBLIC_KEY:-}" \
+            --export-options-plist="$RUNNER_TEMP/export.plist"
+
+      - name: Upload to App Store Connect
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          # `altool` reads the key from this path and this name, and
+          # from nowhere else. Passing a path instead is not an option
+          # it offers.
+          keys="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$keys"
+          printf '%s' "$APP_STORE_CONNECT_KEY_P8" \
+            > "$keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+
+          ipa=$(ls build/ios/ipa/*.ipa | head -1)
+          echo "uploading $ipa"
+
+          # Retried, for the reason `scripts/ci/retry.sh` exists: this
+          # is one long upload to somebody else's service at the end of
+          # half an hour of building, and losing it to a dropped packet
+          # would mean paying for the build twice.
+          ../scripts/ci/retry.sh \
+            xcrun altool --upload-app -f "$ipa" -t ios \
+              --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+              --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+
+          rm -f "$keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+
+      - name: What happened
+        if: always() && steps.creds.outputs.ready == 'true'
+        working-directory: .
+        run: |
+          {
+            echo "### iOS ${{ inputs.lane }}"
+            echo
+            echo "* build number: \`${{ github.run_number }}\`"
+            echo "* commit: \`${{ github.sha }}\`"
+            if [ -n "${{ inputs.notes }}" ]; then
+              echo "* notes: ${{ inputs.notes }}"
+            fi
+            echo
+            if [ "${{ inputs.lane }}" = "appstore" ]; then
+              echo "Uploaded. Submit it for review in App Store Connect —"
+              echo "the upload does not do that, and Apple's review is"
+              echo "hours to days whatever this workflow does."
+            else
+              echo "Uploaded. It appears in TestFlight once Apple has"
+              echo "finished processing it, usually within minutes."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Whatever happened above. A distribution certificate left behind
+      # on a shared runner image is the thing this is guarding against.
+      - name: Take the keychain away
+        if: always()
+        working-directory: .
+        run: |
+          security delete-keychain "$RUNNER_TEMP/ios-release.keychain-db" || true
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/release.mobileprovision" || true
+          rm -rf "$HOME/.appstoreconnect/private_keys" || true

@@ -1447,6 +1447,16 @@ jobs:
       - run: deno check supabase/functions/_shared/apns_test.ts
       - run: deno test --allow-env supabase/functions/_shared/apns_test.ts
 
+      # What the console may ask for when it starts an iOS release.
+      #
+      # `ios-release` holds a token that can dispatch a workflow which
+      # signs a build with a distribution certificate and hands it to
+      # Apple under this company's name. Everything it takes from a
+      # browser is checked against a list, and these run rather than
+      # only type-check for the same reason the two above do.
+      - run: deno check supabase/functions/ios-release/dispatch_test.ts
+      - run: deno test supabase/functions/ios-release/dispatch_test.ts
+
       # Which of an iPhone's two Apple tokens a given notification may
       # go to. `0658`.
       #

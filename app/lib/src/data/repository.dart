@@ -5249,6 +5249,49 @@ class PlatformRepo {
     return data == true;
   }
 
+  /// The last few iOS releases, newest first.
+  ///
+  /// Read from GitHub through the `ios-release` function rather than
+  /// from a table here, and deliberately: the build is what happened,
+  /// and a row this app wrote when it pressed the button would be this
+  /// app's opinion of what happened. A workflow that failed to start,
+  /// or one somebody ran by hand from the Actions tab, both show up in
+  /// the same list.
+  Future<List<Map<String, dynamic>>> iosReleases() async {
+    final res = await client.functions.invoke('ios-release');
+    if (res.status >= 400) {
+      throw Exception(_releaseRefusal(res.data));
+    }
+    final runs = (res.data as Map)['runs'] as List? ?? const [];
+    return [for (final r in runs) Map<String, dynamic>.from(r as Map)];
+  }
+
+  /// Start one.
+  ///
+  /// `lane` is `testflight` or `appstore`. Neither releases anything to
+  /// the public: the first reaches your own testers, the second reaches
+  /// App Review, and what happens after that is Apple's and takes as
+  /// long as it takes.
+  Future<void> releaseIosApp({required String lane, String? notes}) async {
+    final res = await client.functions.invoke(
+      'ios-release',
+      body: {'action': 'release', 'lane': lane, if (notes != null) 'notes': notes},
+    );
+    if (res.status >= 400) {
+      throw Exception(_releaseRefusal(res.data));
+    }
+  }
+
+  /// The sentence the function sent, where it sent one.
+  ///
+  /// `fail()` puts it under `error`. Falling back to the whole body
+  /// would put a JSON blob in a snack bar, which is how "not
+  /// configured" ends up looking like a crash.
+  String _releaseRefusal(Object? data) {
+    if (data is Map && data['error'] is String) return data['error'] as String;
+    return 'The release could not be started';
+  }
+
   Future<Map<String, dynamic>> stats() async {
     final data = await client.rpc('platform_stats');
     return Map<String, dynamic>.from(data as Map);

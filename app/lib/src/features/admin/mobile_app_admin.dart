@@ -2,7 +2,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/format.dart';
 import '../../core/platform_live.dart';
+import '../../core/providers.dart';
+import '../../core/safe_link.dart';
+import '../../core/skeletons.dart';
 import '../../core/splash.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -86,6 +90,8 @@ class _MobileAppAdminTabState extends ConsumerState<MobileAppAdminTab> {
                   busy: _busy,
                   onChanged: (patch) => _save(patch),
                 ),
+                const SizedBox(height: Space.lg),
+                const _ReleaseCard(),
                 const SizedBox(height: Space.lg),
                 const _ElsewhereCard(),
                 const SizedBox(height: Space.lg),
@@ -485,6 +491,250 @@ class _Elsewhere extends StatelessWidget {
           Expanded(child: Text('$title — $where', style: style)),
         ],
       ),
+    );
+  }
+}
+
+/// What somebody here can say about a release, and what nobody can.
+///
+/// Both lanes are worth showing because they are genuinely different
+/// decisions, not two buttons for one thing.
+String releaseBlurb(String lane) => switch (lane) {
+  'testflight' =>
+    'Builds and uploads to TestFlight. Your own testers can install it '
+        'within minutes of Apple finishing processing.',
+  _ =>
+    'Builds and uploads, ready to submit for review. Apple\'s review '
+        'takes hours to days and nothing here can shorten it.',
+};
+
+/// A run, in a word.
+///
+/// GitHub gives a status and a conclusion, and the pair is what means
+/// something: `completed` alone does not say whether it worked, and a
+/// conclusion is null for as long as it is running.
+({String label, IconData icon}) releaseState(
+  String status,
+  String? conclusion,
+) {
+  if (status != 'completed') {
+    return (label: 'Building', icon: Icons.sync);
+  }
+  return switch (conclusion) {
+    'success' => (label: 'Uploaded', icon: Icons.check_circle_outline),
+    'cancelled' => (label: 'Cancelled', icon: Icons.block),
+    // Named rather than folded into "failed": a build that ran out of
+    // its ninety minutes and one that was refused by Apple need
+    // different things looking at.
+    'timed_out' => (label: 'Timed out', icon: Icons.timer_off_outlined),
+    _ => (label: 'Failed', icon: Icons.error_outline),
+  };
+}
+
+/// Build the app and hand it to Apple.
+///
+/// The button is here rather than anywhere else because this is the
+/// page for everything the mobile applications need, and a release is
+/// the last of those things.
+///
+/// What it does NOT do is build. Xcode runs on Apple hardware, and
+/// neither Supabase nor Vercel is that — so this asks
+/// `.github/workflows/ios-release.yml`, on a macOS runner, through the
+/// `ios-release` function, which is the only party here holding a
+/// token that can start it. The console never sees a signing
+/// certificate or an App Store key.
+class _ReleaseCard extends ConsumerStatefulWidget {
+  const _ReleaseCard();
+
+  @override
+  ConsumerState<_ReleaseCard> createState() => _ReleaseCardState();
+}
+
+class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
+  final _notes = TextEditingController();
+  String _lane = 'testflight';
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _release() async {
+    // Asked out loud, because this signs a build with a distribution
+    // certificate and puts it in front of Apple under the company's
+    // name. It is also the one button on this page that costs money.
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          _lane == 'appstore' ? 'Release to the App Store?' : 'Send to TestFlight?',
+        ),
+        content: Text(
+          '${releaseBlurb(_lane)}\n\n'
+          'It builds on a Mac, which takes twenty to thirty minutes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Start the build'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Building. It appears below in a moment.',
+      action: () => ref.read(platformRepoProvider).releaseIosApp(
+        lane: _lane,
+        notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      _notes.clear();
+      ref.invalidate(iosReleasesProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final runs = ref.watch(iosReleasesProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              'Release the iOS app',
+              subtitle: 'Builds on a Mac and uploads to App Store Connect',
+            ),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'testflight', label: Text('TestFlight')),
+                ButtonSegment(value: 'appstore', label: Text('App Store')),
+              ],
+              selected: {_lane},
+              onSelectionChanged: _busy
+                  ? null
+                  : (s) => setState(() => _lane = s.first),
+            ),
+            const SizedBox(height: Space.sm),
+            Text(
+              releaseBlurb(_lane),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: Space.md),
+            TextField(
+              controller: _notes,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'What changed',
+                helperText: 'Optional, and for your own records',
+              ),
+            ),
+            const SizedBox(height: Space.md),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                key: const ValueKey('start-ios-release'),
+                onPressed: _busy ? null : _release,
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: const Text('Start the build'),
+              ),
+            ),
+            const Divider(height: Space.xl),
+            Text(
+              'Recent builds',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: Space.sm),
+            AsyncView(
+              value: runs,
+              onRetry: () => ref.invalidate(iosReleasesProvider),
+              skeleton: const CardRowsSkeleton(
+                rows: 3,
+                leadingSize: 24,
+                trailing: 1,
+              ),
+              builder: (list) => list.isEmpty
+                  ? Text(
+                      'Nothing yet.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        for (final run in list)
+                          _ReleaseRow(
+                            number: (run['number'] as num?)?.toInt() ?? 0,
+                            status: run['status']?.toString() ?? 'unknown',
+                            conclusion: run['conclusion']?.toString(),
+                            startedAt: run['startedAt']?.toString(),
+                            url: run['url']?.toString() ?? '',
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReleaseRow extends StatelessWidget {
+  const _ReleaseRow({
+    required this.number,
+    required this.status,
+    required this.conclusion,
+    required this.startedAt,
+    required this.url,
+  });
+
+  final int number;
+  final String status;
+  final String? conclusion;
+  final String? startedAt;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = releaseState(status, conclusion);
+    final when = startedAt == null ? null : DateTime.tryParse(startedAt!);
+
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(state.icon, size: 20),
+      // The build number, which is what App Store Connect shows beside
+      // the build and therefore the only thing that lets somebody match
+      // a row here to a row there.
+      title: Text('Build $number — ${state.label}'),
+      subtitle: when == null ? null : Text(Fmt.dateTime(when)),
+      trailing: url.isEmpty
+          ? null
+          : IconButton(
+              tooltip: 'Open the log',
+              icon: const Icon(Icons.open_in_new, size: 18),
+              onPressed: () => launchExternal(url),
+            ),
     );
   }
 }

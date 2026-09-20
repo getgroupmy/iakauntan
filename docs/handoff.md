@@ -83,22 +83,20 @@ in the commit message — read those rather than the diff.
 
 ## Blocked on the user — nothing can proceed without these
 
-1. **The new Application ID.** They chose "change the Application ID
-   itself" (current: `my.iakauntan.iakauntan`) and never named a
-   replacement. Ten places must change together:
-   `app/android/app/build.gradle.kts` (namespace **and** applicationId),
-   `MainActivity.kt`'s package line **and its directory path**,
-   `project.pbxproj` (3 Runner + 3 RunnerTests),
+1. ~~The new Application ID.~~ **Settled: it stays
+   `my.iakauntan.iakauntan`.** Answered 2026-09-20. Nothing changes, so
+   the ten-places-at-once problem is closed — but the list is worth
+   keeping for whoever revisits it, because they still have to move
+   together: `app/android/app/build.gradle.kts` (namespace **and**
+   applicationId), `MainActivity.kt`'s package line **and its directory
+   path**, `project.pbxproj` (3 Runner + 3 RunnerTests),
    `app/web/.well-known/apple-app-site-association`,
-   `doc_scanner_io.dart`'s MethodChannel — **which must match
-   MainActivity's or document scanning breaks silently** —
-   `push_native.dart`'s `pushChannel` and `AppDelegate.swift`'s
-   `channelName`, **which must match each other or push registration
-   breaks the same silent way** — `Runner.entitlements`, and
-   `docs/passkeys.md`. And `APNS_TOPIC` in the function secrets, which
-   is the bundle identifier and lives outside the repository.
-   Also still unanswered: is the app published on either store? That
-   decides whether the ID can change at all.
+   `doc_scanner_io.dart`'s MethodChannel, `push_native.dart`'s
+   `pushChannel` and `callkit.dart`'s `callChannel` against
+   `AppDelegate.swift`'s two channel names — **all of which break
+   SILENTLY if they drift** — `Runner.entitlements`, `docs/passkeys.md`,
+   and `APNS_TOPIC` in the function secrets.
+
 2. **The upload key SHA-256** for `assetlinks.json`, and which
    certificate the one already supplied is. The JSON pasted used
    `delegate_permission/common.handle_all_urls` (App Links) rather than
@@ -116,6 +114,10 @@ in the commit message — read those rather than the diff.
    linking, and the new app footer links draw nothing — by design, but
    it looks like the feature is missing.
 5. **A new app build**, for any of the mobile work to reach a phone.
+   There is now a button for it — Mobile Application → Release the iOS
+   app — but it needs the secrets in open work item 2 first, and it is
+   iOS only. Android still has no equivalent, because it has no
+   Firebase project either.
 6. For push on a phone: the five `APNS_*` secrets (iOS) and
    `FCM_SERVICE_ACCOUNT` + `google-services.json` (Android). See
    `docs/push-notifications.md`. `google-services.json` cannot live in
@@ -143,16 +145,28 @@ in the commit message — read those rather than the diff.
      `aps-environment`?** Crossed, every notification comes back
      `BadDeviceToken`, which reads as a dead handset and is not one.
 
-2. ~~Make the local stack match the hosted project on function
+2. **Set up the iOS release secrets, then press the button once.**
+   `docs/ios-release.md` lists them: six Actions secrets (the
+   distribution certificate, the provisioning profile, the App Store
+   Connect API key) and two function secrets (a fine-grained GitHub
+   token, the repository). Until they exist the workflow stops with a
+   list of what is missing rather than failing.
+
+   The build number comes from `github.run_number` and the marketing
+   version from `pubspec.yaml`. The first real run is also the first
+   time `xcrun altool --upload-app` has been exercised here — it is the
+   documented CLI for this and nothing in CI can prove it.
+
+3. ~~Make the local stack match the hosted project on function
    privileges.~~ **Done.** `_local_stack.sql` now reproduces Supabase's
    `grant all on functions to anon, authenticated, service_role`, and
    the two files that encoded the opposite are corrected. The cause was
    that CI has TWO databases — `supabase start` for the SQL assertions,
    the linked hosted project for the migrations — and nobody had said
    which was being measured.
-3. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
+4. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
    from here. Do not start without the user.
-4. Older backlog, not to be started unprompted: `close_fiscal_year`
+5. Older backlog, not to be started unprompted: `close_fiscal_year`
    sweeping to 3200 vs 3300; stripping the posting redirect out of
    `0635`; P14 per-document rounding; G3(b) relaxation flag.
 

@@ -996,6 +996,16 @@ final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
   return ref.watch(platformRepoProvider).modules();
 });
 
+/// The last few iOS releases, from GitHub.
+///
+/// `autoDispose` because it is a list of workflow runs and goes stale
+/// the moment one starts; the card refreshes it rather than holding
+/// yesterday's answer for the length of a session.
+final iosReleasesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return ref.watch(platformRepoProvider).iosReleases();
+    });
+
 /// The bank rules, in the order they are tried. 0625.
 final bankRulesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
