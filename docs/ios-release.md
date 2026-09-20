@@ -276,15 +276,28 @@ whole page.
 
 | Secret | Value | How |
 | --- | --- | --- |
-| `IOS_DIST_CERT_P12` | base64 of `dist.p12` | macOS: `base64 -i dist.p12 \| pbcopy`. Linux: `base64 -w0 dist.p12` |
+| `IOS_DIST_CERT_P12` | base64 of `dist.p12` | `base64 -i dist.p12 \| tr -d '\n' \| pbcopy` (macOS) or `base64 -w0 dist.p12` (Linux) |
 | `IOS_DIST_CERT_PASSWORD` | the password from 2.4 | as typed |
 | `IOS_PROVISIONING_PROFILE` | base64 of the `.mobileprovision` | the same command, on that file |
 | `APP_STORE_CONNECT_KEY_ID` | the 10-character Key ID | as shown |
 | `APP_STORE_CONNECT_ISSUER_ID` | the issuer UUID | as shown |
 | `APP_STORE_CONNECT_KEY_P8` | **the `.p8` file's text, NOT base64** | macOS: `pbcopy < AuthKey_XXXXXXXXXX.p8`. Otherwise `cat` it and paste all of it, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines |
 
-`base64` without `-w0` on Linux wraps at 76 characters and the newlines
-make the decode fail on the runner. macOS `base64 -i` does not wrap.
+**The wrapping is what catches people.** `base64` without `-w0` on
+Linux wraps at 76 characters, and those newlines make the decode fail
+on the runner. macOS has **no `-w` option at all** — `base64 -w0`
+there answers `invalid option -- w` — so the `tr -d '\n'` above is the
+portable way to say the same thing, and is harmless where nothing
+wrapped.
+
+Two commands that check the values before they go anywhere:
+
+```bash
+# one very long line, no spaces, no newlines
+base64 -i dist.p12 | tr -d '\n' | wc -l     # prints 0
+# and the .p8 keeps its newlines — this one prints 3 or more
+wc -l < AuthKey_XXXXXXXXXX.p8
+```
 
 ### Part 4 — press it
 
