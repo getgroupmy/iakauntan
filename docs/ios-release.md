@@ -216,13 +216,22 @@ Access.
 **(a)** Make the key and the signing request:
 
 ```bash
-openssl genrsa -out dist.key 2048
+[ -f dist.key ] || openssl genrsa -out dist.key 2048
 openssl req -new -key dist.key -out dist.csr \
   -subj "/emailAddress=you@example.com/CN=iAkauntan/C=MY"
 ```
 
-Put your own address in. Apple ignores the subject and issues the
-certificate with one of its own, so nothing depends on it.
+**The `[ -f dist.key ] ||` is not decoration.** It means "only if the
+key does not already exist", and it is there because running this
+block a second time is the one mistake that cannot be undone from
+here. A fresh `dist.key` does not match a certificate Apple already
+issued against the old one, the old key is gone, and the only way out
+is a whole new certificate. Regenerating the CSR from an existing key
+is harmless — same key, same public half — so the guard belongs on
+that line and nowhere else.
+
+Put your own address in, or don't. Apple ignores the subject and
+issues the certificate with one of its own, so nothing depends on it.
 
 **(b)** **Stop here and go to Apple.** developer.apple.com →
 Certificates, Identifiers & Profiles → **Certificates** → **+** →
@@ -327,7 +336,22 @@ submit it. **Neither lane submits for review**, and nothing here could.
 | `security import` fails | the `.p12` base64 wrapped (Linux needs `-w0`; macOS `base64 -i` does not wrap), or the password is wrong, or OpenSSL 3 on Linux needs `-legacy` — LibreSSL on macOS does not and rejects the flag |
 | Upload rejected, app not found | 2.3 was skipped |
 | `Error opening Certificate distribution.cer` | step (b) has not been done yet — the file comes back FROM Apple |
+| `No certificate matches private key` | `dist.key` was regenerated AFTER the CSR was uploaded, usually by running block (a) a second time. Confirm with the two `-modulus` commands below; the matching key is gone, so make a new certificate |
 | `zsh: command not found: #` | a `#` comment line was pasted; zsh does not honour them interactively. Harmless, and it means the block was pasted whole |
+
+**To tell whether a key and a certificate are a pair**, compare their
+public halves. Same digest, same pair:
+
+```bash
+openssl rsa  -in dist.key -noout -modulus | openssl md5
+openssl x509 -in dist.pem -noout -modulus | openssl md5
+```
+
+Different digests mean the key that matches the certificate no longer
+exists. Apple cannot re-issue against a key it never had, so the fix
+is a new certificate: revoke the unusable one at developer.apple.com
+(it is useless without its key, and Apple Distribution is limited to
+two), then do (a), (b) and (c) again — once.
 | Upload rejected, duplicate build number | should not happen — `github.run_number` never repeats — unless a build was uploaded by hand with a number above it |
 
 
