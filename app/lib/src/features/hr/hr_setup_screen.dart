@@ -99,6 +99,10 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
     return AsyncView(
       value: settings,
       onRetry: () => ref.invalidate(payrollSettingsProvider),
+      // An editor for one record: the employer's EPF, SOCSO and LHDN
+      // numbers. The boxes are drawn before the record arrives to fill
+      // them, which is exactly what a form skeleton says.
+      skeleton: const FormSkeleton(fields: 5),
       builder: (row) {
         if (!_loaded && row != null) {
           _loaded = true;

@@ -6,6 +6,7 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -85,6 +86,17 @@ class PayslipScreen extends ConsumerWidget {
       body: AsyncView(
         value: payslip,
         onRetry: () => ref.invalidate(payslipProvider),
+        // A payslip is lines with a figure at the end of each: earnings,
+        // then deductions, then what the employer paid on top. One line
+        // of words per row, because a payslip line is a name and an
+        // amount and nothing else.
+        skeleton: const CardRowsSkeleton(
+          rows: 8,
+          leading: false,
+          lines: 1,
+          trailing: 1,
+          trailingWidth: 72,
+        ),
         builder: (slip) {
           if (slip == null) {
             return const EmptyState(

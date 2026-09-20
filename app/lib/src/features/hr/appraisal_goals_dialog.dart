@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -39,6 +40,7 @@ class _GoalsDialog extends ConsumerWidget {
           child: AsyncView(
             value: goals,
             onRetry: () => ref.invalidate(appraisalGoalsProvider(appraisalId)),
+            skeleton: const ListSkeleton(rows: 3, leading: false),
             builder: (list) {
               final weight = list.fold<double>(
                   0, (sum, g) => sum + Fmt.toDouble(g['weight_percent']));

@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -43,6 +44,7 @@ class _InterviewsDialog extends ConsumerWidget {
           child: AsyncView(
             value: rounds,
             onRetry: () => ref.invalidate(interviewsProvider(applicantId)),
+            skeleton: const ListSkeleton(rows: 3, leading: false),
             builder: (list) => Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -791,7 +791,11 @@ class _ApprovalChain extends ConsumerWidget {
             AsyncView(
               value: steps,
               onRetry: () => ref.invalidate(claimApprovalsProvider(claimId)),
-              loading: const LinearProgressIndicator(),
+              // The chain of who has to agree, an icon each for where it
+              // has got to. Three, because most chains are one or two
+              // and an outline longer than the answer reads as content
+              // that vanished.
+              skeleton: const CardRowsSkeleton(rows: 3, leadingSize: 24),
               builder: (list) {
                 if (list.isEmpty) {
                   return Text(

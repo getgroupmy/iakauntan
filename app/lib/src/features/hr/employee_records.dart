@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -227,6 +228,10 @@ class _Section extends ConsumerWidget {
         AsyncView(
           value: rows,
           onRetry: () => ref.invalidate(employeeRowsProvider(arg)),
+          // Two, and deliberately few. This block is reused for
+          // dependants, qualifications and the rest, and every one of
+          // them is a short list under a heading inside a longer page.
+          skeleton: const ListSkeleton(rows: 2, leading: false),
           builder: (list) => list.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: Space.sm),

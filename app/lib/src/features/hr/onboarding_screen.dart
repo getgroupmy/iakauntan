@@ -306,6 +306,15 @@ class _TasksDialog extends ConsumerWidget {
           child: AsyncView(
             value: tasks,
             onRetry: () => ref.invalidate(onboardingTasksProvider(id)),
+            // `_TaskRow` is a CheckboxListTile, so the thing at the
+            // front is a checkbox and not a face: 24, as
+            // `CardRowsSkeleton`'s own comment argues.
+            skeleton: const CardRowsSkeleton(
+              rows: 5,
+              leadingSize: 24,
+              lines: 1,
+              rowGap: Space.xs,
+            ),
             builder: (list) => Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

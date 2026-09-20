@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -38,6 +39,7 @@ class _ReferralsDialog extends ConsumerWidget {
           child: AsyncView(
             value: rows,
             onRetry: () => ref.invalidate(referralHiresProvider),
+            skeleton: const ListSkeleton(rows: 4, leading: false),
             builder: (list) => list.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: Space.lg),

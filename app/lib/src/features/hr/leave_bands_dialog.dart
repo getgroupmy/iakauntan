@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -75,6 +76,7 @@ class _LeaveBandsDialogState extends ConsumerState<_LeaveBandsDialog> {
               AsyncView(
                 value: bands,
                 onRetry: () => ref.invalidate(leaveBandsProvider(_typeId)),
+                skeleton: const ListSkeleton(rows: 3, leading: false),
                 builder: (list) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
