@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iAkauntan promo — frame renderer</title>
+<style>
+  @font-face { font-family:'Plus Jakarta Sans'; font-weight:400;
+    src:url('../../app/assets/fonts/PlusJakartaSans-Regular.ttf') format('truetype'); }
+  @font-face { font-family:'Plus Jakarta Sans'; font-weight:500;
+    src:url('../../app/assets/fonts/PlusJakartaSans-Medium.ttf') format('truetype'); }
+  @font-face { font-family:'Plus Jakarta Sans'; font-weight:600;
+    src:url('../../app/assets/fonts/PlusJakartaSans-SemiBold.ttf') format('truetype'); }
+  @font-face { font-family:'Plus Jakarta Sans'; font-weight:700;
+    src:url('../../app/assets/fonts/PlusJakartaSans-Bold.ttf') format('truetype'); }
+  @font-face { font-family:'Plus Jakarta Sans'; font-weight:800;
+    src:url('../../app/assets/fonts/PlusJakartaSans-ExtraBold.ttf') format('truetype'); }
+
+  :root{
+    --ink:#04100E; --seed:#0B7A6B; --success:#34D399;
+    --warm:#FBBF24; --paper:#EAF4F1;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ink)}
+  body{
+    font-family:'Plus Jakarta Sans',sans-serif;
+    color:var(--paper);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:geometricPrecision;
+  }
+
+  /* ---- atmosphere ------------------------------------------------ */
+  #bg{position:absolute;inset:0;z-index:0}
+  #bg .glow{position:absolute;border-radius:50%;filter:blur(120px);will-change:transform,opacity}
+  #bg .g1{width:1500px;height:1100px;left:-260px;top:-360px;
+    background:radial-gradient(circle,rgba(11,122,107,.60),rgba(11,122,107,0) 68%)}
+  #bg .g2{width:1250px;height:1000px;right:-280px;bottom:-380px;
+    background:radial-gradient(circle,rgba(52,211,153,.30),rgba(52,211,153,0) 70%)}
+  #bg .g3{width:900px;height:900px;left:50%;top:44%;margin:-450px 0 0 -450px;
+    background:radial-gradient(circle,rgba(96,165,250,.14),rgba(96,165,250,0) 70%)}
+  #vignette{position:absolute;inset:0;z-index:40;pointer-events:none;
+    background:radial-gradient(ellipse 78% 74% at 50% 48%,transparent 42%,rgba(0,0,0,.82) 100%)}
+  #grain{position:absolute;inset:-200px;z-index:41;pointer-events:none;opacity:.055;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay}
+  #scanlines{position:absolute;inset:0;z-index:42;pointer-events:none;opacity:.035;
+    background:repeating-linear-gradient(to bottom,rgba(255,255,255,.7) 0 1px,transparent 1px 3px)}
+  #letterbox-t,#letterbox-b{position:absolute;left:0;right:0;height:0;background:#000;z-index:45}
+  #letterbox-t{top:0} #letterbox-b{bottom:0}
+
+  /* ---- stage ----------------------------------------------------- */
+  #stage{position:absolute;inset:0;z-index:10}
+  .plate{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    z-index:1;opacity:.34;filter:saturate(.72) contrast(1.06) brightness(.82)}
+  .plate-scrim{position:absolute;inset:0;z-index:2;
+    background:linear-gradient(100deg,rgba(4,16,14,.95) 0%,rgba(4,16,14,.80) 46%,rgba(4,16,14,.42) 100%)}
+  .scene > .inner{position:relative;z-index:3}
+  .scene{position:absolute;inset:0;display:none;
+    padding:138px 150px;flex-direction:column;justify-content:center}
+  .scene.on{display:flex}
+  .inner{will-change:transform,opacity}
+  .blk{will-change:transform,opacity,filter}
+
+  /* ---- type ------------------------------------------------------ */
+  .kicker{font-size:25px;font-weight:700;letter-spacing:.30em;text-transform:uppercase;
+    color:var(--success);margin-bottom:34px;display:flex;align-items:center;gap:22px}
+  .kicker::before{content:'';width:54px;height:2px;background:var(--success);
+    box-shadow:0 0 18px rgba(52,211,153,.9);flex:none}
+
+  .hero{font-size:84px;font-weight:700;line-height:1.08;letter-spacing:-.025em;max-width:1460px}
+  .hero em{font-style:normal;color:var(--success)}
+
+  .line{font-size:72px;font-weight:600;line-height:1.16;letter-spacing:-.022em;
+    margin-bottom:26px;color:rgba(234,244,241,.94)}
+  .line:last-child{margin-bottom:0}
+
+  .wordmark{font-size:184px;font-weight:800;letter-spacing:-.05em;line-height:1;
+    background:linear-gradient(112deg,#FFFFFF 8%,#9FE8D6 48%,var(--success) 96%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .rule{height:3px;width:0;background:linear-gradient(90deg,var(--success),rgba(52,211,153,0));
+    margin:44px 0 40px;box-shadow:0 0 22px rgba(52,211,153,.55)}
+  .sub{font-size:37px;font-weight:500;letter-spacing:.012em;color:rgba(234,244,241,.90)}
+  .caption{font-size:27px;font-weight:400;line-height:1.55;color:rgba(234,244,241,.56);
+    max-width:1240px;margin-top:44px}
+
+  /* ---- ledger ---------------------------------------------------- */
+  .ledger{margin-top:56px;font-family:'DejaVu Sans Mono','Liberation Mono',monospace;
+    font-size:35px;line-height:1.85;max-width:1400px}
+  .lrow{display:grid;grid-template-columns:86px 132px 1fr 260px 260px;align-items:baseline}
+  .lrow.cr{padding-left:86px;grid-template-columns:86px 132px 1fr 260px 260px}
+  .lrow .dc{font-weight:700;color:var(--success)}
+  .lrow.cr .dc{color:var(--warm)}
+  .lrow .code{color:rgba(234,244,241,.48)}
+  .lrow .nm{color:rgba(234,244,241,.92)}
+  .lrow .amt{text-align:right;font-weight:700;letter-spacing:-.01em}
+  .badge{display:inline-flex;align-items:center;gap:16px;margin-top:38px;
+    padding:15px 30px;border:1px solid rgba(52,211,153,.45);border-radius:999px;
+    background:rgba(52,211,153,.10);font-family:'Plus Jakarta Sans',sans-serif;
+    font-size:27px;font-weight:600;color:var(--success);letter-spacing:.01em}
+  .badge .tick{width:26px;height:26px;border-radius:50%;background:var(--success);
+    color:#04100E;font-size:17px;font-weight:800;display:flex;align-items:center;
+    justify-content:center;line-height:1}
+
+  /* ---- chips ----------------------------------------------------- */
+  .chips{display:flex;flex-wrap:wrap;gap:18px;margin-top:54px;max-width:1500px}
+  .chip{padding:17px 34px;border-radius:999px;font-size:29px;font-weight:600;
+    letter-spacing:.005em;color:rgba(234,244,241,.94);
+    border:1px solid rgba(52,211,153,.32);background:rgba(11,122,107,.20);
+    backdrop-filter:blur(8px)}
+
+  /* ---- fields ---------------------------------------------------- */
+  .fields{margin-top:50px;max-width:1340px;
+    border:1px solid rgba(234,244,241,.13);border-radius:22px;overflow:hidden;
+    background:rgba(255,255,255,.035);backdrop-filter:blur(14px)}
+  .frow{display:grid;grid-template-columns:320px 1fr;padding:25px 40px;
+    border-bottom:1px solid rgba(234,244,241,.09)}
+  .frow:last-child{border-bottom:0}
+  .frow .lbl{font-size:26px;font-weight:500;color:rgba(234,244,241,.46);letter-spacing:.02em}
+  .frow .val{font-size:30px;font-weight:600;color:var(--paper)}
+  .verdict{display:flex;align-items:center;gap:20px;margin-top:34px;flex-wrap:wrap}
+  .verdict .pill{padding:15px 30px;border-radius:999px;font-size:28px;font-weight:700;
+    color:#04100E;background:var(--success);box-shadow:0 0 34px rgba(52,211,153,.42)}
+  .verdict .why{font-size:27px;font-weight:500;color:rgba(234,244,241,.62)}
+  .verdict .why b{font-weight:700;color:rgba(234,244,241,.92)}
+
+  /* ---- table ----------------------------------------------------- */
+  .tbl{margin-top:48px;max-width:1560px;width:100%;border-collapse:collapse}
+  .tbl th{text-align:left;font-size:22px;font-weight:700;letter-spacing:.20em;
+    text-transform:uppercase;color:rgba(52,211,153,.80);padding:0 24px 20px 0;
+    border-bottom:1px solid rgba(52,211,153,.30)}
+  .tbl th:last-child,.tbl td:last-child{text-align:right;padding-right:0}
+  .tbl td{font-size:30px;font-weight:500;color:rgba(234,244,241,.90);
+    padding:22px 24px 22px 0;border-bottom:1px solid rgba(234,244,241,.08)}
+  .tbl td.sec{color:var(--success);font-weight:700;white-space:nowrap}
+  .tbl td.from{color:rgba(234,244,241,.55)}
+  .tbl td.days{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* ---- stats ----------------------------------------------------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:40px;margin-top:64px;max-width:1620px}
+  .stat .v{font-size:118px;font-weight:800;line-height:1;letter-spacing:-.045em;
+    font-variant-numeric:tabular-nums;
+    background:linear-gradient(140deg,#FFFFFF,var(--success));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .l{font-size:23px;font-weight:500;line-height:1.42;color:rgba(234,244,241,.52);
+    margin-top:18px;max-width:280px}
+
+  /* ---- chrome ---------------------------------------------------- */
+  #mark{position:absolute;left:150px;bottom:82px;z-index:30;
+    font-size:27px;font-weight:800;letter-spacing:-.02em;color:rgba(234,244,241,.30);opacity:0}
+  #progress{position:absolute;left:0;bottom:0;height:3px;z-index:46;width:0;
+    background:linear-gradient(90deg,rgba(11,122,107,.6),var(--success));
+    box-shadow:0 0 16px rgba(52,211,153,.55)}
+</style>
+</head>
+<body>
+  <div id="bg"><div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div></div>
+  <div id="stage"></div>
+  <div id="mark">iAkauntan</div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="scanlines"></div>
+  <div id="letterbox-t"></div>
+  <div id="letterbox-b"></div>
+  <div id="progress"></div>
+
+<script>
+(function () {
+  const SB = window.__STORYBOARD__;
+  const SCENES = SB.scenes;
+  const TOTAL = SB.duration_seconds;
+
+  const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+  const easeOut = p => 1 - Math.pow(1 - p, 3);
+  const easeInOut = p => p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2;
+
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+  /* Every animated node declares the local second it starts at. */
+  const at = (n, t, span) => { n.dataset.at = t; n.dataset.span = span || 0.8; n.classList.add('blk'); return n; };
+
+  const stage = document.getElementById('stage');
+  const plates = [];
+
+  /* ---- build every scene once; frames only mutate style ---------- */
+  SCENES.forEach(sc => {
+    const sec = el('section', 'scene');
+    sec.dataset.id = sc.id;
+    if (sc.plate) {
+      const v = document.createElement('video');
+      v.className = 'plate';
+      v.src = (SB.plates_dir || '../../.promo-build/shots/') + sc.plate;
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      sec.appendChild(v);
+      sec.appendChild(el('div', 'plate-scrim'));
+      plates.push(v);
+    }
+    const inner = el('div', 'inner');
+    sec.appendChild(inner);
+
+    (sc.layout || []).forEach(b => {
+      const t0 = b.at || 0;
+      const step = b.step || 0.3;
+
+      if (b.type === 'kicker')   inner.appendChild(at(el('div', 'kicker', b.text), t0, 0.7));
+      else if (b.type === 'hero') inner.appendChild(at(el('h1', 'hero', b.text), t0, 0.9));
+      else if (b.type === 'sub')  inner.appendChild(at(el('div', 'sub', b.text), t0, 0.8));
+      else if (b.type === 'caption') inner.appendChild(at(el('p', 'caption', b.text), t0, 0.9));
+      else if (b.type === 'wordmark') inner.appendChild(at(el('div', 'wordmark', b.text), t0, 1.3));
+      else if (b.type === 'rule') {
+        const r = at(el('div', 'rule'), t0, 1.1);
+        r.dataset.grow = '1';
+        inner.appendChild(r);
+      }
+      else if (b.type === 'lines') {
+        const w = el('div', 'lines');
+        b.items.forEach((s, i) => w.appendChild(at(el('div', 'line', s), t0 + i * step, 0.8)));
+        inner.appendChild(w);
+      }
+      else if (b.type === 'chips') {
+        const w = el('div', 'chips');
+        b.items.forEach((s, i) => w.appendChild(at(el('span', 'chip', s), t0 + i * step, 0.55)));
+        inner.appendChild(w);
+      }
+      else if (b.type === 'ledger') {
+        const w = el('div', 'ledger');
+        b.rows.forEach((r, i) => {
+          const row = el('div', 'lrow' + (r.dc === 'Cr' ? ' cr' : ''));
+          row.appendChild(el('span', 'dc', r.dc));
+          row.appendChild(el('span', 'code', r.code));
+          row.appendChild(el('span', 'nm', r.name));
+          row.appendChild(el('span', 'amt', r.debit));
+          row.appendChild(el('span', 'amt', r.credit));
+          w.appendChild(at(row, t0 + i * step, 0.6));
+        });
+        inner.appendChild(w);
+        if (b.balance) {
+          const bd = at(el('div', 'badge'), b.balance.at, 0.7);
+          bd.appendChild(el('span', 'tick', '&#10003;'));
+          bd.appendChild(el('span', null, b.balance.text));
+          inner.appendChild(bd);
+        }
+      }
+      else if (b.type === 'fields') {
+        const w = el('div', 'fields');
+        b.items.forEach((f, i) => {
+          const row = el('div', 'frow');
+          row.appendChild(el('span', 'lbl', f.label));
+          row.appendChild(el('span', 'val', f.value));
+          w.appendChild(at(row, t0 + i * step, 0.5));
+        });
+        inner.appendChild(w);
+        if (b.verdict) {
+          const v = at(el('div', 'verdict'), b.verdict.at, 0.7);
+          v.appendChild(el('span', 'pill', b.verdict.kind));
+          v.appendChild(el('span', 'why', 'the reason, in words &mdash; <b>&ldquo;' + b.verdict.why + '&rdquo;</b>'));
+          inner.appendChild(v);
+        }
+      }
+      else if (b.type === 'table') {
+        const tb = el('table', 'tbl');
+        const thead = el('thead'); const hr = el('tr');
+        b.head.forEach(h => hr.appendChild(el('th', null, h)));
+        thead.appendChild(at(hr, t0, 0.6)); tb.appendChild(thead);
+        const tbody = el('tbody');
+        const cls = ['', 'sec', 'from', 'days'];
+        b.rows.forEach((r, i) => {
+          const tr = el('tr');
+          r.forEach((c, j) => tr.appendChild(el('td', cls[j] || '', c)));
+          tbody.appendChild(at(tr, t0 + (i + 1) * step, 0.55));
+        });
+        tb.appendChild(tbody);
+        inner.appendChild(tb);
+      }
+      else if (b.type === 'stats') {
+        const w = el('div', 'stats');
+        b.items.forEach((s, i) => {
+          const c = el('div', 'stat');
+          const v = el('div', 'v', s.value);
+          v.dataset.count = s.value;
+          c.appendChild(v);
+          c.appendChild(el('div', 'l', s.label));
+          w.appendChild(at(c, t0 + i * step, 0.7));
+        });
+        inner.appendChild(w);
+      }
+    });
+
+    stage.appendChild(sec);
+  });
+
+  const all = [...stage.querySelectorAll('.scene')];
+  const marks = document.getElementById('mark');
+  const prog = document.getElementById('progress');
+  const g1 = document.querySelector('.g1'), g2 = document.querySelector('.g2'), g3 = document.querySelector('.g3');
+  const grain = document.getElementById('grain');
+  const lbT = document.getElementById('letterbox-t'), lbB = document.getElementById('letterbox-b');
+
+  /* A plate is stretched across its whole scene rather than looped: a five
+     second generation under an eight second scene would otherwise jump. */
+  function seekPlate(video, lt, dur) {
+    const d = video.duration;
+    if (!isFinite(d) || d <= 0) return Promise.resolve();
+    const target = Math.min(Math.max(lt / dur, 0), 1) * (d - 0.001);
+    if (Math.abs(video.currentTime - target) < 1e-4) return Promise.resolve();
+    return new Promise(res => {
+      const done = () => { video.removeEventListener('seeked', done); res(); };
+      video.addEventListener('seeked', done);
+      video.currentTime = target;
+    });
+  }
+
+  /* ---- render one frame ------------------------------------------ */
+  window.__render = async function (t) {
+    t = clamp(t, 0, TOTAL);
+
+    let idx = 0;
+    for (let i = 0; i < SCENES.length; i++) if (t >= SCENES[i].start) idx = i;
+    const sc = SCENES[idx];
+    const lt = t - sc.start;
+    const dur = sc.duration;
+
+    all.forEach((n, i) => n.classList.toggle('on', i === idx));
+
+    /* scene-level cross-fade at the seams */
+    const IN = 0.55, OUT = 0.55;
+    let sceneA = 1;
+    if (lt < IN) sceneA = easeOut(clamp(lt / IN, 0, 1));
+    if (lt > dur - OUT) sceneA = Math.min(sceneA, easeOut(clamp((dur - lt) / OUT, 0, 1)));
+
+    const active = all[idx];
+    const inner = active.firstElementChild;
+    /* a slow continuous drift so a held frame never reads as a slide */
+    const drift = lt / Math.max(dur, .001);
+    inner.style.opacity = sceneA;
+    inner.style.transform =
+      'translate3d(0,' + (-drift * 16).toFixed(2) + 'px,0) scale(' + (1 + drift * 0.012).toFixed(5) + ')';
+
+    /* per-element reveal */
+    active.querySelectorAll('.blk').forEach(n => {
+      const a0 = parseFloat(n.dataset.at), span = parseFloat(n.dataset.span);
+      const p = easeOut(clamp((lt - a0) / span, 0, 1));
+      if (n.dataset.grow === '1') {          /* the rule wipes instead of fading */
+        n.style.width = (p * 420).toFixed(1) + 'px';
+        n.style.opacity = p;
+      } else {
+        n.style.opacity = p;
+        n.style.transform = 'translate3d(0,' + ((1 - p) * 30).toFixed(2) + 'px,0)';
+        n.style.filter = p < 1 ? 'blur(' + ((1 - p) * 9).toFixed(2) + 'px)' : 'none';
+      }
+    });
+
+    /* counters tick up rather than appearing finished */
+    active.querySelectorAll('.v[data-count]').forEach(n => {
+      const target = parseInt(n.dataset.count, 10);
+      const a0 = parseFloat(n.parentElement.dataset.at);
+      const p = easeInOut(clamp((lt - a0) / 1.25, 0, 1));
+      n.textContent = String(Math.round(target * p));
+    });
+
+    /* atmosphere breathes across the whole film, not per scene */
+    const T = t;
+    g1.style.transform = 'translate3d(' + (Math.sin(T * .17) * 70).toFixed(1) + 'px,' + (Math.cos(T * .13) * 46).toFixed(1) + 'px,0)';
+    g2.style.transform = 'translate3d(' + (Math.cos(T * .11) * 84).toFixed(1) + 'px,' + (Math.sin(T * .15) * 56).toFixed(1) + 'px,0)';
+    g3.style.transform = 'translate3d(' + (Math.sin(T * .09 + 1.2) * 110).toFixed(1) + 'px,' + (Math.cos(T * .10) * 66).toFixed(1) + 'px,0)';
+    g1.style.opacity = (0.72 + Math.sin(T * .31) * .14).toFixed(3);
+    g2.style.opacity = (0.66 + Math.cos(T * .26) * .16).toFixed(3);
+
+    /* grain must move or it reads as a dirty lens */
+    const gx = ((T * 977) % 300) | 0, gy = ((T * 613) % 300) | 0;
+    grain.style.backgroundPosition = gx + 'px ' + gy + 'px';
+
+    /* persistent mark everywhere except the title and the sign-off */
+    const showMark = sc.id !== 'title' && sc.id !== 'close' && sc.id !== 'cold-open';
+    marks.style.opacity = showMark ? (sceneA * 0.9).toFixed(3) : 0;
+
+    prog.style.width = (t / TOTAL * 1920).toFixed(1) + 'px';
+
+    /* open on black and close on black */
+    const fadeUp = easeOut(clamp(t / 0.9, 0, 1));
+    const fadeDn = easeOut(clamp((TOTAL - t) / 1.2, 0, 1));
+    const bars = (1 - Math.min(fadeUp, fadeDn)) * 540;
+    lbT.style.height = bars.toFixed(1) + 'px';
+    lbB.style.height = bars.toFixed(1) + 'px';
+
+    const plate = active.querySelector('.plate');
+    if (plate) {
+      plate.style.opacity = (0.34 * sceneA).toFixed(3);
+      await seekPlate(plate, lt, dur);
+    }
+  };
+
+  /* Nothing may be screenshotted until every plate knows its own duration. */
+  Promise.all(plates.map(v => v.readyState >= 1
+    ? Promise.resolve()
+    : new Promise(res => {
+        v.addEventListener('loadedmetadata', res, { once: true });
+        v.addEventListener('error', res, { once: true });   // a missing plate must
+      })))                                                  // not hang the render
+    .then(() => { window.__ready = true; });
+})();
+</script>
+</body>
+</html>

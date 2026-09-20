@@ -1,0 +1,417 @@
+{
+  "title": "iAkauntan — promotional film",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "aspect_ratio": "16:9"
+  },
+  "duration_seconds": 62.5,
+  "voice": "Plain, declarative, unhyped. Every claim on screen is a fact stated in README.md and asserted in supabase/tests/.",
+  "palette": {
+    "seed": "#0B7A6B",
+    "ink": "#04100E",
+    "success": "#34D399",
+    "warning": "#FBBF24",
+    "info": "#60A5FA"
+  },
+  "typeface": "Plus Jakarta Sans (app/assets/fonts)",
+  "scenes": [
+    {
+      "id": "cold-open",
+      "start": 0.0,
+      "duration": 5.5,
+      "layout": [
+        {
+          "type": "lines",
+          "at": 0.35,
+          "step": 1.15,
+          "items": [
+            "A missed date is a penalty.",
+            "An unbalanced ledger is a rebuild.",
+            "A wrong rate is on every payslip."
+          ]
+        }
+      ],
+      "shot": {
+        "model": "kling-v2.5-turbo-pro-t2v",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "Extreme slow push-in across a dark office desk at night, a single warm desk lamp raking light over a stack of unopened statutory envelopes and a wall calendar with one date circled in red. Deep shadow, teal-black ambience, shallow depth of field, anamorphic flare, 35mm film grain. No text, no people, no readable documents. Locked cinematic mood, no camera shake."
+      }
+    },
+    {
+      "id": "title",
+      "start": 5.5,
+      "duration": 5.5,
+      "layout": [
+        {
+          "type": "wordmark",
+          "at": 0.2,
+          "text": "iAkauntan"
+        },
+        {
+          "type": "rule",
+          "at": 0.85
+        },
+        {
+          "type": "sub",
+          "at": 1.25,
+          "text": "Accounting · CRM · HR &amp; Payroll · Corporate Secretarial · LHDN e-Invoice"
+        },
+        {
+          "type": "caption",
+          "at": 2.1,
+          "text": "Built for Malaysian business. Flutter on the front, Postgres underneath."
+        }
+      ],
+      "shot": {
+        "model": "veo3.1-text-to-video",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "Abstract deep-teal liquid ink blooming outward from centre against near-black, resolving into a calm horizontal plane of light. Slow, elegant, premium fintech title backdrop. Volumetric depth, subtle particulate, no text, no logos, no people. 24fps cinematic motion."
+      }
+    },
+    {
+      "id": "ledger",
+      "start": 11.0,
+      "duration": 8.5,
+      "layout": [
+        {
+          "type": "kicker",
+          "at": 0.2,
+          "text": "The ledger cannot drift"
+        },
+        {
+          "type": "hero",
+          "at": 0.55,
+          "text": "Everything posts through<br>one entry point."
+        },
+        {
+          "type": "ledger",
+          "at": 1.5,
+          "step": 0.55,
+          "rows": [
+            {
+              "dc": "Dr",
+              "code": "1210",
+              "name": "Accounts Receivable",
+              "debit": "19,332.00",
+              "credit": ""
+            },
+            {
+              "dc": "Cr",
+              "code": "4100",
+              "name": "Sales",
+              "debit": "",
+              "credit": "17,900.00"
+            },
+            {
+              "dc": "Cr",
+              "code": "2130",
+              "name": "SST Output Tax",
+              "debit": "",
+              "credit": "1,432.00"
+            }
+          ],
+          "balance": {
+            "at": 3.6,
+            "text": "Balanced — 19,332.00 = 19,332.00"
+          }
+        },
+        {
+          "type": "caption",
+          "at": 4.4,
+          "text": "A deferred constraint trigger refuses to commit an unbalanced journal. Weighted-average costing, SST and Bank Negara 5-sen rounding are asserted in CI, not eyeballed."
+        }
+      ],
+      "shot": {
+        "model": "wan2.6-text-to-video",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "Two columns of soft light on a black field, perfectly mirrored, gently settling until they align to exactly equal height, then a thin emerald rule snaps across joining them. Minimal, geometric, weightless. No text, no numbers, no UI. Dark teal-black, high contrast, cinematic."
+      }
+    },
+    {
+      "id": "einvoice",
+      "start": 19.5,
+      "duration": 8.0,
+      "layout": [
+        {
+          "type": "kicker",
+          "at": 0.2,
+          "text": "LHDN MyInvois"
+        },
+        {
+          "type": "hero",
+          "at": 0.55,
+          "text": "e-Invoice is part of the invoice,<br><em>not a bolt-on.</em>"
+        },
+        {
+          "type": "chips",
+          "at": 1.9,
+          "step": 0.16,
+          "items": [
+            "submit",
+            "status",
+            "cancel",
+            "validate-TIN",
+            "certificate",
+            "consolidations"
+          ]
+        },
+        {
+          "type": "caption",
+          "at": 3.4,
+          "text": "UBL 2.1 · XAdES signing for version 1.1 · cancellation refused once the 72-hour window closes · every call kept for the 7-year trail."
+        }
+      ],
+      "shot": {
+        "model": "seedance-v2.0-t2v",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "A single sheet of paper dissolving into a lattice of glowing teal data nodes that travel along clean orthogonal paths into the distance and are received by a soft pulse of green light. Clinical, elegant, dark background. No text, no logos, no people. Slow dolly, cinematic depth of field."
+      }
+    },
+    {
+      "id": "smartscan",
+      "start": 27.5,
+      "duration": 7.5,
+      "layout": [
+        {
+          "type": "kicker",
+          "at": 0.2,
+          "text": "AI SmartScan"
+        },
+        {
+          "type": "hero",
+          "at": 0.5,
+          "text": "Photograph the paper."
+        },
+        {
+          "type": "fields",
+          "at": 1.5,
+          "step": 0.42,
+          "items": [
+            {
+              "label": "Supplier",
+              "value": "Syarikat Perniagaan Bersatu Sdn Bhd"
+            },
+            {
+              "label": "Date",
+              "value": "14 Mac 2026"
+            },
+            {
+              "label": "Invoice no.",
+              "value": "INV-2026-04417"
+            },
+            {
+              "label": "Total",
+              "value": "RM 8,214.00"
+            }
+          ],
+          "verdict": {
+            "at": 3.6,
+            "kind": "Supplier&rsquo;s bill",
+            "why": "Says TAX INVOICE"
+          }
+        },
+        {
+          "type": "caption",
+          "at": 4.5,
+          "text": "It says why in words, never a percentage — a percentage reads as a machine being certain about something it cannot be certain about."
+        }
+      ],
+      "shot": {
+        "model": "kling-v2.6-pro-t2v",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "Overhead macro shot of a crumpled paper receipt on a dark slate surface, a sheet of soft teal scanning light sweeping across it once, left to right, lifting faint luminous glyph-shapes off the page that float and settle into a neat grid. No legible text, no hands, no faces. Moody, shallow focus, cinematic film grain."
+      }
+    },
+    {
+      "id": "payroll",
+      "start": 35.0,
+      "duration": 7.5,
+      "layout": [
+        {
+          "type": "kicker",
+          "at": 0.2,
+          "text": "HR &amp; Payroll"
+        },
+        {
+          "type": "hero",
+          "at": 0.5,
+          "text": "Statutory rates are data,<br><em>not code.</em>"
+        },
+        {
+          "type": "chips",
+          "at": 1.8,
+          "step": 0.16,
+          "items": [
+            "EPF",
+            "SOCSO",
+            "EIS",
+            "PCB",
+            "HRD Corp levy",
+            "Zakat"
+          ]
+        },
+        {
+          "type": "caption",
+          "at": 3.2,
+          "text": "Every schedule carries an effective range, so re-running March uses March&rsquo;s rules. A gazetted change is an insert, not a deploy — and every payslip records which schedule produced it."
+        }
+      ],
+      "shot": {
+        "model": "veo3.1-fast-text-to-video",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "Rows of thin horizontal light bars sliding into precise alignment like a settling ledger, each one illuminating in sequence with a soft emerald pulse, against deep black. Ordered, calm, mechanical precision. No text, no numbers, no people. Slow lateral camera drift, cinematic."
+      }
+    },
+    {
+      "id": "corpsec",
+      "start": 42.5,
+      "duration": 7.5,
+      "layout": [
+        {
+          "type": "kicker",
+          "at": 0.2,
+          "text": "Corporate Secretarial"
+        },
+        {
+          "type": "hero",
+          "at": 0.5,
+          "text": "The dates are the product."
+        },
+        {
+          "type": "table",
+          "at": 1.5,
+          "step": 0.38,
+          "head": [
+            "Filing",
+            "Section",
+            "Runs from",
+            "Days"
+          ],
+          "rows": [
+            [
+              "Annual Return",
+              "s.68",
+              "anniversary of incorporation",
+              "30"
+            ],
+            [
+              "Financial statements",
+              "s.258, s.259",
+              "financial year end",
+              "180 + 30"
+            ],
+            [
+              "Change of officers",
+              "s.58",
+              "the change",
+              "14"
+            ],
+            [
+              "Registration of a charge",
+              "s.352",
+              "creation of the charge",
+              "30"
+            ]
+          ]
+        },
+        {
+          "type": "caption",
+          "at": 4.2,
+          "text": "None of them are typed in. Each is computed from the company&rsquo;s own dates against the section that imposes it."
+        }
+      ],
+      "shot": {
+        "model": "kling-v3.0-pro-text-to-video",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "An elegant dark clock face with no numerals, its hands replaced by slender beams of teal light that sweep and lock into four precise positions, each lock accompanied by a soft ring of emerald. Deep black background, volumetric haze, no text, no people. Slow cinematic push-in."
+      }
+    },
+    {
+      "id": "proof",
+      "start": 50.0,
+      "duration": 6.0,
+      "layout": [
+        {
+          "type": "kicker",
+          "at": 0.2,
+          "text": "Asserted, not eyeballed"
+        },
+        {
+          "type": "stats",
+          "at": 0.7,
+          "step": 0.22,
+          "items": [
+            {
+              "value": "662",
+              "label": "functions a tenant&rsquo;s token can reach"
+            },
+            {
+              "value": "329",
+              "label": "tables"
+            },
+            {
+              "value": "45",
+              "label": "MyInvois classification codes"
+            },
+            {
+              "value": "5",
+              "label": "point-of-sale screens"
+            }
+          ]
+        },
+        {
+          "type": "caption",
+          "at": 2.6,
+          "text": "The API description is generated from the catalog and checked against the schema in CI. The SQL assertions run on every push — anything touching EPF, SOCSO, EIS, PCB or an SSM deadline has a test that fails if the number moves."
+        }
+      ],
+      "shot": {
+        "model": "wan2.5-text-to-video",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "A vast dark grid of tiny dim cells igniting row by row in emerald green, sweeping outward until the whole field is lit and steady. Data-centre scale, weightless, abstract. No text, no numbers, no people. Slow pull-back reveal, cinematic contrast."
+      }
+    },
+    {
+      "id": "close",
+      "start": 56.0,
+      "duration": 6.5,
+      "layout": [
+        {
+          "type": "wordmark",
+          "at": 0.25,
+          "text": "iAkauntan"
+        },
+        {
+          "type": "rule",
+          "at": 0.9
+        },
+        {
+          "type": "sub",
+          "at": 1.3,
+          "text": "Double-entry books · SST · Inventory · Payroll · e-Invoice"
+        },
+        {
+          "type": "caption",
+          "at": 2.2,
+          "text": "Built for Malaysia. Verified end to end."
+        }
+      ],
+      "shot": {
+        "model": "veo3.1-text-to-video",
+        "aspect_ratio": "16:9",
+        "duration": 5,
+        "prompt": "Deep-teal ink settling to perfect stillness on a black field, a single horizontal emerald rule holding steady at centre, faint particulate drifting upward. Calm, resolved, premium. No text, no logos, no people. Locked-off cinematic shot."
+      }
+    }
+  ]
+}

@@ -64,3 +64,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 app/screenshots/out/
+
+# promotional film — the storyboard in docs/promo/ is the source, the film is
+# a build artefact (about 15 MB), and the plates are paid generations
+.promo-build/
+.promo-preview/
+docs/promo/node_modules/

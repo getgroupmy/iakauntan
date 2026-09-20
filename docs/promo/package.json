@@ -1,0 +1,17 @@
+{
+  "name": "iakauntan-promo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Deterministic renderer for the iAkauntan promotional film",
+  "type": "module",
+  "scripts": {
+    "build": "./build.sh",
+    "render": "node render.mjs",
+    "preview": "node render.mjs --preview 0.9,3.2,7.4,13.5,16,22,25,30,32,37.5,40,45,47.5,52,54,58,61",
+    "shots": "node generate_shots.mjs"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "playwright": "^1.49.0"
+  }
+}
