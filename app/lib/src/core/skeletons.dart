@@ -291,6 +291,7 @@ class CardRowsSkeleton extends StatelessWidget {
     this.rows = 1,
     this.leading = true,
     this.leadingSize = 40,
+    this.leadingHeight,
     this.lines = 2,
     this.trailing = 0,
     this.trailingWidth = 32,
@@ -305,6 +306,18 @@ class CardRowsSkeleton extends StatelessWidget {
 
   /// How big that is, on a side. A checkbox is not an avatar.
   final double leadingSize;
+
+  /// How TALL it is, where that is not the same as how wide.
+  ///
+  /// The settings cards do not start a row with an avatar. They start
+  /// it with a short piece of text in a fixed column -- a branch code,
+  /// a warehouse code -- seventy-odd pixels wide and one line high. A
+  /// square bone of that width would be seventy pixels TALL, which is
+  /// half again the height of the row it is outlining, and the card
+  /// would visibly shrink the moment the codes arrived.
+  ///
+  /// Null means square, which is what an avatar and a checkbox are.
+  final double? leadingHeight;
 
   /// How many lines of words follow it. One for a bare label, two for
   /// the usual title-and-detail.
@@ -339,8 +352,15 @@ class CardRowsSkeleton extends StatelessWidget {
             child: Row(
               children: [
                 if (leading) ...[
-                  Bone.square(
-                    size: leadingSize,
+                  Bone(
+                    // Keyed so its SIZE can be asserted. `Bone` is
+                    // abstract and its concrete classes are private, so
+                    // `find.byType` cannot reach one, and a wrong
+                    // height here is invisible to every assertion that
+                    // counts children instead.
+                    key: ValueKey('skeleton-card-row-$r-leading'),
+                    width: leadingSize,
+                    height: leadingHeight ?? leadingSize,
                     borderRadius: BorderRadius.circular(Radii.md),
                   ),
                   const SizedBox(width: Space.lg),

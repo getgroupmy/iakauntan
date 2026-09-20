@@ -7,6 +7,7 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/row_actions.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -182,7 +183,10 @@ class _ChartBody extends ConsumerWidget {
     return AsyncView(
       value: accounts,
       onRetry: () => ref.invalidate(accountsProvider),
-      loading: const LinearProgressIndicator(),
+      // Exactly five, and not a guess: `order` below is a constant, so
+      // assets, liabilities, equity, revenue and expense are drawn
+      // whatever the chart turns out to hold.
+      skeleton: const ListSkeleton(rows: 5, leading: false),
       builder: (list) {
         // Grouped by type, in the order a chart is read: assets,
         // liabilities, equity, revenue, expense. A flat list of a

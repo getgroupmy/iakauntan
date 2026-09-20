@@ -288,6 +288,30 @@ void main() {
       expect(rowAt(t, 0).children.length, 3);
     });
 
+    testWidgets('and a leading that is a word rather than a face',
+        (t) async {
+      // The settings cards start a row with a code in a fixed column,
+      // not with an avatar. Outlined as a square that column is as
+      // tall as it is wide -- seventy-odd pixels against a row of
+      // about forty -- and the card shrinks when the codes arrive.
+      //
+      // Asserted on the bone's own size rather than on the card's,
+      // because the row is as tall as its tallest child and that IS
+      // the bone: a wrong height here is not visible in a count of
+      // children, which is what every other assertion in this group
+      // looks at.
+      Size boneAt(WidgetTester t) =>
+          t.getSize(find.byKey(const ValueKey('skeleton-card-row-0-leading')));
+
+      await t.pumpWidget(wrap(const CardRowsSkeleton(leadingSize: 72)));
+      expect(boneAt(t), const Size(72, 72));
+
+      await t.pumpWidget(wrap(
+        const CardRowsSkeleton(leadingSize: 72, leadingHeight: 14),
+      ));
+      expect(boneAt(t), const Size(72, 14));
+    });
+
     testWidgets('and a bone for each control at the end', (t) async {
       // A count and not a flag, because the clock card carries two --
       // the month button and the punch button -- and outlining one of

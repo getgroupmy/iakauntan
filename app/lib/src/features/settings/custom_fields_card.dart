@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/custom_fields_repository.dart';
@@ -92,6 +93,7 @@ class _CustomFieldsCardState extends ConsumerState<CustomFieldsCard> {
             const SizedBox(height: Space.md),
             AsyncView(
               value: fields,
+              skeleton: const ListSkeleton(rows: 3, leading: false),
               builder: (list) {
                 if (list.isEmpty) {
                   return Padding(

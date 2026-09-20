@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -47,6 +48,7 @@ class SstReturnsCard extends ConsumerWidget {
               AsyncView(
                 value: periods,
                 onRetry: () => ref.invalidate(sstTaxablePeriodsProvider),
+                skeleton: const ListSkeleton(rows: 4, leading: false),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return Text(
