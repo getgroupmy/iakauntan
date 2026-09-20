@@ -29,6 +29,20 @@ void main() {
       expect(blurb, contains('hours to days'));
     });
 
+    test('and it says where the submitting happens', () {
+      // Both lanes export with `method: app-store` and both call
+      // `xcrun altool --upload-app`: the lane changes what the run
+      // SUMMARY says and nothing else. Somebody comparing two buttons
+      // would reasonably assume picking this one submits the app, so
+      // the copy has to name the place where that actually happens —
+      // otherwise the screen is accurate and still leaves them with no
+      // next action.
+      expect(releaseBlurb('appstore'), contains('App Store Connect'));
+      // And the TestFlight lane must not claim it: a build reaches
+      // testers without anybody opening App Store Connect at all.
+      expect(releaseBlurb('testflight'), isNot(contains('submit')));
+    });
+
     test('and an unknown lane gets the more cautious of the two', () {
       // Rather than an empty string or a throw. If a lane ever reaches
       // here that this build does not know, the safer sentence is the

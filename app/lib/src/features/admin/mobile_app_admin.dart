@@ -505,8 +505,9 @@ String releaseBlurb(String lane) => switch (lane) {
     'Builds and uploads to TestFlight. Your own testers can install it '
         'within minutes of Apple finishing processing.',
   _ =>
-    'Builds and uploads, ready to submit for review. Apple\'s review '
-        'takes hours to days and nothing here can shorten it.',
+    'Builds and uploads the same way, then you submit it for review in '
+        'App Store Connect. Apple\'s review takes hours to days and '
+        'nothing here can shorten it.',
 };
 
 /// A run, in a word.
