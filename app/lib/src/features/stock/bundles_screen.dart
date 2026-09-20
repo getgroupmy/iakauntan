@@ -170,6 +170,7 @@ class _BundlesScreenState extends ConsumerState<BundlesScreen> {
           AsyncView<List<Map<String, dynamic>>>(
             value: parts,
             onRetry: () => ref.invalidate(bundlePartsProvider(id)),
+            skeleton: const ListSkeleton(rows: 3, leading: false),
             builder: (rows) => Column(
               children: [
                 for (final p in rows)

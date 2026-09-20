@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -83,6 +84,9 @@ class _NotificationsDialogState extends ConsumerState<_NotificationsDialog> {
           child: AsyncView(
             value: list,
             onRetry: _refresh,
+            // An icon each for what kind of thing is waiting, which is
+            // what `_NotificationTile` leads with.
+            skeleton: const ListSkeleton(rows: 4, trailing: false),
             builder: (rows) => rows.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: Space.md),

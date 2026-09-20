@@ -216,6 +216,9 @@ class _CashFlowScreenState extends ConsumerState<CashFlowScreen> {
         onRetry: () => ref.invalidate(
           cashForecastDetailProvider((from: from, to: to, useHistory: _useHistory)),
         ),
+        // An arrow each way in front, which is the one thing somebody
+        // scanning a week is looking for.
+        skeleton: const ListSkeleton(rows: 4),
         builder: (rows) {
           if (rows.isEmpty) {
             return const Padding(

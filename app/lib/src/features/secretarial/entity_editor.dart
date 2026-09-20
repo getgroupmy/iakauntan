@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
@@ -105,6 +106,11 @@ class _CorpEntityEditorState extends ConsumerState<CorpEntityEditor> {
       body: AsyncView(
         value: existing,
         onRetry: () => ref.invalidate(corpEntityProvider),
+        // Safe on a NEW company for the same reason `employee_editor`
+        // is: `existing` is a settled `AsyncValue.data(null)` when
+        // `isNew`, so there is no loading state and this never draws
+        // over boxes that are already right.
+        skeleton: const FormSkeleton(fields: 6),
         builder: (e) {
           if (e != null) _hydrate(e);
           return SingleChildScrollView(

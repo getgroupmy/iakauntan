@@ -197,6 +197,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
             onRetry: () => ref.invalidate(
               budgetVsActualProvider((budget: id, from: _from, to: _to)),
             ),
+            skeleton: const ListSkeleton(rows: 6, leading: false),
             builder: (rows) {
               if (rows.isEmpty) {
                 return const Padding(
