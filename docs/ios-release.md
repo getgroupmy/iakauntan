@@ -189,8 +189,36 @@ the upload is rejected with a message about the app not existing.
 **2.4 The distribution certificate.** This is the one that normally
 wants a Mac. It does not have to.
 
-*On a Mac:* Keychain Access → Certificate Assistant → **Request a
-Certificate From a Certificate Authority**, save to disk. Then
+*First, on a Mac, ask whether this is needed at all:*
+
+```bash
+security find-identity -v -p codesigning
+```
+
+If a line names `Apple Distribution: <your company>`, the account
+already has a certificate AND this machine already has its private
+key. Skip everything below: Keychain Access → **login** → **My
+Certificates** → find that row → it must expand to show a private key
+under it → right-click → **Export** → Personal Information Exchange
+(`.p12`) → set a password, which is `IOS_DIST_CERT_PASSWORD`. It then
+asks for the Mac login password to unlock the keychain; that is a
+different thing and is not the secret.
+
+That path uses the certificate the account already has and consumes
+none of the two Apple Distribution slots. Only make a new certificate
+when it finds nothing.
+
+> **Downloading the existing certificate from the portal is NOT the
+> same thing** and is the trap here. The `.cer` Apple serves is the
+> public half; the private half was only ever on the machine that made
+> the request. Pairing a downloaded `.cer` with a freshly generated
+> key gives `No certificate matches private key`, and the giveaway is
+> the certificate's `notBefore` date being older than the CSR —
+> `openssl x509 -in dist.pem -noout -subject -dates` shows both.
+
+*Otherwise, on a Mac:* Keychain Access → Certificate Assistant →
+**Request a Certificate From a Certificate Authority**, save to disk.
+Then
 developer.apple.com → Certificates → **+** → **Apple Distribution** →
 upload the CSR → download the `.cer` → double-click to install →
 find it in Keychain Access under **My Certificates** → right-click →
