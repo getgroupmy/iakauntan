@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -153,7 +154,7 @@ class _Subdomain extends ConsumerWidget {
     return AsyncView(
       value: standing,
       onRetry: () => ref.invalidate(orgSubdomainProvider),
-      loading: const LinearProgressIndicator(),
+      skeleton: const FormSkeleton(fields: 3),
       builder: (row) {
         final status = row?['status'] as String?;
         return Column(
@@ -363,7 +364,8 @@ class _Mailboxes extends ConsumerWidget {
     return AsyncView(
       value: boxes,
       onRetry: () => ref.invalidate(orgMailboxesProvider),
-      loading: const LinearProgressIndicator(),
+      skeleton: const CardRowsSkeleton(
+          rows: 3, leadingSize: 24, lines: 1, trailing: 1),
       builder: (rows) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

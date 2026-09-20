@@ -329,6 +329,7 @@ class _Enrolments extends ConsumerWidget {
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(terminalEnrolmentsProvider(terminal.id)),
+      skeleton: const CardRowsSkeleton(rows: 3, trailing: 1),
       builder: (list) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -476,6 +477,8 @@ class _UnmatchedPunches extends ConsumerWidget {
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(unmatchedPunchesProvider),
+      skeleton: const CardRowsSkeleton(
+          rows: 4, leadingSize: 24, trailing: 2),
       builder: (list) {
         if (list.isEmpty) return const SizedBox.shrink();
         return Card(
