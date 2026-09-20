@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'till_screen.dart' show posNum;
@@ -157,6 +158,8 @@ class OutletChannels extends ConsumerWidget {
 
     return AsyncView<List<Map<String, dynamic>>>(
       value: channels,
+      skeleton: const CardRowsSkeleton(
+          rows: 4, leadingSize: 24, lines: 1, trailing: 2),
       builder: (rows) {
         final byChannel = {for (final r in rows) '${r['channel']}': r};
         var order = 0;
@@ -363,6 +366,7 @@ class RegisterChannels extends ConsumerWidget {
 
     return AsyncView<List<Map<String, dynamic>>>(
       value: registers,
+      skeleton: const CardRowsSkeleton(rows: 3, trailing: 1),
       builder: (all) {
         final here = registersAt(all, outletId);
         if (here.isEmpty) {
@@ -404,6 +408,8 @@ class ChannelMix extends ConsumerWidget {
     final mix = ref.watch(posChannelMixProvider);
     return AsyncView<List<Map<String, dynamic>>>(
       value: mix,
+      skeleton: const CardRowsSkeleton(
+          rows: 4, leading: false, lines: 1, trailing: 2),
       builder: (rows) {
         if (rows.isEmpty) {
           return const Padding(

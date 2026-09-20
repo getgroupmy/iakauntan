@@ -89,6 +89,7 @@ class _StallsScreenState extends ConsumerState<StallsScreen>
       ),
       body: AsyncView(
         value: outlets,
+        skeleton: const ListSkeleton(rows: 3, subtitle: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -540,6 +541,8 @@ class _SettleTabState extends ConsumerState<_SettleTab> {
         Text('Already paid', style: Theme.of(context).textTheme.titleSmall),
         AsyncView(
           value: settled,
+          skeleton: const CardRowsSkeleton(
+              rows: 3, leading: false, lines: 1, trailing: 2),
           builder: (list) => Column(
             children: [
               if (list.isEmpty)

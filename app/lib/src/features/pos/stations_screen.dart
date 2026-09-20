@@ -214,6 +214,7 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
             ),
       body: AsyncView<List<Map<String, dynamic>>>(
         value: outlets,
+        skeleton: const ListSkeleton(rows: 3, subtitle: false),
         builder: (shops) {
           if (shops.isEmpty) {
             return const EmptyState(
@@ -361,6 +362,8 @@ class _Body extends ConsumerWidget {
           const SectionHeader('What goes where'),
           AsyncView<List<Map<String, dynamic>>>(
             value: routing,
+            skeleton: const CardRowsSkeleton(
+                rows: 4, leadingSize: 24, lines: 1, trailing: 1),
             builder: (rows) {
               if (rows.isEmpty) {
                 return const Padding(

@@ -81,7 +81,8 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen>
         children: [
           AsyncView(
             value: summaries,
-            loading: const LinearProgressIndicator(),
+            skeleton: const CardRowsSkeleton(
+                rows: 2, leading: false, trailing: 2),
             builder: (list) {
               final s =
                   list.where((e) => e.matterId == widget.matterId).firstOrNull;
