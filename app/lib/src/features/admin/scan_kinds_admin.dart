@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/scan_kinds_repository.dart';
@@ -36,6 +37,7 @@ class ScanKindsAdminTab extends ConsumerWidget {
     return AsyncView(
       value: kinds,
       onRetry: () => ref.invalidate(allScanKindsProvider),
+      skeleton: const ListSkeleton(rows: 6, trailing: false),
       builder: (rows) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 900,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/entity_types_repository.dart';
@@ -43,6 +44,10 @@ class EntityTypesAdminTab extends ConsumerWidget {
     return AsyncView(
       value: types,
       onRetry: () => ref.invalidate(allEntityTypesProvider),
+      // No trailing: the chips that say "off" or "a person" sit beside
+      // the name in the title, not at the end of the row, and a bone
+      // out there would move the words in.
+      skeleton: const ListSkeleton(rows: 6, trailing: false),
       builder: (rows) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 900,

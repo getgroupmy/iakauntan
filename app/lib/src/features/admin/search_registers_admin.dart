@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/search_registers_repository.dart';
@@ -32,6 +33,7 @@ class SearchRegistersAdminTab extends ConsumerWidget {
     return AsyncView(
       value: registers,
       onRetry: () => ref.invalidate(allSearchRegistersProvider),
+      skeleton: const ListSkeleton(rows: 6, trailing: false),
       builder: (rows) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 900,

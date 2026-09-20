@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ssm_repository.dart';
@@ -88,6 +89,15 @@ class _SsmLookupAdminTabState extends ConsumerState<SsmLookupAdminTab> {
     return AsyncView<SsmStatus>(
       value: status,
       onRetry: () => ref.invalidate(ssmStatusProvider),
+      // Label-and-value rows about 22 pixels tall, not tiles. A
+      // `ListSkeleton` here would be two and a half times the height of
+      // what replaces it and the card would visibly collapse.
+      skeleton: const CardRowsSkeleton(
+        rows: 6,
+        leading: false,
+        lines: 1,
+        rowGap: Space.xs,
+      ),
       builder: (s) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 820,

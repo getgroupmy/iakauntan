@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // Not unused: emailDocument and friends live in an `extension on Repo`,
@@ -206,6 +207,15 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
                 value: activity,
                 onRetry: () => ref
                     .invalidate(documentActivityProvider(widget.documentId)),
+                // Three, because this list sits under the form inside a
+                // dialog and the dialog is already as tall as the
+                // screen allows. An eighteen-pixel icon at the front,
+                // not an avatar.
+                skeleton: const CardRowsSkeleton(
+                  rows: 3,
+                  leadingSize: 18,
+                  rowGap: Space.xs,
+                ),
                 builder: (list) => list.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.symmetric(vertical: Space.md),
@@ -343,6 +353,13 @@ class _ActivityDialog extends ConsumerWidget {
           child: AsyncView(
             value: activity,
             onRetry: () => ref.invalidate(documentActivityProvider(documentId)),
+            // The same rows, in a dialog that is nothing but them, so
+            // there is room for more of an outline.
+            skeleton: const CardRowsSkeleton(
+              rows: 5,
+              leadingSize: 18,
+              rowGap: Space.xs,
+            ),
             builder: (list) => list.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: Space.md),

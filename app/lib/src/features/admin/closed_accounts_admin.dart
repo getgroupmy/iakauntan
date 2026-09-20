@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -44,6 +45,10 @@ class _ClosedAccountsAdminTabState
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(platformClosuresProvider),
+      // Five rather than six: the card above the list carries a row of
+      // filter chips, so a longer outline runs past the fold on a
+      // laptop and looks like content that then vanished.
+      skeleton: const ListSkeleton(rows: 5, trailing: false),
       builder: (list) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 1000,
