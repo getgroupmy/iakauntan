@@ -13,6 +13,7 @@ import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
 import '../landing/splash_screen.dart';
 import 'branding_admin.dart' show mimeForExtension;
+import 'ios_release.dart';
 
 /// Everything about the iOS and Android builds, in one place.
 ///
@@ -609,6 +610,13 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
   @override
   Widget build(BuildContext context) {
     final runs = ref.watch(iosReleasesProvider);
+    // `valueOrNull` and not `.value`: this is read on every build,
+    // including the one where the provider is still in flight or has
+    // failed, and `.value` throws on both. Unknown reads as "set up"
+    // so the button is not disabled by a provider that has not
+    // answered yet -- a 503 from pressing it is recoverable, a button
+    // that is dead while the page loads looks broken.
+    final unavailable = runs.valueOrNull?.unavailable;
 
     return Card(
       child: Padding(
@@ -652,7 +660,7 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
                 key: const ValueKey('start-ios-release'),
-                onPressed: _busy ? null : _release,
+                onPressed: _busy || unavailable != null ? null : _release,
                 icon: const Icon(Icons.ios_share, size: 18),
                 label: const Text('Start the build'),
               ),
@@ -663,7 +671,7 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: Space.sm),
-            AsyncView(
+            AsyncView<IosReleases>(
               value: runs,
               onRetry: () => ref.invalidate(iosReleasesProvider),
               skeleton: const CardRowsSkeleton(
@@ -671,29 +679,99 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
                 leadingSize: 24,
                 trailing: 1,
               ),
-              builder: (list) => list.isEmpty
-                  ? Text(
-                      'Nothing yet.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    )
-                  : Column(
-                      children: [
-                        for (final run in list)
-                          _ReleaseRow(
-                            number: (run['number'] as num?)?.toInt() ?? 0,
-                            status: run['status']?.toString() ?? 'unknown',
-                            conclusion: run['conclusion']?.toString(),
-                            startedAt: run['startedAt']?.toString(),
-                            url: run['url']?.toString() ?? '',
-                          ),
-                      ],
+              builder: (result) {
+                if (!result.isConfigured) {
+                  return _NotSetUp(result.unavailable!);
+                }
+                if (result.runs.isEmpty) {
+                  return Text(
+                    'Nothing yet.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final run in result.runs)
+                      _ReleaseRow(
+                        number: (run['number'] as num?)?.toInt() ?? 0,
+                        status: run['status']?.toString() ?? 'unknown',
+                        conclusion: run['conclusion']?.toString(),
+                        startedAt: run['startedAt']?.toString(),
+                        url: run['url']?.toString() ?? '',
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Releasing has not been set up here yet, said as a fact.
+///
+/// NOT `ErrorState`. That draws a red exclamation, the words "Something
+/// went wrong" and whatever the exception stringified to — which for
+/// this is `FunctionException(status: 503, details: {error: ...})`,
+/// shown to somebody whose only mistake is not having added a secret
+/// they were never told to add.
+///
+/// The same judgement `.github/workflows/ios-release.yml` makes when it
+/// checks its own secrets and stops rather than failing, and the same
+/// one `send-push` makes about a missing VAPID pair. Nothing here is
+/// broken; a setup has not been finished.
+class _NotSetUp extends StatelessWidget {
+  const _NotSetUp(this.said);
+
+  /// The function's own sentence, which names what is missing. Shown
+  /// rather than replaced with wording from here: the function knows
+  /// which secret it looked for and this screen does not.
+  final String said;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const ValueKey('ios-release-not-set-up'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(Radii.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.settings_outlined, size: 18, color: scheme.onSurfaceVariant),
+              const SizedBox(width: Space.sm),
+              Expanded(
+                child: Text(
+                  'Not set up yet',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.xs),
+          Text(
+            said,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: Space.sm),
+          Text(
+            'Until then the button above is off. Nothing is broken and '
+            'nothing has failed — the Mac that would do the building '
+            'has not been given anything to sign with.',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }

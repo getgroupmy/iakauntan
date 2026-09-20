@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:iakauntan/src/features/admin/ios_release.dart';
 import 'package:iakauntan/src/features/admin/mobile_app_admin.dart';
 
 /// What the console says about a release, and about a build it is
@@ -84,6 +85,95 @@ void main() {
         releaseState('completed', 'timed_out').icon,
       };
       expect(icons, hasLength(5));
+    });
+  });
+
+  /// What a refusal from the function means, and what it is called.
+  ///
+  /// This group exists because of a defect that shipped: the repository
+  /// checked `res.status >= 400` on the value `functions.invoke`
+  /// returns, and `invoke` does not RETURN a failure — it THROWS
+  /// `FunctionException`. So the whole sentence-extraction path below
+  /// was written, reviewed and never executed, and the console drew a
+  /// raw `FunctionException(status: 503, details: {error: ...})` under
+  /// the words "Something went wrong" at somebody whose only mistake
+  /// was not having added a secret yet.
+  ///
+  /// The assertions are on these functions rather than on the
+  /// repository because the repository needs a Supabase client. What
+  /// they cannot prove is that the repository CATCHES — that is what
+  /// `analyzer` and the call site have to carry, and it is why the
+  /// catch clause names the mistake in a comment.
+  group('a refusal, and whether it is one to worry about', () {
+    test('503 is the one that means nobody has set this up', () {
+      expect(releaseNotConfigured(503), isTrue);
+    });
+
+    test('and every other refusal is not', () {
+      // Each of these needs something different doing about it, and
+      // none of them is "add a secret". Folding them together would
+      // send somebody to the wrong place: a 403 is a person without
+      // the right to release, a 502 is GitHub being unreachable.
+      for (final status in [400, 401, 403, 404, 500, 502, 504]) {
+        expect(releaseNotConfigured(status), isFalse, reason: '$status');
+      }
+    });
+
+    test('the sentence comes out of the envelope', () {
+      expect(
+        releaseRefusalLine({'error': 'Releasing from here is not configured.'}),
+        'Releasing from here is not configured.',
+      );
+    });
+
+    test('and a body that is not the envelope does not become the message', () {
+      // The failure this guards is a JSON blob, or a proxy's HTML error
+      // page, arriving in a snack bar — which is what made a 503 look
+      // like a crash in the first place.
+      expect(releaseRefusalLine(null), 'The release could not be started');
+      expect(releaseRefusalLine({'unexpected': 'shape'}),
+          'The release could not be started');
+      expect(releaseRefusalLine({'error': 42}),
+          'The release could not be started');
+      expect(releaseRefusalLine({'error': '   '}),
+          'The release could not be started');
+      expect(releaseRefusalLine('<html><body>502 Bad Gateway</body></html>'),
+          'The release could not be started');
+      expect(releaseRefusalLine('x' * 400), 'The release could not be started');
+    });
+
+    test('but a short plain-text refusal is worth showing', () {
+      // Something answered before the function did, and said why in a
+      // sentence. Better than this screen's generic line.
+      expect(releaseRefusalLine('Gateway timeout'), 'Gateway timeout');
+    });
+
+    test('and the caller can say what to fall back to', () {
+      // The build LIST and the build BUTTON fail differently, and
+      // "The release could not be started" is wrong on a page that
+      // was only reading.
+      expect(
+        releaseRefusalLine(null, orElse: 'The build list could not be read'),
+        'The build list could not be read',
+      );
+    });
+  });
+
+  group('what the card is holding', () {
+    test('a list of runs is configured', () {
+      expect(const IosReleases.runs([]).isConfigured, isTrue);
+      expect(const IosReleases.runs([]).unavailable, isNull);
+    });
+
+    test('and "not set up" is a result, not an error', () {
+      // The whole point of the type. If this were a thrown exception
+      // the console would draw `ErrorState` for it, which is the
+      // behaviour being fixed.
+      const r = IosReleases.unavailable('It needs GITHUB_RELEASE_TOKEN.');
+      expect(r.isConfigured, isFalse);
+      expect(r.unavailable, 'It needs GITHUB_RELEASE_TOKEN.');
+      // And it holds no runs to draw, rather than null to guard.
+      expect(r.runs, isEmpty);
     });
   });
 }

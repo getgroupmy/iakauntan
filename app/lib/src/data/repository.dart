@@ -12,6 +12,7 @@ import '../features/contacts/brought_forward.dart';
 import '../features/documents/transfer.dart';
 import '../features/einvoice/received_einvoice.dart';
 // `RepoMia` at the foot of this file returns these.
+import '../features/admin/ios_release.dart';
 import '../features/mia/mia_credential.dart';
 import 'models.dart';
 
@@ -5257,13 +5258,28 @@ class PlatformRepo {
   /// app's opinion of what happened. A workflow that failed to start,
   /// or one somebody ran by hand from the Actions tab, both show up in
   /// the same list.
-  Future<List<Map<String, dynamic>>> iosReleases() async {
-    final res = await client.functions.invoke('ios-release');
-    if (res.status >= 400) {
-      throw Exception(_releaseRefusal(res.data));
+  Future<IosReleases> iosReleases() async {
+    final FunctionResponse res;
+    try {
+      res = await client.functions.invoke('ios-release');
+    } on FunctionException catch (e) {
+      // `invoke` THROWS on a non-2xx. It does not hand back a response
+      // with a status to inspect, which is what the first version of
+      // this method checked for -- so the careful sentence below was
+      // written and never reached, and the console drew
+      // `FunctionException(status: 503, details: {...})` at somebody.
+      // The same idiom is in `ssm_search_service.dart`.
+      final said = releaseRefusalLine(
+        e.details,
+        orElse: 'The build list could not be read',
+      );
+      if (releaseNotConfigured(e.status)) return IosReleases.unavailable(said);
+      throw Exception(said);
     }
     final runs = (res.data as Map)['runs'] as List? ?? const [];
-    return [for (final r in runs) Map<String, dynamic>.from(r as Map)];
+    return IosReleases.runs([
+      for (final r in runs) Map<String, dynamic>.from(r as Map),
+    ]);
   }
 
   /// Start one.
@@ -5273,23 +5289,23 @@ class PlatformRepo {
   /// App Review, and what happens after that is Apple's and takes as
   /// long as it takes.
   Future<void> releaseIosApp({required String lane, String? notes}) async {
-    final res = await client.functions.invoke(
-      'ios-release',
-      body: {'action': 'release', 'lane': lane, if (notes != null) 'notes': notes},
-    );
-    if (res.status >= 400) {
-      throw Exception(_releaseRefusal(res.data));
+    try {
+      await client.functions.invoke(
+        'ios-release',
+        body: {
+          'action': 'release',
+          'lane': lane,
+          if (notes != null) 'notes': notes,
+        },
+      );
+    } on FunctionException catch (e) {
+      // Thrown, not returned -- see `iosReleases` above. Every refusal
+      // is an error here, including 503: the card disables this button
+      // when releasing is not set up, so somebody reaching this with a
+      // 503 has pressed a button that should not have been pressable,
+      // and that is worth saying rather than swallowing.
+      throw Exception(releaseRefusalLine(e.details));
     }
-  }
-
-  /// The sentence the function sent, where it sent one.
-  ///
-  /// `fail()` puts it under `error`. Falling back to the whole body
-  /// would put a JSON blob in a snack bar, which is how "not
-  /// configured" ends up looking like a crash.
-  String _releaseRefusal(Object? data) {
-    if (data is Map && data['error'] is String) return data['error'] as String;
-    return 'The release could not be started';
   }
 
   Future<Map<String, dynamic>> stats() async {

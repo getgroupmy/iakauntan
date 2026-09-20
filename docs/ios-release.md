@@ -54,6 +54,15 @@ The workflow checks its secrets first and stops with a list of the
 missing ones. It does not fail: a release nobody has set up yet is not
 a broken build.
 
+The console says the same thing in the same way. Before
+`GITHUB_RELEASE_TOKEN` exists, the function answers 503 with a
+sentence, the card draws **Not set up yet** with that sentence under
+it, and the button is off. It is not an error state and does not
+pretend to be one — `app/test/ios_release_card_test.dart` asserts that
+503 is the only status treated that way, because a 403 is a person
+without the right to release and a 502 is GitHub being unreachable,
+and neither is fixed by adding a secret.
+
 ### In the Apple developer account
 
 | | |
@@ -100,6 +109,19 @@ signing failure by a distance, and normally it surfaces as an Xcode
 error about a mismatch deep in a log. The workflow reads the
 `application-identifier` out of the profile before it builds and stops
 with a sentence naming what it found.
+
+**The console shows a raw `FunctionException`.** It did once, and the
+cause is worth knowing if anything else here starts talking to an edge
+function: `functions.invoke` **throws** `FunctionException` on a
+non-2xx answer. It does not return a response with a status to check.
+Code shaped like
+
+    final res = await client.functions.invoke('...');
+    if (res.status >= 400) { ... }
+
+is a branch that never runs, and whatever was inside it never happens.
+`ssm_search_service.dart` had this right first; `repository.dart` now
+catches, and the assertions live in `ios_release_card_test.dart`.
 
 **The build number repeats.** App Store Connect refuses a build number
 it has seen for a version. The workflow uses `github.run_number`, which
