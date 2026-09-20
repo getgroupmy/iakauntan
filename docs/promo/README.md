@@ -19,6 +19,7 @@ build artefact.** Nothing about the cut is typed into the encoder.
 | `music.py` | Synthesises the score, taking its cues from `storyboard.json`. |
 | `generate_shots.mjs` | Generates the plates through Open Higgsfield AI's backend. |
 | `build.sh` | Frames, score, mux. |
+| `assets/iakauntan-mark.png` | The iAkauntan mark, trimmed and de-fringed for a dark background. |
 
 ## Everything on screen is a claim this repository already makes
 
@@ -36,6 +37,24 @@ because a test passes.
 No identity document number — IC, NRIC or passport — appears anywhere in the
 film, and none should be added. The SmartScan scene uses a supplier name, a
 date, a document number and a total, which is what that screen reads.
+
+## The mark
+
+`assets/iakauntan-mark.png` is the iAkauntan mark, in its own green `#01DC00`.
+It appears three times: above the wordmark on the opening title, again on the
+sign-off, and as a small watermark in the bottom-left corner of every scene in
+between.
+
+It was supplied matted against white. The alpha channel was already clean, but
+the antialiased edges carried white RGB, which halos on a dark background — so
+every pixel is repainted flat `#01DC00` and only the alpha is kept, then the
+image is trimmed to its ink. The colour was not otherwise changed; it is the
+brand's, not the film's. If the mark is ever reissued, replace that file and
+rebuild.
+
+The renderer waits on `img.decode()` before it shoots the first frame. Without
+that, the opening title renders before the artwork is ready and the mark is
+simply missing from the first second of the film.
 
 ## Why a browser renders the frames
 

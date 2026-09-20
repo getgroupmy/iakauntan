@@ -48,7 +48,9 @@
         {
           "type": "wordmark",
           "at": 0.2,
-          "text": "iAkauntan"
+          "text": "iAkauntan",
+          "logo": "iakauntan-mark.png",
+          "logo_height": 130
         },
         {
           "type": "rule",
@@ -389,7 +391,9 @@
         {
           "type": "wordmark",
           "at": 0.25,
-          "text": "iAkauntan"
+          "text": "iAkauntan",
+          "logo": "iakauntan-mark.png",
+          "logo_height": 156
         },
         {
           "type": "rule",
@@ -413,5 +417,11 @@
         "prompt": "Deep-teal ink settling to perfect stillness on a black field, a single horizontal emerald rule holding steady at centre, faint particulate drifting upward. Calm, resolved, premium. No text, no logos, no people. Locked-off cinematic shot."
       }
     }
-  ]
+  ],
+  "assets_dir": "assets/",
+  "logo": {
+    "file": "iakauntan-mark.png",
+    "colour": "#01DC00",
+    "note": "The mark as supplied, trimmed to its ink and repainted flat so the antialiased edges carry no white fringe on a dark background."
+  }
 }

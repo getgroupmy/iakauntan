@@ -73,6 +73,8 @@
     margin-bottom:26px;color:rgba(234,244,241,.94)}
   .line:last-child{margin-bottom:0}
 
+  .logo{display:block;width:auto;margin-bottom:30px;
+    filter:drop-shadow(0 0 26px rgba(1,220,0,.40)) drop-shadow(0 0 70px rgba(1,220,0,.16))}
   .wordmark{font-size:184px;font-weight:800;letter-spacing:-.05em;line-height:1;
     background:linear-gradient(112deg,#FFFFFF 8%,#9FE8D6 48%,var(--success) 96%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
@@ -144,8 +146,9 @@
     margin-top:18px;max-width:280px}
 
   /* ---- chrome ---------------------------------------------------- */
-  #mark{position:absolute;left:150px;bottom:82px;z-index:30;
-    font-size:27px;font-weight:800;letter-spacing:-.02em;color:rgba(234,244,241,.30);opacity:0}
+  #mark{position:absolute;left:150px;bottom:82px;z-index:30;opacity:0}
+  #mark img{display:block;height:46px;width:auto;
+    filter:drop-shadow(0 0 16px rgba(1,220,0,.35))}
   #progress{position:absolute;left:0;bottom:0;height:3px;z-index:46;width:0;
     background:linear-gradient(90deg,rgba(11,122,107,.6),var(--success));
     box-shadow:0 0 16px rgba(52,211,153,.55)}
@@ -154,7 +157,7 @@
 <body>
   <div id="bg"><div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div></div>
   <div id="stage"></div>
-  <div id="mark">iAkauntan</div>
+  <div id="mark"><img alt=""></div>
   <div id="vignette"></div>
   <div id="grain"></div>
   <div id="scanlines"></div>
@@ -183,6 +186,7 @@
 
   const stage = document.getElementById('stage');
   const plates = [];
+  const logos = [];
 
   /* ---- build every scene once; frames only mutate style ---------- */
   SCENES.forEach(sc => {
@@ -208,7 +212,19 @@
       else if (b.type === 'hero') inner.appendChild(at(el('h1', 'hero', b.text), t0, 0.9));
       else if (b.type === 'sub')  inner.appendChild(at(el('div', 'sub', b.text), t0, 0.8));
       else if (b.type === 'caption') inner.appendChild(at(el('p', 'caption', b.text), t0, 0.9));
-      else if (b.type === 'wordmark') inner.appendChild(at(el('div', 'wordmark', b.text), t0, 1.3));
+      else if (b.type === 'wordmark') {
+        if (b.logo) {
+          const img = document.createElement('img');
+          img.className = 'logo';
+          img.alt = '';
+          img.src = (SB.assets_dir || 'assets/') + b.logo;
+          img.style.height = (b.logo_height || 130) + 'px';
+          inner.appendChild(at(img, t0, 1.0));
+          logos.push(img);
+        }
+        // the mark lands first, the name settles under it
+        inner.appendChild(at(el('div', 'wordmark', b.text), t0 + (b.logo ? 0.34 : 0), 1.3));
+      }
       else if (b.type === 'rule') {
         const r = at(el('div', 'rule'), t0, 1.1);
         r.dataset.grow = '1';
@@ -293,6 +309,9 @@
 
   const all = [...stage.querySelectorAll('.scene')];
   const marks = document.getElementById('mark');
+  const markImg = marks.querySelector('img');
+  markImg.src = (SB.assets_dir || 'assets/') + ((SB.logo && SB.logo.file) || 'iakauntan-mark.png');
+  logos.push(markImg);
   const prog = document.getElementById('progress');
   const g1 = document.querySelector('.g1'), g2 = document.querySelector('.g2'), g3 = document.querySelector('.g3');
   const grain = document.getElementById('grain');
@@ -393,12 +412,15 @@
   };
 
   /* Nothing may be screenshotted until every plate knows its own duration. */
+  const logosReady = Promise.all(logos.map(img => img.decode().catch(() => {})));
+
   Promise.all(plates.map(v => v.readyState >= 1
     ? Promise.resolve()
     : new Promise(res => {
         v.addEventListener('loadedmetadata', res, { once: true });
         v.addEventListener('error', res, { once: true });   // a missing plate must
       })))                                                  // not hang the render
+    .then(() => logosReady)
     .then(() => { window.__ready = true; });
 })();
 </script>
