@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/address_field.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/places_repository.dart';
@@ -47,6 +48,7 @@ class ContactExtras extends ConsumerWidget {
         AsyncView(
           value: people,
           onRetry: () => ref.invalidate(contactPersonsProvider(contactId)),
+          skeleton: const CardRowsSkeleton(rows: 2, trailing: 1),
           builder: (list) => list.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: Space.sm),
@@ -82,6 +84,7 @@ class ContactExtras extends ConsumerWidget {
         AsyncView(
           value: addresses,
           onRetry: () => ref.invalidate(contactAddressesProvider(contactId)),
+          skeleton: const CardRowsSkeleton(rows: 2, trailing: 1),
           builder: (list) => list.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: Space.sm),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -165,7 +166,8 @@ class _TaxDetailsCardState extends ConsumerState<TaxDetailsCard> {
               value: links,
               onRetry: () =>
                   ref.invalidate(taxDetailLinksProvider(widget.contactId)),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 2, leadingSize: 24, trailing: 1),
               builder: (rows) {
                 final state = TaxDetailLinkState.fromRows(rows);
                 return Column(

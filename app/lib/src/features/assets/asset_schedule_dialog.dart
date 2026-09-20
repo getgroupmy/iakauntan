@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -171,6 +172,7 @@ class _ScheduleDialogState extends ConsumerState<_ScheduleDialog> {
               child: AsyncView(
                 value: note,
                 onRetry: () => ref.invalidate(assetMovementsProvider),
+                skeleton: const TableSkeleton(columns: 3, rows: 5),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return const Padding(
@@ -343,6 +345,7 @@ class _HistoryDialog extends ConsumerWidget {
                 value: history,
                 onRetry: () =>
                     ref.invalidate(depreciationHistoryProvider(asset.id)),
+                skeleton: const TableSkeleton(columns: 4, rows: 6),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return const Padding(

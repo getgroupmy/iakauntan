@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -82,7 +83,7 @@ class _TaxYearSectionState extends ConsumerState<TaxYearSection> {
                 value: opening,
                 onRetry: () =>
                     ref.invalidate(ytdOpeningProvider(widget.employeeId)),
-                loading: const LinearProgressIndicator(),
+                skeleton: const FormSkeleton(fields: 4),
                 builder: (o) {
                   _hydrate(o);
                   return Column(
@@ -269,7 +270,8 @@ class _ReliefList extends ConsumerWidget {
         AsyncView(
           value: reliefs,
           onRetry: () => ref.invalidate(declaredReliefsProvider(employeeId)),
-          loading: const LinearProgressIndicator(),
+          skeleton: const CardRowsSkeleton(
+              rows: 3, leading: false, trailing: 2),
           builder: (list) => list.isEmpty
               ? Text(
                   'None declared.',
