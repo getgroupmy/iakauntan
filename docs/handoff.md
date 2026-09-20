@@ -34,10 +34,10 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/new-session-9rvhar` (a fresh container's designated branch; continues from `claude/iakauntan-accounting-crm-8snun0` at `9ce1d22`, which is this file's previous version) |
-| Head at time of writing | `85064bd` |
-| CI | not yet checked for this push — watch it. **This push touches `app/ios/`, so `ci.yml`'s `ios` job (macOS, ~45 minutes) will run** — the first real compile check on the Swift in `85064bd`, since nothing on this Linux container can compile it |
-| Migrations | `0658` is the highest; `0658` is this session's |
-| Live database | **`0650`–`0658` are applied**, confirmed by CI run 1944 going green on `993aaec`. CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has it |
+| Head at time of writing | `1051b2b4` |
+| CI | run 1950: every job green EXCEPT the schema-drift comparison, which is the collision described below and is not fixable on this branch alone. The macOS `ios` job passes, so the Swift in `85064bd`+`1051b2b4` really does compile |
+| Migrations | this branch's is `0659`; the DEFAULT branch's highest is `0658`, a different file |
+| Live database | **nothing this branch wrote is applied, and nothing it writes ever will be.** `ci.yml`'s `migrate` job is `if: github.ref_name == github.event.repository.default_branch`, and the default branch is `claude/iakauntan-accounting-crm-8snun0`, not this one. A green run on this branch means the gates passed, never that the schema moved |
 
 Counts to expect from a clean run: **41** gates, **333** SQL files,
 **29** deno tests, **5,099** widget tests with 1 skipped (was 5,095;
@@ -47,6 +47,82 @@ this session on a real Flutter SDK installed fresh into this container
 which this session never ran: nothing here needed the edge functions
 touched, so `check_locally.sh` was not re-run and that count is carried
 over from the previous session's handoff rather than confirmed.
+
+## Read this first: another session is working the same repository
+
+Not a hazard this file has had to carry before, and it invalidates the
+assumption every other section was written under — that this branch is
+the only thing moving.
+
+`claude/iakauntan-accounting-crm-8snun0` is the repository's **default
+branch** (confirmed from the API, not inferred: PR #3 is `main` merging
+INTO it, which reads backwards until you know that). A second session
+has been working on it, concurrently with this one, and neither knew
+about the other until CI said so. Between roughly 12:58 and 14:09 on
+19 September it pushed four commits, and two of them are this session's
+work done twice:
+
+| Theirs | Mine | Same problem |
+| --- | --- | --- |
+| `7b8a39e1` "An iPhone that registers itself" (`push_native.dart`) | `85064bd` (`push_io.dart`) | the Flutter half of iOS push |
+| `62569530` + `551dc7f9` + `24adf7e2` | `e0328e0` (`0659`) | the function-privilege default |
+
+They are not the same answer. On push, theirs also carries the
+two-token model (`device_id`, an `apns_voip` transport, a seventh
+argument to `register_device`) that this session deliberately deferred
+for wanting CallKit reporting first. On privileges, theirs rewrites
+`function_grants.sql` to assert only what holds on ALL THREE database
+shapes — hosted, `supabase start`, and the throwaway cluster — having
+found that reading `pg_default_acl` without filtering on `defaclrole`
+reads some other role's row; mine instead writes a migration that
+changes the hosted project so one strict model is true everywhere.
+Theirs is better evidenced. Mine does one thing theirs does not: it
+closes the `service_role` half and stops a future function inheriting
+either grant.
+
+**Both sessions numbered their migration `0658`.** Theirs is applied to
+the hosted project (default branch); mine never ran anywhere but a
+throwaway cluster, and is now renumbered `0659` so that a merge cannot
+silently skip it against a version the hosted project already records.
+
+What this costs, concretely:
+
+- CI on this branch cannot go green. The schema-drift comparison is
+  correct to fail: hosted has their `device_tokens.device_id` and the
+  rest, and this branch's migrations do not create it. Nothing pushed
+  here fixes that; it needs the branches reconciled.
+- `0659`'s keep-lists were read off a schema snapshot taken BEFORE
+  their `0658` landed, so they are stale in a way the file's own header
+  now spells out. Recompute before trusting it.
+- Anything else this session did may be duplicated work. Check the
+  default branch before starting, every time.
+
+If the reconciliation goes the obvious way — the default branch's
+version of both features wins, because it is better evidenced on
+privileges and further along on push — these are the parts of this
+branch that are NOT duplicated and would be lost with it:
+
+- **The `service_role` half of the privilege question.** Their fix
+  changes what the tests assert; it leaves the hosted default in place,
+  and their own count ("738 of 760 either way") is about
+  `authenticated`. Under that default every new `public` function still
+  arrives `service_role`-executable on hosted. `0659` is the only thing
+  in either branch that closes that, and the argument for closing it is
+  in its header.
+- **`aps-environment` in `Runner.entitlements`.** Without it a signed
+  build gets `didFailToRegisterForRemoteNotificationsWithError` and no
+  token, whichever Dart file asks. Check whether theirs added it; if
+  not, it is needed either way.
+- **The three traps** at the bottom of this file — the `mutate.py` hang
+  that leaves the source mutated under `kill -9`, the
+  `debugDefaultTargetPlatformOverride` reset that has to be inside the
+  test body, and `dart format` rewriting hundreds of unrelated lines.
+  All three cost real time here and none is visible from the code.
+- **The mutation-tested push tests** in `notifications_card_test.dart`:
+  five mutants killed, control survived. Worth porting onto whichever
+  implementation survives, since the assertions are about behaviour
+  (`platform`/`transport` on the row, no registration attempt after a
+  refusal) rather than about which file provides it.
 
 ### The working agreement
 
@@ -75,9 +151,10 @@ touched without the other.
 
 | SHA | What |
 | --- | --- |
-| `85064bd` | iOS registers a device for push, over `UNUserNotificationCenter` — open work item 1, below, partly resolved (the ordinary alert path; PushKit's VoIP token is deliberately still open) |
-| `993aaec` | Update the handoff for the fix below and this container's gaps |
-| `e0328e0` | Close the leaked default: `authenticated` and `service_role` on functions (`0658`) — open work item 2, below, resolved |
+| `1051b2b4` | Fix: `override`, not a fresh conformance, for the foreground handler — CI's macOS build refused `85064bd` and this is what it wanted |
+| `85064bd` | iOS registers a device for push, over `UNUserNotificationCenter` (the ordinary alert path; PushKit's VoIP token deliberately left alone) — **duplicated by `7b8a39e1` on the default branch, written at the same time by another session** |
+| `993aaec` | Update the handoff — **contains the claim this file now corrects**, that `0658` had reached the hosted database |
+| `e0328e0` | The leaked default on functions, as `0658`, since renumbered to `0659` — **duplicated in intent by `62569530` on the default branch, which took the opposite approach** |
 
 ### The previous session's commits, for reference
 
@@ -158,10 +235,14 @@ touched without the other.
    sweeping to 3200 vs 3300; stripping the posting redirect out of
    `0635`; P14 per-document rounding; G3(b) relaxation flag.
 
-Resolved this session: **make the local stack match the hosted project
-on function privileges** (`0658`, see the trap below); **the Flutter
-half of push for iOS's ordinary alert path** (`85064bd`) — its VoIP half
-is the new item 1 above, not a leftover of the old one.
+Attempted this session, and NOT to be counted as resolved until the
+branches are reconciled: **the local stack versus the hosted project on
+function privileges** (`0659`, unapplied, stale lists); **the Flutter
+half of push for iOS's ordinary alert path** (`85064bd`, compiles and
+passes, but the default branch has its own). Both are in the collision
+table above. The honest summary is that this session solved two
+problems the other session was solving at the same time, and the
+reconciliation is the work that is actually left.
 
 ## The environment, exactly
 
@@ -293,25 +374,27 @@ CI run 1941 was a controlled experiment: the function was *dropped* and
 recreated and still came back executable by `authenticated`, which only
 a default privilege explains.
 
-**Resolved this session, by `0658`, without touching the two test
-files.** Adding the default privilege locally, on the strength of that
-evidence, would have failed `function_grants.sql` and
-`trigger_reachable_grants.sql` — both assert that a function created
-now is callable by nobody, which is the behaviour this machine has
-always had and the hosted project did not. Rather than loosen the
-tests to tolerate what the hosted project was doing, `0658` fixes the
-hosted project to match: it revokes the leftover default privilege
-itself (so nothing created after it depends on remembering), revokes
-`authenticated` from the twenty-two functions that had it without a
-matching explicit revoke, and sweeps `service_role` back to exactly the
-list this repository's own local stack already said should hold it —
-read off `has_function_privilege` on this machine, which has never been
-able to hold a grant that no `grant execute` statement wrote, and
-cross-checked against every `.rpc()` call site with
-`check_rpc_grants.py` before being written into the migration. Its own
-self-checks are what prove it against the hosted project; this
-machine's checks staying green throughout is what proves the two now
-agree instead of one being quietly loosened to match the other.
+**Attempted this session as `0659`, and NOT resolved.** The migration
+revokes the leftover default privilege, revokes `authenticated` from
+the twenty-two functions that had it without a matching explicit
+revoke, and sweeps `service_role` back to a named list read off
+`has_function_privilege` on the throwaway cluster and cross-checked
+against every `.rpc()` call site with `check_rpc_grants.py`. All of
+that still stands as reasoning. What does not stand is the conclusion
+an earlier version of this section drew, that its self-checks had
+proved it against the hosted project: **they had not, because it never
+ran there and could not have.** See the collision section at the top.
+
+**The trap under that mistake, which is the part worth keeping:** a
+green CI run on a non-default branch says the gates passed, and says
+nothing whatever about the hosted schema. `ci.yml`'s `migrate` job is
+`if: github.ref_name == github.event.repository.default_branch`, with a
+comment saying exactly why ("there is one Supabase project"). Reading
+"CI green" as "migration applied" is the specific error, and it is easy
+to make because on the default branch the two really do coincide.
+Check `github.ref_name` against the default branch before believing a
+migration is live — or read the `migrate` job's conclusion, which says
+`skipped` in plain sight.
 
 **Dropping a function drops its COMMENT**, and
 `check_undocumented_writes.py` refuses a write function without one.

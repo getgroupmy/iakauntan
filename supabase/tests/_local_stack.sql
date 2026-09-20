@@ -84,16 +84,14 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
 -- ---------------------------------------------------------------------
--- The FUNCTIONS question `0658` closed
+-- The FUNCTIONS question, still open, and `0659` is NOT the answer yet
 --
--- There is still no default privilege for functions here, and that is
--- now the settled answer rather than the open one. `c2d2d15` added one
--- on the strength of `0165`'s comment, it made this machine more
--- generous than the hosted project, and it was reverted -- but the
+-- There is still no default privilege for functions here. `c2d2d15`
+-- added one on the strength of `0165`'s comment, it made this machine
+-- more generous than the hosted project, and it was reverted -- but the
 -- hosted project turned out to be the generous one, not this machine.
 --
--- Three pieces of evidence said so before anybody could check the
--- hosted project directly, which this machine still cannot do:
+-- Three pieces of evidence say so, and none of them is this file:
 -- `0621`'s apply-time check found `public.set_sst_registration`
 -- executable by `service_role` there though no migration ever granted
 -- it; CI run 1941 found `0657`'s freshly dropped-and-recreated
@@ -102,22 +100,25 @@ alter default privileges for role postgres in schema public
 -- both began life with an EXECUTE grant no statement wrote, and a
 -- default privilege is the only thing that explains that.
 --
--- `0658` is the look at the hosted project this file used to say the
--- question needed -- taken from inside a migration, at apply time,
--- against the database in question, the only way this repository can
--- take it. It revokes the leftover default itself, closes the
--- twenty-two functions it had opened without a matching `authenticated`
--- revoke, and sweeps `service_role` back to the named list this
--- machine's own silence about the default made it possible to read off
--- correctly. Its own self-checks are what proved it on the hosted
--- project, not this file -- but its effect is that hosted now matches
--- what this machine already modelled, rather than the other way round,
--- so nothing here needed to change to agree with it.
+-- `0659_the_two_roles_0165_left_standing.sql` was written to close it:
+-- revoke the leftover default, close the twenty-two functions it had
+-- opened without a matching `authenticated` revoke, sweep `service_role`
+-- back to a named list. **It has never run against the hosted project,
+-- and an earlier version of this note claimed it had.** It was written
+-- on a branch that is not the default branch, and `ci.yml`'s `migrate`
+-- job runs on the default branch alone -- so its self-checks have only
+-- ever been proved against the throwaway cluster this file builds, which
+-- is the one database whose answer was never in doubt.
 --
--- Every migration should still write `from public, anon, authenticated`
--- in full, as `0141` and `0143` do: `0658` closed what already existed
--- and what is created after it, not what a future migration forgets to
--- say for itself.
+-- What that leaves: this machine still models the STRICT shape (no
+-- default), the hosted project still has the GENEROUS one, and the file
+-- meant to reconcile them is sitting unapplied on a side branch with
+-- keep-lists computed before the default branch moved underneath it.
+-- Read that file's own header before trusting it.
+--
+-- Every migration should therefore still write
+-- `from public, anon, authenticated` in full, as `0141` and `0143` do.
+-- That rule is what has actually been holding, and it is holding alone.
 -- ---------------------------------------------------------------------
 
 -- The second entry, which governs only what `supabase_admin` creates

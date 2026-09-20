@@ -1,6 +1,33 @@
 -- =====================================================================
 -- iAkauntan :: the two roles 0165 left standing
 --
+-- ---------------------------------------------------------------------
+-- READ THIS BEFORE MERGING. The lists below are not yet trustworthy.
+--
+-- This file was written as `0658` on a branch that is NOT the default
+-- branch, and `ci.yml`'s `migrate` job runs on the default branch only
+-- ("there is one Supabase project, so a branch's migrations applied to
+-- it are applied to production"). So it has never been applied to the
+-- hosted project, and a green CI run on this branch never meant that it
+-- had been. It was renumbered to `0659` because the default branch
+-- meanwhile applied a DIFFERENT `0658`
+-- (`0658_the_other_token_the_same_iphone_has.sql`): hosted's
+-- `schema_migrations` already records version `0658`, so under the old
+-- name `supabase db push` would have skipped this file for ever, and it
+-- would have looked merged and green while never reaching production.
+--
+-- The renumber removes that trap. It does NOT make the lists current.
+-- Both were read off a throwaway Postgres built from the migrations as
+-- they stood BEFORE that other `0658`, which added a column to
+-- `device_tokens`, a seventh argument to `register_device`, and a
+-- `device_id` column to `push_targets`'s return. Any function that
+-- migration adds or reshapes is therefore missing from, or named at the
+-- wrong signature in, the `service_role` keep-list below -- and the
+-- sweep revokes from everything it does not name. Recompute both lists
+-- against the reconciled schema, and let the self-check at the bottom
+-- fail the apply if they are wrong, before trusting this in production.
+-- ---------------------------------------------------------------------
+--
 -- `0165` revokes EXECUTE from PUBLIC and from `anon` on every function
 -- created in `public` or `app`, and says of the other two roles: "A
 -- grant to `authenticated` survives, which is what makes this safe to
@@ -367,17 +394,17 @@ declare
 begin
   -- The default privilege itself: a function created right now, inside
   -- this transaction, must not carry either grant.
-  create function public.zz_0658_probe() returns integer
+  create function public.zz_0659_probe() returns integer
     language sql as 'select 1';
-  if has_function_privilege('authenticated', 'public.zz_0658_probe()',
+  if has_function_privilege('authenticated', 'public.zz_0659_probe()',
        'execute')
-     or has_function_privilege('service_role', 'public.zz_0658_probe()',
+     or has_function_privilege('service_role', 'public.zz_0659_probe()',
        'execute') then
     raise exception
-      '0658: a function created after the default privilege change '
+      '0659: a function created after the default privilege change '
       'still carries it';
   end if;
-  drop function public.zz_0658_probe();
+  drop function public.zz_0659_probe();
 
   -- The twenty-two: none may be executable by authenticated.
   select string_agg(v.v_fn, ', ') into v_left
@@ -409,7 +436,7 @@ begin
    where has_function_privilege('authenticated', v.v_fn, 'execute');
   if v_left is not null then
     raise exception
-      '0658: still executable by authenticated: %', v_left;
+      '0659: still executable by authenticated: %', v_left;
   end if;
 
   -- `service_role`: exactly the list just granted, on every function in
@@ -510,7 +537,7 @@ begin
        'void_sales_document(uuid,text)', 'workspace_module_refusal(text)');
   if v_left is not null then
     raise exception
-      '0658: service_role holds a grant the sweep did not write back: %',
+      '0659: service_role holds a grant the sweep did not write back: %',
       v_left;
   end if;
 end
