@@ -6,6 +6,31 @@ Store, press the button, and a Mac builds the app and hands it to Apple.
 This page is what has to exist first, and what the button can and
 cannot do.
 
+## Where this stands
+
+**It works.** Builds 4 and 5 are in TestFlight, archived, signed and
+uploaded by this workflow. Everything below has been exercised rather
+than reasoned about, which it had not been when this page was written:
+runs 1 to 3 failed, and the symptom table at the bottom is what they
+cost.
+
+Two things a reader should carry away before anything else.
+
+**The build number is `github.run_number`, so a failed run burns
+one.** Builds 1, 2 and 3 do not exist in TestFlight; the runs that
+would have made them died before the upload. The number never repeats
+and never goes backwards, which is the property Apple needs — it is
+just not a count of builds.
+
+**`GITHUB_RELEASE_REF` decides which code gets built, and its default
+is now the wrong answer.** The function sends it as the dispatch `ref`
+and it defaults to `main`, which is a snapshot from the PR #4 merge.
+Everything that made this workflow actually succeed landed after that
+snapshot. So the button currently builds a tree that fails at signing,
+which is the worst shape a bug can take here: the button is fine, the
+secrets are fine, the code being built is old. Set it to the branch
+that is being developed on.
+
 ## The one constraint everything here follows from
 
 **Xcode runs on Apple hardware and nowhere else.** Neither Supabase nor

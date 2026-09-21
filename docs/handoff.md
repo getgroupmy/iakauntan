@@ -65,6 +65,18 @@ obvious:
   default `main`, so `ios-release.yml` had to reach `main` before the
   console's button could start anything — not because `main` is the
   default branch, which it is not.
+* **And that default is now actively wrong, rather than merely
+  unset.** `main` is a snapshot of this branch as it stood at the PR #4
+  merge, and everything that made the iOS build actually work landed
+  AFTER it: the pods `xcconfig` fix, `ITSAppUsesNonExemptEncryption`,
+  the purpose strings. Pressing the console button today dispatches
+  `main`, builds that older tree, and fails at signing with the forty
+  pod errors that were fixed hours ago — a button that worked, against
+  code that does not, which is the hardest version of this to diagnose.
+  **Set `GITHUB_RELEASE_REF` to `claude/iakauntan-accounting-crm-8snun0`**
+  in Supabase → Edge Functions → Secrets. Dispatching the API directly
+  with an explicit `ref` is unaffected, which is how builds 4 and 5
+  were made.
 
 **A previous version of this file got this exactly backwards** and
 said the migrations were unapplied, reasoning from "the job runs on
@@ -157,45 +169,58 @@ message. Read those rather than the diffs.
    the gate refuses that by name, because listing only one works on the
    developer's handset and nowhere else. Whether App Links is wanted at
    all is also open.
-3. **Associated Domains** enabled on the App ID in the Apple developer
-   portal — and now also **Push Notifications**, for the same App ID in
-   the same place. Without it the provisioning profile carries no
-   `aps-environment` and a signed build fails at signing. CI builds iOS
-   with codesigning off, so neither shows up until a real release.
+3. ~~**Associated Domains** and **Push Notifications** on the App
+   ID.~~ **Both done, and proved rather than reported.**
+   `Runner.entitlements` asks for `com.apple.developer.associated-domains`
+   and `aps-environment`; Xcode refuses to sign against a profile
+   carrying neither and names the one it is missing. The archive in
+   `ios-release.yml` run 5 signed, so the profile carries both, so the
+   App ID has both. This is the useful way to check either of them
+   again: a green release run IS the check, and CI cannot be, because
+   it builds iOS with codesigning off.
 4. **Publish Terms of Use, Terms of Service and Privacy** in the
    platform console. Until then the consent line names them without
    linking, and the new app footer links draw nothing — by design, but
    it looks like the feature is missing.
-5. **A new app build**, for any of the mobile work to reach a phone.
-   There is now a button for it — Mobile Application → Release the iOS
-   app — but it needs the secrets in open work item 2 first, and it is
-   iOS only. Android still has no equivalent, because it has no
-   Firebase project either.
+5. ~~**A new app build**, for any of the mobile work to reach a
+   phone.~~ **Done. There is an iOS build in TestFlight.**
 
-   **The button was pressed on 2026-09-20 and the card said "Not set
-   up yet".** That is correct behaviour and not a fault: the two
-   function secrets below do not exist, so the function answers 503
-   with a sentence. Two secrets make the card list builds and the
-   button live, and they are the smallest step that moves this
-   forward:
-
-   | Supabase → Edge Functions → Secrets | |
+   | | |
    | --- | --- |
-   | `GITHUB_RELEASE_TOKEN` | a fine-grained PAT on `getgroupmy/iakauntan` with **Actions: read and write** and nothing else |
-   | `GITHUB_REPOSITORY` | `getgroupmy/iakauntan` |
+   | build 4 | `ios-release.yml` run 4, commit `466d91ff` |
+   | **build 5** | run 5, commit `08c87ac1` — the current one |
 
-   Starting a build then needs the six Apple secrets in GitHub
-   Actions, and the workflow stops with a list of whichever are
-   missing rather than failing. **`docs/ios-release.md` now carries a
-   step-by-step walkthrough** — including a `.p8`-and-`openssl` route
-   to the distribution certificate that needs no Mac, which is the
-   step that otherwise blocks anybody without one.
+   Both archived, signed and uploaded (`No errors uploading archive`).
+   All six Actions secrets and both function secrets exist and work.
+   The two things that took four failed runs to find are written up in
+   `docs/ios-release.md`'s symptom table; the short version is that
+   `flutter build ipa` resolves its own DEVELOPMENT identity before it
+   ever reads `signingStyle: manual`, and that an `xcodebuild` build
+   setting given on the command line is applied to every pod and Swift
+   package too.
+
+   Still iOS only. **Android has no equivalent**, because it has no
+   Firebase project — that is the next mobile-delivery gap, not this
+   one.
+
+   One thing left, and it is item 0 of this list rather than this one:
+   `GITHUB_RELEASE_REF` is unset, so the console's button dispatches
+   `main`, which is behind. Builds 4 and 5 were dispatched against the
+   branch explicitly.
 6. For push on a phone: the five `APNS_*` secrets (iOS) and
    `FCM_SERVICE_ACCOUNT` + `google-services.json` (Android). See
    `docs/push-notifications.md`. `google-services.json` cannot live in
-   this repository. `APNS_PRODUCTION` must agree with the build's
-   `aps-environment`; crossed, every notification is `BadDeviceToken`,
-   which reads as a dead handset and is not one.
+   this repository.
+
+   **`APNS_PRODUCTION` must now be `true`**, and that is a change of
+   answer, not a restatement. It has to agree with the build's
+   `aps-environment`, and the build that exists is a TestFlight one —
+   a distribution archive, which Xcode signs as `production` whatever
+   the checked-in entitlements file says. The old advice here and in
+   `docs/push-notifications.md` was "leave it unset while testing",
+   which was right when the only handset build came off a cable and is
+   now exactly the way to get `BadDeviceToken` on every push. Both
+   files carry the table instead.
 
 ## Open work, ranked
 
@@ -232,8 +257,15 @@ message. Read those rather than the diffs.
 1. **Try iOS push and calls on a real handset.** The code is all here
    — `AppDelegate.swift`, `push_native.dart`, `callkit.dart`, `0657`,
    `0658`, `send-push/routing.ts` — and none of it has ever run on a
-   phone, because there has been no build (blocker 5) and no APNs
-   secrets (blocker 6). Two things to check first, in this order:
+   phone.
+
+   **This is now the top of the list, and half of what blocked it is
+   gone.** Blocker 5 was "there is no build"; there is one, in
+   TestFlight, signed with both the push and associated-domains
+   entitlements. What remains is blocker 6, the five `APNS_*` secrets
+   — and `APNS_PRODUCTION` is `true` for a TestFlight build, which is
+   the opposite of what this file said until today. Two things to
+   check first, in this order:
 
    * **does a call make a sound?** `didActivate` sets the audio
      category and nothing else. If the ring connects to silence, add
@@ -247,17 +279,20 @@ message. Read those rather than the diffs.
      `aps-environment`?** Crossed, every notification comes back
      `BadDeviceToken`, which reads as a dead handset and is not one.
 
-2. **Set up the iOS release secrets, then press the button once.**
-   `docs/ios-release.md` lists them: six Actions secrets (the
-   distribution certificate, the provisioning profile, the App Store
-   Connect API key) and two function secrets (a fine-grained GitHub
-   token, the repository). Until they exist the workflow stops with a
-   list of what is missing rather than failing.
+2. ~~**Set up the iOS release secrets, then press the button
+   once.**~~ **Done.** All eight secrets exist, and `xcrun altool
+   --upload-app` — which nothing in CI could ever exercise — has now
+   run twice and uploaded twice.
 
-   The build number comes from `github.run_number` and the marketing
-   version from `pubspec.yaml`. The first real run is also the first
-   time `xcrun altool --upload-app` has been exercised here — it is the
-   documented CLI for this and nothing in CI can prove it.
+   The build number comes from `github.run_number`, so it is the
+   workflow's run number and NOT a count of builds: a failed run burns
+   one. Builds 1 to 3 do not exist in TestFlight because runs 1 to 3
+   failed. The marketing version comes from `pubspec.yaml` and is still
+   `0.1.0`.
+
+   What is left of this item is one secret, in blocker 0 above:
+   `GITHUB_RELEASE_REF`. Set it and the console button is usable;
+   until then the button builds `main`, which is stale.
 
 3. ~~Make the local stack match the hosted project on function
    privileges.~~ **Done.** `_local_stack.sql` now reproduces Supabase's
