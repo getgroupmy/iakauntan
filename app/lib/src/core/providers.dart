@@ -981,6 +981,40 @@ final isPlatformAdminProvider = FutureProvider<bool>((ref) async {
   return ref.watch(platformRepoProvider).amIPlatformAdmin();
 });
 
+/// Whether this person carries the report button on every screen.
+///
+/// Not autoDispose. The shell watches it for the whole session, and a
+/// provider that disposed between rebuilds would ask the server again
+/// every time the person changed screens -- which is the one thing a
+/// button on every screen must not do.
+///
+/// False while it is loading and false on an error, both deliberately.
+/// The failure mode of guessing true is a button that opens a dialog
+/// for somebody who will then be refused; the failure mode of guessing
+/// false is a button that appears a moment late.
+final isBetaTesterProvider = FutureProvider<bool>((ref) async {
+  if (ref.watch(currentUserProvider) == null) return false;
+  return ref.watch(platformRepoProvider).amIABetaTester();
+});
+
+final betaTestersProvider = FutureProvider.autoDispose<List<BetaTester>>((ref) {
+  return ref.watch(platformRepoProvider).betaTesters();
+});
+
+/// People matching what has been typed into the console's picker.
+///
+/// `autoDispose` and keyed on the query, so a search that has been
+/// typed past is not kept alive; `family` rather than a controller so
+/// the screen has no state to get out of step with the box.
+final platformUserSearchProvider = FutureProvider.autoDispose
+    .family<List<PlatformUser>, String>((ref, query) {
+  final needle = query.trim();
+  // The server refuses under two characters as well. This saves the
+  // round trip on every single keystroke of the first letter.
+  if (needle.length < 2) return Future.value(const <PlatformUser>[]);
+  return ref.watch(platformRepoProvider).searchUsers(needle);
+});
+
 final platformStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
   ref,
 ) {

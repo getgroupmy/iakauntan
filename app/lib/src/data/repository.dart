@@ -5312,6 +5312,52 @@ class PlatformRepo {
     return data == true;
   }
 
+  /// Whether this person sees the floating report button.
+  ///
+  /// Asked once per session and cheap: `0663`'s function takes no
+  /// argument, so there is nothing to get wrong about whom it is
+  /// answering for.
+  Future<bool> amIABetaTester() async {
+    final data = await client.rpc('am_i_a_beta_tester');
+    return data == true;
+  }
+
+  /// The beta list, newest first, with names rather than uuids.
+  Future<List<BetaTester>> betaTesters() async {
+    final rows = await client.rpc('beta_testers_list');
+    return [
+      for (final r in (rows as List).cast<Map<String, dynamic>>())
+        BetaTester.fromMap(r),
+    ];
+  }
+
+  /// People matching a name or an e-mail, for the console's picker.
+  ///
+  /// Comes back empty under two characters, which the server decides --
+  /// see `0663`. The screen says so rather than showing an empty list
+  /// that reads as "nobody by that name".
+  Future<List<PlatformUser>> searchUsers(String query) async {
+    final rows = await client.rpc(
+      'search_platform_users',
+      params: {'p_query': query},
+    );
+    return [
+      for (final r in (rows as List).cast<Map<String, dynamic>>())
+        PlatformUser.fromMap(r),
+    ];
+  }
+
+  Future<void> assignBetaTester(String userId, {String? note}) async {
+    await client.rpc(
+      'assign_beta_tester',
+      params: {'p_user_id': userId, 'p_note': note},
+    );
+  }
+
+  Future<void> removeBetaTester(String userId) async {
+    await client.rpc('remove_beta_tester', params: {'p_user_id': userId});
+  }
+
   /// The last few iOS releases, newest first.
   ///
   /// Read from GitHub through the `ios-release` function rather than

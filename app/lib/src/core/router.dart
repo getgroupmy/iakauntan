@@ -123,7 +123,13 @@ import '../features/shell/app_shell.dart';
 import '../data/reserved_names_repository.dart';
 import 'providers.dart';
 
-final _rootKey = GlobalKey<NavigatorState>();
+/// The navigator every route in this app is pushed onto.
+///
+/// Public because one widget sits ABOVE it and still needs it: the beta
+/// report button lives in `MaterialApp.builder`, whose child IS this
+/// navigator, so `Navigator.of(context)` from there looks upward and
+/// finds nothing. A key looks sideways.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellKey = GlobalKey<NavigatorState>();
 
 /// Where a visitor at [path] belongs, given what is known about them.
@@ -552,7 +558,7 @@ String? routeFor({
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    navigatorKey: _rootKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: AuthRefresh(ref),
     redirect: (context, state) {
@@ -793,14 +799,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) => ContactEditor(
                   contactType: state.uri.queryParameters['type'] ?? 'customer',
                 ),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     ContactEditor(contactId: state.pathParameters['id']),
               ),
@@ -824,7 +830,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     MatterDetailScreen(matterId: state.pathParameters['id']!),
               ),
@@ -855,12 +861,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const EmployeeEditor(),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     EmployeeEditor(employeeId: state.pathParameters['id']),
               ),
@@ -884,7 +890,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     PayrollRunScreen(runId: state.pathParameters['id']!),
               ),
@@ -963,7 +969,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'group',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const GroupPaymentScreen(),
               ),
             ],
@@ -1026,7 +1032,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     FilingScreen(filingId: state.pathParameters['id']!),
               ),
@@ -1045,12 +1051,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               // the same trap `/property/new` fell into.
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const TicketEditor(),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, st) => TicketScreen(id: st.pathParameters['id']!),
               ),
             ],
@@ -1106,18 +1112,18 @@ final routerProvider = Provider<GoRouter>((ref) {
               // viewer is handed the literal string `new` as a uuid.
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const PropertySiteEditor(),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     PropertySiteScreen(siteId: state.pathParameters['id']!),
               ),
               GoRoute(
                 path: ':id/edit',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     PropertySiteEditor(siteId: state.pathParameters['id']),
               ),
@@ -1129,7 +1135,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) => ManufacturingOrderScreen(
                   orderId: state.pathParameters['id']!,
                 ),
@@ -1146,25 +1152,25 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const CorpEntityEditor(),
               ),
               // Before ':id', because a path parameter would otherwise
               // swallow it and open a company called "people".
               GoRoute(
                 path: 'people',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const CorpPeopleScreen(),
               ),
               GoRoute(
                 path: ':id/edit',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     CorpEntityEditor(entityId: state.pathParameters['id']),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     CorpEntityScreen(entityId: state.pathParameters['id']!),
               ),
@@ -1179,7 +1185,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               // visit from a company, not a place in the sidebar.
               GoRoute(
                 path: 'group',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const GroupReportsScreen(),
               ),
             ],
@@ -1209,7 +1215,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             Text('No page at ${state.matchedLocation}'),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => _rootKey.currentContext?.go('/dashboard'),
+              onPressed: () => rootNavigatorKey.currentContext?.go('/dashboard'),
               child: const Text('Back to dashboard'),
             ),
           ],
@@ -1230,14 +1236,14 @@ List<RouteBase> _documentRoutes(String prefix, String fallbackType) => [
     routes: [
       GoRoute(
         path: 'new',
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, state) => DocumentEditor(
           docType: state.pathParameters['docType'] ?? fallbackType,
         ),
       ),
       GoRoute(
         path: ':id',
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, state) => DocumentEditor(
           docType: state.pathParameters['docType'] ?? fallbackType,
           documentId: state.pathParameters['id'],

@@ -2095,6 +2095,83 @@ class PlatformOrg {
   );
 }
 
+/// Somebody on the beta list, as the console shows them.
+///
+/// [addedBy] is a name and is NULLABLE, because `beta_testers.added_by`
+/// is ON DELETE SET NULL: the person who added a tester may have left,
+/// and the tester still has the button.
+class BetaTester {
+  BetaTester({
+    required this.userId,
+    this.fullName,
+    this.email,
+    this.note,
+    this.addedBy,
+    this.createdAt,
+  });
+
+  final String userId;
+  final String? fullName;
+  final String? email;
+  final String? note;
+  final String? addedBy;
+  final DateTime? createdAt;
+
+  /// What to call them on screen.
+  ///
+  /// A name, then an e-mail, then the uuid -- which is not pretty and
+  /// is better than a blank row nobody can act on. A profile with
+  /// neither exists: somebody invited who has not signed in yet.
+  String get label => switch ((fullName?.trim(), email?.trim())) {
+    (final n?, _) when n.isNotEmpty => n,
+    (_, final e?) when e.isNotEmpty => e,
+    _ => userId,
+  };
+
+  factory BetaTester.fromMap(Map<String, dynamic> j) => BetaTester(
+    userId: j['user_id'] as String,
+    fullName: j['full_name'] as String?,
+    email: j['email'] as String?,
+    note: j['note'] as String?,
+    addedBy: j['added_by'] as String?,
+    createdAt: Fmt.parseDate(j['created_at']),
+  );
+}
+
+/// A person the platform console found, and whether they are already on
+/// the beta list.
+///
+/// [isBeta] comes from the search itself rather than from comparing
+/// against the list on this side: the console offers hundreds of people
+/// and holds a dozen, and asking the server once is cheaper than every
+/// row asking the list.
+class PlatformUser {
+  PlatformUser({
+    required this.userId,
+    this.fullName,
+    this.email,
+    this.isBeta = false,
+  });
+
+  final String userId;
+  final String? fullName;
+  final String? email;
+  final bool isBeta;
+
+  String get label => switch ((fullName?.trim(), email?.trim())) {
+    (final n?, _) when n.isNotEmpty => n,
+    (_, final e?) when e.isNotEmpty => e,
+    _ => userId,
+  };
+
+  factory PlatformUser.fromMap(Map<String, dynamic> j) => PlatformUser(
+    userId: j['user_id'] as String,
+    fullName: j['full_name'] as String?,
+    email: j['email'] as String?,
+    isBeta: j['is_beta'] == true,
+  );
+}
+
 // =====================================================================
 // Legal firm accounting
 // =====================================================================

@@ -37,7 +37,7 @@ class FeedbackScreen extends ConsumerWidget {
             child: FilledButton.icon(
               onPressed: () => showDialog<void>(
                 context: context,
-                builder: (_) => const _ReportDialog(),
+                builder: (_) => const ReportDialog(),
               ),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('New report'),
@@ -169,17 +169,30 @@ class _ReportTile extends ConsumerWidget {
   }
 }
 
-class _ReportDialog extends ConsumerStatefulWidget {
-  const _ReportDialog();
+/// The "Tell us" form, wherever it is opened from.
+///
+/// Public because it is opened from two places now: the "New report"
+/// button on this screen, and the floating button a beta tester carries
+/// on every other one. A second copy of this form would be a second
+/// place for the screen catalogue and the severity wording to drift.
+///
+/// [initialFiles] is what the floating button hands over: a screenshot
+/// it has already taken. It is seeded into the picker rather than
+/// uploaded separately, so a tester can remove it, add three more, and
+/// see the same five-file limit everybody else sees.
+class ReportDialog extends ConsumerStatefulWidget {
+  const ReportDialog({super.key, this.initialFiles = const []});
+
+  final List<DroppedFile> initialFiles;
 
   @override
-  ConsumerState<_ReportDialog> createState() => _ReportDialogState();
+  ConsumerState<ReportDialog> createState() => _ReportDialogState();
 }
 
-class _ReportDialogState extends ConsumerState<_ReportDialog> {
+class _ReportDialogState extends ConsumerState<ReportDialog> {
   final _title = TextEditingController();
   final _body = TextEditingController();
-  List<DroppedFile> _files = const [];
+  late List<DroppedFile> _files = widget.initialFiles;
   String _kind = 'bug';
   int _severity = 3;
 

@@ -1,3 +1,4 @@
+import 'features/feedback/report_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -89,11 +90,19 @@ class IAkauntanApp extends ConsumerWidget {
       // see `core/splash.dart`, which is where both of those are
       // decided.
       builder: (context, child) => SplashGate(
-        child:
-            ref.watch(workspaceLookupProvider).valueOrNull?.host ==
-                WorkspaceHost.unknown
-            ? const UnknownWorkspaceScreen()
-            : child ?? const SizedBox.shrink(),
+        // The report button, INSIDE the splash and outside everything
+        // else. A beta tester carries it on every screen; for everybody
+        // else this draws its child and nothing at all -- see
+        // `features/feedback/report_button.dart`, which also explains
+        // why the screenshot boundary lives here rather than around a
+        // single screen.
+        child: ReportButtonOverlay(
+          child:
+              ref.watch(workspaceLookupProvider).valueOrNull?.host ==
+                  WorkspaceHost.unknown
+              ? const UnknownWorkspaceScreen()
+              : child ?? const SizedBox.shrink(),
+        ),
       ),
     );
   }

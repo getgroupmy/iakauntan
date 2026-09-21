@@ -8,6 +8,7 @@ import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'beta_testers_admin.dart';
 import 'entity_types_admin.dart';
 import 'search_registers_admin.dart';
 import 'ai_providers_admin.dart';
@@ -173,6 +174,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/feedback',
     primary: false,
     page: FeedbackAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'Beta testers',
+    icon: Icons.science_outlined,
+    selectedIcon: Icons.science,
+    path: '/admin/beta',
+    primary: false,
+    page: BetaTestersAdminTab(),
   ),
   (
     group: 'Service',
