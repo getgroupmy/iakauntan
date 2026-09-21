@@ -381,6 +381,25 @@ in the same place. What differs is what you do in App Store Connect
 afterwards: leave it for your testers, or add it to a version and
 submit it. **Neither lane submits for review**, and nothing here could.
 
+### After the first upload
+
+**App Store Connect asks about export compliance once, and then never
+again.** `ios/Runner/Info.plist` carries
+
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
+
+which answers it. `false` means "no NON-EXEMPT encryption", not "no
+encryption": every call is over HTTPS, and standard TLS for protecting
+a connection is exempt. The app implements none of its own — no
+at-rest encryption, no bundled cipher, nothing beyond the transport and
+the platform's passkey and push APIs.
+
+Without that key the dialog appears on **every** build and holds it
+back from testers until somebody answers, which on an automated
+release is an upload that succeeded and then quietly did nothing. If
+that ever changes — if the app starts encrypting anything itself — the
+key is the thing to revisit, and the answer stops being `false`.
+
 ### When it goes wrong
 
 | What you see | What it is |

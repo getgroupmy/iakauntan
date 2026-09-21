@@ -22,6 +22,22 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Export compliance, answered here rather than in App Store
+	     Connect on every upload.
+
+	     false means "uses no NON-EXEMPT encryption". It is not a claim
+	     that nothing is encrypted: every call this app makes is over
+	     HTTPS. Standard TLS for protecting a connection is exempt, and
+	     this app implements no encryption of its own. There is no
+	     at-rest encryption, no bundled cipher, and nothing beyond the
+	     transport plus the platform's own passkey and push APIs.
+
+	     Without this key, App Store Connect stops each build with the
+	     App Encryption Documentation dialog before it can reach a
+	     tester, which on an automated release is a build that uploads
+	     and then silently waits for somebody to notice. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
