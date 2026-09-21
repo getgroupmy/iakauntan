@@ -820,6 +820,16 @@ final taxComputationRowProvider = FutureProvider.autoDispose
       return requireRepo(ref).taxComputationRow(id);
     });
 
+/// What LHDN is waiting for, and when.
+///
+/// Not keyed on anything: the window is the same for everybody and the
+/// answer changes only with the date, so a second parameter would be a
+/// second cache entry for the same list.
+final taxFilingCalendarProvider =
+    FutureProvider.autoDispose<List<TaxFiling>>((ref) {
+      return requireRepo(ref).taxUpcomingFilings();
+    });
+
 /// The CP204 estimate row itself.
 final taxEstimateProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, id) {

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0667",
+    "version": "0668",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -70030,6 +70030,126 @@
         }
       }
     },
+    "/rpc/tax_upcoming_filings": {
+      "post": {
+        "operationId": "tax_upcoming_filings",
+        "summary": "Every income tax obligation this company has against its own basis periods, computed rather than stored, with\u2026",
+        "description": "Every income tax obligation this company has against its own basis periods, computed rather than stored, with what is already late kept in the list. The e-filing date is shown beside the statutory one, never instead of it.\n\n`public.tax_upcoming_filings(p_org_id uuid, p_within_days integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_within_days": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "filing_type": {
+                        "type": "string"
+                      },
+                      "filing_name": {
+                        "type": "string"
+                      },
+                      "form_label": {
+                        "type": "string"
+                      },
+                      "statute_ref": {
+                        "type": "string"
+                      },
+                      "fiscal_year_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "period_from": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "period_to": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "year_of_assessment": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "due_date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "efiling_due_date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "days_left": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "is_overdue": {
+                        "type": "boolean"
+                      },
+                      "needs_employees": {
+                        "type": "boolean"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "computation_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "estimate_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/ticket_team_roster": {
       "post": {
         "operationId": "ticket_team_roster",
@@ -76578,6 +76698,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_estimates"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_filing_types": {
+      "get": {
+        "operationId": "select_tax_filing_types",
+        "summary": "Read tax_filing_types",
+        "description": "What LHDN requires and when, per entity type. Computed against a company's own periods by tax_upcoming_filings -- nothing is stored per company, so a corrected rule corrects everybody. Seeded is_verified FALSE: check against the Act and the current Return Form Filing Programme before anybody files on it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_filing_types"
                   }
                 }
               }
@@ -99071,6 +99255,91 @@
           "org_id",
           "fiscal_year_id",
           "year_of_assessment"
+        ]
+      },
+      "tax_filing_types": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "form_label": {
+            "type": "string"
+          },
+          "statute_ref": {
+            "type": "string"
+          },
+          "basis": {
+            "type": "string"
+          },
+          "days_before": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "months_after": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "period_month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "due_month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "due_day": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "applies_to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "needs_employees": {
+            "type": "boolean"
+          },
+          "efiling_grace_months": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "efiling_grace_days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_verified": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "form_label",
+          "basis",
+          "applies_to"
         ]
       },
       "tax_other_income": {

@@ -48,6 +48,15 @@ class FilingsScreen extends ConsumerWidget {
           // CP204 runs the opposite way round -- a figure said BEFORE
           // the year rather than worked out after it -- so it is its
           // own action rather than a tab on the computation.
+          // The calendar needs no permission to post: it computes
+          // dates and writes nothing, and the person who most needs to
+          // see a deadline is often not the one who keys the return.
+          IconButton(
+            key: const ValueKey('open-tax-calendar'),
+            tooltip: 'Tax calendar',
+            icon: const Icon(Icons.event_note_outlined),
+            onPressed: () => GoRouter.of(context).push('/tax-calendar'),
+          ),
           if (canPost)
             IconButton(
               key: const ValueKey('open-tax-estimate'),

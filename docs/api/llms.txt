@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0667` (the highest applied migration).
-758 functions and 361 readable tables, of which
-288 functions only read.
+Schema version `0668` (the highest applied migration).
+759 functions and 362 readable tables, of which
+289 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**616 of 758 functions carry a `comment on
+**617 of 759 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (546)
+### general (547)
 
 Not gated on any module.
 
@@ -893,6 +893,7 @@ Not gated on any module.
 - `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, with their dates.
 - `tax_partnership_allocation(p_computation_id uuid)`
 - `tax_partnership_summary(p_computation_id uuid)` — The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.
+- `tax_upcoming_filings(p_org_id uuid, p_within_days integer)` — Every income tax obligation this company has against its own basis periods, computed rather than stored, with what is already late kept in the list.
 - `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
 - `trace_lot(p_org_id uuid, p_lot_id uuid)`
 - `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` *(writes)* — Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together.
@@ -1268,6 +1269,7 @@ inconsistent.
 - `tax_detail_submissions`
 - `tax_estimate_rules`
 - `tax_estimates`
+- `tax_filing_types`
 - `tax_other_income`
 - `tax_partners`
 - `tax_relief_claims`

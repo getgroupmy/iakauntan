@@ -2694,6 +2694,21 @@ class Repo {
     return [for (final r in rows) TaxComputationLine.fromMap(r)];
   }
 
+  /// Every income tax deadline this company has, computed.
+  ///
+  /// Nothing is stored per company — `0668` works each date out from
+  /// the company's own periods every time — so a corrected rule
+  /// corrects everybody rather than everybody who asks after today.
+  Future<List<TaxFiling>> taxUpcomingFilings({int withinDays = 240}) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_upcoming_filings',
+        params: {'p_org_id': orgId, 'p_within_days': withinDays},
+      ),
+    );
+    return [for (final r in rows) TaxFiling.fromMap(r)];
+  }
+
   /// Starts, or reopens, the CP204 estimate for a financial year.
   Future<String> openTaxEstimate(
     String fiscalYearId, {

@@ -714,6 +714,7 @@ jobs:
                    supabase/tests/tax_computation.sql \
                    supabase/tests/tax_forms_b_and_p.sql \
                    supabase/tests/tax_estimates.sql \
+                   supabase/tests/tax_filing_calendar.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/fs_mapping_is_total.sql \

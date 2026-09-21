@@ -55,6 +55,7 @@ import '../features/financials/filing_screen.dart';
 import '../features/financials/filings_screen.dart';
 import '../features/financials/form_b_screen.dart';
 import '../features/financials/form_p_screen.dart';
+import '../features/financials/tax_calendar_screen.dart';
 import '../features/financials/tax_computation_screen.dart';
 import '../features/financials/tax_estimate_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
@@ -1067,6 +1068,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) => TaxComputationScreen(
               computationId: state.pathParameters['id']!,
             ),
+          ),
+          // The dates, which outlive any one computation: a company
+          // that has opened nothing still has deadlines.
+          GoRoute(
+            path: '/tax-calendar',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, __) => const TaxCalendarScreen(),
           ),
           // The other half of the year. The computation to measure
           // against is a QUERY parameter rather than a path segment

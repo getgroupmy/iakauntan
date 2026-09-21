@@ -2256,6 +2256,95 @@ class TaxInstalment {
   );
 }
 
+/// One income tax obligation, against one period, with its date.
+///
+/// Three things here are decisions rather than data, and each is the
+/// answer to a mistake `0668` was written to prevent:
+///
+///   * [dueDate] is the STATUTORY date. [efilingDueDate] is a
+///     concession LHDN republishes every year and has changed, so it
+///     is beside the deadline and never instead of it.
+///   * [periodFrom] and [periodTo] are not always the company's own
+///     financial year. Form E covers a calendar year whatever the year
+///     end is, and the server labels it accordingly.
+///   * [daysLeft] goes negative rather than stopping at zero. An
+///     obligation already missed is the one somebody most needs to
+///     see.
+class TaxFiling {
+  TaxFiling({
+    required this.filingType,
+    required this.name,
+    required this.formLabel,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.yearOfAssessment,
+    required this.dueDate,
+    required this.daysLeft,
+    required this.isOverdue,
+    this.statuteRef,
+    this.efilingDueDate,
+    this.description,
+    this.fiscalYearId,
+    this.computationId,
+    this.estimateId,
+  });
+
+  final String filingType;
+  final String name;
+
+  /// What somebody looks for on LHDN's site: 'C', 'B', 'E', 'CP204'.
+  final String formLabel;
+  final String? statuteRef;
+
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+  final int yearOfAssessment;
+
+  final DateTime? dueDate;
+
+  /// Null where the Filing Programme grants nothing for this form —
+  /// which is not the same as granting nothing this year.
+  final DateTime? efilingDueDate;
+
+  final int daysLeft;
+  final bool isOverdue;
+  final String? description;
+
+  final String? fiscalYearId;
+
+  /// The working already opened for this period, where there is one.
+  /// A deadline with nothing behind it is a deadline nobody has
+  /// started.
+  final String? computationId;
+  final String? estimateId;
+
+  /// Close enough to interrupt somebody about. A month is the point
+  /// at which a Form C still has time to be prepared and a CP204 does
+  /// not — so it is a warning rather than a countdown.
+  bool get isImminent => !isOverdue && daysLeft <= 30;
+
+  /// Whether the work behind it has been started at all.
+  bool get hasWorking => computationId != null || estimateId != null;
+
+  factory TaxFiling.fromMap(Map<String, dynamic> j) => TaxFiling(
+    filingType: j['filing_type']?.toString() ?? '',
+    name: j['filing_name']?.toString() ?? '',
+    formLabel: j['form_label']?.toString() ?? '',
+    statuteRef: j['statute_ref']?.toString(),
+    periodFrom: Fmt.parseDate(j['period_from']),
+    periodTo: Fmt.parseDate(j['period_to']),
+    yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+    dueDate: Fmt.parseDate(j['due_date']),
+    efilingDueDate: Fmt.parseDate(j['efiling_due_date']),
+    daysLeft: Fmt.toInt(j['days_left']),
+    isOverdue: j['is_overdue'] == true,
+    description: j['description']?.toString(),
+    fiscalYearId: j['fiscal_year_id']?.toString(),
+    computationId: j['computation_id']?.toString(),
+    estimateId: j['estimate_id']?.toString(),
+  );
+}
+
 /// Whether an estimate is allowed, and whether it is high enough.
 ///
 /// Two different questions with two different answers, and conflating
