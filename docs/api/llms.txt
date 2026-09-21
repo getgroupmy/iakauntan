@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0659` (the highest applied migration).
-739 functions and 348 readable tables, of which
-275 functions only read.
+Schema version `0660` (the highest applied migration).
+741 functions and 348 readable tables, of which
+276 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**598 of 739 functions carry a `comment on
+**600 of 741 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (527)
+### general (529)
 
 Not gated on any module.
 
@@ -404,6 +404,7 @@ Not gated on any module.
 - `archive_report_layout(p_layout_id uuid)` *(writes)* — Retires a layout.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
 - `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)* — Appoints a practice to keep this company's books, and returns how many access rows that came to.
+- `attach_feedback_file(p_report_id uuid, p_storage_path text, p_file_name text, p_file_size integer, p_mime_type text)` *(writes)* — Records a file already uploaded to the `feedback` bucket against a report.
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
 - `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer, p_actor_id uuid, p_from date, p_to date)` *(writes)* — Returns what changed, most recent first, with the before and after of each row.
 - `audit_trail_actors(p_org_id uuid)` — Who appears in this company's change history, and how often, for the filter on the trail.
@@ -557,6 +558,7 @@ Not gated on any module.
 - `exchange_rate_for(p_org_id uuid, p_currency character, p_on_date date)`
 - `expense_split(p_expense_id uuid)`
 - `extend_document_validity(p_document uuid, p_valid_until date)` *(writes)* — Puts a new date on a quotation or proforma.
+- `feedback_files(p_report_id uuid)` — The files on a report, for whoever may read the report itself.
 - `file_sst_return(p_org_id uuid, p_period_end date, p_amount numeric, p_reference text)` *(writes)* — Records that the SST-02 for a taxable period has gone in, for how much, and under what reference.
 - `finalise_appraisal(p_appraisal uuid, p_final_rating numeric, p_calibration_note text)` *(writes)* — Settles the final rating and completes the appraisal.
 - `finish_import_batch(p_batch_id uuid, p_status text, p_notes text)` *(writes)* — Closes an import run as reconciling, posted or failed.

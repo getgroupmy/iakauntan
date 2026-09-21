@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0659",
+    "version": "0660",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -21197,6 +21197,77 @@
         }
       }
     },
+    "/rpc/attach_feedback_file": {
+      "post": {
+        "operationId": "attach_feedback_file",
+        "summary": "Records a file already uploaded to the `feedback` bucket against a report",
+        "description": "Records a file already uploaded to the `feedback` bucket against a report. Only the reporter, at most five per report. The object itself is uploaded by the client, which is the only party holding the bytes.\n\n`public.attach_feedback_file(p_report_id uuid, p_storage_path text, p_file_name text, p_file_size integer, p_mime_type text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_report_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_storage_path": {
+                    "type": "string"
+                  },
+                  "p_file_name": {
+                    "type": "string"
+                  },
+                  "p_file_size": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_mime_type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_report_id",
+                  "p_storage_path",
+                  "p_file_name",
+                  "p_file_size"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/audit_list_payslips": {
       "post": {
         "operationId": "audit_list_payslips",
@@ -34526,6 +34597,86 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/feedback_files": {
+      "post": {
+        "operationId": "feedback_files",
+        "summary": "The files on a report, for whoever may read the report itself",
+        "description": "The files on a report, for whoever may read the report itself. SECURITY DEFINER and therefore carrying its own check -- without the can_see_feedback clause this would return every report's files to anybody who asked.\n\n`public.feedback_files(p_report_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_report_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_report_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "file_name": {
+                        "type": "string"
+                      },
+                      "mime_type": {
+                        "type": "string"
+                      },
+                      "file_size": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "storage_path": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
                 }
               }
             }
