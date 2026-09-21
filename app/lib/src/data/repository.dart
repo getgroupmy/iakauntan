@@ -379,6 +379,55 @@ class Repo {
   Future<List<Map<String, dynamic>>> myFeedback() async =>
       _rows(await callRpc('my_feedback', params: {'p_org_id': orgId}));
 
+  /// Put a file on a report.
+  ///
+  /// Two steps and they cannot be one: the bytes go to storage, which
+  /// only the client holds, and then the row is recorded. Both halves
+  /// are guarded by `app.can_attach_to_feedback`, so an upload the
+  /// bucket allowed cannot fail to be recordable.
+  ///
+  /// The object key starts with the report id because **that is what
+  /// the storage policy reads** to decide who may see it —
+  /// `split_part(name, '/', 1)`. A file stored anywhere else would be
+  /// invisible to the very people the report is for. `0660` has a
+  /// CHECK saying the same thing about the row, so a mismatch is
+  /// refused rather than stored and unreadable.
+  Future<String> attachToFeedback({
+    required String reportId,
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+  }) async {
+    // A filename goes into an object key and into a URL. Anything that
+    // is not plainly a name is replaced rather than escaped, and the
+    // timestamp keeps two files of the same name apart. The same
+    // treatment `attachments_repository.dart` gives one, for the same
+    // reason.
+    final safe = fileName
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final path = '$reportId/${DateTime.now().millisecondsSinceEpoch}-'
+        '${safe.isEmpty ? 'file' : safe}';
+
+    await client.storage.from('feedback').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: mimeType),
+        );
+    final id = await callRpc(
+      'attach_feedback_file',
+      params: {
+        'p_report_id': reportId,
+        'p_storage_path': path,
+        'p_file_name': fileName,
+        'p_file_size': bytes.length,
+        'p_mime_type': mimeType,
+      },
+    );
+    return id as String;
+  }
+
+
   // ------------------------------------------------------------------
   // The chart of accounts
   //
@@ -5429,6 +5478,30 @@ class PlatformRepo {
         'set_feedback_status',
         params: {'p_id': id, 'p_status': status, 'p_note': note},
       );
+
+  /// The files on one report. `0660`.
+  ///
+  /// Here rather than on `Repo` because this is where they are read
+  /// from: triage. `feedback_files` carries its own `can_see_feedback`
+  /// check, which is what lets somebody in NO organization open a
+  /// screenshot belonging to a company's report — the thing the whole
+  /// migration is arranged around.
+  Future<List<Map<String, dynamic>>> feedbackFiles(String reportId) async =>
+      Repo._rows(
+        await client.rpc('feedback_files', params: {'p_report_id': reportId}),
+      );
+
+  /// A short-lived link to one.
+  ///
+  /// The bucket is private, so there is no public URL to hand out and
+  /// nothing to leak if the link is still in somebody's browser
+  /// history an hour later. Ten minutes is long enough to open a
+  /// screenshot and short enough not to matter afterwards.
+  Future<String> feedbackFileUrl(String storagePath,
+          {Duration validFor = const Duration(minutes: 10)}) =>
+      client.storage
+          .from('feedback')
+          .createSignedUrl(storagePath, validFor.inSeconds);
 
   /// `value` is `dynamic` rather than a map because `platform_settings`
   /// stores jsonb, and not every setting is an object: `mail_domain` is

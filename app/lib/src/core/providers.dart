@@ -1007,6 +1007,15 @@ final appReleasesProvider = FutureProvider.autoDispose
   return ref.watch(platformRepoProvider).appReleases(platform);
 });
 
+/// The files on one feedback report, fetched when a row is expanded.
+///
+/// `family` on the report id, and autoDispose so a triage session
+/// through forty reports does not hold forty lists open.
+final feedbackFilesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, reportId) {
+  return ref.watch(platformRepoProvider).feedbackFiles(reportId);
+});
+
 /// The bank rules, in the order they are tried. 0625.
 final bankRulesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {

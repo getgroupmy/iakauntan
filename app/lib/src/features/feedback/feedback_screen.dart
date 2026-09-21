@@ -6,6 +6,8 @@ import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'attachment_picker.dart';
+import 'file_drop.dart';
 import '../shared/attachments_card.dart';
 import 'screen_catalogue.dart';
 
@@ -177,6 +179,7 @@ class _ReportDialog extends ConsumerStatefulWidget {
 class _ReportDialogState extends ConsumerState<_ReportDialog> {
   final _title = TextEditingController();
   final _body = TextEditingController();
+  List<DroppedFile> _files = const [];
   String _kind = 'bug';
   int _severity = 3;
 
@@ -339,6 +342,11 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
                 'other companies.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              const SizedBox(height: Space.md),
+              AttachmentPicker(
+                files: _files,
+                onChanged: (files) => setState(() => _files = files),
+              ),
             ],
           ),
         ),
@@ -353,17 +361,40 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
             if (_title.text.trim().isEmpty) return;
             final repo = ref.read(repoProvider);
             if (repo == null) return;
+            final files = _files;
             final done = await runWithFeedback(
               context,
               doing: 'report a problem',
-              successMessage: 'Sent — thank you',
-              action: () => repo.reportFeedback(
-                title: _title.text.trim(),
-                kind: _kind,
-                body: _body.text.trim().isEmpty ? null : _body.text.trim(),
-                screen: _where,
-                severity: _kind == 'bug' ? _severity : null,
-              ),
+              successMessage: files.isEmpty
+                  ? 'Sent — thank you'
+                  : 'Sent with ${files.length} '
+                      'file${files.length == 1 ? '' : 's'} — thank you',
+              action: () async {
+                final id = await repo.reportFeedback(
+                  title: _title.text.trim(),
+                  kind: _kind,
+                  body:
+                      _body.text.trim().isEmpty ? null : _body.text.trim(),
+                  screen: _where,
+                  severity: _kind == 'bug' ? _severity : null,
+                );
+                // After the report, never before: a file uploaded
+                // against a report that was then not filed is an
+                // object in a bucket with nothing pointing at it, and
+                // `attach_feedback_file` needs the id anyway.
+                //
+                // One at a time rather than `Future.wait`, so a
+                // refusal on the third names the third — wait reports
+                // one error for five attempts and abandons the rest.
+                for (final file in files) {
+                  await repo.attachToFeedback(
+                    reportId: id,
+                    fileName: file.name,
+                    bytes: file.bytes,
+                    mimeType: file.mimeType,
+                  );
+                }
+              },
             );
             ref.invalidate(myFeedbackProvider);
             if (done && context.mounted) Navigator.pop(context);
