@@ -53,6 +53,7 @@ import '../features/approvals/approvals_screen.dart';
 import '../features/collections/collections_screen.dart';
 import '../features/financials/filing_screen.dart';
 import '../features/financials/filings_screen.dart';
+import '../features/financials/tax_computation_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
@@ -1037,6 +1038,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                     FilingScreen(filingId: state.pathParameters['id']!),
               ),
             ],
+          ),
+          // The tax computation, beside the statutory filings rather
+          // than under reports: it is a document with a state, opened
+          // once a year and reviewed, not a report anybody runs.
+          GoRoute(
+            path: '/tax-computation/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) => TaxComputationScreen(
+              computationId: state.pathParameters['id']!,
+            ),
           ),
           GoRoute(
             path: '/timesheets',

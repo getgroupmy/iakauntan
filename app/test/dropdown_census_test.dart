@@ -143,7 +143,13 @@ const dropdownCensus = <String, int>{
   'features/secretarial/person_editor.dart': 2,
   'features/secretarial/resolution_sheet.dart': 1,
   'features/secretarial/share_event_sheet.dart': 1,
-  'features/settings/chart_of_accounts_card.dart': 2,
+  // Three now: the account's kind, where it sits, and -- added with
+  // `0665` -- how a tax computation treats it. The third is a fixed
+  // statutory set read from `tax_treatments`, moved by a Budget rather
+  // than by anybody using this app, and it is shown only on an expense
+  // or revenue account because it can mean nothing on the others.
+  // There is nothing to search: ten rows, each already a sentence.
+  'features/settings/chart_of_accounts_card.dart': 3,
   'features/settings/company_card.dart': 2,
   'features/settings/document_numbering_card.dart': 1,
   'features/settings/landing_settings.dart': 1,

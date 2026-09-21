@@ -802,6 +802,45 @@ final depreciationHistoryProvider = FutureProvider.autoDispose
 
 /// The fixed asset note. Both dates are nullable: no start date means
 /// since the company began, which is the position rather than a period.
+/// The Form C working for one computation.
+final taxComputationProvider = FutureProvider.autoDispose
+    .family<TaxComputation, String>((ref, id) {
+      return requireRepo(ref).taxComputation(id);
+    });
+
+/// Every add-back and deduction in it.
+final taxComputationLinesProvider = FutureProvider.autoDispose
+    .family<List<TaxComputationLine>, String>((ref, id) {
+      return requireRepo(ref).taxComputationLines(id);
+    });
+
+/// The row's own figures, which the computation cannot derive.
+final taxComputationRowProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, id) {
+      return requireRepo(ref).taxComputationRow(id);
+    });
+
+/// The typed adjustments on a computation, with their ids.
+final taxAdjustmentsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxAdjustments(id);
+    });
+
+/// Accounts whose tax treatment is for the other side of the ledger.
+final taxMisfiledAccountsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).taxMisfiledAccounts();
+    });
+
+/// What a chart of accounts can say about an account.
+///
+/// Not autoDispose: ten rows that move with a Budget, read by the
+/// account editor every time it opens.
+final taxTreatmentsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).taxTreatments();
+    });
+
 /// The Schedule 3 classes an asset can be put in.
 ///
 /// Not autoDispose: the list is eight rows that change with a Budget,

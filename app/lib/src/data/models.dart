@@ -954,6 +954,7 @@ class Account {
     required this.name,
     required this.accountType,
     required this.accountSubtype,
+    this.taxTreatment,
     this.isGroup = false,
     this.currentBalance = 0,
     this.isActive = true,
@@ -964,6 +965,11 @@ class Account {
   final String name;
   final String accountType;
   final String accountSubtype;
+
+  /// How a tax computation treats it. Null means ordinary — an expense
+  /// is deductible, revenue is taxable — which is what almost every
+  /// account is. Not a to-do.
+  final String? taxTreatment;
   final bool isGroup;
   final double currentBalance;
   final bool isActive;
@@ -974,6 +980,7 @@ class Account {
     name: j['name']?.toString() ?? '',
     accountType: j['account_type']?.toString() ?? 'asset',
     accountSubtype: j['account_subtype']?.toString() ?? 'current_asset',
+    taxTreatment: j['tax_treatment'] as String?,
     isGroup: j['is_group'] == true,
     currentBalance: Fmt.toDouble(j['current_balance']),
     isActive: j['is_active'] != false,
@@ -2109,6 +2116,175 @@ class PlatformOrg {
         .toList(),
     createdAt: Fmt.parseDate(j['created_at']),
   );
+}
+
+/// The Form C working for one basis period.
+///
+/// Every figure derived from the ledger, the Schedule 3 schedule and
+/// the rates — nothing here is stored. A computation opened a year
+/// later still agrees with the books it came from, which is the whole
+/// reason it is computed rather than typed.
+class TaxComputation {
+  TaxComputation({
+    required this.yearOfAssessment,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.profitBeforeTax,
+    required this.addBacks,
+    required this.deductions,
+    required this.balancingCharge,
+    required this.adjustedIncome,
+    required this.adjustedLoss,
+    required this.caCurrent,
+    required this.caBroughtForward,
+    required this.caUsed,
+    required this.caCarriedForward,
+    required this.statutoryIncome,
+    required this.lossBroughtForward,
+    required this.lossUsed,
+    required this.lossCarriedForward,
+    required this.chargeableIncome,
+    required this.isSme,
+    required this.smeKnown,
+    required this.taxCharged,
+    required this.zakatRebate,
+    required this.s110TaxDeducted,
+    required this.cp204Paid,
+    required this.taxPayable,
+  });
+
+  final int yearOfAssessment;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+
+  final double profitBeforeTax;
+  final double addBacks;
+  final double deductions;
+
+  /// Taxable, and reported on its own rather than folded into the
+  /// add-backs: it comes from a disposal rather than from an account,
+  /// and a reviewer looking for it looks for it by name.
+  final double balancingCharge;
+
+  final double adjustedIncome;
+
+  /// A loss is reported as a positive number under its own name. The
+  /// adjusted income is nothing in that case, not a negative, because
+  /// nothing downstream may be computed from a negative income.
+  final double adjustedLoss;
+
+  final double caCurrent;
+  final double caBroughtForward;
+  final double caUsed;
+
+  /// Unabsorbed capital allowance. NOT a loss: it carries forward under
+  /// its own rules and the two must never be added together.
+  final double caCarriedForward;
+
+  final double statutoryIncome;
+  final double lossBroughtForward;
+  final double lossUsed;
+  final double lossCarriedForward;
+  final double chargeableIncome;
+
+  /// Whether the preferential band applies.
+  final bool isSme;
+
+  /// Whether the test could be taken at all. False means the two
+  /// figures it needs have not both been given — and the computation
+  /// then charges the standard rate while SAYING it does not know,
+  /// rather than quietly assuming the company does not qualify.
+  final bool smeKnown;
+
+  final double taxCharged;
+  final double zakatRebate;
+  final double s110TaxDeducted;
+  final double cp204Paid;
+
+  /// Negative means refundable. Not clamped at zero: a refund is a real
+  /// answer and rounding it away hides money the company is owed.
+  final double taxPayable;
+
+  bool get isRefund => taxPayable < 0;
+  bool get hasLoss => adjustedLoss > 0;
+
+  factory TaxComputation.fromMap(Map<String, dynamic> j) => TaxComputation(
+    yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+    periodFrom: Fmt.parseDate(j['period_from']),
+    periodTo: Fmt.parseDate(j['period_to']),
+    profitBeforeTax: Fmt.toDouble(j['profit_before_tax']),
+    addBacks: Fmt.toDouble(j['add_backs']),
+    deductions: Fmt.toDouble(j['deductions']),
+    balancingCharge: Fmt.toDouble(j['balancing_charge']),
+    adjustedIncome: Fmt.toDouble(j['adjusted_income']),
+    adjustedLoss: Fmt.toDouble(j['adjusted_loss']),
+    caCurrent: Fmt.toDouble(j['ca_current']),
+    caBroughtForward: Fmt.toDouble(j['ca_brought_forward']),
+    caUsed: Fmt.toDouble(j['ca_used']),
+    caCarriedForward: Fmt.toDouble(j['ca_carried_forward']),
+    statutoryIncome: Fmt.toDouble(j['statutory_income']),
+    lossBroughtForward: Fmt.toDouble(j['loss_brought_forward']),
+    lossUsed: Fmt.toDouble(j['loss_used']),
+    lossCarriedForward: Fmt.toDouble(j['loss_carried_forward']),
+    chargeableIncome: Fmt.toDouble(j['chargeable_income']),
+    isSme: j['is_sme'] == true,
+    smeKnown: j['sme_known'] == true,
+    taxCharged: Fmt.toDouble(j['tax_charged']),
+    zakatRebate: Fmt.toDouble(j['zakat_rebate']),
+    s110TaxDeducted: Fmt.toDouble(j['s110_tax_deducted']),
+    cp204Paid: Fmt.toDouble(j['cp204_paid']),
+    taxPayable: Fmt.toDouble(j['tax_payable']),
+  );
+}
+
+/// One add-back or deduction, and where it came from.
+class TaxComputationLine {
+  TaxComputationLine({
+    required this.kind,
+    required this.label,
+    required this.source,
+    required this.gross,
+    required this.fraction,
+    required this.amount,
+    this.code,
+    this.reference,
+  });
+
+  /// 'add_back' or 'deduct'.
+  final String kind;
+  final String label;
+
+  /// The account this came from, or the reason somebody typed.
+  final String source;
+
+  /// The account's whole balance, before the fraction.
+  final double gross;
+
+  /// How much of it the treatment applies to. Half, for entertainment.
+  final double fraction;
+
+  final double amount;
+  final String? code;
+  final String? reference;
+
+  bool get isAddBack => kind == 'add_back';
+
+  /// Whether only part of the balance was taken, which is worth showing
+  /// beside the figure: "50% of 12,000" answers the question a bare
+  /// 6,000 provokes.
+  bool get isPartial => fraction < 1;
+
+  factory TaxComputationLine.fromMap(Map<String, dynamic> j) =>
+      TaxComputationLine(
+        kind: j['kind']?.toString() ?? 'add_back',
+        label: j['label']?.toString() ?? '',
+        source: j['source']?.toString() ?? '',
+        gross: Fmt.toDouble(j['gross']),
+        fraction: Fmt.toDouble(j['fraction']),
+        amount: Fmt.toDouble(j['amount']),
+        code: j['code'] as String?,
+        reference: j['reference'] as String?,
+      );
 }
 
 /// A Schedule 3 class an asset can be put in.

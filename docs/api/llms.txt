@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0664` (the highest applied migration).
-747 functions and 351 readable tables, of which
-280 functions only read.
+Schema version `0665` (the highest applied migration).
+751 functions and 355 readable tables, of which
+283 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**606 of 747 functions carry a `comment on
+**610 of 751 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (535)
+### general (539)
 
 Not gated on any module.
 
@@ -645,6 +645,7 @@ Not gated on any module.
 - `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)* — Opens a vacancy so it can be applied to, from draft or from on hold, and clears any closing date a previous hold left behind.
 - `open_shared_document(p_token text)` *(writes)* — Opens an invoice or quotation shared by link, for a customer who is not a user of this system.
 - `open_shared_ticket(p_token text)` *(writes)* — Opens a support ticket shared by link, for the customer who raised it.
+- `open_tax_computation(p_org_id uuid, p_fiscal_year_id uuid)` *(writes)* — Starts, or reopens, the computation for a basis period.
 - `open_tax_detail_request(p_token text)` *(writes)* — What we hold about one contact, plus the state list its form needs, for somebody holding their tax-details token and no account.
 - `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
 - `org_payment_gateway_status(p_org_id uuid)` — Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what is configured without being shown the credentials.
@@ -882,6 +883,9 @@ Not gated on any module.
 - `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)`
 - `suggest_lots(p_item_id uuid, p_warehouse_id uuid, p_quantity numeric)`
 - `suggested_charge(p_payment_method_id uuid, p_amount numeric)` — What a payment method's stated rate comes to on this amount.
+- `tax_computation(p_computation_id uuid)` — The Form C working for one basis period, every figure derived from the ledger, the Schedule 3 schedule and the rates.
+- `tax_computation_lines(p_computation_id uuid)` — Every add-back and deduction in a computation, with the account or the typed adjustment it came from.
+- `tax_computation_misfiled(p_org_id uuid)` — Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account.
 - `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
 - `trace_lot(p_org_id uuid, p_lot_id uuid)`
 - `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` *(writes)* — Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together.
@@ -977,6 +981,7 @@ inconsistent.
 - `client_account_transactions`
 - `collection_attempts`
 - `company_groups`
+- `company_tax_rates`
 - `company_transfers`
 - `contact_addresses`
 - `contact_persons`
@@ -1247,11 +1252,14 @@ inconsistent.
 - `strata_charge_rates`
 - `strata_charge_runs`
 - `strata_schemes`
+- `tax_adjustments`
 - `tax_brackets`
 - `tax_codes`
+- `tax_computations`
 - `tax_detail_requests`
 - `tax_detail_submissions`
 - `tax_reliefs`
+- `tax_treatments`
 - `tenancies`
 - `terminal_enrolments`
 - `terminal_punches`

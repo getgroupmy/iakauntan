@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 
 /// One row per financial year, newest first.
@@ -21,6 +22,7 @@ class FilingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filings = ref.watch(fsFilingsProvider);
     final canWrite = ref.watch(canWriteProvider);
+    final canPost = ref.watch(canPostProvider);
     // Asked once for the whole list rather than once per row. It is
     // allowed to fail without taking the screen with it: the list is
     // still the list if the countdown is missing, and `report_fs_deadlines`
@@ -30,7 +32,21 @@ class FilingsScreen extends ConsumerWidget {
         .maybeWhen(data: (m) => m, orElse: () => const <String, Map<String, dynamic>>{});
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Financial statements')),
+      appBar: AppBar(
+        title: const Text('Financial statements'),
+        actions: [
+          // The tax computation is the other half of a year end and
+          // has nowhere else to live: it is keyed to a financial year,
+          // and this is the screen that lists them.
+          if (canPost)
+            IconButton(
+              key: const ValueKey('open-tax-computation'),
+              tooltip: 'Tax computation',
+              icon: const Icon(Icons.calculate_outlined),
+              onPressed: () => _openTaxComputation(context, ref),
+            ),
+        ],
+      ),
       body: AsyncView(
         value: filings,
         onRetry: () => ref.invalidate(fsFilingsProvider),
@@ -284,5 +300,69 @@ class _NewFilingDialogState extends State<_NewFilingDialog> {
         ),
       ],
     );
+  }
+}
+
+/// Which year to compute the tax for, and then its computation.
+///
+/// A financial year rather than a calendar one, because the basis
+/// period is what a year of assessment is taken from -- `0665` derives
+/// the year from the period's end date rather than letting anybody
+/// type it.
+Future<void> _openTaxComputation(BuildContext context, WidgetRef ref) async {
+  final years = await ref.read(fiscalYearsProvider.future);
+  if (!context.mounted) return;
+  if (years.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Start a financial year first — a tax computation is for a '
+          'basis period.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  // Newest first: a computation is prepared after the year has ended,
+  // so the one somebody wants is almost always the most recent.
+  final sorted = [...years]..sort((a, b) => b.endDate.compareTo(a.endDate));
+
+  final chosen = await showDialog<FiscalYear>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: const Text('Which year?'),
+      children: [
+        for (final y in sorted)
+          SimpleDialogOption(
+            key: ValueKey('tax-year-${y.id}'),
+            onPressed: () => Navigator.pop(ctx, y),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Year of assessment ${y.endDate.year}'),
+              subtitle: Text(
+                '${Fmt.date(y.startDate)} to ${Fmt.date(y.endDate)}',
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+  if (chosen == null || !context.mounted) return;
+
+  final repo = ref.read(repoProvider);
+  if (repo == null) return;
+
+  String? id;
+  final ok = await runWithFeedback(
+    context,
+    doing: 'open the tax computation',
+    successMessage: null,
+    action: () async {
+      id = await repo.openTaxComputation(chosen.id);
+    },
+  );
+  if (ok && id != null && context.mounted) {
+    GoRouter.of(context).push('/tax-computation/$id');
   }
 }

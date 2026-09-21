@@ -394,6 +394,11 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
   late String _type = widget.existing?.accountType ?? 'expense';
   late String _subtype = widget.existing?.accountSubtype ?? 'operating_expense';
 
+  /// How a tax computation treats this account. Null is ordinary --
+  /// deductible if it is an expense, taxable if it is revenue -- which
+  /// is what almost every account is.
+  late String? _taxTreatment = widget.existing?.taxTreatment;
+
   /// Which subtypes belong to which type. Offering all twenty-odd
   /// against every type is how an expense ends up filed as share
   /// capital, and the balance sheet stops making sense.
@@ -488,6 +493,18 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
               ],
               onChanged: (v) => setState(() => _subtype = v ?? choices.first),
             ),
+            // Only where it can mean anything. A tax treatment on a
+            // bank account is a choice with no effect, and offering it
+            // invites somebody to make it and then wonder why the
+            // computation ignores them.
+            if (_type == 'expense' || _type == 'revenue') ...[
+              const SizedBox(height: 12),
+              _TaxTreatmentPicker(
+                accountType: _type,
+                value: _taxTreatment,
+                onChanged: (v) => setState(() => _taxTreatment = v),
+              ),
+            ],
           ],
         ),
       ),
@@ -504,19 +521,118 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
               context,
               doing: 'change the chart of accounts',
               successMessage: 'Saved',
-              action: () => repo.upsertAccount(
-                code: _code.text.trim(),
-                name: _name.text.trim(),
-                type: _type,
-                subtype: choices.contains(_subtype) ? _subtype : choices.first,
-                id: widget.existing?.id,
-              ),
+              action: () async {
+                final id = await repo.upsertAccount(
+                  code: _code.text.trim(),
+                  name: _name.text.trim(),
+                  type: _type,
+                  subtype:
+                      choices.contains(_subtype) ? _subtype : choices.first,
+                  id: widget.existing?.id,
+                );
+                // After, and with the id the upsert returns: a new
+                // account has none until it exists. Cleared where the
+                // kind no longer admits one, so an expense account
+                // changed to a bank account does not keep a treatment
+                // the computation would then ignore.
+                final keep = _type == 'expense' || _type == 'revenue';
+                await repo.setAccountTaxTreatment(
+                  id,
+                  keep ? _taxTreatment : null,
+                );
+              },
             );
             if (done && context.mounted) Navigator.pop(context, true);
           },
           child: const Text('Save'),
         ),
       ],
+    );
+  }
+}
+
+/// How a tax computation treats this account.
+///
+/// Read from `tax_treatments` rather than listed here: the rules are
+/// the Act's and a list in Dart would be a second copy to forget. Only
+/// the treatments meant for this side of the ledger are offered --
+/// `0665` DROPS a line whose treatment is for the other side, which is
+/// silent, so the picker is where it is prevented.
+class _TaxTreatmentPicker extends ConsumerWidget {
+  const _TaxTreatmentPicker({
+    required this.accountType,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String accountType;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return AsyncView(
+      value: ref.watch(taxTreatmentsProvider),
+      onRetry: () => ref.invalidate(taxTreatmentsProvider),
+      skeleton: const FormSkeleton(fields: 1),
+      builder: (all) {
+        final mine = [
+          for (final t in all)
+            if (t['applies_to'] == accountType) t,
+        ];
+        if (mine.isEmpty) return const SizedBox.shrink();
+
+        final chosen = mine.where((t) => t['code'] == value).firstOrNull;
+        final fraction = Fmt.toDouble(chosen?['fraction'] ?? 1);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String?>(
+              key: const ValueKey('account-tax-treatment'),
+              isExpanded: true,
+              initialValue: mine.any((t) => t['code'] == value) ? value : null,
+              decoration: const InputDecoration(
+                labelText: 'In a tax computation',
+              ),
+              items: [
+                DropdownMenuItem(
+                  value: null,
+                  child: Text(
+                    accountType == 'expense'
+                        ? 'Deductible (ordinary)'
+                        : 'Taxable (ordinary)',
+                  ),
+                ),
+                for (final t in mine)
+                  DropdownMenuItem(
+                    value: t['code'] as String,
+                    child: Text(t['label']?.toString() ?? ''),
+                  ),
+              ],
+              onChanged: onChanged,
+            ),
+            if (chosen != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                // The fraction where there is one, because "half" is
+                // the whole rule for entertainment and a label that
+                // does not say it reads like all of it.
+                fraction < 1
+                    ? '${Fmt.qty(fraction * 100)}% of this account is '
+                          'added back. ${chosen['notes'] ?? ''}'
+                    : '${chosen['notes'] ?? ''}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

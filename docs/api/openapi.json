@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0664",
+    "version": "0665",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -3671,6 +3671,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/company_groups"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/company_tax_rates": {
+      "get": {
+        "operationId": "select_company_tax_rates",
+        "summary": "Read company_tax_rates",
+        "description": "Company income tax rates by year of assessment. is_verified false means the figures came from published summaries rather than from the Act -- the same flag and the same meaning as `0025` and `0664`.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/company_tax_rates"
                   }
                 }
               }
@@ -42988,6 +43052,66 @@
         }
       }
     },
+    "/rpc/open_tax_computation": {
+      "post": {
+        "operationId": "open_tax_computation",
+        "summary": "Starts, or reopens, the computation for a basis period",
+        "description": "Starts, or reopens, the computation for a basis period. The year of assessment is taken from the period's end date rather than typed.\n\n`public.open_tax_computation(p_org_id uuid, p_fiscal_year_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_fiscal_year_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_fiscal_year_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/open_tax_detail_request": {
       "post": {
         "operationId": "open_tax_detail_request",
@@ -68941,6 +69065,298 @@
         }
       }
     },
+    "/rpc/tax_computation": {
+      "post": {
+        "operationId": "tax_computation",
+        "summary": "The Form C working for one basis period, every figure derived from the ledger, the Schedule 3 schedule and\u2026",
+        "description": "The Form C working for one basis period, every figure derived from the ledger, the Schedule 3 schedule and the rates. Not a filing.\n\n`public.tax_computation(p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_computation_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_computation_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "year_of_assessment": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "period_from": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "period_to": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "profit_before_tax": {
+                        "type": "number"
+                      },
+                      "add_backs": {
+                        "type": "number"
+                      },
+                      "deductions": {
+                        "type": "number"
+                      },
+                      "balancing_charge": {
+                        "type": "number"
+                      },
+                      "adjusted_income": {
+                        "type": "number"
+                      },
+                      "adjusted_loss": {
+                        "type": "number"
+                      },
+                      "ca_current": {
+                        "type": "number"
+                      },
+                      "ca_brought_forward": {
+                        "type": "number"
+                      },
+                      "ca_used": {
+                        "type": "number"
+                      },
+                      "ca_carried_forward": {
+                        "type": "number"
+                      },
+                      "statutory_income": {
+                        "type": "number"
+                      },
+                      "loss_brought_forward": {
+                        "type": "number"
+                      },
+                      "loss_used": {
+                        "type": "number"
+                      },
+                      "loss_carried_forward": {
+                        "type": "number"
+                      },
+                      "chargeable_income": {
+                        "type": "number"
+                      },
+                      "is_sme": {
+                        "type": "boolean"
+                      },
+                      "sme_known": {
+                        "type": "boolean"
+                      },
+                      "tax_charged": {
+                        "type": "number"
+                      },
+                      "zakat_rebate": {
+                        "type": "number"
+                      },
+                      "s110_tax_deducted": {
+                        "type": "number"
+                      },
+                      "cp204_paid": {
+                        "type": "number"
+                      },
+                      "tax_payable": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/tax_computation_lines": {
+      "post": {
+        "operationId": "tax_computation_lines",
+        "summary": "Every add-back and deduction in a computation, with the account or the typed adjustment it came from",
+        "description": "Every add-back and deduction in a computation, with the account or the typed adjustment it came from. A reviewer's first question about any line is which account, so the answer is a column.\n\n`public.tax_computation_lines(p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_computation_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_computation_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "gross": {
+                        "type": "number"
+                      },
+                      "fraction": {
+                        "type": "number"
+                      },
+                      "amount": {
+                        "type": "number"
+                      },
+                      "reference": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/tax_computation_misfiled": {
+      "post": {
+        "operationId": "tax_computation_misfiled",
+        "summary": "Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account",
+        "description": "Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account. Those lines are DROPPED from the computation rather than applied, so nothing else would show it.\n\n`public.tax_computation_misfiled(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "account_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "treatment": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/ticket_team_roster": {
       "post": {
         "operationId": "ticket_team_roster",
@@ -74988,6 +75404,70 @@
         }
       }
     },
+    "/tax_adjustments": {
+      "get": {
+        "operationId": "select_tax_adjustments",
+        "summary": "Read tax_adjustments",
+        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_adjustments"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/tax_brackets": {
       "get": {
         "operationId": "select_tax_brackets",
@@ -75105,6 +75585,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_codes"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_computations": {
+      "get": {
+        "operationId": "select_tax_computations",
+        "summary": "Read tax_computations",
+        "description": "One Form C working per basis period. Holds only what the ledger cannot know -- the SME test figures, amounts brought forward, and tax already paid. Everything else is recomputed from the accounts every time it is read.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_computations"
                   }
                 }
               }
@@ -75297,6 +75841,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_reliefs"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_treatments": {
+      "get": {
+        "operationId": "select_tax_treatments",
+        "summary": "Read tax_treatments",
+        "description": "What a tax computation does with the balance on an account: add it back, or take it out, and how much of it. Platform data -- the rules are the Act's, not a tenant's.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_treatments"
                   }
                 }
               }
@@ -76820,6 +77428,9 @@
           "imported_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "tax_treatment": {
+            "type": "string"
           }
         },
         "required": [
@@ -79684,6 +80295,55 @@
         },
         "required": [
           "name"
+        ]
+      },
+      "company_tax_rates": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "year_of_assessment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sme_band_limit": {
+            "type": "number"
+          },
+          "sme_rate": {
+            "type": "number"
+          },
+          "standard_rate": {
+            "type": "number"
+          },
+          "sme_capital_limit": {
+            "type": "number"
+          },
+          "sme_turnover_limit": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          },
+          "is_verified": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "year_of_assessment",
+          "sme_band_limit",
+          "sme_rate",
+          "standard_rate",
+          "sme_capital_limit",
+          "sme_turnover_limit"
         ]
       },
       "company_transfers": {
@@ -96863,6 +97523,50 @@
           "site_id"
         ]
       },
+      "tax_adjustments": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "computation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "computation_id",
+          "kind",
+          "label",
+          "amount"
+        ]
+      },
       "tax_brackets": {
         "type": "object",
         "properties": {
@@ -96973,6 +97677,71 @@
           "org_id",
           "code",
           "name"
+        ]
+      },
+      "tax_computations": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fiscal_year_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "year_of_assessment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paid_up_capital": {
+            "type": "number"
+          },
+          "gross_business_income": {
+            "type": "number"
+          },
+          "capital_allowance_bf": {
+            "type": "number"
+          },
+          "loss_bf": {
+            "type": "number"
+          },
+          "zakat_paid": {
+            "type": "number"
+          },
+          "s110_tax_deducted": {
+            "type": "number"
+          },
+          "cp204_paid": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "fiscal_year_id",
+          "year_of_assessment"
         ]
       },
       "tax_detail_requests": {
@@ -97193,6 +97962,41 @@
           "schedule_id",
           "code",
           "name"
+        ]
+      },
+      "tax_treatments": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "fraction": {
+            "type": "number"
+          },
+          "applies_to": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "kind"
         ]
       },
       "tenancies": {

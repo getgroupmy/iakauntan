@@ -2645,6 +2645,127 @@ class Repo {
     ),
   );
 
+  /// How a tax computation treats an account.
+  ///
+  /// A direct update rather than a parameter on `upsert_account`:
+  /// that function's signature belongs to an applied migration, and
+  /// the table already carries an update policy for somebody who may
+  /// change the chart. Null clears it back to ordinary.
+  Future<void> setAccountTaxTreatment(String id, String? treatment) async {
+    await client
+        .from('accounts')
+        .update({'tax_treatment': treatment})
+        .eq('id', id);
+  }
+
+  /// Starts, or reopens, the computation for a financial year.
+  Future<String> openTaxComputation(String fiscalYearId) async {
+    final id = await callRpc(
+      'open_tax_computation',
+      params: {'p_org_id': orgId, 'p_fiscal_year_id': fiscalYearId},
+    );
+    return id as String;
+  }
+
+  /// The Form C working, every figure derived.
+  Future<TaxComputation> taxComputation(String computationId) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_computation',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That computation no longer exists.');
+    }
+    return TaxComputation.fromMap(rows.first);
+  }
+
+  /// Every add-back and deduction in it, with the account behind each.
+  Future<List<TaxComputationLine>> taxComputationLines(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_computation_lines',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    return [for (final r in rows) TaxComputationLine.fromMap(r)];
+  }
+
+  /// Accounts whose treatment is for the other side of the ledger.
+  ///
+  /// Those lines are DROPPED from the computation rather than applied,
+  /// so the figure is simply wrong by whatever the account holds and
+  /// nothing else in the working would show it.
+  Future<List<Map<String, dynamic>>> taxMisfiledAccounts() async => _rows(
+    await callRpc('tax_computation_misfiled', params: {'p_org_id': orgId}),
+  );
+
+  /// The row's own figures — what the ledger cannot know.
+  Future<Map<String, dynamic>?> taxComputationRow(String id) async {
+    final rows = await client
+        .from('tax_computations')
+        .select()
+        .eq('id', id)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
+  Future<void> saveTaxComputation(
+    String id,
+    Map<String, dynamic> changes,
+  ) async {
+    await client.from('tax_computations').update(changes).eq('id', id);
+  }
+
+  Future<void> addTaxAdjustment({
+    required String computationId,
+    required String kind,
+    required String label,
+    required double amount,
+    String? reason,
+  }) async {
+    await client.from('tax_adjustments').insert({
+      'org_id': orgId,
+      'computation_id': computationId,
+      'kind': kind,
+      'label': label,
+      'amount': amount,
+      'reason': reason,
+    });
+  }
+
+  /// The typed adjustments on a computation, as rows that can be
+  /// removed again. `tax_computation_lines` folds them in with the
+  /// tagged accounts, which is right for reading and useless for
+  /// deleting -- a folded line has no id.
+  Future<List<Map<String, dynamic>>> taxAdjustments(
+    String computationId,
+  ) async {
+    final rows = await client
+        .from('tax_adjustments')
+        .select()
+        .eq('computation_id', computationId)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> removeTaxAdjustment(String id) async {
+    await client.from('tax_adjustments').delete().eq('id', id);
+  }
+
+  /// What a chart of accounts can say about an account's tax treatment.
+  Future<List<Map<String, dynamic>>> taxTreatments() async {
+    final rows = await client
+        .from('tax_treatments')
+        .select()
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// The Schedule 3 classes in force today, for the editor's picker.
   ///
   /// Not org-scoped: the rates are the same for every company in
