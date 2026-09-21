@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/core/widgets.dart';
+import 'package:iakauntan/src/data/corp_models.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/crm/leads_screen.dart';
 import 'package:iakauntan/src/features/crm/pipeline_screen.dart';
@@ -16,10 +17,13 @@ import 'package:iakauntan/src/features/documents/knock_off_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
 import 'package:iakauntan/src/features/legal/matters_screen.dart';
+import 'package:iakauntan/src/features/profile/profile_screen.dart';
 import 'package:iakauntan/src/features/property/property_screen.dart';
+import 'package:iakauntan/src/features/secretarial/people_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
+import 'package:iakauntan/src/data/my_profile_repository.dart';
 import 'package:iakauntan/src/features/pos/menu_links_screen.dart';
 import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
@@ -64,6 +68,10 @@ void main() {
         GoRoute(
           path: '/property/:id',
           builder: (_, __) => const Scaffold(body: Text('one site')),
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (_, __) => const Scaffold(body: Text('settings')),
         ),
       ],
     );
@@ -1286,6 +1294,141 @@ void main() {
       // that rather than showing an empty account.
       expect(
         find.text('Pick a customer to see their account.'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('the people and bodies corporate screen', () {
+    testWidgets('builds, and puts the two AMLA facts on the row',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const CorpPeopleScreen(), [
+          corpPersonsProvider.overrideWith(
+            (ref) async => [
+              CorpPerson(
+                id: 'p1',
+                kind: 'individual',
+                fullName: 'Dato Sri Azman bin Hassan',
+                nric: '650412-10-5533',
+                // A politically exposed person carries enhanced due
+                // diligence for as long as they are on the file, so it
+                // belongs on the row rather than two clicks inside it.
+                isPep: true,
+                idVerifiedOn: DateTime(2026, 3, 14),
+              ),
+              CorpPerson(
+                id: 'p2',
+                kind: 'corporate',
+                fullName: 'Amanah Holdings Sdn Bhd',
+                registrationNo: '202101001234',
+              ),
+              CorpPerson(
+                id: 'p3',
+                kind: 'individual',
+                fullName: 'Nurul Huda',
+              ),
+            ],
+          ),
+          canWriteProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('PEP'), findsOneWidget);
+      // `identifier` picks a different column depending on what the
+      // person IS: the registration number for a body corporate, the
+      // NRIC or passport for a human.
+      expect(find.text('650412-10-5533'), findsOneWidget);
+      expect(find.text('202101001234'), findsOneWidget);
+      // And says so rather than leaving a blank line, which is how a
+      // person with nothing on file looks complete.
+      expect(find.text('no identifier on file'), findsOneWidget);
+      // The question an AMLA inspection asks first: has a document
+      // actually been sighted. Two of the three, so two warnings.
+      expect(
+        find.byTooltip('No identity document sighted'),
+        findsNWidgets(2),
+      );
+      expect(
+        find.byTooltip('Identity verified 14/03/2026'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and offers no Add to somebody who may not write',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const CorpPeopleScreen(), [
+          corpPersonsProvider.overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(false),
+        ]),
+      );
+      expect(find.text('Nobody on file'), findsOneWidget);
+      expect(find.byKey(const ValueKey('add-person')), findsNothing);
+    });
+  });
+
+  group('the profile screen', () {
+    testWidgets('builds, and Save is dead until something changes',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ProfileScreen(), [
+          myProfileProvider.overrideWith(
+            (ref) async => {
+              'full_name': 'Nurul Huda binti Rahman',
+              'salutation': 'Puan',
+              'phone': '012-3456789',
+            },
+          ),
+          // A plain Provider reading the Supabase client. Null is a
+          // real state -- the screen has a fallback for it -- and it
+          // keeps the client out of the test.
+          currentUserProvider.overrideWithValue(null),
+          memberRoleProvider.overrideWith((ref) async => 'account_manager'),
+        ]),
+      );
+      expect(find.text('Nurul Huda binti Rahman'), findsOneWidget);
+      // A form whose Save is always live teaches people to press it
+      // and hope, so it starts disabled.
+      final save = tester.widget<FilledButton>(
+        find.byKey(const ValueKey('profile-save')),
+      );
+      expect(save.onPressed, isNull);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('profile-full-name')),
+        'Nurul Huda Rahman',
+      );
+      await tester.pumpAndSettle();
+      final after = tester.widget<FilledButton>(
+        find.byKey(const ValueKey('profile-save')),
+      );
+      expect(after.onPressed, isNotNull);
+    });
+
+    testWidgets('and the address is shown, not edited', (tester) async {
+      // `profiles.email` is a COPY of the auth address and 0649
+      // refuses to write it: changing it here would move what the row
+      // says and leave the address that actually signs you in exactly
+      // as it was.
+      await onAPhone(
+        tester,
+        wrap(const ProfileScreen(), [
+          myProfileProvider.overrideWith((ref) async => {'full_name': 'A'}),
+          currentUserProvider.overrideWithValue(null),
+          memberRoleProvider.overrideWith((ref) async => 'account_manager'),
+        ]),
+      );
+      expect(find.text('Signed in as'), findsOneWidget);
+      // No user, so the em dash rather than a blank -- and there is no
+      // box to type an address into.
+      expect(find.text('—'), findsOneWidget);
+      // The role is a column value turned into words by the screen.
+      expect(find.text('Account Manager'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('profile-to-settings')),
         findsOneWidget,
       );
     });

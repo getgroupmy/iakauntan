@@ -60,7 +60,6 @@ APP = ROOT / 'app'
 # go straight to it.
 EXEMPT: dict[str, str] = {
     'CashFlowScreen': 'lib/src/features/reports/cash_forecast_screen.dart',
-    'CorpPeopleScreen': 'lib/src/features/secretarial/people_screen.dart',
     'DeliverySetupScreen': 'lib/src/features/pos/delivery_setup_screen.dart',
     'EmailScreen': 'lib/src/features/settings/email_screen.dart',
     'FilingScreen': 'lib/src/features/financials/filing_screen.dart',
@@ -68,7 +67,6 @@ EXEMPT: dict[str, str] = {
     'OnboardingScreen': 'lib/src/features/hr/onboarding_screen.dart',
     'PayrollRunScreen': 'lib/src/features/hr/payroll_screen.dart',
     'PayrollScreen': 'lib/src/features/hr/payroll_screen.dart',
-    'ProfileScreen': 'lib/src/features/profile/profile_screen.dart',
     'RecipesScreen': 'lib/src/features/pos/recipes_screen.dart',
     'ScalesScreen': 'lib/src/features/pos/scales_screen.dart',
     'StallsScreen': 'lib/src/features/pos/stalls_screen.dart',
