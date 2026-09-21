@@ -54,10 +54,26 @@ obvious:
   push to `main` they are SKIPPED. PR #4 merged this branch into `main`
   on 2026-09-21 and its run skipped all three.
 * **This branch deploys everything.** Those same jobs run here, and
-  `MIGRATIONS_AUTOPUSH` is `true`, so a green run on this branch has
-  already applied its migrations to the live project and redeployed the
-  edge functions. The hosted schema IS level; the database job's
-  "Compare them" step asserts it every run.
+  `MIGRATIONS_AUTOPUSH` is `true`, so a green run on this branch
+  applies its migrations to the live project and redeploys the edge
+  functions, the workspace proxy and the web app.
+* **But only the run for the branch TIP deploys.** `migrate` sets a
+  `superseded` output from its "Has this commit already been passed?"
+  step, and all four deploy jobs are gated on
+  `needs.migrate.outputs.superseded != 'true'`. Push twice inside the
+  twelve minutes a run takes and the FIRST run goes green with `Apply`
+  and every deploy SKIPPED — deliberately, so an older commit cannot
+  overwrite a newer one.
+
+  So "green" and "deployed" are different questions, and reading a
+  green run as a deploy is wrong for any commit that was overtaken.
+  Run 1985 (`ec9d7706`) is the worked example: green, everything
+  skipped. Run 1987 (`08c87ac1`) was the tip and carried all of it —
+  `Apply`, then the edge functions, the proxy, and Vercel at 04:38 UTC,
+  with "Confirm the domain is serving this commit" passing.
+
+  To answer "is the live site running commit X", look at the run for
+  the TIP at the time, not at X's own run.
 * So the live product tracks THIS BRANCH. Merging to `main` is
   bookkeeping, plus the one thing in the next bullet.
 * **`workflow_dispatch` needs the file on the ref being dispatched.**
