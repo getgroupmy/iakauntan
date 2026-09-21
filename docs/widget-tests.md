@@ -334,3 +334,33 @@ read it inside an `onPressed` closure, which runs later and is correct.
 So the test is to TYPE into every box the gate names, one at a time,
 and assert the button after each. The one that matters is the last
 keystroke before it should go live.
+
+## `check_narrow_rows.py` measures two things as zero, and it is not fixable in the estimate
+
+That script exists because three overflows shipped, and it catches the
+shape it was written for. It did not catch a fourth, on
+`matters_screen.dart`, which went 37 pixels off a 412px phone while the
+script called the row clean. Both halves of its estimate read zero:
+
+- **A bare `Text(matter.matterNo)`** is neither a string literal nor an
+  interpolation — no quotes, no `$` — so `text_width` counts nothing.
+  `'${matter.matterNo}'` would have been counted at 64px.
+- **A trailing `Column` whose second line is a bare `Text`** is counted
+  by its `Money` alone. On this row that second line read
+  `RM 2,400.00 unbilled` and was the WIDER of the two, so the thing
+  deciding the trailing's width contributed nothing to the estimate.
+
+Counting a bare expression as an unknown was tried and does not close
+it: the title side then measures 152px against an estimated 202px of
+room, and it still passes, because the room is the number that is
+wrong. Making the trailing estimate honest means measuring arbitrary
+Dart, which is where a rough static estimate stops being rough and
+starts being a layout engine.
+
+So this is a limit to know rather than a bug to fix. **The thing that
+catches it is building the screen at 412x900**, where a `RenderFlex`
+overflow is a test failure with no assertion required. The gate narrows
+the field; it does not replace the pump. Every screen that comes off
+the `check_screens_built.py` backlog should come off it at phone width
+for exactly this reason — two of the last three defects found that way
+were overflows neither gate saw.

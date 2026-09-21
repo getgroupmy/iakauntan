@@ -11,6 +11,8 @@ import 'package:iakauntan/src/features/crm/leads_screen.dart';
 import 'package:iakauntan/src/features/crm/pipeline_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
+import 'package:iakauntan/src/features/legal/matters_screen.dart';
+import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
@@ -44,6 +46,10 @@ void main() {
         GoRoute(
           path: '/tax-calendar',
           builder: (_, __) => const Scaffold(body: Text('the calendar')),
+        ),
+        GoRoute(
+          path: '/legal/:id',
+          builder: (_, __) => const Scaffold(body: Text('one matter')),
         ),
       ],
     );
@@ -529,6 +535,145 @@ void main() {
       );
       expect(find.text('No teams yet'), findsOneWidget);
       expect(find.text('Add a team'), findsNothing);
+    });
+  });
+
+  group('the matters list', () {
+    testWidgets('builds, and adds up the client account itself',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const MattersScreen(), [
+          mattersProvider((status: 'open', search: '')).overrideWith(
+            (ref) async => [
+              Matter(
+                id: 'm1',
+                matterNo: 'MAT-001',
+                name: 'Sale of shophouse',
+                clientId: 'c1',
+                clientName: 'Tan Sri Lim',
+                status: 'open',
+              ),
+              Matter(
+                id: 'm2',
+                matterNo: 'MAT-002',
+                name: 'Tenancy dispute',
+                clientId: 'c2',
+                clientName: 'Kedai Runcit Aman',
+                status: 'open',
+              ),
+            ],
+          ),
+          matterSummaryProvider.overrideWith(
+            (ref) async => [
+              MatterSummary(
+                matterId: 'm1',
+                matterNo: 'MAT-001',
+                matterName: 'Sale of shophouse',
+                clientName: 'Tan Sri Lim',
+                status: 'open',
+                clientFunds: 15000,
+                unbilledTime: 2400,
+                unbilledDisbursements: 100,
+                billed: 0,
+                outstanding: 0,
+              ),
+              MatterSummary(
+                matterId: 'm2',
+                matterNo: 'MAT-002',
+                matterName: 'Tenancy dispute',
+                clientName: 'Kedai Runcit Aman',
+                status: 'open',
+                clientFunds: 3500,
+                unbilledTime: 0,
+                unbilledDisbursements: 0,
+                billed: 0,
+                outstanding: 0,
+              ),
+            ],
+          ),
+          canWriteProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('MAT-001'), findsOneWidget);
+      // The banner is a sum over a SECOND provider, joined to the list
+      // by id. Nothing hands the screen this number.
+      expect(
+        find.textContaining('2 matters · RM 18,500.00 held'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('matters-over-fee')), findsOneWidget);
+    });
+
+    testWidgets('and a matter with no unbilled time says client funds',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const MattersScreen(), [
+          mattersProvider((status: 'open', search: '')).overrideWith(
+            (ref) async => [
+              Matter(
+                id: 'm1',
+                matterNo: 'MAT-001',
+                name: 'Sale of shophouse',
+                clientId: 'c1',
+                status: 'open',
+              ),
+            ],
+          ),
+          matterSummaryProvider.overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(false),
+        ]),
+      );
+      // No summary at all for this matter, which is the state a file
+      // opened five minutes ago is in.
+      expect(find.text('client funds'), findsOneWidget);
+      expect(find.text('New matter'), findsNothing);
+    });
+  });
+
+  group('the budgets screen', () {
+    testWidgets('builds and phrases what is in each budget', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const BudgetsScreen(), [
+          budgetsProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'b1',
+                'name': 'FY2027 plan',
+                'status': 'draft',
+                'year_name': 'FY2027',
+                'department_code': 'KL',
+                'lines': 24,
+              },
+              {
+                'id': 'b2',
+                'name': 'FY2026 plan',
+                'status': 'approved',
+                'year_name': 'FY2026',
+                'lines': 0,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('FY2027 plan'), findsOneWidget);
+      // Pluralised and joined by the screen from three columns.
+      expect(find.text('FY2027 · KL · 24 lines'), findsOneWidget);
+      // And the empty one says so rather than printing a zero.
+      expect(find.text('FY2026 · nothing in it yet'), findsOneWidget);
+    });
+
+    testWidgets('and an empty list argues for the third column',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const BudgetsScreen(), [
+          budgetsProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('No budget yet'), findsOneWidget);
     });
   });
 }

@@ -165,9 +165,18 @@ class _MatterTile extends StatelessWidget {
     return ListTile(
       onTap: () => context.go('/legal/${matter.id}'),
       contentPadding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
+      // Flexible, because this Row cannot otherwise shrink: a matter
+      // number and a status chip are both natural-width, and the box
+      // ListTile gives the title is whatever the trailing left. With
+      // an unbilled figure beside the client funds that is not much,
+      // and the chip went 37 pixels off a 412px phone.
       title: Row(children: [
-        Text(matter.matterNo,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(matter.matterNo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
         const SizedBox(width: 10),
         StatusChip(matter.status, compact: true),
       ]),
