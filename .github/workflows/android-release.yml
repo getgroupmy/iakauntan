@@ -45,6 +45,10 @@ on:
         description: What changed (one line, shown to testers)
         type: string
         required: false
+      upload:
+        description: Send it to Play. Untick to just build it and download it.
+        type: boolean
+        default: true
 
 # One release at a time, for the version-code reason in the header: two
 # at once would race and the loser would be refused after building.
@@ -74,10 +78,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT }}
         run: |
+          # The Play credential is needed only to SEND. A build-only run
+          # is how the first bundle gets made -- see the header -- and
+          # demanding the service account for one would mean doing part
+          # of the Play setup before the step that has to come first.
+          needed="ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD"
+          needed="$needed ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD"
+          if [ "${{ inputs.upload }}" = "true" ]; then
+            needed="$needed PLAY_SERVICE_ACCOUNT"
+          fi
+
           missing=""
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD \
-                      ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD \
-                      PLAY_SERVICE_ACCOUNT; do
+          for name in $needed; do
             eval "value=\${$name}"
             [ -z "$value" ] && missing="$missing $name"
           done
@@ -201,9 +213,31 @@ jobs:
           fi
           echo "signed with the upload key"
 
+      # The way out of Play's first-upload rule without an Android
+      # toolchain on anybody's laptop.
+      #
+      # Play will not take the first bundle from the API, so one has to
+      # go up through the console by hand -- and the obvious way to get
+      # one is `flutter build appbundle` locally, which means a JDK, the
+      # Android SDK and Flutter installed just to satisfy a rule that
+      # applies exactly once. This runner already has all three.
+      #
+      # So: build here, download the .aab from this run's artifacts, and
+      # drag it into the Play Console. An app bundle is not a secret --
+      # it is the thing being published -- so an artifact is the right
+      # place for it.
+      - name: Keep the bundle for download
+        if: steps.creds.outputs.ready == 'true' && inputs.upload != true
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ steps.build.outputs.code }}
+          path: app/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload to Google Play
         id: upload
-        if: steps.creds.outputs.ready == 'true'
+        if: steps.creds.outputs.ready == 'true' && inputs.upload == true
         env:
           PLAY_SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT }}
           PLAY_PACKAGE_NAME: my.iakauntan.iakauntan
@@ -240,7 +274,15 @@ jobs:
             # workflow's run 1 printed "Uploaded" under a red cross
             # because this block assumed success, and that is the
             # single most misleading thing a release job can do.
-            if [ "${{ steps.upload.outcome }}" != "success" ]; then
+            if [ "${{ inputs.upload }}" != "true" ]; then
+              echo "**Built, not sent.** The bundle is on this run's"
+              echo "summary page under Artifacts. Download it and upload"
+              echo "it in the Play Console — which is the one upload that"
+              echo "has to be done by hand. After that, run this again"
+              echo "with Upload ticked and set"
+              echo "\`ANDROID_VERSION_CODE_OFFSET\` to"
+              echo "\`${{ steps.build.outputs.code }}\`."
+            elif [ "${{ steps.upload.outcome }}" != "success" ]; then
               echo "**Nothing was uploaded.** This run did not get that"
               echo "far — the failing step above says why, and the"
               echo "version code is free to be used again."

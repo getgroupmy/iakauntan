@@ -86,29 +86,34 @@ permission", which reads like step 1.
 
 ## Part 3 — the first upload, by hand
 
-**Play Console** → create the app if it does not exist → build a
-bundle locally and upload it through *Release → Testing → Internal
-testing*.
+Play will not take the first bundle from the API, so one has to go up
+through the console. **The bundle does not have to be built on your
+machine**, and it is worth not building it there: doing so means a JDK,
+the Android SDK and Flutter installed to satisfy a rule that applies
+exactly once. The runner already has all three.
 
-```
-cd app
-flutter build appbundle --release --build-number=1
-```
+So set the four keystore secrets from part 4 first, then:
 
-That needs `android/key.properties` pointing at your keystore — the
-same four lines the workflow writes, in `docs/` terms:
+**Actions → Android release → Run workflow → untick "Send it to
+Play".**
 
-```
-storeFile=/absolute/path/to/upload.jks
-storePassword=...
-keyAlias=upload
-keyPassword=...
-```
+It builds, verifies the signature, and attaches the `.aab` to the run
+under *Artifacts*. `PLAY_SERVICE_ACCOUNT` is not required for a
+build-only run — the readiness gate asks for it only when the box is
+ticked, because needing it here would mean doing part 2 before part 3,
+which is the wrong way round.
 
-The file is gitignored twice, here and at the repository root. Check
-that `git status` does not show it before committing anything.
+Then **Play Console** → create the app if it does not exist → *Release
+→ Testing → Internal testing* → drag the downloaded `.aab` in.
 
-**Note the version code you used.** It matters in part 5.
+**Note the version code.** The run summary prints it, and it is what
+part 5 wants.
+
+(If you would rather build locally and have the toolchain already,
+`flutter build appbundle --release --build-number=1` does it, with an
+`android/key.properties` pointing at your keystore — the same four
+lines the workflow writes. That file is gitignored twice, here and at
+the repository root; check `git status` before committing anything.)
 
 ## Part 4 — the five secrets
 

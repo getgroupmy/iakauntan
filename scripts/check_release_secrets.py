@@ -29,6 +29,8 @@ refuses after the upload.
 """
 import re
 import sys
+
+import yaml
 from pathlib import Path
 
 WORKFLOWS = Path(".github/workflows")
@@ -43,12 +45,28 @@ OPTIONAL = {
 }
 
 
-def readiness_list(text: str) -> set[str]:
-    """The names the `for name in ...` loop of the gate walks."""
-    block = re.search(r"for name in ((?:[A-Z0-9_ \\\n]+));\s*do", text)
-    if not block:
-        return set()
-    return set(re.findall(r"[A-Z][A-Z0-9_]{3,}", block.group(1)))
+def readiness_list(path: Path) -> set[str]:
+    """The secrets the readiness step can see.
+
+    Read from the step's `env:` block rather than from the shell inside
+    it. The shell is the wrong thing to parse: the Android gate builds
+    its list conditionally, because the Play credential is needed only
+    to SEND and a build-only run must not demand it. An earlier version
+    of this function matched a literal `for name in A B C; do` and went
+    silently blind the moment that loop grew an `if`.
+
+    The `env:` block is the real contract in any case. A step cannot
+    check a secret it was not given, whatever its shell says.
+    """
+    doc = yaml.safe_load(path.read_text())
+    for job in (doc.get("jobs") or {}).values():
+        for step in job.get("steps") or []:
+            if step.get("id") == "creds":
+                return {
+                    name for name, value in (step.get("env") or {}).items()
+                    if "secrets." in str(value)
+                }
+    return set()
 
 
 def used(text: str) -> set[str]:
@@ -58,11 +76,11 @@ def used(text: str) -> set[str]:
 
 def check_workflow(path: Path) -> list[str]:
     text = path.read_text()
-    gated, reads = readiness_list(text), used(text)
+    gated, reads = readiness_list(path), used(text)
     if not gated:
-        return [f"  {path.name}: no readiness gate found — either it lost "
-                "its `for name in ...; do` loop, or this gate is looking "
-                "for the wrong shape"]
+        return [f"  {path.name}: no step with `id: creds` carrying secrets "
+                "in its env — either the readiness gate went, or it was "
+                "renamed and this gate was not"]
 
     problems = []
     for name in sorted(gated - reads):
