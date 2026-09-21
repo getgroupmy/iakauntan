@@ -22,12 +22,14 @@ import 'package:iakauntan/src/features/profile/profile_screen.dart';
 import 'package:iakauntan/src/features/property/property_screen.dart';
 import 'package:iakauntan/src/features/secretarial/people_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
+import 'package:iakauntan/src/features/reports/cash_forecast_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
 import 'package:iakauntan/src/data/my_profile_repository.dart';
 import 'package:iakauntan/src/features/pos/menu_links_screen.dart';
 import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
+import 'package:iakauntan/src/features/pos/recipes_screen.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 import 'package:iakauntan/src/features/stock/landed_cost_screen.dart';
 import 'package:iakauntan/src/features/stock/transfers_screen.dart';
@@ -1580,6 +1582,167 @@ void main() {
       );
       expect(find.text('Nothing in progress'), findsOneWidget);
       expect(find.text('Start a checklist'), findsNothing);
+    });
+  });
+
+  group('the recipes screen', () {
+    testWidgets('builds, and the countdown says the three things it can',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const RecipesScreen(), [
+          posRecipesProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'r1',
+                'item_id': 'i1',
+                'item_name': 'Nasi lemak ayam',
+                'line_count': 6,
+                'cost_per_unit': 4.25,
+              },
+              {
+                'id': 'r2',
+                'item_id': 'i2',
+                'item_name': 'Teh tarik',
+                'line_count': 1,
+                'cost_per_unit': 0.85,
+              },
+              {
+                'id': 'r3',
+                'item_id': 'i3',
+                'item_name': 'Roti canai',
+                'line_count': 3,
+                'cost_per_unit': 0.60,
+              },
+            ],
+          ),
+          posOutletsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'o1', 'name': 'Jalan Ipoh'},
+            ],
+          ),
+          // The countdown is a question about ONE kitchen's shelves,
+          // so it is keyed on the outlet the screen picks: the first
+          // one, since nothing has been chosen.
+          posItemAvailabilityProvider('o1').overrideWith(
+            (ref) async => [
+              {'item_id': 'i1', 'portions': 4, 'available': true},
+              {
+                'item_id': 'i2',
+                'portions': 0,
+                'available': false,
+                'limiting_item_name': 'Susu pekat',
+              },
+              // No portions at all: nothing counted limits this dish.
+              // Saying "unlimited" would be a promise nobody made, so
+              // the chip is absent rather than reassuring.
+              {'item_id': 'i3', 'portions': null, 'available': true},
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('6 ingredients · costs RM 4.25'), findsOneWidget);
+      expect(find.text('1 ingredient · costs RM 0.85'), findsOneWidget);
+      expect(find.text('4 left'), findsOneWidget);
+      // Out, and WHAT of -- a kitchen can act on the second.
+      expect(find.text('Out of susu pekat'), findsOneWidget);
+      // The "why" button appears exactly where there is a number to
+      // explain. It was described in the repository as the list that
+      // explains why the countdown says four, and nothing called it.
+      expect(find.byKey(const ValueKey('why-i1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('why-i3')), findsNothing);
+    });
+
+    testWidgets('and an empty list says what a recipe buys you',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const RecipesScreen(), [
+          posRecipesProvider.overrideWith((ref) async => []),
+          posOutletsProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('No recipes yet'), findsOneWidget);
+    });
+  });
+
+  group('the cash flow screen', () {
+    testWidgets('builds, and the banner is the one thing it cannot miss',
+        (tester) async {
+      // Twelve weeks out. The banner turns days into weeks and says
+      // the date, which is the sentence somebody reads first.
+      final runsOut = DateTime.now().add(const Duration(days: 84));
+      await onAPhone(
+        tester,
+        wrap(const CashFlowScreen(), [
+          // Opens on thirteen weeks with history on, so that is the
+          // family key -- the record is compared by value.
+          cashForecastProvider((weeks: 13, useHistory: true)).overrideWith(
+            (ref) async => [
+              {
+                'week_no': 1,
+                'week_start': '2026-09-21',
+                'week_end': '2026-09-27',
+                'money_in': 12000,
+                'money_out': 8000,
+                'closing': 4000,
+                'overdrawn': false,
+              },
+              {
+                'week_no': 2,
+                'week_start': '2026-09-28',
+                'week_end': '2026-10-04',
+                'money_in': 1000,
+                'money_out': 9000,
+                'closing': -4000,
+                'overdrawn': true,
+              },
+            ],
+          ),
+          cashRunsOutProvider(13).overrideWith((ref) async => runsOut),
+        ]),
+      );
+      expect(
+        find.textContaining('The bank runs short in 12 weeks'),
+        findsOneWidget,
+      );
+      // The label is built from a week number and a parsed date.
+      expect(find.text('Week 1 · 21/09/2026'), findsOneWidget);
+      expect(find.text('in RM 12,000.00 · out RM 8,000.00'), findsOneWidget);
+      // The button that shows the figures behind the toggle -- the
+      // tooltip had been claiming the forecast uses how late each
+      // customer actually pays, with no way to see or dispute one.
+      expect(find.byKey(const ValueKey('payment-lags')), findsOneWidget);
+    });
+
+    testWidgets('and says so plainly when it never runs short',
+        (tester) async {
+      // `overdrawn` is the SERVER's answer and is read as one.
+      // Recomputing it here from the figures on the row would be a
+      // second opinion that could disagree with the first.
+      await onAPhone(
+        tester,
+        wrap(const CashFlowScreen(), [
+          cashForecastProvider((weeks: 13, useHistory: true)).overrideWith(
+            (ref) async => [
+              {
+                'week_no': 1,
+                'week_start': '2026-09-21',
+                'week_end': '2026-09-27',
+                'money_in': 5000,
+                'money_out': 1000,
+                'closing': 4000,
+                'overdrawn': false,
+              },
+            ],
+          ),
+          cashRunsOutProvider(13).overrideWith((ref) async => null),
+        ]),
+      );
+      expect(
+        find.text('The bank stays in credit the whole way'),
+        findsOneWidget,
+      );
     });
   });
 }
