@@ -719,6 +719,7 @@ jobs:
                    supabase/tests/tax_estimate_revision_spread.sql \
                    supabase/tests/tax_estimate_payments.sql \
                    supabase/tests/tax_dashboard_tile.sql \
+                   supabase/tests/tax_stack_end_to_end.sql \
                    supabase/tests/tax_filing_calendar.sql \
                    supabase/tests/tax_filings_recorded.sql \
                    supabase/tests/mbrs.sql \
