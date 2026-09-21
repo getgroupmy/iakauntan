@@ -24,15 +24,19 @@ void main() {
     double estimated = 60000,
     bool floorKnown = true,
     bool meetsFloor = true,
+    bool floorApplies = true,
     bool actualKnown = true,
     bool revisionOpen = false,
     double? penalty = 0,
+    String form = 'CP204',
   }) => TaxEstimateExposure(
+    form: form,
     estimatedTax: estimated,
     priorEstimate: floorKnown ? 70000 : null,
     floorRequired: floorKnown ? 59500 : null,
     meetsFloor: meetsFloor,
     floorKnown: floorKnown,
+    floorApplies: floorApplies,
     actualTax: actualKnown ? 90000 : null,
     actualKnown: actualKnown,
     shortfall: actualKnown ? 30000 : null,
@@ -111,16 +115,63 @@ void main() {
     });
   });
 
+  group('a floor that does not exist is not a floor that was missed', () {
+    test('a CP204 below the floor misses it', () {
+      expect(exposure(meetsFloor: false).missesFloor, isTrue);
+    });
+
+    test('a CP204 above it does not', () {
+      expect(exposure().missesFloor, isFalse);
+    });
+
+    test('a CP204 whose prior year is unknown does not either', () {
+      // `meetsFloor` is false here too, and reporting that as a
+      // failure would be a red mark against a figure nobody has
+      // checked.
+      expect(
+        exposure(floorKnown: false, meetsFloor: false).missesFloor,
+        isFalse,
+      );
+    });
+
+    test('and a CP500 never does, because it has no floor', () {
+      // THE distinction. LHDN issues a CP500 from the preceding
+      // assessment rather than the taxpayer proposing a figure, so
+      // there is nothing to fall short of. `meetsFloor` is false for
+      // a CP500 as well — which is why the screen switches on
+      // `missesFloor` rather than on `!meetsFloor`.
+      final e = exposure(
+        form: 'CP500',
+        floorApplies: false,
+        floorKnown: false,
+        meetsFloor: false,
+      );
+      expect(e.meetsFloor, isFalse);
+      expect(e.missesFloor, isFalse);
+      expect(e.floorApplies, isFalse);
+    });
+
+    test('even with last year''s figure sitting on the row', () {
+      expect(
+        exposure(form: 'CP500', floorApplies: false, meetsFloor: false)
+            .missesFloor,
+        isFalse,
+      );
+    });
+  });
+
   group('reading the server back', () {
     test('every exposure figure lands in its own field', () {
       // Different numbers in every position, so a transposition
       // between two of them cannot pass.
       final e = TaxEstimateExposure.fromMap(const {
+        'form': 'CP204',
         'estimated_tax': 60000,
         'prior_estimate': 70000,
         'floor_required': 59500,
         'meets_floor': true,
         'floor_known': true,
+        'floor_applies': true,
         'actual_tax': 91000,
         'actual_known': true,
         'shortfall': 31000,
@@ -134,8 +185,11 @@ void main() {
       expect(e.estimatedTax, 60000);
       expect(e.priorEstimate, 70000);
       expect(e.floorRequired, 59500);
+      expect(e.form, 'CP204');
       expect(e.meetsFloor, isTrue);
       expect(e.floorKnown, isTrue);
+      expect(e.floorApplies, isTrue);
+      expect(e.missesFloor, isFalse);
       expect(e.actualTax, 91000);
       expect(e.shortfall, 31000);
       expect(e.toleranceAmount, 27300);
@@ -165,7 +219,55 @@ void main() {
       expect(e.floorRequired, isNull);
       expect(e.floorKnown, isFalse);
       expect(e.meetsFloor, isFalse);
+      expect(e.floorApplies, isFalse);
+      expect(e.missesFloor, isFalse);
       expect(e.isExposed, isFalse);
+    });
+
+    test('a CP500 comes back saying which form it is', () {
+      final e = TaxEstimateExposure.fromMap(const {
+        'form': 'CP500',
+        'estimated_tax': 30000,
+        'floor_known': false,
+        'floor_applies': false,
+        'meets_floor': false,
+        'actual_known': false,
+        'revision_open': false,
+        'revision_months': [6],
+      });
+      expect(e.form, 'CP500');
+      expect(e.floorApplies, isFalse);
+      expect(e.missesFloor, isFalse);
+      expect(e.revisionMonths, [6]);
+    });
+
+    test('a company whose prior year is unknown HAS a floor', () {
+      // The one row where the two flags differ, and the only thing
+      // that tells `floorApplies` apart from `floorKnown` at all: a
+      // CP204 in its first year here has a floor that cannot yet be
+      // checked. Reading one from the other would make that
+      // indistinguishable from a CP500, which has no floor to check.
+      final e = TaxEstimateExposure.fromMap(const {
+        'form': 'CP204',
+        'estimated_tax': 60000,
+        'floor_applies': true,
+        'floor_known': false,
+        'meets_floor': false,
+        'actual_known': false,
+        'revision_open': false,
+        'revision_months': [6, 9],
+      });
+      expect(e.floorApplies, isTrue);
+      expect(e.floorKnown, isFalse);
+      expect(e.missesFloor, isFalse);
+    });
+
+    test('a row that says nothing about the form reads as CP204', () {
+      // The company form, which is what this product mostly holds —
+      // and wrong in the direction that shows up as twelve dates
+      // rather than six silent ones.
+      final e = TaxEstimateExposure.fromMap(const {'estimated_tax': 1});
+      expect(e.form, 'CP204');
     });
 
     test('a missing revision window is no months rather than a throw', () {

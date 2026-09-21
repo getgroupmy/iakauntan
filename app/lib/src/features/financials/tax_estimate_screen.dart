@@ -84,7 +84,15 @@ class _TaxEstimateScreenState extends ConsumerState<TaxEstimateScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tax estimate'),
+        // The form, not a generic word for it. A person paying CP500
+        // and a company paying CP204 are looking at two different
+        // documents on two different rhythms, and the title is the
+        // first place that can say so.
+        title: Text(
+          exposure.valueOrNull == null
+              ? 'Tax estimate'
+              : '${exposure.valueOrNull!.form} estimate',
+        ),
         actions: [
           IconButton(
             key: const ValueKey('estimate-edit'),
@@ -167,7 +175,13 @@ class _Estimate extends ConsumerWidget {
 
               // Missing the floor is a different failure: the estimate
               // is not low, it is invalid, and LHDN substitutes its own.
-              if (e.floorKnown && !e.meetsFloor)
+              //
+              // Three states, not two. A CP500 has no floor at all --
+              // LHDN issues it rather than the taxpayer proposing a
+              // figure -- so `missesFloor` is what decides this rather
+              // than `!meetsFloor`, which is also false when the rule
+              // does not exist.
+              if (e.missesFloor)
                 _Notice(
                   key: const ValueKey('estimate-floor'),
                   colour: scheme.errorContainer,
@@ -179,7 +193,7 @@ class _Estimate extends ConsumerWidget {
                       'share of last year’s — or it is not accepted '
                       'and a figure is substituted.',
                 )
-              else if (!e.floorKnown)
+              else if (e.floorApplies && !e.floorKnown)
                 _Notice(
                   key: const ValueKey('estimate-floor-unknown'),
                   colour: scheme.surfaceContainerHighest,
@@ -189,11 +203,25 @@ class _Estimate extends ConsumerWidget {
                       'Last year’s estimate has not been entered, so '
                       'whether this one clears the floor cannot be '
                       'checked. Enter it and the answer appears.',
+                )
+              else if (!e.floorApplies)
+                _Notice(
+                  key: const ValueKey('estimate-floor-none'),
+                  colour: scheme.surfaceContainerHighest,
+                  onColour: scheme.onSurface,
+                  icon: Icons.info_outline,
+                  text:
+                      'A CP500 has no floor against last year. LHDN '
+                      'issues the estimate from the previous '
+                      'assessment and you apply to revise it — so '
+                      'there is nothing here for an estimate to be too '
+                      'low against. The penalty below is a separate '
+                      'question and still applies.',
                 ),
 
-              const TaxSection(title: 'The estimate'),
+              TaxSection(title: 'The ${e.form} estimate'),
               TaxLine('Estimated tax', e.estimatedTax, bold: true),
-              if (e.floorKnown) ...[
+              if (e.floorApplies && e.floorKnown) ...[
                 TaxLine('Last year’s estimate', e.priorEstimate ?? 0),
                 TaxLine(
                   'The least this year may be',

@@ -2439,9 +2439,11 @@ class TaxFilingRecord {
 /// the floor comfortably and still be penalised.
 class TaxEstimateExposure {
   TaxEstimateExposure({
+    required this.form,
     required this.estimatedTax,
     required this.meetsFloor,
     required this.floorKnown,
+    required this.floorApplies,
     required this.actualKnown,
     required this.revisionOpen,
     required this.revisionMonths,
@@ -2454,17 +2456,35 @@ class TaxEstimateExposure {
     this.penalty,
   });
 
+  /// `CP204` for a company under s.107C, `CP500` for a person under
+  /// s.107B. Not the same document, not the same rhythm, and not the
+  /// same rules — `0670` decides it from the entity type so nobody has
+  /// to.
+  final String form;
+
   final double estimatedTax;
 
   /// Null means nobody has said what last year's estimate was.
   final double? priorEstimate;
   final double? floorRequired;
 
-  /// False when the floor is unknown as well as when it is missed.
-  /// Read it with [floorKnown]: a tick beside a figure nobody has
-  /// checked is worse than an honest question mark.
+  /// False when the floor is unknown as well as when it is missed,
+  /// AND when there is no floor at all. Read it with [floorKnown] and
+  /// [floorApplies]: a tick beside a figure nobody has checked is
+  /// worse than an honest question mark, and a red mark against a rule
+  /// that does not exist is worse than either.
   final bool meetsFloor;
   final bool floorKnown;
+
+  /// Whether this form HAS a floor. CP500 does not: LHDN issues it
+  /// from the preceding year's assessment rather than the taxpayer
+  /// proposing a figure, so there is nothing to fall short of.
+  ///
+  /// Three states, not two — `!floorApplies` is "does not arise",
+  /// `floorApplies && !floorKnown` is "cannot be checked yet", and
+  /// only `floorApplies && floorKnown` makes [meetsFloor] mean
+  /// anything.
+  final bool floorApplies;
 
   /// All of these are null until there is a computation to measure
   /// against — which there is not, for most of the year.
@@ -2490,8 +2510,14 @@ class TaxEstimateExposure {
   /// AND there is still a month in which to fix it.
   bool get canStillFix => isExposed && revisionOpen;
 
+  /// The floor was checkable and was missed — which is not the same
+  /// as [meetsFloor] being false, and is the only state worth showing
+  /// as a failure.
+  bool get missesFloor => floorApplies && floorKnown && !meetsFloor;
+
   factory TaxEstimateExposure.fromMap(Map<String, dynamic> j) =>
       TaxEstimateExposure(
+        form: j['form']?.toString() ?? 'CP204',
         estimatedTax: Fmt.toDouble(j['estimated_tax']),
         priorEstimate: j['prior_estimate'] == null
             ? null
@@ -2501,6 +2527,7 @@ class TaxEstimateExposure {
             : Fmt.toDouble(j['floor_required']),
         meetsFloor: j['meets_floor'] == true,
         floorKnown: j['floor_known'] == true,
+        floorApplies: j['floor_applies'] == true,
         actualTax:
             j['actual_tax'] == null ? null : Fmt.toDouble(j['actual_tax']),
         actualKnown: j['actual_known'] == true,

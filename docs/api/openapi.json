@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0669",
+    "version": "0670",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -43294,8 +43294,8 @@
     "/rpc/open_tax_estimate": {
       "post": {
         "operationId": "open_tax_estimate",
-        "summary": "Starts, or reopens, the CP204 estimate for a basis period",
-        "description": "Starts, or reopens, the CP204 estimate for a basis period. The year of assessment comes from the period's end date. Pressing it again hands back the live estimate rather than making a second -- but a SUPERSEDED one is passed over, so a revised year opens its revision.\n\n`public.open_tax_estimate(p_org_id uuid, p_fiscal_year_id uuid, p_estimated_tax numeric, p_prior_estimate numeric)` Writes. Requires a signed-in user.",
+        "summary": "Starts, or reopens, the estimate for a basis period -- CP204 or CP500, decided from the entity type rather\u2026",
+        "description": "Starts, or reopens, the estimate for a basis period -- CP204 or CP500, decided from the entity type rather than typed. The year of assessment comes from the period's end date. Pressing it again hands back the live estimate rather than making a second, but a SUPERSEDED one is passed over so a revised year opens its revision.\n\n`public.open_tax_estimate(p_org_id uuid, p_fiscal_year_id uuid, p_estimated_tax numeric, p_prior_estimate numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -62395,8 +62395,8 @@
     "/rpc/revise_tax_estimate": {
       "post": {
         "operationId": "revise_tax_estimate",
-        "summary": "Replaces an estimate with a revised one, keeping the original",
-        "description": "Replaces an estimate with a revised one, keeping the original. The revision is NOT refused outside the permitted months -- whether it is allowed is a question the screen asks with tax_estimate_exposure and a person answers, because a late revision is sometimes the right thing to record even when it will not be accepted.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` Writes. Requires a signed-in user.",
+        "summary": "Replaces an estimate with a revised one, keeping the original and carrying its form",
+        "description": "Replaces an estimate with a revised one, keeping the original and carrying its form. The revision is NOT refused outside the permitted months -- whether it is allowed is a question the screen asks with tax_estimate_exposure and a person answers, because a late revision is sometimes the right thing to record even when it will not be accepted.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -69829,8 +69829,8 @@
     "/rpc/tax_estimate_exposure": {
       "post": {
         "operationId": "tax_estimate_exposure",
-        "summary": "Whether an estimate clears the floor against last year, and -- where a computation exists to measure against\u2026",
-        "description": "Whether an estimate clears the floor against last year, and -- where a computation exists to measure against -- how far under the real liability it fell and what that costs. Two different questions: an estimate can clear the floor and still be penalised.\n\n`public.tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "Whether an estimate clears the floor against last year -- where its form HAS a floor, which CP500 does not --\u2026",
+        "description": "Whether an estimate clears the floor against last year -- where its form HAS a floor, which CP500 does not -- and, where a computation exists to measure against, how far under the real liability it fell and what that costs. Three separate questions, and floor_applies is what stops the third being reported as a failure of the first.\n\n`public.tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -69871,6 +69871,9 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "form": {
+                        "type": "string"
+                      },
                       "estimated_tax": {
                         "type": "number"
                       },
@@ -69884,6 +69887,9 @@
                         "type": "boolean"
                       },
                       "floor_known": {
+                        "type": "boolean"
+                      },
+                      "floor_applies": {
                         "type": "boolean"
                       },
                       "actual_tax": {
@@ -69935,8 +69941,8 @@
     "/rpc/tax_estimate_schedule": {
       "post": {
         "operationId": "tax_estimate_schedule",
-        "summary": "The instalments an estimate is paid in, with their dates",
-        "description": "The instalments an estimate is paid in, with their dates. Equal amounts with the last one carrying the rounding, so the schedule adds up to the estimate exactly.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "The instalments an estimate is paid in, on the rhythm its FORM names -- twelve monthly for CP204, six\u2026",
+        "description": "The instalments an estimate is paid in, on the rhythm its FORM names -- twelve monthly for CP204, six bimonthly for CP500. Equal amounts with the last carrying the rounding, and each date clamped to the length of its month.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -99502,6 +99508,16 @@
           },
           "notes": {
             "type": "string"
+          },
+          "form": {
+            "type": "string"
+          },
+          "months_between": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "has_floor": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -99568,6 +99584,9 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "form": {
+            "type": "string"
           }
         },
         "required": [
