@@ -1111,6 +1111,19 @@ class Repo {
     },
   );
 
+  /// Opens the year immediately BEFORE the earliest one, for a company
+  /// posting history it arrived with.
+  ///
+  /// Takes no date. The date is not the caller's to choose: the new
+  /// year ends the day before the earliest one, and `0659` derives it
+  /// from that rather than from anything passed in — a start date sent
+  /// from here could leave a day covered by no period, which is a date
+  /// nothing can be posted to and nothing reports.
+  Future<void> createPreviousFiscalYear() => callRpc(
+    'create_previous_fiscal_year',
+    params: {'p_org_id': orgId},
+  );
+
   Future<void> setPeriodStatus(String periodId, String status) => callRpc(
     'set_fiscal_period_status',
     params: {'p_period_id': periodId, 'p_status': status},

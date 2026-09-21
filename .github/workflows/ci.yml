@@ -658,6 +658,7 @@ jobs:
                    supabase/tests/collections.sql \
                    supabase/tests/approvals.sql \
                    supabase/tests/year_end_close.sql \
+                   supabase/tests/previous_fiscal_year.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/fs_mapping_is_total.sql \
@@ -1213,6 +1214,14 @@ jobs:
       # hears is a home screen.
       - name: Check the app icons are whole on both phones
         run: python3 scripts/check_app_icons.py
+
+      # Offered and not permitted is a save that fails; permitted and
+      # not offered is a feature nobody can reach. Both were true of
+      # `bank_accounts.account_type` at once.
+      - name: Check the account kinds offered are the ones taken
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_bank_account_types.py "$DB"
 
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?

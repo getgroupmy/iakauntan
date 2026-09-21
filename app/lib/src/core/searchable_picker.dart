@@ -282,19 +282,38 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
                           : Text(option.sublabel!),
                       onTap: () => _choose(option.value),
                     ),
-                  if (matches.isEmpty && widget.onCreate == null)
-                    const ListTile(
+                  // Said whether or not there is a way to create one.
+                  // It used to be suppressed when `onCreate` was given,
+                  // on the reasoning that the create row below says
+                  // enough -- but that row only appeared once somebody
+                  // had TYPED something, so a picker with an empty list
+                  // and an empty box drew nothing whatsoever: no
+                  // options, no explanation, no way out. Reported as
+                  // "not showing the list to select from" on both the
+                  // pay-supplier and the receive-payment dialogs, by
+                  // somebody whose company had no bank account on file
+                  // yet. An empty sheet is indistinguishable from a
+                  // broken one.
+                  if (matches.isEmpty)
+                    ListTile(
                       dense: true,
                       enabled: false,
-                      title: Text('Nothing matches that.'),
+                      title: Text(_query.trim().isEmpty
+                          ? 'None on file yet.'
+                          : 'Nothing matches that.'),
                     ),
-                  // Last, and only when there is something to add. It is a
-                  // way out, not a suggestion.
-                  if (widget.onCreate != null && _query.trim().isNotEmpty)
+                  // A way out, not a suggestion -- so it names what was
+                  // typed where something was. With an empty box and
+                  // nothing to choose it is the only thing on the
+                  // sheet, and carries the plain label instead.
+                  if (widget.onCreate != null &&
+                      (_query.trim().isNotEmpty || matches.isEmpty))
                     ListTile(
                       dense: true,
                       leading: const Icon(Icons.add, size: 18),
-                      title: Text('${widget.createLabel} "${_query.trim()}"'),
+                      title: Text(_query.trim().isEmpty
+                          ? widget.createLabel
+                          : '${widget.createLabel} "${_query.trim()}"'),
                       onTap: _create,
                     ),
                 ],

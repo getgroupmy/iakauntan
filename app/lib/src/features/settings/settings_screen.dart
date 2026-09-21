@@ -1831,11 +1831,32 @@ class _FiscalYearsCard extends ConsumerWidget {
             SectionHeader(
               'Fiscal years',
               subtitle: 'Nothing can be posted to a date no period covers',
+              // Two directions, because a company arrives with history
+              // as often as it runs out of runway. Forward is the
+              // common one and keeps the plain button; backward is
+              // behind the menu, where it is findable without being
+              // the thing somebody presses by accident.
               action: canAdmin
-                  ? TextButton.icon(
-                      onPressed: () => _createNext(context, ref),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add next year'),
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _createNext(context, ref),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add next year'),
+                        ),
+                        PopupMenuButton<String>(
+                          key: const ValueKey('fiscal-year-more'),
+                          tooltip: 'More',
+                          onSelected: (_) => _createPrevious(context, ref),
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'previous',
+                              child: Text('Add previous year'),
+                            ),
+                          ],
+                        ),
+                      ],
                     )
                   : null,
             ),
@@ -1866,6 +1887,50 @@ class _FiscalYearsCard extends ConsumerWidget {
       context,
       action: () => ref.read(repoProvider)!.createFiscalYear(),
       successMessage: 'Next fiscal year created, with its twelve periods',
+    );
+    ref.invalidate(fiscalYearsProvider);
+  }
+
+  /// The year BEFORE the earliest one, for books brought across.
+  ///
+  /// Asked out loud because it is not the button somebody was reaching
+  /// for: a year opened by accident is periods that accept postings
+  /// nobody meant to date that far back, and the fix is a delete this
+  /// screen does not offer.
+  ///
+  /// No date is sent. `0659` derives the year from the earliest one
+  /// that exists, and deliberately: a date chosen here could leave a
+  /// day covered by no period.
+  Future<void> _createPrevious(BuildContext context, WidgetRef ref) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add the year before the first?'),
+        content: const Text(
+          'Opens the fiscal year immediately before the earliest one, '
+          'with its periods, so entries can be posted to it. For books '
+          'brought across from somewhere else, or a comparative year '
+          'that was never entered.\n\n'
+          'The periods arrive open. Close the year once it is complete.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Add it'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.createPreviousFiscalYear(),
+      successMessage: 'Previous fiscal year created, with its periods',
     );
     ref.invalidate(fiscalYearsProvider);
   }

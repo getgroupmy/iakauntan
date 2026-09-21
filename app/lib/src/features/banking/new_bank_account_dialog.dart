@@ -30,13 +30,29 @@ class NewBankAccountDialog extends ConsumerStatefulWidget {
       _NewBankAccountDialogState();
 }
 
-/// What a bank account can be. The four `bank_accounts.account_type`
-/// takes, in the words a bank statement uses.
+/// What a bank account can be: every value `bank_accounts.account_type`
+/// accepts, in the words somebody would use for it.
+///
+/// This map and the CHECK constraint on that column have to agree, and
+/// for a long time they did not. `fixed_deposit` was offered here and
+/// has never been a permitted value in any migration, so choosing it
+/// produced a constraint violation at save — the one option on the
+/// list that could not work. And `cash` and `ewallet` were permitted
+/// by the database and offered nowhere, so petty cash could be paid
+/// from only by somebody who inserted the row by hand.
+///
+/// `scripts/check_bank_account_types.py` now compares the two on every
+/// run, because a mismatch in one direction is a save that fails and
+/// in the other a feature nobody can reach — and neither says so.
+///
+/// Cash and e-wallet accounts need no bank name and no account number;
+/// those fields have no validator for that reason.
 const bankAccountTypes = <String, String>{
   'current': 'Current',
   'savings': 'Savings',
-  'fixed_deposit': 'Fixed deposit',
   'credit_card': 'Credit card',
+  'cash': 'Cash or petty cash',
+  'ewallet': 'E-wallet',
 };
 
 class _NewBankAccountDialogState
@@ -80,7 +96,9 @@ class _NewBankAccountDialogState
               Text(
                 'Not on file yet. Fill this in and it will be used. An '
                 'account on the chart is opened for it automatically, in '
-                'the bank range.',
+                'the bank range. Petty cash and e-wallets belong here '
+                'too — set the kind below and leave the bank and number '
+                'empty.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),

@@ -261,6 +261,58 @@ void main() {
       expect(find.text('Nothing matches that.'), findsOneWidget);
     });
 
+    testWidgets('an empty list with an empty box still offers a way out',
+        (tester) async {
+      // The bug this group exists for now. A company with no bank
+      // account on file opened Pay supplier, tapped the picker, and got
+      // a sheet with NOTHING on it: no rows, because there are none; no
+      // "nothing matches", because that line used to be suppressed
+      // wherever there was a way to create one; and no create row,
+      // because that one only appeared once something had been typed.
+      //
+      // Three conditions that are individually reasonable and together
+      // draw a blank sheet. Reported as "not showing the list to select
+      // from", which is exactly what it is, and reported twice — Pay
+      // supplier and Receive payment are the same dialog.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SearchablePicker<String>(
+              options: const [],
+              value: null,
+              onChanged: (_) {},
+              onCreate: (_) async => 'b1',
+              label: 'Bank account',
+              createLabel: 'Add bank account',
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+
+      // Says there is nothing, rather than looking broken.
+      expect(find.text('None on file yet.'), findsOneWidget);
+      // And offers the way out under its plain name, because there is
+      // no typed text for it to be about.
+      expect(find.text('Add bank account'), findsOneWidget);
+    });
+
+    testWidgets('and says so even when the list has rows that do not match',
+        (tester) async {
+      // The other half: with a query that matches nothing, the create
+      // row names what was typed AND the explanation still appears.
+      // Suppressing it was the original mistake.
+      await pump(tester, onCreate: (_) async => 'c9');
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Zzz Trading');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing matches that.'), findsOneWidget);
+      expect(find.text('Add customer "Zzz Trading"'), findsOneWidget);
+    });
+
     testWidgets('adding one selects it', (tester) async {
       String? chosen;
       await pump(

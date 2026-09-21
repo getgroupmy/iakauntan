@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0658` (the highest applied migration).
-738 functions and 348 readable tables, of which
+Schema version `0659` (the highest applied migration).
+739 functions and 348 readable tables, of which
 275 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**597 of 738 functions carry a `comment on
+**598 of 739 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (526)
+### general (527)
 
 Not gated on any module.
 
@@ -514,6 +514,7 @@ Not gated on any module.
 - `create_layout_from_builtin(p_org_id uuid, p_kind app.report_kind, p_name text)` *(writes)* — Copies the standard layout into a company's own, editable one, and makes it active.
 - `create_organization(p_name text, p_slug text, p_entity_type text, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` *(writes)* — Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner.
 - `create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` *(writes)* — Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed.
+- `create_previous_fiscal_year(p_org_id uuid)` *(writes)* — Opens the fiscal year immediately BEFORE the earliest one, with its periods, for a company posting history it arrived with.
 - `create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` *(writes)* — Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended.
 - `create_supplier_from_received_einvoice(p_id uuid)` *(writes)* — Creates the supplier named by a received document, or links the one already holding that TIN.
 - `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` *(writes)* — Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this.
