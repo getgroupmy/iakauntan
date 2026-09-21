@@ -64,14 +64,12 @@ EXEMPT: dict[str, str] = {
     'EmailScreen': 'lib/src/features/settings/email_screen.dart',
     'FilingScreen': 'lib/src/features/financials/filing_screen.dart',
     'HrSetupScreen': 'lib/src/features/hr/hr_setup_screen.dart',
-    'OnboardingScreen': 'lib/src/features/hr/onboarding_screen.dart',
     'PayrollRunScreen': 'lib/src/features/hr/payroll_screen.dart',
     'PayrollScreen': 'lib/src/features/hr/payroll_screen.dart',
     'RecipesScreen': 'lib/src/features/pos/recipes_screen.dart',
     'ScalesScreen': 'lib/src/features/pos/scales_screen.dart',
     'StallsScreen': 'lib/src/features/pos/stalls_screen.dart',
     'TicketScreen': 'lib/src/features/ticketing/ticket_screen.dart',
-    'TransfersScreen': 'lib/src/features/stock/transfers_screen.dart',
     # Private, so no test outside its own library can name it at all.
     # Listed rather than skipped so the count is honest about them.
     '_PreviewScreen': 'lib/src/features/admin/landing_cms.dart',

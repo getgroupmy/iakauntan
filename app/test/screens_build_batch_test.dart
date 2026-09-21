@@ -16,6 +16,7 @@ import 'package:iakauntan/src/features/documents/deposits_screen.dart';
 import 'package:iakauntan/src/features/documents/knock_off_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
+import 'package:iakauntan/src/features/hr/onboarding_screen.dart';
 import 'package:iakauntan/src/features/legal/matters_screen.dart';
 import 'package:iakauntan/src/features/profile/profile_screen.dart';
 import 'package:iakauntan/src/features/property/property_screen.dart';
@@ -29,6 +30,7 @@ import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 import 'package:iakauntan/src/features/stock/landed_cost_screen.dart';
+import 'package:iakauntan/src/features/stock/transfers_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
 import 'package:iakauntan/src/features/ticketing/teams_screen.dart';
 import 'package:iakauntan/src/features/ticketing/tickets_screen.dart';
@@ -1431,6 +1433,153 @@ void main() {
         find.byKey(const ValueKey('profile-to-settings')),
         findsOneWidget,
       );
+    });
+  });
+
+  group('the transfers screen', () {
+    testWidgets('builds both tabs, and only mentions a shortfall when '
+        'there is one', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TransfersScreen(), [
+          stockTransfersProvider(null).overrideWith(
+            (ref) async => [
+              {
+                'id': 't1',
+                'transfer_no': 'TRF-001',
+                'status': 'sent',
+                'from_warehouse': 'Jalan Ipoh',
+                'to_warehouse': 'Kajang',
+                'line_count': 4,
+                'value': 3200,
+                'shortfall': 150,
+              },
+              {
+                'id': 't2',
+                'transfer_no': 'TRF-002',
+                'status': 'received',
+                'from_warehouse': 'Kajang',
+                'to_warehouse': 'Jalan Ipoh',
+                'line_count': 1,
+                'value': 90,
+                'shortfall': 0,
+              },
+            ],
+          ),
+          itemConversionsProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      // The state machine said in words rather than as a column value.
+      expect(find.text('On its way'), findsOneWidget);
+      expect(find.text('Arrived'), findsOneWidget);
+      expect(
+        find.text('Jalan Ipoh → Kajang · 4 lines · RM 3,200.00 · '
+            'short by RM 150.00'),
+        findsOneWidget,
+      );
+      // Every arrived transfer saying "short by RM 0.00" is noise that
+      // trains people to stop reading the line that matters.
+      expect(find.text('Kajang → Jalan Ipoh · 1 line · RM 90.00'),
+          findsOneWidget);
+      // Neither is a draft, so nothing here can be called off.
+      expect(find.byKey(const ValueKey('cancel-transfer')), findsNothing);
+    });
+
+    testWidgets('and the conversions tab is its own list', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TransfersScreen(), [
+          stockTransfersProvider(null).overrideWith((ref) async => []),
+          itemConversionsProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'c1',
+                'name': 'Whole chicken into pieces',
+                'from_quantity': 1,
+                'from_uom_code': 'ea',
+                'from_item': 'Ayam sejuk beku',
+                'output_count': 4,
+                'on_hand': 18,
+                'is_active': true,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('Nothing has moved between stores'), findsOneWidget);
+      // A TabBarView keeps the second page off screen until it is
+      // asked for, so the tap is the test.
+      await tester.tap(find.text('Conversions'));
+      await tester.pumpAndSettle();
+      expect(find.text('Whole chicken into pieces'), findsOneWidget);
+      expect(
+        find.textContaining('1 ea Ayam sejuk beku → 4 things · 18 on hand'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('the onboarding screen', () {
+    testWidgets('builds, and counts the tasks off the embed', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const OnboardingScreen(), [
+          // Opens on 'in progress', so `true` is the family key.
+          onboardingChecklistsProvider(true).overrideWith(
+            (ref) async => [
+              {
+                'id': 'ch1',
+                'kind': 'onboarding',
+                'start_date': '2026-10-01',
+                'employees': {
+                  'full_name': 'Lim Wei Ling',
+                  'employee_no': 'EMP-014',
+                },
+                'onboarding_tasks': [
+                  {'id': 'a', 'is_done': true},
+                  {'id': 'b', 'is_done': true},
+                  {'id': 'c', 'is_done': false},
+                ],
+              },
+              {
+                'id': 'ch2',
+                'kind': 'offboarding',
+                'completed_at': '2026-09-15T00:00:00Z',
+                'employees': {'full_name': 'Ahmad Faiz'},
+                'onboarding_tasks': [
+                  {'id': 'd', 'is_done': true},
+                ],
+              },
+            ],
+          ),
+          // The HR roles, through the role provider the gate reads.
+          memberRoleProvider.overrideWith((ref) async => 'hr_manager'),
+        ]),
+      );
+      expect(find.text('Lim Wei Ling'), findsOneWidget);
+      // Counted off a PostgREST embed and joined with a start date the
+      // screen parses and reformats.
+      expect(
+        find.text('EMP-014 · from 01/10/2026 · 2 of 3 done'),
+        findsOneWidget,
+      );
+      // No employee number and no start date, so the line is just the
+      // count rather than two empty separators.
+      expect(find.text('1 of 1 done'), findsOneWidget);
+      expect(find.text('Start a checklist'), findsOneWidget);
+    });
+
+    testWidgets('and somebody without an HR role cannot start one',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const OnboardingScreen(), [
+          onboardingChecklistsProvider(true).overrideWith((ref) async => []),
+          memberRoleProvider.overrideWith((ref) async => 'viewer'),
+        ]),
+      );
+      expect(find.text('Nothing in progress'), findsOneWidget);
+      expect(find.text('Start a checklist'), findsNothing);
     });
   });
 }
