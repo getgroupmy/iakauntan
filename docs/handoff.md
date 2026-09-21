@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `e55c8e5f` plus `0672`, committed together |
-| CI | green and APPLIED through run 2015 (`e55c8e5f`) |
-| Migrations | `0672` is the highest (the revision re-spread) |
-| Live database | **level with the branch through `0671`.** `0672` is in this push |
+| Head at time of writing | `eb1f8d99` |
+| CI | APPLIED through run 2017 (`423e3f5f`, migration `0673`) |
+| Migrations | `0674` is the highest (the tax tile on the home screen) |
+| Live database | **level with the branch through `0673`.** `0674` is in this push |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 345 SQL assertion files, 48 Python gates, 5,299 Flutter tests, 32 deno tests |
-| API description | 763 functions, 363 tables, version `0672` |
+| Gates | 347 SQL assertion files, 48 Python gates, 5,322 Flutter tests, 32 deno tests |
+| API description | 766 functions, 364 tables, version `0674` |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
@@ -110,11 +110,11 @@ has not been asked. It is unusual, and if the default branch is ever
 moved to `main`, the deploy jobs move with it — at which point this
 branch stops deploying and `main` starts.
 
-Counts to expect from a clean run: **48** gates, **345** SQL assertion
-files, **32** deno tests, **5,299** widget tests with 1 skipped,
+Counts to expect from a clean run: **48** gates, **347** SQL assertion
+files, **32** deno tests, **5,322** widget tests with 1 skipped,
 analyser clean.
 
-Counting the SQL files: 347 sit in `supabase/tests/`, less `_helpers.sql`
+Counting the SQL files: 349 sit in `supabase/tests/`, less `_helpers.sql`
 and `_local_stack.sql`, which are included by the others rather than run.
 
 The branch carries `main`'s history — PR #3 merged `main` INTO it — so
@@ -144,7 +144,10 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
-| `e55c8e5` | **The first year has its own rules (`0671`)**, and `0672` beside it |
+| `eb1f8d9` | **The taxman's queue, beside the Registrar's (`0674`)** |
+| `423e3f5` | **What was payable, and what was paid (`0673`)** |
+| `d76211b` | **A revision does not undo the year (`0672`)** |
+| `e55c8e5` | **The first year has its own rules (`0671`)** |
 | `aa20715` | **A person pays on a different rhythm (`0670`) — CP500** |
 | `d4ba69d` | **A deadline that never clears is one nobody reads (`0669`)** |
 | `cc1de24` | The handoff, two migrations later |
@@ -288,9 +291,9 @@ message. Read those rather than the diffs.
    now exactly the way to get `BadDeviceToken` on every push. Both
    files carry the table instead.
 
-## The tax computations — `0664` through `0671`
+## The tax computations — `0664` through `0674`
 
-Eight migrations built a thing this product did not have: the
+Eleven migrations built a thing this product did not have: the
 arithmetic between the accounts and a return, the dates it is owed on,
 and a record of what was done about each one. It is worth understanding
 as one piece, because each layer only makes sense on the one below.
@@ -361,6 +364,20 @@ total less everything already scheduled divides over the rest. Two
 revisions compose. A downward revision takes the remainder to nil
 rather than negative, because LHDN does not refund through the
 schedule.
+
+**`0673` — what was paid.** The schedule said what was PAYABLE and
+never what was paid. `tax_estimate_payments` is keyed to the chain
+ROOT rather than to the estimate a payment was made against, because
+a revision supersedes that row and the payment has to outlive it.
+Overdue, late and partly paid are three different states: s.107C(9)
+charges 10% of an instalment paid after its date, which a company can
+incur in a year it estimated perfectly.
+
+**`0674` — the tile.** All of the above lived behind the financial
+statements screen and an icon. The home screen now carries returns
+overdue, returns due within a month with the FORM named, and
+instalments unpaid — every figure read from the same functions the
+screens use, so there is no second definition of "overdue" to drift.
 
 ### The five rules that are easy to get wrong and are each asserted
 
@@ -452,11 +469,14 @@ schedule.
   A company changing its accounting date is the case, and `0665` says
   so. `0671` does not change that: a first period shorter than a year
   gets the full instalment count on the ordinary rhythm.
-- **Nothing files, and nothing is paid.** No submission of anything.
-  `0669` records that somebody SAYS a return was filed — a note with a
-  name on it, never verified with LHDN — and nothing tracks an
-  instalment as paid against the schedule `tax_estimate_schedule`
-  produces.
+- **Nothing files, and nothing posts.** No submission of anything.
+  `0669` records that somebody SAYS a return was filed and `0673`
+  that somebody says an instalment was paid — notes with a name on
+  them, never verified with LHDN — and neither touches the ledger.
+- **The late-payment charge is computed, not raised.** `0673` says
+  what s.107C(9) comes to on the instalments already paid late.
+  Whether LHDN actually raised it is not something this can know, and
+  the screen says so.
 
 ### Where they are
 
@@ -562,12 +582,11 @@ deal with, and the estimate screen is honest about not knowing.
    * ~~CP500 for individuals~~ — done at `0670`.
    * ~~A company's first basis period~~ — done at `0671`.
    * ~~Marking an obligation as met~~ — done at `0669`.
-   * **Tracking an instalment as PAID.** `tax_estimate_schedule` says
-     what was PAYABLE — after `0672`, correctly, even across two
-     revisions — and nothing records that any of it was paid. This is
-     the largest real gap left in the stack: a company that has paid
-     nine of twelve has no way to see it here, and the ledger cannot
-     tell a CP204 instalment from any other payment to LHDN.
+   * ~~Tracking an instalment as PAID~~ — done at `0673`. What
+     remains of it: **nothing posts to the ledger**. Recording a
+     payment is a note that money moved; the bank side is a bank
+     transaction like any other, and nothing links the two. Joining
+     them would be real work and a real improvement.
    * **Form BE**, the return for a person with no business income —
      due 30 April, two months before Form B. Low value: a person with
      no business is not using an accounting product. `0668` names it
