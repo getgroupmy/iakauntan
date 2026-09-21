@@ -131,28 +131,64 @@ anything in the APK:
 
 `https://iakauntan.com/.well-known/assetlinks.json`
 
+**That file now exists**, at `app/web/.well-known/assetlinks.json`, and
+is the authority — read it rather than the shape below, which is only
+here to explain the two decisions in it.
+
 ```json
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls",
-                 "delegate_permission/common.get_login_creds"],
+    "relation": ["delegate_permission/common.get_login_creds"],
     "target": {
       "namespace": "android_app",
       "package_name": "my.iakauntan.iakauntan",
-      "sha256_cert_fingerprints": ["<upload key>", "<Play signing key>"]
+      "sha256_cert_fingerprints": ["<Play signing key>", "<upload key>"]
     }
   }
 ]
 ```
 
-`get_login_creds` is the relation that matters; an `assetlinks.json` written
-for deep links alone has only the first and passkeys will fail on it.
+**`get_login_creds` and NOT `handle_all_urls`.** The Play Console offers
+a ready-made Digital Asset Links snippet and it uses `handle_all_urls` —
+App Links, which decides what opens a URL and carries no credentials.
+Pasting it verbatim gives a file that looks configured and does nothing
+for passkeys. It is the same decision the iOS side already made:
+`Runner.entitlements` asks for `webcredentials:` and not `applinks:`,
+because applinks would make the app open every link on the site.
+Whether App Links is wanted at all is a separate, still-open question.
 
-**Both fingerprints.** The build signed locally carries the upload key; the
-build a tester installs from Play carries Google's Play App Signing key,
-which is a different certificate. Listing only the first is the commonest
-way this ships broken — it works on the developer's handset and nowhere
-else. Play Console → Setup → App signing has both.
+**A third and fourth certificate exist, and are deliberately not
+listed.** Downloading the app signing certificates from the Play
+Console gives three files, not one:
+
+| File | Subject | In `assetlinks.json`? |
+| --- | --- | --- |
+| `deployment_cert.der` | `CN=Android, O=Google Inc.` | **yes** — `20:38:98:…` |
+| `hybrid_classical_cert.der` | same | no |
+| `hybrid_pqc_cert.der` | same | no |
+
+The last two are Play's hybrid and post-quantum signing certificates.
+Only the DEPLOYMENT certificate is listed, because that is the one the
+Play Console's own generated Digital Asset Links snippet names — and
+that snippet is generated live from the key actually in use, which
+makes it a better authority than any reasoning from file names.
+
+Written down because the reasoning is weaker than the rest of this
+page: if passkeys ever start failing on Android after a Play signing
+change, and nothing in this repository changed, **these two are the
+first thing to check**. Adding a fingerprint that is never presented
+is harmless; missing one that is fails silently on every affected
+device.
+
+**Both fingerprints.** The build signed locally carries the upload key;
+the build a tester installs from Play carries Google's Play App Signing
+key, which is a different certificate. Listing only the first is the
+commonest way this ships broken — it works on the developer's handset
+and nowhere else. The upload key also comes out of the Android release
+job summary, and `keytool -list -v -keystore upload.jks -alias upload`
+prints it locally; Google's half only exists in the Play Console, on
+the app signing page (`.../app/<id>/keymanagement` — Google has moved
+what that page is CALLED twice, and the URL has outlasted both names).
 
 Served as `application/json`, over HTTPS, with no redirect. Android fetches
 it directly and a 301 to `www.` is a failure.
@@ -200,24 +236,31 @@ recursively with no filter on dot-directories, which was checked in the SDK
 source rather than assumed, because a file that is silently not deployed is
 the same failure as a file that is wrong.
 
-**`assetlinks.json` is still absent**, and deliberately: it needs the SHA-256
-of the upload key AND of the Play App Signing certificate, and neither is in
-this repository. A placeholder is worse than nothing — it is a file that says
-the association is configured while failing every ceremony, which is
-precisely the silent failure the rest of this document is about.
+**`assetlinks.json` is now written**, at
+`app/web/.well-known/assetlinks.json`, carrying both fingerprints:
 
-**Half of it is now obtainable without asking anybody.**
-`.github/workflows/android-release.yml` prints the upload key's SHA-256 into
-its job summary, deliberately rather than incidentally — this paragraph is
-why. A certificate fingerprint is public by design, so a summary is a safe
-place for it, and reading it back out of a keystore afterwards is otherwise
-an awkward `keytool` invocation nobody remembers.
+* the **Play App Signing** certificate, `20:38:98:4F:…`, which is the
+  key Google holds and re-signs with — what an app installed from Play
+  actually presents;
+* the **upload key**, `19:50:C0:81:…`, which is what the release
+  workflow signs with and what a directly installed build presents.
 
-The other half, the **Play App Signing** certificate, still comes from *Play
-Console → Setup → App signing*, and cannot be derived here: it is a key
-Google holds. Both are needed. The upload key alone is the failure mode named
-below — it works on the developer's own handset, which installed the bundle
-directly, and on nothing that installed from Play.
+Both, because they are different keys and a device presents whichever
+one installed it. A file with only the upload key works on the
+developer's own handset and on nothing that came from Play, which is
+the failure this page is mostly about.
+
+The relation is **`get_login_creds`, not `handle_all_urls`**. The Play
+Console offers a ready-made Digital Asset Links snippet and that
+snippet uses `handle_all_urls` — App Links, which decides what opens a
+URL and carries no credentials at all. Pasting it verbatim produces a
+file that looks configured and does nothing for passkeys. It is also
+the same decision the iOS side already made deliberately:
+`Runner.entitlements` asks for `webcredentials:` and not `applinks:`,
+because applinks would make the app open every link on the site.
+
+Whether App Links is wanted at all is still open, and is a separate
+question from this file working.
 
 `scripts/check_passkey_association.py` enforces that rather than leaving it
 advisory. Absent is allowed; present and wrong is refused, including a
