@@ -183,6 +183,10 @@ jobs:
           echo "profile UUID: $uuid"
           echo "profile app id: $appid"
           echo "PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
+          # The team is the prefix of the application identifier, by
+          # construction, so it needs no second lookup and cannot
+          # disagree with the profile the build is about to use.
+          echo "TEAM_ID=${appid%%.*}" >> "$GITHUB_ENV"
 
           case "$appid" in
             *.my.iakauntan.iakauntan) ;;
@@ -192,7 +196,36 @@ jobs:
               ;;
           esac
 
+      # ---------------------------------------------------------------
+      # Why this is xcodebuild and not `flutter build ipa`
+      #
+      # It was `flutter build ipa`, and run 1 died on:
+      #
+      #     No development certificates available to code sign app
+      #     for device deployment
+      #
+      # `flutter build ipa` resolves a signing identity ITSELF before
+      # it archives, by looking for a DEVELOPMENT certificate in the
+      # keychain -- which a machine doing distribution signing does not
+      # have and should not have. The `--export-options-plist` saying
+      # `signingStyle: manual` is read at EXPORT, long after the check
+      # that refused.
+      #
+      # So Flutter compiles without signing anything, and xcodebuild is
+      # told the identity, the team and the profile by name. Those are
+      # the three things automatic signing would have gone looking for.
+      #
+      # UNVERIFIED FROM WHERE THIS WAS WRITTEN. There is no macOS here,
+      # so the next run is the first test of it. The failure to expect,
+      # if there is one, is the Pods: build settings given on an
+      # xcodebuild command line apply to EVERY target, and a pod that
+      # does not want signing can refuse a CODE_SIGN_IDENTITY it was
+      # handed. If that happens, the lead is `CODE_SIGNING_ALLOWED=NO`
+      # for the pod targets rather than anything about the certificate,
+      # which will look like the culprit and will not be.
+      # ---------------------------------------------------------------
       - name: Archive
+        id: archive
         if: steps.creds.outputs.ready == 'true'
         env:
           WEB_PUSH_PUBLIC_KEY: ${{ secrets.WEB_PUSH_PUBLIC_KEY }}
@@ -219,13 +252,35 @@ jobs:
           # counter here that never goes backwards. The marketing
           # version still comes from pubspec.yaml, where a person sets
           # it deliberately.
-          flutter build ipa \
+          flutter build ios \
             --release \
+            --no-codesign \
             --build-number="${{ github.run_number }}" \
-            --dart-define=WEB_PUSH_PUBLIC_KEY="${WEB_PUSH_PUBLIC_KEY:-}" \
-            --export-options-plist="$RUNNER_TEMP/export.plist"
+            --dart-define=WEB_PUSH_PUBLIC_KEY="${WEB_PUSH_PUBLIC_KEY:-}"
+
+          # `generic/platform=iOS` rather than `-sdk iphoneos`: the
+          # destination is what an archive wants, and it does not pin an
+          # architecture the way the sdk flag can.
+          xcodebuild archive \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            CODE_SIGN_IDENTITY="Apple Distribution"
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/ipa"
+
+          ls -l "$RUNNER_TEMP/ipa"
 
       - name: Upload to App Store Connect
+        id: upload
         if: steps.creds.outputs.ready == 'true'
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -241,7 +296,7 @@ jobs:
           printf '%s' "$APP_STORE_CONNECT_KEY_P8" \
             > "$keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
 
-          ipa=$(ls build/ios/ipa/*.ipa | head -1)
+          ipa=$(ls "$RUNNER_TEMP"/ipa/*.ipa | head -1)
           echo "uploading $ipa"
 
           # Retried, for the reason `scripts/ci/retry.sh` exists: this
@@ -268,7 +323,18 @@ jobs:
               echo "* notes: ${{ inputs.notes }}"
             fi
             echo
-            if [ "${{ inputs.lane }}" = "appstore" ]; then
+            # `if: always()` means this runs after a FAILED step too,
+            # so it has to read the outcome rather than assume one.
+            # Run 1 failed in the archive and this summary said
+            # "Uploaded. It appears in TestFlight" underneath a red
+            # cross -- which is the exact fault
+            # `app/test/ios_release_card_test.dart` exists to prevent
+            # on the console, written into the workflow instead.
+            if [ "${{ steps.upload.outcome }}" != "success" ]; then
+              echo "**Nothing was uploaded.** This run did not get that"
+              echo "far — the failing step above says why, and the build"
+              echo "number is free to be used again."
+            elif [ "${{ inputs.lane }}" = "appstore" ]; then
               echo "Uploaded. Submit it for review in App Store Connect —"
               echo "the upload does not do that, and Apple's review is"
               echo "hours to days whatever this workflow does."
