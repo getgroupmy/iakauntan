@@ -34,12 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `6d5f5834` |
-| CI | green and APPLIED through run 2008 (`ecf46283`); 2009 (`6d5f5834`) in flight |
-| Migrations | `0666` is the highest (Form B and Form P) |
-| Live database | **level with the branch through `0665`.** `0666` was pushed and is waiting on run 2009 |
+| Head at time of writing | `14d6d164` |
+| CI | green and APPLIED through run 2011 (`ae74039a`); 2012 (`14d6d164`) in flight |
+| Migrations | `0668` is the highest (the LHDN filing calendar) |
+| Live database | **level with the branch through `0667`.** `0668` was pushed and is waiting on run 2012 |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 339 SQL assertion files, 48 Python gates, 5,244 Flutter tests, 32 deno tests |
+| Gates | 341 SQL assertion files, 48 Python gates, 5,269 Flutter tests, 32 deno tests |
+| API description | 759 functions, 362 tables, version `0668` |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
@@ -109,11 +110,11 @@ has not been asked. It is unusual, and if the default branch is ever
 moved to `main`, the deploy jobs move with it — at which point this
 branch stops deploying and `main` starts.
 
-Counts to expect from a clean run: **45** gates, **334** SQL assertion
-files, **32** deno tests, **5,153** widget tests with 1 skipped,
+Counts to expect from a clean run: **48** gates, **341** SQL assertion
+files, **32** deno tests, **5,269** widget tests with 1 skipped,
 analyser clean.
 
-Counting the SQL files: 336 sit in `supabase/tests/`, less `_helpers.sql`
+Counting the SQL files: 343 sit in `supabase/tests/`, less `_helpers.sql`
 and `_local_stack.sql`, which are included by the others rather than run.
 
 The branch carries `main`'s history — PR #3 merged `main` INTO it — so
@@ -143,6 +144,9 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `14d6d16` | **The dates LHDN counts from (`0668`) — the filing calendar** |
+| `ae74039` | **CP204: the estimate, before it becomes a penalty (`0667`)** |
+| `b4e128f` | The handoff, four migrations later |
 | `6d5f583` | **Form B and Form P (`0666`), on the machinery Form C already had** |
 | `ecf4628` | **Form C: the gap between the accounts and the return (`0665`)** |
 | `4b3117f` | Say when the beta button actually appears, rather than that it has |
@@ -280,11 +284,12 @@ message. Read those rather than the diffs.
    now exactly the way to get `BadDeviceToken` on every push. Both
    files carry the table instead.
 
-## The tax computations — `0664`, `0665`, `0666`
+## The tax computations — `0664` through `0668`
 
-Four migrations built a thing this product did not have: the arithmetic
-between the accounts and a return. It is worth understanding as one
-piece, because each layer only makes sense on the one below.
+Five migrations built a thing this product did not have: the arithmetic
+between the accounts and a return, and the dates it is owed on. It is
+worth understanding as one piece, because each layer only makes sense
+on the one below.
 
 **`0664` — Schedule 3 capital allowances.** Rates by asset class,
 effective-dated, with the motor caps and the small-value rule.
@@ -302,6 +307,23 @@ say is a typed `tax_adjustments` row with a reason.
 **`0666` — Form B and Form P**, on `app.tax_business_income`, which is
 `0665`'s business half extracted so the three forms cannot disagree
 about it.
+
+**`0667` — CP204 and CP204A.** The other half of the year, running the
+opposite way: a company says what it will owe BEFORE the basis period
+begins, pays that monthly, and is penalised for guessing too low. Two
+questions that look like one and are not — the FLOOR is about last
+year (below it the estimate is invalid, not low, and LHDN substitutes
+its own figure), the EXPOSURE is about this year (an estimate can
+clear the floor comfortably and still cost money). A revision is a NEW
+row that names the one it replaces, because CP204A is its own form and
+next year's floor is measured against the revised figure.
+
+**`0668` — the filing calendar.** Every date the four above are owed
+on, computed from the company's own periods rather than stored. SSM's
+deadlines had been computed since `0063` and SST's since `0455`;
+income tax, which carries the largest penalties of the three, had
+none. Nothing is stored per company, so a corrected rule corrects
+everybody rather than everybody who asks after today.
 
 ### The five rules that are easy to get wrong and are each asserted
 
@@ -341,10 +363,11 @@ about it.
 
 ### The limitations, stated to the user and still true
 
-- Every rate in `0664`, `0665` and `0666` is seeded `is_verified =
+- Every rate in `0664` through `0668` is seeded `is_verified =
   FALSE` — published summaries, not transcribed from the Act. The same
   flag and the same meaning as `0025`'s payroll schedules. **They want
-  an accountant's check before anybody files.**
+  an accountant's check before anybody files.** In `0668` that covers
+  the deadlines themselves, and the e-filing grace on top of them.
 - `0664`'s RM20,000 small-value aggregate cap UNDER-claims where a
   company buys more than that in a year: the excess should go at
   ordinary rates and that is not modelled.
@@ -354,16 +377,39 @@ about it.
 - Form P assumes the accounts EXPENSED the partners' salaries. Where
   they were shown below the line the allocation over-states by that
   amount; the screen says so.
-- **Nothing files.** No submission, no CP204 or CP500 estimate.
+- **`0667` does not model a new company's first basis period**, which
+  has its own timing and its own exemption from instalments.
+  `first_period` is on the estimate so the screen can say the rules
+  differ rather than quietly applying the wrong ones. CP500's
+  instalment rhythm for individuals — six bimonthly, on the 30th — is
+  not modelled either; `tax_estimate_rules` is company-shaped.
+- **`0668` cannot know whether a particular obligation applies.** A
+  CP58 appears for every trading company because the threshold test is
+  about payments to agents this schema does not track, and a dormant
+  company still gets its Form C because a dormant company still files
+  one. It is a calendar, not an assessment of who is exempt.
+- **Nothing files.** No submission of anything, no instalment paid, and
+  nothing marks an obligation as met.
 
 ### Where they are
 
-Financial statements → the calculator icon picks a financial year and
-opens the right form by entity type. Fixed assets → the receipt icon
+Financial statements carries three actions: the calculator picks a
+financial year and opens the right form by entity type
+(`/tax-computation/:id`, `/form-b/:id`, `/form-p/:id`); the repeat
+icon opens the CP204 estimate (`/tax-estimate/:id`, with the
+computation as a query parameter where one exists); the notes icon
+opens the calendar (`/tax-calendar`). Fixed assets → the receipt icon
 opens the capital allowance schedule. The account editor carries the
 tax treatment picker, and **until accounts are tagged every computation
 is the profit unchanged** — which is not wrong, only empty, and the
 screen cannot warn about it.
+
+The calendar needs no posting permission, deliberately: it computes
+dates and writes nothing, and the person who most needs to see a
+deadline is often not the one who keys the return. The estimate opener
+does NOT open a computation to measure against — it asks whether one
+exists, because opening one writes a document somebody then has to
+deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
@@ -435,9 +481,28 @@ screen cannot warn about it.
    that CI has TWO databases — `supabase start` for the SQL assertions,
    the linked hosted project for the migrations — and nobody had said
    which was being measured.
-4. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
+4. **What the tax stack still does not do**, in the order it would be
+   worth doing. None is started; each is honest work rather than a
+   gap somebody will trip over:
+
+   * **Form BE**, the return for a person with no business income —
+     due 30 April, two months before Form B, and `0668` names it in a
+     description rather than seeding it because nothing here knows
+     which individuals have a business source.
+   * **CP500 for individuals.** `0667`'s `tax_estimate_rules` is
+     company-shaped: twelve instalments on the 15th. An individual's
+     is six bimonthly on the 30th, revisable by 30 June on a CP502.
+     The table would need a form dimension rather than a second copy.
+   * **A company's first basis period**, which has its own CP204
+     timing and its own exemption from instalments. `first_period` is
+     already on the estimate for the screen to say so.
+   * **Marking an obligation as met.** `0668` computes and shows; it
+     has no equivalent of `corp_filings`, so nothing records that a
+     Form C was actually filed and nothing falls off the list.
+
+5. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
    from here. Do not start without the user.
-5. Older backlog, not to be started unprompted: `close_fiscal_year`
+6. Older backlog, not to be started unprompted: `close_fiscal_year`
    sweeping to 3200 vs 3300; stripping the posting redirect out of
    `0635`; P14 per-document rounding; G3(b) relaxation flag.
 
@@ -528,6 +593,49 @@ After any migration: `python3 scripts/generate_api_description.py "$DB"`.
 ## Traps found this session
 
 Each of these was paid for once. None is obvious from the code.
+
+**`mutate.py` replaces the FIRST occurrence in the file.** A mutant
+written as `periodFrom: Fmt.parseDate(j['period_from']),` matched four
+model classes, mutated the one nearest the top, and was reported as a
+SURVIVOR — a missing assertion about code the test never loads. The
+harness has no way to notice: the mutation landed, it just landed
+somewhere else. Anchor a mutant on a neighbouring line whenever the
+string is not unique, and `grep -c` it first when in doubt.
+
+**`make_date(2027, 2, 31)` raises before anything can clamp it.** The
+obvious spelling of "the last day of a month" —
+`least(make_date(y, m, 31), end_of_month)` — fails on exactly the case
+it exists for, because the argument is evaluated before `least` sees
+it. Count forward from the first of the month instead.
+
+**"N months from the date FOLLOWING the close" is not N months from
+the close.** A period ending 30 June runs from 1 July, and seven
+months of it ends on 31 January — a day after `end + 7 months` gives,
+and 30 January is late. February moves the other way: 30 September,
+not the 28th. Written as "forward a day, forward the months, back a
+day".
+
+**A grace period in days is not the same grace in months.** A month
+from 31 January is 28 February; thirty days from it is 2 March. Two
+days past a deadline somebody filed against. `0668` stores both units
+for that reason.
+
+**A December year end makes every statutory clock agree.** The basis
+period, the year of assessment and the calendar year of remuneration
+all end on the same day, so a Form E measured from the wrong one still
+comes out right and a fixture built on one passes over every error.
+Use a 30 June year end for anything date-shaped.
+
+**An entity type can keep a whole branch from ever running.** The
+mutant that made a return due IN the year of assessment rather than
+the year after survived a sweep whose only fixture was a Sdn Bhd — a
+company never reaches the Form B branch, so nothing exercised it. A
+surviving mutant in a table-driven function is often a missing
+FIXTURE, not a missing assertion.
+
+**`pg_temp.check_refused` takes a LIKE pattern, not a substring.**
+Without a trailing `%` it fails on the very message it was written to
+match, and reports it as "refused, but for the wrong reason".
 
 **A mutation harness that reports everything killed is broken.** A
 migration is not idempotent, so re-applying one to the same database
