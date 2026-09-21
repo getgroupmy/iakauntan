@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0663",
+    "version": "0664",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -2455,6 +2455,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/canned_responses"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/capital_allowance_classes": {
+      "get": {
+        "operationId": "select_capital_allowance_classes",
+        "summary": "Read capital_allowance_classes",
+        "description": "Schedule 3 ITA 1967 rates by asset class, effective-dated. Platform data, not tenant data: the rates are the same for every company in Malaysia. is_verified false means derived from published percentages rather than transcribed from the Act.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/capital_allowance_classes"
                   }
                 }
               }
@@ -23450,6 +23514,117 @@
               "application/json": {
                 "schema": {
                   "type": "boolean"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/capital_allowance_schedule": {
+      "post": {
+        "operationId": "capital_allowance_schedule",
+        "summary": "The Schedule 3 working for a year of assessment: qualifying expenditure, initial and annual allowances, the\u2026",
+        "description": "The Schedule 3 working for a year of assessment: qualifying expenditure, initial and annual allowances, the balancing adjustment on disposal, and residual expenditure carried forward. Not a tax computation -- this is the figure one subtracts.\n\n`public.capital_allowance_schedule(p_org_id uuid, p_year integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_year": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_year"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "asset_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "asset_no": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "class_code": {
+                        "type": "string"
+                      },
+                      "class_label": {
+                        "type": "string"
+                      },
+                      "acquired": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "cost": {
+                        "type": "number"
+                      },
+                      "qualifying": {
+                        "type": "number"
+                      },
+                      "initial": {
+                        "type": "number"
+                      },
+                      "annual": {
+                        "type": "number"
+                      },
+                      "prior_claimed": {
+                        "type": "number"
+                      },
+                      "balancing_allowance": {
+                        "type": "number"
+                      },
+                      "balancing_charge": {
+                        "type": "number"
+                      },
+                      "claimed": {
+                        "type": "number"
+                      },
+                      "residual": {
+                        "type": "number"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -78603,6 +78778,69 @@
           "body"
         ]
       },
+      "capital_allowance_classes": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "initial_rate": {
+            "type": "number"
+          },
+          "annual_rate": {
+            "type": "number"
+          },
+          "cost_cap": {
+            "type": "number"
+          },
+          "small_value_threshold": {
+            "type": "number"
+          },
+          "aggregate_cap": {
+            "type": "number"
+          },
+          "apportion_first_year": {
+            "type": "boolean"
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date"
+          },
+          "effective_to": {
+            "type": "string",
+            "format": "date"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "source": {
+            "type": "string"
+          },
+          "is_verified": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "effective_from"
+        ]
+      },
       "cash_forecast_items": {
         "type": "object",
         "properties": {
@@ -83966,6 +84204,12 @@
           "purchase_line_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "ca_class_code": {
+            "type": "string"
+          },
+          "ca_notes": {
+            "type": "string"
           }
         },
         "required": [

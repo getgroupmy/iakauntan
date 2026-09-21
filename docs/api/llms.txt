@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0663` (the highest applied migration).
-746 functions and 350 readable tables, of which
-279 functions only read.
+Schema version `0664` (the highest applied migration).
+747 functions and 351 readable tables, of which
+280 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**605 of 746 functions carry a `comment on
+**606 of 747 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (534)
+### general (535)
 
 Not gated on any module.
 
@@ -426,6 +426,7 @@ Not gated on any module.
 - `calculate_payroll_run(p_run_id uuid)` *(writes)* — Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the schedules in force on the pay date.
 - `can_add_company()` — Whether this account may add another company, so the app can leave the button out rather than offer one that refuses.
 - `cancel_pdc(p_id uuid, p_reason text)` *(writes)* — Hands a post-dated cheque back to whoever wrote it, before it has been banked.
+- `capital_allowance_schedule(p_org_id uuid, p_year integer)` — The Schedule 3 working for a year of assessment: qualifying expenditure, initial and annual allowances, the balancing adjustment on disposal, and residual expenditure carried forward.
 - `capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` *(writes)* — Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again.
 - `cash_runs_out_on(p_org uuid, p_weeks integer, p_use_history boolean)`
 - `change_company_name(p_entity uuid, p_new_name text, p_resolved_on date)` *(writes)* — Renames a company, keeps the former name, and opens the s.28 filing.
@@ -957,6 +958,7 @@ inconsistent.
 - `budgets`
 - `business_types`
 - `canned_responses`
+- `capital_allowance_classes`
 - `cash_forecast_items`
 - `category_kitchen_stations`
 - `chat_access`

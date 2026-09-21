@@ -60,6 +60,14 @@ const dropdownCensus = <String, int>{
   // for "Sdn Bhd". If that list ever reaches the size where somebody
   // would, this entry comes off and a `SearchablePicker` goes in.
   'features/auth/sign_in_screen.dart': 1,
+  // The Schedule 3 class on a fixed asset. A statutory set of eight,
+  // fixed by the Act and moved by a Budget rather than by anybody
+  // using this app -- there is no "add a class" and there must not be,
+  // since a company that could invent a capital allowance class could
+  // invent a rate. It shows all eight at once with their rates beside
+  // them, which is exactly the comparison somebody choosing one is
+  // making, and there is nothing to search.
+  'features/assets/asset_editor.dart': 1,
   'features/banking/new_bank_account_dialog.dart': 1,
   'features/collections/log_attempt_sheet.dart': 2,
   'features/contacts/contact_editor.dart': 4,

@@ -2645,6 +2645,45 @@ class Repo {
     ),
   );
 
+  /// The Schedule 3 classes in force today, for the editor's picker.
+  ///
+  /// Not org-scoped: the rates are the same for every company in
+  /// Malaysia, and `0664` puts them behind a read-for-anybody policy
+  /// for that reason.
+  Future<List<CapitalAllowanceClass>> capitalAllowanceClasses() async {
+    final today = Fmt.iso(DateTime.now());
+    final rows = await client
+        .from('capital_allowance_classes')
+        .select()
+        .lte('effective_from', today)
+        .or('effective_to.is.null,effective_to.gt.$today')
+        // `ascending: true` said out loud. postgrest-dart defaults it
+        // to FALSE, so the bare `.order('sort_order')` this was written
+        // as put industrial buildings at the top of the picker and
+        // plant and machinery at the bottom.
+        .order('sort_order', ascending: true);
+    return [
+      for (final r in (rows as List).cast<Map<String, dynamic>>())
+        CapitalAllowanceClass.fromMap(r),
+    ];
+  }
+
+  /// The Schedule 3 working for a year of assessment.
+  ///
+  /// [year] is the year of assessment, which for a December year end is
+  /// the calendar year. A company on another year end has a basis
+  /// period, and mapping one to the other is not modelled — `0664` takes
+  /// the year and says so rather than pretending to know.
+  Future<List<CapitalAllowanceLine>> capitalAllowances(int year) async {
+    final rows = _rows(
+      await callRpc(
+        'capital_allowance_schedule',
+        params: {'p_org_id': orgId, 'p_year': year},
+      ),
+    );
+    return [for (final r in rows) CapitalAllowanceLine.fromMap(r)];
+  }
+
   /// What the open foreign balances would be restated to, one row per
   /// currency. Raises if a currency has no rate on file at that date,
   /// rather than reporting a confident zero for one it cannot price.

@@ -527,6 +527,8 @@ class FixedAsset {
     this.depreciatedTo,
     this.serialNo,
     this.location,
+    this.caClassCode,
+    this.caNotes,
     this.status = 'active',
     this.disposalDate,
     this.disposalProceeds,
@@ -560,6 +562,16 @@ class FixedAsset {
   final DateTime? depreciatedTo;
   final String? serialNo;
   final String? location;
+
+  /// The Schedule 3 class, or null for an asset that attracts no
+  /// capital allowance at all — land, goodwill. Null is a real answer
+  /// rather than a gap, and `0664` says so on the column.
+  final String? caClassCode;
+
+  /// Why it is in the class it is in — the reasoning a reviewer would
+  /// otherwise reconstruct from the cost and the label.
+  final String? caNotes;
+
   final String status;
   final DateTime? disposalDate;
   final double? disposalProceeds;
@@ -608,6 +620,8 @@ class FixedAsset {
     depreciatedTo: Fmt.parseDate(j['depreciated_to']),
     serialNo: j['serial_no'] as String?,
     location: j['location'] as String?,
+    caClassCode: j['ca_class_code'] as String?,
+    caNotes: j['ca_notes'] as String?,
     status: j['status']?.toString() ?? 'active',
     disposalDate: Fmt.parseDate(j['disposal_date']),
     disposalProceeds: j['disposal_proceeds'] == null
@@ -645,6 +659,8 @@ class FixedAsset {
     'rate_percent': method == 'reducing_balance' ? ratePercent : null,
     'serial_no': serialNo,
     'location': location,
+    'ca_class_code': caClassCode,
+    'ca_notes': caNotes,
     'notes': notes,
   };
 }
@@ -2094,6 +2110,197 @@ class PlatformOrg {
     createdAt: Fmt.parseDate(j['created_at']),
   );
 }
+
+/// A Schedule 3 class an asset can be put in.
+///
+/// Read from the database rather than listed in Dart: Budget speeches
+/// move the rates, and a list here would be a second copy to forget.
+class CapitalAllowanceClass {
+  CapitalAllowanceClass({
+    required this.code,
+    required this.label,
+    required this.initialRate,
+    required this.annualRate,
+    this.costCap,
+    this.smallValueThreshold,
+    this.notes,
+    this.isVerified = false,
+  });
+
+  final String code;
+  final String label;
+  final double initialRate;
+  final double annualRate;
+  final double? costCap;
+  final double? smallValueThreshold;
+  final String? notes;
+
+  /// False means the figures came from published percentages rather
+  /// than from the Act. `0025` uses the same flag for the payroll
+  /// schedules and means the same thing by it.
+  final bool isVerified;
+
+  /// "20% then 14%", which is what somebody choosing a class is
+  /// actually comparing.
+  ///
+  /// `Fmt.qty` rather than `Fmt.rate`: the latter pads to two decimals,
+  /// so every class in the dropdown would read "20.00% then 14.00%".
+  /// This drops the zeros on a whole percentage and keeps them on a
+  /// fractional one, which is what an industrial building's 3% and a
+  /// hypothetical 2.5% both need.
+  /// Rounded before it is formatted, because `0.14 * 100` is
+  /// `14.000000000000002` in binary floating point -- and `Fmt.qty`
+  /// faithfully prints every digit of it. Without this the dropdown
+  /// offers "20% then 14.000000000000002%".
+  static String _pct(double rate) =>
+      Fmt.qty(double.parse((rate * 100).toStringAsFixed(4)));
+
+  String get rates => '${_pct(initialRate)}% then ${_pct(annualRate)}%';
+
+  factory CapitalAllowanceClass.fromMap(Map<String, dynamic> j) =>
+      CapitalAllowanceClass(
+        code: j['code'] as String,
+        label: j['label']?.toString() ?? '',
+        initialRate: Fmt.toDouble(j['initial_rate']),
+        annualRate: Fmt.toDouble(j['annual_rate']),
+        costCap: j['cost_cap'] == null ? null : Fmt.toDouble(j['cost_cap']),
+        smallValueThreshold: j['small_value_threshold'] == null
+            ? null
+            : Fmt.toDouble(j['small_value_threshold']),
+        notes: j['notes'] as String?,
+        isVerified: j['is_verified'] == true,
+      );
+}
+
+/// One line of the Schedule 3 working for a year of assessment.
+///
+/// Not a depreciation row. Accounting depreciation is added back in a
+/// tax computation and replaced by these, so an asset appears in both
+/// schedules with two entirely different figures against it — which is
+/// the point of the exercise rather than a discrepancy.
+class CapitalAllowanceLine {
+  CapitalAllowanceLine({
+    required this.assetId,
+    required this.assetNo,
+    required this.name,
+    required this.classCode,
+    required this.classLabel,
+    required this.acquired,
+    required this.cost,
+    required this.qualifying,
+    required this.initial,
+    required this.annual,
+    required this.priorClaimed,
+    required this.balancingAllowance,
+    required this.balancingCharge,
+    required this.claimed,
+    required this.residual,
+  });
+
+  final String assetId;
+  final String assetNo;
+  final String name;
+  final String classCode;
+  final String classLabel;
+  final DateTime? acquired;
+
+  /// What was paid, which is not always what the allowance is computed
+  /// on — see [qualifying].
+  final double cost;
+
+  /// What the allowance is computed on. Lower than [cost] for a vehicle
+  /// in a restricted class, and the difference is relief nobody gets.
+  final double qualifying;
+
+  final double initial;
+  final double annual;
+  final double priorClaimed;
+  final double balancingAllowance;
+  final double balancingCharge;
+
+  /// The initial and annual allowances for this year, which is what a
+  /// tax computation subtracts. The balancing figures are NOT in here:
+  /// one is an extra deduction and the other is taxable, and adding
+  /// them together would net off two things that go in different
+  /// places on the return.
+  final double claimed;
+
+  final double residual;
+
+  /// Whether the cost was restricted before any allowance was computed.
+  bool get isRestricted => qualifying < cost;
+
+  /// An asset filed in a small-value class that is not a small-value
+  /// asset. It gets nothing at all rather than being written off in
+  /// full, and its residual sits at the whole qualifying expenditure —
+  /// which is what this spots, so the screen can say to reclassify it.
+  /// `qualifying > 0` is stated rather than left to follow from
+  /// `residual > 0`. An asset that cost nothing -- `fixed_assets`
+  /// allows it, the check is `cost >= 0` -- has a qualifying sum of
+  /// zero and a residual of zero, and every other condition here is
+  /// trivially true of it. Without this line it reads as misfiled and
+  /// the screen puts a red notice on a row there is nothing wrong with.
+  bool get looksMisclassified =>
+      qualifying > 0 &&
+      initial == 0 &&
+      annual == 0 &&
+      priorClaimed == 0 &&
+      // These two are EQUIVALENT today and are kept deliberately. A
+      // row with a balancing figure was disposed of, and `0664` sets
+      // its residual to zero -- so `residual == qualifying` already
+      // excludes it unless the qualifying sum is zero, which the line
+      // above now excludes. A mutant that deletes them survives, and
+      // that is written down rather than left for somebody to discover
+      // and mistake for a gap.
+      //
+      // They stay because they say what the predicate MEANS. If the
+      // schedule ever leaves a residual on a disposed asset -- a part
+      // disposal, say -- these are what stop it turning red.
+      balancingAllowance == 0 &&
+      balancingCharge == 0 &&
+      residual == qualifying;
+
+  factory CapitalAllowanceLine.fromMap(Map<String, dynamic> j) =>
+      CapitalAllowanceLine(
+        assetId: j['asset_id'] as String,
+        assetNo: j['asset_no']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        classCode: j['class_code']?.toString() ?? '',
+        classLabel: j['class_label']?.toString() ?? '',
+        acquired: Fmt.parseDate(j['acquired']),
+        cost: Fmt.toDouble(j['cost']),
+        qualifying: Fmt.toDouble(j['qualifying']),
+        initial: Fmt.toDouble(j['initial']),
+        annual: Fmt.toDouble(j['annual']),
+        priorClaimed: Fmt.toDouble(j['prior_claimed']),
+        balancingAllowance: Fmt.toDouble(j['balancing_allowance']),
+        balancingCharge: Fmt.toDouble(j['balancing_charge']),
+        claimed: Fmt.toDouble(j['claimed']),
+        residual: Fmt.toDouble(j['residual']),
+      );
+}
+
+/// The cast down a capital allowance schedule.
+///
+/// An accountant totals a schedule before believing a line of it, and
+/// these four totals are the ones that leave this screen: the
+/// allowances claimed and the balancing allowance are deductions, the
+/// balancing charge is taxable, and the residual is what carries
+/// forward.
+({
+  double qualifying,
+  double claimed,
+  double balancingAllowance,
+  double balancingCharge,
+  double residual,
+})
+capitalAllowanceTotals(List<CapitalAllowanceLine> rows) => (
+  qualifying: rows.fold(0.0, (s, r) => s + r.qualifying),
+  claimed: rows.fold(0.0, (s, r) => s + r.claimed),
+  balancingAllowance: rows.fold(0.0, (s, r) => s + r.balancingAllowance),
+  balancingCharge: rows.fold(0.0, (s, r) => s + r.balancingCharge),
+  residual: rows.fold(0.0, (s, r) => s + r.residual),
+);
 
 /// Somebody on the beta list, as the console shows them.
 ///

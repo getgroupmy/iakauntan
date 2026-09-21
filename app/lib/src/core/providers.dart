@@ -802,6 +802,26 @@ final depreciationHistoryProvider = FutureProvider.autoDispose
 
 /// The fixed asset note. Both dates are nullable: no start date means
 /// since the company began, which is the position rather than a period.
+/// The Schedule 3 classes an asset can be put in.
+///
+/// Not autoDispose: the list is eight rows that change with a Budget,
+/// and refetching it every time somebody opens the asset editor is a
+/// round trip for a list that has not moved since the app started.
+final capitalAllowanceClassesProvider =
+    FutureProvider<List<CapitalAllowanceClass>>((ref) {
+      return requireRepo(ref).capitalAllowanceClasses();
+    });
+
+/// The capital allowance schedule for a year of assessment.
+///
+/// Keyed on the year, so flipping between two years keeps both and
+/// nothing is refetched going back. `autoDispose` because a schedule
+/// nobody is looking at is a schedule worth recomputing when they are.
+final capitalAllowancesProvider = FutureProvider.autoDispose
+    .family<List<CapitalAllowanceLine>, int>((ref, year) {
+      return requireRepo(ref).capitalAllowances(year);
+    });
+
 final assetMovementsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({DateTime? from, DateTime? to})>((
       ref,

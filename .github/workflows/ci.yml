@@ -710,6 +710,7 @@ jobs:
                    supabase/tests/year_end_close.sql \
                    supabase/tests/feedback_attachments.sql supabase/tests/previous_fiscal_year.sql \
                    supabase/tests/beta_testers.sql \
+                   supabase/tests/capital_allowances.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/fs_mapping_is_total.sql \
