@@ -9,13 +9,21 @@ believed.
 
 The ways THIS one could lie are all about what it does not look
 through. It reads Dart with a regular expression and a paren counter,
-so it has no idea what an identifier means -- and the three things it
-must not do are pair an outer with an inner on a DIFFERENT axis (that
-is a carousel), pair across a boundary that re-bounds the axis (a
-`SizedBox(width:)`, a `shrinkWrap`), and count a widget named in a
-comment or a string. The last one is not hypothetical here: this
-repository explains itself in prose, and the gate's own file names
-every widget it looks for, many times.
+so it has no idea what an identifier means -- and the four things it
+must not do are refuse an inner widget that does NOT expand (a
+`SingleChildScrollView` sizes to its child and draws), pair an outer
+with an inner on a DIFFERENT axis (that is a carousel), pair across a
+boundary that re-bounds the axis (a `SizedBox(width:)`, a
+`shrinkWrap`), and count a widget named in a comment or a string. The
+last one is not hypothetical here: this repository explains itself in
+prose, and the gate's own file names every widget it looks for, many
+times.
+
+The first of those four is in this list because the gate got it wrong
+and accused a screen that was fine. Which widgets expand and which
+size to their child is not a matter of taste: every entry in the
+gate's table was settled by building it inside a same-axis scroll view
+and looking at whether it threw.
 
 The real tree is asserted too, so the script cannot pass by finding
 nothing because it looked in the wrong place.
@@ -77,6 +85,48 @@ Widget build() => SingleChildScrollView(
 '''})
         self.assertEqual(code, 1)
         self.assertIn('unbounded height', out)
+
+    def test_a_SingleChildScrollView_inside_one_is_redundant_not_broken(self):
+        # It is built on `_RenderSingleChildViewport`, which sizes to
+        # its child rather than to its constraints, so it draws --
+        # and the outer keeps scrolling. Both checked by pumping them.
+        # The first version of this gate refused this and was wrong.
+        code, _ = run_on({'a.dart': '''
+Widget build() => SingleChildScrollView(
+  scrollDirection: Axis.horizontal,
+  child: SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(children: []),
+  ),
+);
+'''})
+        self.assertEqual(code, 0)
+
+    def test_nor_one_inside_the_repository_wrapper(self):
+        code, _ = run_on({'a.dart': '''
+Widget build() => FilterBar(
+  child: SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(children: []),
+  ),
+);
+'''})
+        self.assertEqual(code, 0)
+
+    def test_but_it_is_still_a_container_that_unbounds_what_is_in_it(self):
+        # The asymmetry the rule turns on: it does not THROW when
+        # nested, and it still offers its own child infinity.
+        code, out = run_on({'a.dart': '''
+Widget build() => SingleChildScrollView(
+  scrollDirection: Axis.horizontal,
+  child: SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: ListView(scrollDirection: Axis.horizontal, children: []),
+  ),
+);
+'''})
+        self.assertEqual(code, 1)
+        self.assertIn('ListView', out)
 
     def test_the_repository_wrapper_counts_as_the_scroll_view_it_is(self):
         # `FilterBar` is a horizontal SingleChildScrollView underneath

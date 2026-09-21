@@ -1285,13 +1285,13 @@ jobs:
         run: python3 scripts/check_screens_built.py
 
       # And the fault that gate found the moment it was obeyed. A
-      # viewport expands along the axis it scrolls, so one inside
-      # another on that axis is offered infinity and asserts in
-      # performResize before it draws. It had shipped twice -- the
-      # leads and tickets filter bars, both of which put a horizontal
-      # scroll view inside `FilterBar`, which is one -- and neither
-      # had ever drawn.
-      - name: Check no scroll view is nested inside another on its axis
+      # ListView expands along the axis it scrolls, so one inside a
+      # scroll view on that axis is offered infinity and asserts in
+      # performResize before it draws. It had shipped: the leads
+      # filter bar put a horizontal ListView inside `FilterBar`, which
+      # is a horizontal scroll view, so it threw on every build and
+      # had never once drawn.
+      - name: Check no expanding viewport is nested on the axis it scrolls
         run: python3 scripts/check_nested_scrollables.py
 
       # The app icons, which nothing else looks at. The analyser does

@@ -62,9 +62,10 @@ class _TicketsScreenState extends ConsumerState<TicketsScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           // No inner scroll view: `FilterBar` already scrolls
-          // horizontally, and a second horizontal viewport inside it is
-          // offered unbounded width and asserts in `performResize`
-          // before it draws -- so this bar has never appeared. The Row
+          // horizontally. The one that used to be here worked -- a
+          // `SingleChildScrollView` sizes to its child rather than
+          // expanding, so it drew, and the bar still dragged. It was
+          // simply a second scrollable doing nothing, and the Row
           // alone is what the other fifteen filter bars do.
           child: FilterBar(
             child: Row(

@@ -14,6 +14,8 @@ import 'package:iakauntan/src/features/financials/filings_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
+import 'package:iakauntan/src/features/ticketing/teams_screen.dart';
+import 'package:iakauntan/src/features/ticketing/tickets_screen.dart';
 import 'package:iakauntan/src/data/reserved_names_repository.dart';
 
 /// Screens that nothing had ever constructed.
@@ -413,6 +415,120 @@ void main() {
       );
       expect(find.text('This address is not open to you'), findsOneWidget);
       expect(find.textContaining('property_strata'), findsNothing);
+    });
+  });
+
+  group('the service desk', () {
+    testWidgets('builds, and its filter bar draws at all', (tester) async {
+      // Written expecting to catch the same fault as the leads bar,
+      // and it did not: this screen's inner scroll view was a
+      // `SingleChildScrollView`, which sizes to its child instead of
+      // expanding, so the bar drew and dragged perfectly well. The
+      // test passed against the unfixed version, which is how the
+      // claim got checked rather than believed. Kept anyway -- the
+      // screen still had nothing building it.
+      await onAPhone(
+        tester,
+        wrap(const TicketsScreen(), [
+          ticketsProvider(const TicketQuery()).overrideWith(
+            (ref) async => [
+              {
+                'id': 't1',
+                'ticket_no': 'TKT-001',
+                'subject': 'Printer will not print the receipt',
+                'status': 'open',
+                'priority': 'p1',
+                'team_id': 'team-1',
+                'category_id': 'cat-1',
+                'response_breached': false,
+                'resolution_breached': true,
+              },
+            ],
+          ),
+          ticketTeamsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'team-1', 'name': 'Front counter'},
+            ],
+          ),
+          ticketCategoriesProvider.overrideWith(
+            (ref) async => [
+              {'id': 'cat-1', 'name': 'Hardware'},
+            ],
+          ),
+        ]),
+      );
+      // 'Resolved' and 'Breached', not 'Open': the row's own status
+      // chip reads "Open" too, so that one would pass whether the bar
+      // drew or not.
+      expect(find.text('Resolved'), findsOneWidget);
+      expect(find.text('Breached'), findsOneWidget);
+      expect(find.text('Mine'), findsOneWidget);
+      expect(find.text('Printer will not print the receipt'), findsOneWidget);
+      // The id on the row resolved through two other providers, which
+      // is the screen doing work rather than printing what it was
+      // handed.
+      expect(find.textContaining('Hardware · Front counter'), findsOneWidget);
+      // A breached ticket says so instead of showing a due time.
+      expect(find.text('SLA breached'), findsOneWidget);
+    });
+
+    testWidgets('and an empty queue blames the filters, not the desk',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TicketsScreen(), [
+          ticketsProvider(const TicketQuery()).overrideWith((ref) async => []),
+          ticketTeamsProvider.overrideWith((ref) async => []),
+          ticketCategoriesProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Nothing in this queue'), findsOneWidget);
+    });
+  });
+
+  group('the support teams screen', () {
+    testWidgets('builds and summarises a roster', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TicketTeamsScreen(), [
+          ticketTeamsAllProvider.overrideWith(
+            (ref) async => [
+              {'id': 'team-1', 'name': 'Front counter', 'is_active': true},
+              {'id': 'team-2', 'name': 'Night shift', 'is_active': false},
+            ],
+          ),
+          ticketTeamRosterProvider('team-1').overrideWith(
+            (ref) async => [
+              {'user_id': 'u1', 'full_name': 'Siti', 'is_lead': true},
+              {'user_id': 'u2', 'full_name': 'Ravi', 'is_lead': false},
+            ],
+          ),
+          ticketTeamRosterProvider('team-2').overrideWith((ref) async => []),
+          canAdminProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('Front counter'), findsOneWidget);
+      // Counted and phrased by the screen, not sent as a sentence.
+      expect(find.text('2 people, led by Siti'), findsOneWidget);
+      // A retired team is still listed, and says which it is.
+      expect(find.text('Night shift'), findsOneWidget);
+      expect(
+        find.text('Anybody can be given these — nobody is on it'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and offers no way to add one to somebody who may not',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TicketTeamsScreen(), [
+          ticketTeamsAllProvider.overrideWith((ref) async => []),
+          canAdminProvider.overrideWithValue(false),
+        ]),
+      );
+      expect(find.text('No teams yet'), findsOneWidget);
+      expect(find.text('Add a team'), findsNothing);
     });
   });
 }

@@ -85,8 +85,6 @@ EXEMPT: dict[str, str] = {
     'ScalesScreen': 'lib/src/features/pos/scales_screen.dart',
     'StallsScreen': 'lib/src/features/pos/stalls_screen.dart',
     'TicketScreen': 'lib/src/features/ticketing/ticket_screen.dart',
-    'TicketTeamsScreen': 'lib/src/features/ticketing/teams_screen.dart',
-    'TicketsScreen': 'lib/src/features/ticketing/tickets_screen.dart',
     'TransfersScreen': 'lib/src/features/stock/transfers_screen.dart',
     # Private, so no test outside its own library can name it at all.
     # Listed rather than skipped so the count is honest about them.

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Refuse a scroll view nested inside another on the same axis.
+"""Refuse an expanding viewport nested inside a scroll view on its axis.
 
     python3 scripts/check_nested_scrollables.py
 
-A viewport expands to fill its container along the axis it scrolls. So
-a horizontal scroll view inside another horizontal scroll view is
-offered unbounded width, and Flutter does not lay it out badly -- it
-ASSERTS, in `performResize`, before anything is drawn:
+A `ListView` expands to fill its container along the axis it scrolls.
+Put one inside another scroll view on that same axis and it is offered
+unbounded space, and Flutter does not lay it out badly -- it ASSERTS,
+in `performResize`, before anything is drawn:
 
     Horizontal viewport was given unbounded width.
 
@@ -18,7 +18,7 @@ than a review comment.
 It shipped. `leads_screen.dart` put a horizontally scrolling `ListView`
 of filter chips inside a `FilterBar`, which IS a horizontal
 `SingleChildScrollView` -- so the leads filter bar threw on every
-single build and had never once drawn. Nothing caught it: the analyzer
+single build and had never once drawn. Nothing caught it: the analyser
 sees a valid tree, and no test had ever put `LeadsScreen` on a surface.
 That is two gates missing the same defect from different sides, which
 is why both now exist.
@@ -27,13 +27,33 @@ The vertical direction is the same fault and is included: a `ListView`
 inside a `SingleChildScrollView` is the single most common way a
 Flutter screen throws, and it throws for exactly this reason.
 
-## What counts as a scroll view
+## Which widgets expand, and which do not
 
-The widgets that create a viewport: `ListView`, `GridView`,
-`SingleChildScrollView`, `CustomScrollView`, `PageView`,
-`ReorderableListView`, `NestedScrollView`, `TabBarView` -- plus the
-wrappers in this repository that are one underneath, which are named
-here because a caller cannot see through them. `FilterBar` is the
+This distinction is the whole rule, and the first version of this
+script did not have it -- it refused any two scroll views nested on an
+axis, which is wrong, and it wrongly accused `tickets_screen.dart` of
+a defect it did not have.
+
+`SingleChildScrollView` is built on `_RenderSingleChildViewport`, which
+sizes itself to its CHILD rather than to its constraints. Given
+unbounded width it takes the child's width and draws, and the outer
+scroll view still scrolls normally -- both facts checked by pumping
+them, not reasoned about. So a `SingleChildScrollView` nested inside
+another is redundant, and redundant is not broken.
+
+Everything built on `RenderViewport` does the opposite: it expands, and
+`debugCheckHasBoundedAxis` throws. `ListView`, `GridView`,
+`CustomScrollView`, `PageView`, `ReorderableListView`, `NestedScrollView`
+and `TabBarView` are all in that group -- each one checked by building
+it inside a same-axis scroll view and watching it throw.
+
+So the rule reads in one direction only. Anything that creates a
+scrollable is a container that offers its child unbounded space along
+its axis, and is a valid OUTER. Only an expanding viewport is a
+finding when it is the INNER one.
+
+Wrappers in this repository that are a scroll view underneath are named
+here too, because a caller cannot see through them. `FilterBar` is the
 whole reason for that list.
 
 ## What does not count
@@ -43,14 +63,11 @@ vertical list of horizontally scrolling rows is a carousel, not a bug.
 The axis is read from `scrollDirection:`, defaulting to vertical, which
 is Flutter's own default.
 
-`shrinkWrap: true` also makes it fine in the vertical case: the inner
-list measures its children instead of expanding. It does NOT help the
-horizontal case if the outer is horizontal, because the outer still
-offers unbounded width -- but Flutter accepts a shrink-wrapped inner
-viewport under an unbounded constraint, so it is allowed here. A
-`SizedBox`/`Container` with an explicit extent on the shared axis is
-the other escape, and is honoured for the same reason: the constraint
-is bounded again by the time the inner viewport sees it.
+`shrinkWrap: true` also makes it fine: the inner list measures its
+children instead of expanding, which is exactly the property this rule
+is about. A `SizedBox`/`Container` with an explicit extent on the
+shared axis is the other escape, and is honoured for the same reason:
+the constraint is bounded again by the time the inner viewport sees it.
 """
 
 from __future__ import annotations
@@ -61,24 +78,27 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent / 'app'
 
-#: Widgets that create a viewport, and the axis they scroll when
-#: `scrollDirection:` is not given.
-SCROLLERS: dict[str, str] = {
-    'ListView': 'vertical',
-    'GridView': 'vertical',
-    'SingleChildScrollView': 'vertical',
-    'CustomScrollView': 'vertical',
-    'PageView': 'horizontal',
-    'ReorderableListView': 'vertical',
-    'NestedScrollView': 'vertical',
-    'TabBarView': 'horizontal',
+#: Widgets that create a scrollable, the axis they scroll when
+#: `scrollDirection:` is not given, and whether they EXPAND to fill
+#: that axis. Only an expanding one throws when nested; all of them
+#: offer their child unbounded space, so all of them are valid outers.
+SCROLLERS: dict[str, tuple[str, bool]] = {
+    'ListView': ('vertical', True),
+    'GridView': ('vertical', True),
+    'CustomScrollView': ('vertical', True),
+    'PageView': ('horizontal', True),
+    'ReorderableListView': ('vertical', True),
+    'NestedScrollView': ('vertical', True),
+    'TabBarView': ('horizontal', True),
+    # Sizes to its child. Redundant inside another, never broken.
+    'SingleChildScrollView': ('vertical', False),
 }
 
 #: This repository's own wrappers, which are a scroll view underneath.
 #: A caller reading `FilterBar(child: ...)` has no way to know, so the
 #: knowledge lives here.
-WRAPPERS: dict[str, str] = {
-    'FilterBar': 'horizontal',
+WRAPPERS: dict[str, tuple[str, bool]] = {
+    'FilterBar': ('horizontal', False),
 }
 
 _LINE_COMMENT = re.compile(r'//[^\n]*')
@@ -178,7 +198,7 @@ def findings() -> list[str]:
             name = match.group(1)
             start = match.end() - 1
             end = matching(code, start)
-            axis = axis_of(own_arguments(code, start, end), known[name])
+            axis = axis_of(own_arguments(code, start, end), known[name][0])
             body = code[start:end]
 
             for inner in call.finditer(body):
@@ -187,8 +207,13 @@ def findings() -> list[str]:
                 inner_name = inner.group(1)
                 inner_start = inner.end() - 1
                 inner_end = matching(body, inner_start)
+                # Only an expanding viewport can be the fault. A
+                # `SingleChildScrollView` inside one sizes to its child
+                # and draws, and the outer still scrolls.
+                if not known[inner_name][1]:
+                    continue
                 inner_head = own_arguments(body, inner_start, inner_end)
-                if axis_of(inner_head, known[inner_name]) != axis:
+                if axis_of(inner_head, known[inner_name][0]) != axis:
                     continue
                 # Anything between the two that pins the shared axis
                 # hands the inner a bounded constraint again.
@@ -217,15 +242,15 @@ def findings() -> list[str]:
 def main() -> int:
     problems = findings()
     if problems:
-        print('Scroll views nested on the same axis:\n')
+        print('Expanding viewports nested on the axis they scroll:\n')
         print('\n\n'.join(problems))
         print(
             f'\n{len(problems)} of them. A viewport expands along the axis '
-            f'it scrolls, so one\ninside another on that axis is offered '
-            f'infinity and asserts before it draws.'
+            f'it scrolls, so one\ninside a scroll view on that axis is '
+            f'offered infinity and asserts before it draws.'
         )
         return 1
-    print('No scroll view is nested inside another on the same axis.')
+    print('No expanding viewport is nested inside a scroll view on its axis.')
     return 0
 
 
