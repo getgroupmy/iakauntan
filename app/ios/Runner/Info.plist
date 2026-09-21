@@ -70,6 +70,24 @@
 	<string>Attach a photo of a receipt or bill you have already taken.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Recording a voice note, and speaking on a call.</string>
+	<!-- Nothing in this app asks for your location. There is no
+	     location package in pubspec.yaml and no call to a location API
+	     in lib/ or ios/Runner/.
+
+	     It is here because DKImagePickerController, which file_picker
+	     brings in, REFERENCES the location API in order to read the
+	     place a photo was taken from its metadata. Apple's static check
+	     sees the reference rather than the use, and warns 90683 on
+	     upload: "While your app might not use these APIs, a purpose
+	     string is still required."
+
+	     So the string is written for the one moment it could ever be
+	     shown, which is picking a photo, and says plainly that the app
+	     does not want the phone's location for anything else. A string
+	     that said "not used" would be the wrong thing to show somebody
+	     being asked for a permission. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>A photo you attach can carry the place it was taken. iAkauntan never asks for your location for anything else and does not track where you are.</string>
 	<!-- Audio in the background so a call keeps its sound when the
 	     screen locks or somebody switches app mid-conversation. -->
 	<key>UIBackgroundModes</key>

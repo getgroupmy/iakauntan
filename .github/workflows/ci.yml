@@ -1215,6 +1215,13 @@ jobs:
       - name: Check the app icons are whole on both phones
         run: python3 scripts/check_app_icons.py
 
+      # A missing purpose string is not a refused permission on iOS, it
+      # is the app being terminated — so this is a crash on a phone
+      # after release, and never on a run that does not reach the
+      # screen.
+      - name: Check every permission the plugins need is explained
+        run: python3 scripts/check_ios_purpose_strings.py
+
       # Offered and not permitted is a save that fails; permitted and
       # not offered is a feature nobody can reach. Both were true of
       # `bank_accounts.account_type` at once.

@@ -400,6 +400,22 @@ release is an upload that succeeded and then quietly did nothing. If
 that ever changes — if the app starts encrypting anything itself — the
 key is the thing to revisit, and the answer stops being `false`.
 
+**Warning 90683, missing purpose string.** A warning on the upload
+rather than a rejection, and worth fixing anyway: it becomes a
+rejection at review, and the same class of omission for a permission
+the app really uses is not a warning at all — iOS TERMINATES an app
+that asks for a permission it has no purpose string for.
+
+`scripts/check_ios_purpose_strings.py` holds the mapping from plugin
+to key, so adding a plugin that needs one fails in CI rather than on a
+phone. It also complains about a purpose string nothing needs, which
+asks somebody for a permission the app has no use for.
+
+`NSLocationWhenInUseUsageDescription` is the odd one: nothing here
+asks for a location, and `DKImagePickerController` — which
+`file_picker` brings in — references the API to read where a photo was
+taken. Apple's check sees the reference, not the use.
+
 ### When it goes wrong
 
 | What you see | What it is |
