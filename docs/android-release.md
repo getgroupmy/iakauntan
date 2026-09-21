@@ -9,28 +9,30 @@ genuinely different are the parts worth your attention.
 
 ## Where this stands
 
-**Everything up to the upload works.** A run has built, signed and
-reached `Upload to Google Play`. Parts 1 and 4 are done, and the
-service account exists.
+**It works end to end.** Version code 5 is on the internal testing
+track, uploaded by this workflow through the Play API — built, signed,
+checked against the debug key, and sent, with nobody touching a
+console.
 
-Two failures found so far, both now fixed or documented:
+Getting there took three failures, all now fixed or documented:
 
 * `:app:minifyReleaseWithR8`, on four ML Kit script recognizers the
   text-recognition plugin references and this app does not depend on.
   Fixed in `app/android/app/proguard-rules.pro` — and the reason it
   was not caught earlier matters more than the fix: **CI built the
   Android app in debug, and a debug build does not run R8 at all.** So
-  the whole class of "a referenced class is missing" was unchecked
+  the whole class of "a referenced class is missing" went unchecked
   until the first attempt to publish. `ci.yml` builds release now.
+* `actions/setup-java@v4` losing a run to a GitHub API rate limit.
+  `jetbrains` is not baked into the runner image, so it is fetched
+  every run over a shared IP's quota. It is tried twice now.
 * The **Google Play Android Developer API was never enabled** on the
   Cloud project. That is part 2 step 2, which this page did not have
   until it happened.
 
-Nothing has reached Play yet. Part 3 and part 5 remain.
-
-The iOS pipeline took four failed runs to find two real traps. This is
-running about the same — at a tenth the cost per attempt, because it
-runs on Ubuntu.
+The parts below are the setup as it should have been described the
+first time. Part 3 is done and stays because it has to be done again
+for any future app.
 
 ## Three ways this is not the iOS release
 

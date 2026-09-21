@@ -34,10 +34,11 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `0e69d4d`, plus the two commits below it |
-| CI | green through run 1968 (`7078fc6`); 1969 was still in the queue |
-| Migrations | `0658` is the highest. **Nothing since has touched SQL** — the recent work is all Dart |
-| Live database | **level with the branch.** `0637`–`0658` are applied. See below for why, which is not what it looks like |
+| Head at time of writing | `c17acd62` |
+| CI | green through run 1993 (`9cdf63c1`); 1995 was in flight |
+| Migrations | `0659` is the highest (`create_previous_fiscal_year`) |
+| Live database | **level with the branch.** See below for why, which is not what it looks like |
+| Mobile | **iOS build 5 in TestFlight, Android version code 5 on Play internal testing.** Both from this repository's own workflows |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
@@ -107,8 +108,12 @@ has not been asked. It is unusual, and if the default branch is ever
 moved to `main`, the deploy jobs move with it — at which point this
 branch stops deploying and `main` starts.
 
-Counts to expect from a clean run: **41** gates, **335** SQL files,
-**31** deno tests, **5,147** widget tests with 1 skipped, analyser clean.
+Counts to expect from a clean run: **45** gates, **334** SQL assertion
+files, **32** deno tests, **5,153** widget tests with 1 skipped,
+analyser clean.
+
+Counting the SQL files: 336 sit in `supabase/tests/`, less `_helpers.sql`
+and `_local_stack.sql`, which are included by the others rather than run.
 
 The branch carries `main`'s history — PR #3 merged `main` INTO it — so
 `git log 9ce1d22..HEAD` prints hundreds of commits that are not this
@@ -215,24 +220,31 @@ message. Read those rather than the diffs.
    setting given on the command line is applied to every pod and Swift
    package too.
 
-   **Android now has the same pipeline**, written and gated and never
-   yet run: `.github/workflows/android-release.yml`,
-   `scripts/play_upload.ts` and a real signing config in
-   `app/android/app/build.gradle.kts`, which until now signed release
-   builds with the DEBUG key — the Flutter template's TODO, still in
-   place, and a bundle Play refuses outright.
+   **Android works too.** Version code 5 is on the internal testing
+   track, uploaded by `.github/workflows/android-release.yml` through
+   the Play API. All five secrets exist. `docs/android-release.md` has
+   the setup and a symptom table.
 
-   It is blocked on the user in the same way iOS was, and
-   `docs/android-release.md` walks it through. Two things there have no
-   equivalent on the Apple side and will catch whoever does it:
+   Three failures on the way, each worth keeping:
 
-   * **Play will not take the first bundle from the API.** It cannot
-     create an app and refuses the first upload for one that has never
-     had a release. That upload is done by hand, once.
-   * **The version code must clear whatever went up by hand.** Run
-     numbers start at 1, so a manual first upload at code 1 collides
-     with run 1. `ANDROID_VERSION_CODE_OFFSET` is added to the run
-     number for exactly that.
+   * `app/android/app/build.gradle.kts` signed RELEASE builds with the
+     DEBUG key — the Flutter template's TODO, never done. Every release
+     bundle this repository ever produced would have been refused by
+     Play.
+   * R8 stopped the build on four ML Kit script recognizers the
+     text-recognition plugin references and nothing here depends on.
+     **CI built Android in debug, and a debug build does not run R8**,
+     so that whole class went unchecked until the first publish. It
+     builds release now, and `check_mlkit_scripts.py` refuses any
+     script both asked for in Dart and suppressed in the R8 rules —
+     which would otherwise be a NoClassDefFoundError on a handset.
+   * The Google Play Android Developer API was never enabled on the
+     Cloud project. Creating a service account does not enable it.
+
+   Two rules with no Apple equivalent, both still true for any future
+   app: **Play will not take the first bundle from the API** (done by
+   hand, once), and **the version code must clear whatever went up by
+   hand** (`ANDROID_VERSION_CODE_OFFSET`, added to the run number).
 
    Firebase is still absent, but that is PUSH, not delivery — the two
    were conflated in an earlier version of this file. An Android build
