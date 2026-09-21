@@ -37,7 +37,30 @@ it has to be committed.
 | Head at time of writing | `0e69d4d`, plus the two commits below it |
 | CI | green through run 1968 (`7078fc6`); 1969 was still in the queue |
 | Migrations | `0658` is the highest. **Nothing since has touched SQL** — the recent work is all Dart |
-| Live database | **`0650`–`0658` are applied.** CI's "Apply the migrations" job pushes to the linked project, so a green run means the hosted schema already has them |
+| Live database | **`0637`–`0658` are NOT applied.** See below — this was wrong in the previous version of this file |
+
+### The hosted schema is behind this branch, and the old note said otherwise
+
+The previous version of this file said CI's "Apply the migrations" job
+pushes to the linked project on any green run. **It does not.** Its
+condition is
+
+    github.event_name != 'pull_request' &&
+    github.ref_name == github.event.repository.default_branch
+
+— the default branch only, added in `aefac8e` and already on `main`.
+So nothing this branch has ever pushed reached the live database, and
+`0637`–`0658` are still pending there.
+
+Even on `main` it applies nothing unless the repository variable
+`MIGRATIONS_AUTOPUSH` is `true`; otherwise the job reports what is
+pending and changes nothing. So the consequence of merging depends on
+a variable, and the run summary on `main` is what says which happened.
+
+This matters because it is the difference between "the schema is
+already there" and "twenty-two migrations reach production the moment
+this merges". Check the merge run's summary rather than assuming
+either.
 
 Counts to expect from a clean run: **41** gates, **335** SQL files,
 **31** deno tests, **5,147** widget tests with 1 skipped, analyser clean.
