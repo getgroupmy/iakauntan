@@ -38,6 +38,17 @@ set -uo pipefail
 attempts="${RETRY_ATTEMPTS:-4}"
 delay="${RETRY_DELAY:-10}"
 
+# Exit codes that mean "this cannot come right on its own", space
+# separated. Empty by default, because a `supabase` CLI failure gives
+# no such signal and everything here was written for those.
+#
+# `scripts/play_upload.ts` does give one. The first real Play upload
+# spent seventy seconds and four identical stack traces retrying a
+# DISABLED API — a switch in a browser. Backoff against a
+# configuration error is not resilience, it is four times the noise
+# and four times as long to read.
+never="${RETRY_NEVER_ON:-}"
+
 out=""
 if [ "${1:-}" = "-o" ]; then
   out="$2"
@@ -69,6 +80,14 @@ while true; do
     if [ -n "$out" ]; then cat "$out"; fi
     exit 0
   fi
+
+  for code in $never; do
+    if [ "$status" -eq "$code" ]; then
+      echo "::error::\`$*\` failed with exit $status, which says trying" \
+           "again cannot help. Not retrying." >&2
+      exit "$status"
+    fi
+  done
 
   if [ "$n" -ge "$attempts" ]; then
     echo "::error::\`$*\` failed $attempts times; last exit $status" >&2

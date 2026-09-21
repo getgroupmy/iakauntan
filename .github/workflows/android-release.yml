@@ -293,7 +293,13 @@ jobs:
           # one long upload to somebody else's service at the end of the
           # build, and losing it to a dropped packet would mean paying
           # for the build twice.
-          ../scripts/ci/retry.sh \
+          #
+          # But NOT retried on exit 3, which `play_upload.ts` uses for a
+          # refusal no amount of waiting can change — a disabled API, a
+          # missing permission, a version code already taken. The first
+          # real upload spent seventy seconds and four identical stack
+          # traces on the first of those.
+          RETRY_NEVER_ON=3 ../scripts/ci/retry.sh \
             deno run --allow-read --allow-env --allow-net \
               ../scripts/play_upload.ts \
               build/app/outputs/bundle/release/app-release.aab

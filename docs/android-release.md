@@ -9,24 +9,28 @@ genuinely different are the parts worth your attention.
 
 ## Where this stands
 
-**The keystore secrets exist and the first run has happened.** It got
-as far as `Build the bundle` and failed there, which means the
-readiness gate passed and the signing key was read — parts 1 and 4 are
-done.
+**Everything up to the upload works.** A run has built, signed and
+reached `Upload to Google Play`. Parts 1 and 4 are done, and the
+service account exists.
 
-It failed at `:app:minifyReleaseWithR8`, on four ML Kit script
-recognizers the text-recognition plugin references and this app does
-not depend on. Fixed in `app/android/app/proguard-rules.pro`, and the
-reason it was not caught earlier is worth more than the fix: **CI built
-the Android app in debug, and a debug build does not run R8 at all.**
-So the entire class of "a referenced class is missing" was unchecked
-until the first attempt to publish. `ci.yml` builds release now.
+Two failures found so far, both now fixed or documented:
 
-Nothing has yet reached Play. Parts 2, 3 and 5 are still to do.
+* `:app:minifyReleaseWithR8`, on four ML Kit script recognizers the
+  text-recognition plugin references and this app does not depend on.
+  Fixed in `app/android/app/proguard-rules.pro` — and the reason it
+  was not caught earlier matters more than the fix: **CI built the
+  Android app in debug, and a debug build does not run R8 at all.** So
+  the whole class of "a referenced class is missing" was unchecked
+  until the first attempt to publish. `ci.yml` builds release now.
+* The **Google Play Android Developer API was never enabled** on the
+  Cloud project. That is part 2 step 2, which this page did not have
+  until it happened.
 
-The iOS pipeline took four failed runs to find two real traps. Budget
-for the same here — at a tenth the cost per attempt, because this runs
-on Ubuntu.
+Nothing has reached Play yet. Part 3 and part 5 remain.
+
+The iOS pipeline took four failed runs to find two real traps. This is
+running about the same — at a tenth the cost per attempt, because it
+runs on Ubuntu.
 
 ## Three ways this is not the iOS release
 
@@ -77,21 +81,31 @@ answers `invalid option -- w`. That cost an evening on the iOS side.
 
 ## Part 2 — the Play service account
 
-Two screens in two different products, and doing only the first is the
-most common way this fails.
+Three screens across two different products, and doing only some of
+them is the most common way this fails.
 
 1. **Google Cloud Console** → the project linked to your Play
    developer account → *IAM & Admin* → *Service Accounts* → create one
    → *Keys* → *Add key* → *JSON*. That downloaded file, whole, braces
    included, is `PLAY_SERVICE_ACCOUNT`.
-2. **Play Console** → *Users and permissions* → *Invite new users* →
+2. **Google Cloud Console → APIs & Services → Enable APIs and
+   services** → *Google Play Android Developer API* → **Enable**.
+3. **Play Console** → *Users and permissions* → *Invite new users* →
    the service account's email address → give it **Release** access to
    this app.
 
-Step 2 is a separate invitation in a separate product and is easy to
-miss. `play_upload.ts` names it explicitly when Play answers 403,
-because the raw message says only "the caller does not have
-permission", which reads like step 1.
+**All three, and each one is easy to believe the others cover.**
+
+Step 2 was missing from this page until the first real upload found
+it: the account existed, the invitation was done, and the API itself
+had never been switched on in that project. Creating a service account
+does not enable an API, and an API is enabled per project rather than
+per account. It takes a couple of minutes to propagate after you press
+Enable.
+
+Step 3 is a separate invitation in a separate product. `play_upload.ts`
+names it explicitly when Play answers 403, because the raw message says
+only "the caller does not have permission", which reads like step 1.
 
 ## Part 3 — the first upload, by hand
 
@@ -184,7 +198,8 @@ not.
 | `Missing classes detected while running R8` | a class the code references is not on the classpath. The first run hit this on four ML Kit script recognizers; `app/android/app/proguard-rules.pro` explains it. CI builds the Android app in **release** now, so this is caught there rather than here |
 | "Not set up yet" with a list | exactly that; the secrets in part 4 are missing and nothing was built |
 | "Google Play has no released version of this app yet" | part 3 has not been done |
-| "The service account cannot see this app" | part 2 step 2 — the Play Console invitation, not the Cloud IAM role |
+| "The Google Play Android Developer API is not enabled" | part 2 step 2 — the API is switched on per Cloud PROJECT, and creating the service account does not do it. Wait a couple of minutes after enabling |
+| "The service account cannot see this app" | part 2 step 3 — the Play Console invitation, not the Cloud IAM role |
 | "Play has seen this version code before" | part 5; raise `ANDROID_VERSION_CODE_OFFSET` |
 | "The bundle is signed with the DEBUG key" | `key.properties` did not take effect. Caught BEFORE the upload on purpose — a debug-signed bundle is otherwise refused by Play after it |
 | "Play refused the signature" | the keystore is not the one this app is registered to |

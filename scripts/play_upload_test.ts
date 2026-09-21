@@ -16,13 +16,51 @@ import {
 } from "jsr:@std/assert@1";
 
 import {
+  isPermanent,
   LANGUAGE,
   messageOf,
+  PERMANENT_EXIT,
   SCOPE,
   trackBody,
   trackOf,
   uploadRefusal,
 } from "./play_upload.ts";
+
+Deno.test("a disabled API names the switch, not the workflow", () => {
+  // The first real upload. The Cloud project had the service account
+  // and not the API, which are separate switches in separate parts of
+  // the console, and creating one does not turn on the other.
+  const said = uploadRefusal(
+    403,
+    "Google Play Android Developer API has not been used in project " +
+      "1234567890 before or it is disabled.",
+  );
+  assertStringIncludes(said, "separate switch");
+  assertStringIncludes(said, "Enable");
+});
+
+Deno.test("4xx is permanent and 5xx is not", () => {
+  // What decides whether retry.sh tries again. The first real upload
+  // spent seventy seconds and four identical stack traces on a
+  // disabled API, which no amount of backoff could have fixed.
+  assert(isPermanent(400), "a bad request will be bad next time too");
+  assert(isPermanent(403), "a missing permission does not heal");
+  assert(isPermanent(404));
+
+  assert(!isPermanent(500), "Google having a bad moment is worth a retry");
+  assert(!isPermanent(503));
+  // 429 is the one 4xx that means "try again", which is the whole
+  // reason this is not just `status < 500`.
+  assert(!isPermanent(429), "being asked to slow down is a reason to wait");
+  assert(!isPermanent(200));
+});
+
+Deno.test("the permanent exit code is the one the workflow passes", () => {
+  // `RETRY_NEVER_ON=3` in android-release.yml. If this number moves
+  // and that does not, every permanent refusal is retried four times
+  // again, silently.
+  assertEquals(PERMANENT_EXIT, 3);
+});
 
 Deno.test("the track is an allow-list, not a cast", () => {
   assertEquals(trackOf("internal"), "internal");

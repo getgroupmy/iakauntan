@@ -91,7 +91,48 @@ export function trackBody(
  * wrong end of the problem. They are the Android half of the symptom
  * table in `docs/android-release.md`.
  */
+/**
+ * The exit code that means "trying again cannot help".
+ *
+ * `scripts/ci/retry.sh` is told not to retry this one. The first real
+ * upload spent seventy seconds and four identical stack traces on a
+ * disabled API — a setting in a browser, which no amount of backoff
+ * was ever going to change.
+ */
+export const PERMANENT_EXIT = 3;
+
+/**
+ * Whether trying again could ever change the answer.
+ *
+ * 4xx is Google's decision about this request: a missing permission,
+ * an API nobody enabled, a version code already used. None of them
+ * heal on their own. 5xx is Google having a bad moment, and 429 is
+ * being asked to slow down — both worth another go.
+ */
+export function isPermanent(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 429;
+}
+
+/** A refusal, carrying whether it is worth retrying. */
+export class PlayRefusal extends Error {
+  constructor(message: string, readonly permanent: boolean) {
+    super(message);
+    this.name = "PlayRefusal";
+  }
+}
+
 export function uploadRefusal(status: number, said: string): string {
+  // The Cloud project has the service account but not the API. It is
+  // a separate switch in a separate part of the console from creating
+  // the account, and creating one does not turn it on.
+  if (said.includes("has not been used in project") ||
+      said.includes("it is disabled")) {
+    return "The Google Play Android Developer API is not enabled on " +
+      "the Cloud project this service account belongs to. Creating the " +
+      "account does not enable it — it is a separate switch. Open the " +
+      "console link in the message above, press Enable, wait a couple " +
+      "of minutes for it to propagate, and run this again.";
+  }
   // The one that will happen to whoever sets this up. The Publishing
   // API cannot create an app and will not take the FIRST bundle for one
   // that has never had a release -- that upload goes through the
@@ -155,7 +196,12 @@ async function call(
     },
   });
   const body = await res.text();
-  if (!res.ok) throw new Error(uploadRefusal(res.status, messageOf(body)));
+  if (!res.ok) {
+    throw new PlayRefusal(
+      uploadRefusal(res.status, messageOf(body)),
+      isPermanent(res.status),
+    );
+  }
   return body ? JSON.parse(body) : {};
 }
 
@@ -221,5 +267,17 @@ async function main() {
 }
 
 if (import.meta.main) {
-  await main();
+  try {
+    await main();
+  } catch (error) {
+    // A refusal is reported as the sentence it was turned into, not as
+    // a Deno stack trace through `call`. The stack says where the
+    // throw was, which is never where the problem is — and the first
+    // real run printed it four times.
+    if (error instanceof PlayRefusal) {
+      console.error(error.message);
+      Deno.exit(error.permanent ? PERMANENT_EXIT : 1);
+    }
+    throw error;
+  }
 }
