@@ -2694,6 +2694,83 @@ class Repo {
     return [for (final r in rows) TaxComputationLine.fromMap(r)];
   }
 
+  /// Starts, or reopens, the CP204 estimate for a financial year.
+  Future<String> openTaxEstimate(
+    String fiscalYearId, {
+    double estimatedTax = 0,
+    double? priorEstimate,
+  }) async {
+    final id = await callRpc(
+      'open_tax_estimate',
+      params: {
+        'p_org_id': orgId,
+        'p_fiscal_year_id': fiscalYearId,
+        'p_estimated_tax': estimatedTax,
+        'p_prior_estimate': priorEstimate,
+      },
+    );
+    return id as String;
+  }
+
+  Future<Map<String, dynamic>?> taxEstimate(String id) async {
+    final rows = await client
+        .from('tax_estimates')
+        .select()
+        .eq('id', id)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
+  Future<void> saveTaxEstimate(
+    String id,
+    Map<String, dynamic> changes,
+  ) async {
+    await client.from('tax_estimates').update(changes).eq('id', id);
+  }
+
+  /// A revision is a NEW estimate that supersedes this one — CP204A is
+  /// its own form, and overwriting would lose the figure next year's
+  /// floor is measured against. Returns the new one's id.
+  Future<String> reviseTaxEstimate(String id, double estimatedTax) async {
+    final newId = await callRpc(
+      'revise_tax_estimate',
+      params: {'p_estimate_id': id, 'p_estimated_tax': estimatedTax},
+    );
+    return newId as String;
+  }
+
+  Future<List<TaxInstalment>> taxEstimateSchedule(String id) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_schedule',
+        params: {'p_estimate_id': id},
+      ),
+    );
+    return [for (final r in rows) TaxInstalment.fromMap(r)];
+  }
+
+  /// Whether the estimate clears the floor, and — where there is a
+  /// computation to measure against — what under-estimating costs.
+  Future<TaxEstimateExposure> taxEstimateExposure(
+    String id, {
+    String? computationId,
+  }) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_exposure',
+        params: {
+          'p_estimate_id': id,
+          'p_computation_id': computationId,
+        },
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That estimate no longer exists.');
+    }
+    return TaxEstimateExposure.fromMap(rows.first);
+  }
+
   /// The Form B working.
   Future<IndividualTaxComputation> individualTaxComputation(
     String computationId,
@@ -2875,6 +2952,22 @@ class Repo {
         .limit(1);
     final list = (rows as List).cast<Map<String, dynamic>>();
     return list.isEmpty ? null : list.first;
+  }
+
+  /// The computation for a year, where one has already been opened.
+  ///
+  /// Opening one is not free — `open_tax_computation` writes a row and
+  /// a row is a document somebody then has to look at. The estimate
+  /// screen wants to MEASURE against a computation if there is one and
+  /// say so plainly if there is not, so it asks rather than opens.
+  Future<String?> existingTaxComputation(String fiscalYearId) async {
+    final rows = await client
+        .from('tax_computations')
+        .select('id')
+        .eq('fiscal_year_id', fiscalYearId)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first['id']?.toString();
   }
 
   Future<void> saveTaxComputation(

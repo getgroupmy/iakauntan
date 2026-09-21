@@ -820,6 +820,31 @@ final taxComputationRowProvider = FutureProvider.autoDispose
       return requireRepo(ref).taxComputationRow(id);
     });
 
+/// The CP204 estimate row itself.
+final taxEstimateProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, id) {
+      return requireRepo(ref).taxEstimate(id);
+    });
+
+final taxEstimateScheduleProvider = FutureProvider.autoDispose
+    .family<List<TaxInstalment>, String>((ref, id) {
+      return requireRepo(ref).taxEstimateSchedule(id);
+    });
+
+/// Keyed on the estimate AND the computation, because the exposure is
+/// a different answer with one than without — and for most of the year
+/// there is not one.
+final taxEstimateExposureProvider = FutureProvider.autoDispose
+    .family<TaxEstimateExposure, ({String estimate, String? computation})>((
+      ref,
+      args,
+    ) {
+      return requireRepo(ref).taxEstimateExposure(
+        args.estimate,
+        computationId: args.computation,
+      );
+    });
+
 /// The Form B working.
 final individualTaxProvider = FutureProvider.autoDispose
     .family<IndividualTaxComputation, String>((ref, id) {

@@ -45,6 +45,16 @@ class FilingsScreen extends ConsumerWidget {
               icon: const Icon(Icons.calculate_outlined),
               onPressed: () => _openTaxComputation(context, ref),
             ),
+          // CP204 runs the opposite way round -- a figure said BEFORE
+          // the year rather than worked out after it -- so it is its
+          // own action rather than a tab on the computation.
+          if (canPost)
+            IconButton(
+              key: const ValueKey('open-tax-estimate'),
+              tooltip: 'Tax estimate (CP204)',
+              icon: const Icon(Icons.event_repeat_outlined),
+              onPressed: () => _openTaxEstimate(context, ref),
+            ),
         ],
       ),
       body: AsyncView(
@@ -303,32 +313,34 @@ class _NewFilingDialogState extends State<_NewFilingDialog> {
   }
 }
 
-/// Which year to compute the tax for, and then its computation.
+/// Which financial year, for anything keyed to a basis period.
 ///
-/// A financial year rather than a calendar one, because the basis
-/// period is what a year of assessment is taken from -- `0665` derives
-/// the year from the period's end date rather than letting anybody
-/// type it.
-Future<void> _openTaxComputation(BuildContext context, WidgetRef ref) async {
+/// Newest first: both the computation and the estimate are about the
+/// year somebody is in or has just left, so the one they want is almost
+/// always the most recent. Returns null when there is nothing to pick
+/// or the reader backed out, and says why in the first case rather
+/// than opening an empty dialog.
+Future<FiscalYear?> _pickFiscalYear(
+  BuildContext context,
+  WidgetRef ref,
+  String what,
+) async {
   final years = await ref.read(fiscalYearsProvider.future);
-  if (!context.mounted) return;
+  if (!context.mounted) return null;
   if (years.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Start a financial year first — a tax computation is for a '
-          'basis period.',
+          'Start a financial year first — $what is for a basis period.',
         ),
       ),
     );
-    return;
+    return null;
   }
 
-  // Newest first: a computation is prepared after the year has ended,
-  // so the one somebody wants is almost always the most recent.
   final sorted = [...years]..sort((a, b) => b.endDate.compareTo(a.endDate));
 
-  final chosen = await showDialog<FiscalYear>(
+  return showDialog<FiscalYear>(
     context: context,
     builder: (ctx) => SimpleDialog(
       title: const Text('Which year?'),
@@ -348,6 +360,52 @@ Future<void> _openTaxComputation(BuildContext context, WidgetRef ref) async {
       ],
     ),
   );
+}
+
+/// The CP204 estimate for a year, and the computation to judge it
+/// against where one has already been opened.
+///
+/// It does NOT open a computation to get one. Opening a computation is
+/// a document somebody then has to deal with, and the estimate screen
+/// is honest about not knowing — it says the shortfall cannot be
+/// checked yet rather than showing a shortfall against zero, which for
+/// most of the year is exactly the true state of things.
+Future<void> _openTaxEstimate(BuildContext context, WidgetRef ref) async {
+  final chosen = await _pickFiscalYear(context, ref, 'an estimate');
+  if (chosen == null || !context.mounted) return;
+
+  final repo = ref.read(repoProvider);
+  if (repo == null) return;
+
+  String? id;
+  String? computationId;
+  final ok = await runWithFeedback(
+    context,
+    doing: 'open the tax estimate',
+    successMessage: null,
+    action: () async {
+      id = await repo.openTaxEstimate(chosen.id);
+      computationId = await repo.existingTaxComputation(chosen.id);
+    },
+  );
+  final estimateId = id;
+  if (!ok || estimateId == null || !context.mounted) return;
+
+  final against = computationId;
+  GoRouter.of(context).push(
+    '/tax-estimate/$estimateId'
+    '${against == null ? '' : '?computation=$against'}',
+  );
+}
+
+/// Which year to compute the tax for, and then its computation.
+///
+/// A financial year rather than a calendar one, because the basis
+/// period is what a year of assessment is taken from -- `0665` derives
+/// the year from the period's end date rather than letting anybody
+/// type it.
+Future<void> _openTaxComputation(BuildContext context, WidgetRef ref) async {
+  final chosen = await _pickFiscalYear(context, ref, 'a tax computation');
   if (chosen == null || !context.mounted) return;
 
   final repo = ref.read(repoProvider);

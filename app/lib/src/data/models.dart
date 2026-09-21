@@ -2237,6 +2237,116 @@ class TaxComputation {
   );
 }
 
+/// One instalment of a CP204 estimate.
+class TaxInstalment {
+  TaxInstalment({
+    required this.number,
+    required this.dueOn,
+    required this.amount,
+  });
+
+  final int number;
+  final DateTime? dueOn;
+  final double amount;
+
+  factory TaxInstalment.fromMap(Map<String, dynamic> j) => TaxInstalment(
+    number: Fmt.toInt(j['instalment_no']),
+    dueOn: Fmt.parseDate(j['due_on']),
+    amount: Fmt.toDouble(j['amount']),
+  );
+}
+
+/// Whether an estimate is allowed, and whether it is high enough.
+///
+/// Two different questions with two different answers, and conflating
+/// them is the mistake this exists to prevent. The FLOOR is about last
+/// year — an estimate below the required share of it is not low, it is
+/// invalid. The EXPOSURE is about this year, and an estimate can clear
+/// the floor comfortably and still be penalised.
+class TaxEstimateExposure {
+  TaxEstimateExposure({
+    required this.estimatedTax,
+    required this.meetsFloor,
+    required this.floorKnown,
+    required this.actualKnown,
+    required this.revisionOpen,
+    required this.revisionMonths,
+    this.priorEstimate,
+    this.floorRequired,
+    this.actualTax,
+    this.shortfall,
+    this.toleranceAmount,
+    this.excessOverTolerance,
+    this.penalty,
+  });
+
+  final double estimatedTax;
+
+  /// Null means nobody has said what last year's estimate was.
+  final double? priorEstimate;
+  final double? floorRequired;
+
+  /// False when the floor is unknown as well as when it is missed.
+  /// Read it with [floorKnown]: a tick beside a figure nobody has
+  /// checked is worse than an honest question mark.
+  final bool meetsFloor;
+  final bool floorKnown;
+
+  /// All of these are null until there is a computation to measure
+  /// against — which there is not, for most of the year.
+  final double? actualTax;
+  final bool actualKnown;
+  final double? shortfall;
+  final double? toleranceAmount;
+  final double? excessOverTolerance;
+
+  /// Null is "not yet known", which is NOT the same as zero. A penalty
+  /// of nothing is a promise; a penalty of null is a question.
+  final double? penalty;
+
+  /// Whether today falls in a month a revision is allowed in.
+  final bool revisionOpen;
+  final List<int> revisionMonths;
+
+  /// Under-estimated far enough to cost money. False while unknown,
+  /// because the screen must not cry wolf in the second month.
+  bool get isExposed => actualKnown && (penalty ?? 0) > 0;
+
+  /// The one state worth interrupting somebody for: money is at stake
+  /// AND there is still a month in which to fix it.
+  bool get canStillFix => isExposed && revisionOpen;
+
+  factory TaxEstimateExposure.fromMap(Map<String, dynamic> j) =>
+      TaxEstimateExposure(
+        estimatedTax: Fmt.toDouble(j['estimated_tax']),
+        priorEstimate: j['prior_estimate'] == null
+            ? null
+            : Fmt.toDouble(j['prior_estimate']),
+        floorRequired: j['floor_required'] == null
+            ? null
+            : Fmt.toDouble(j['floor_required']),
+        meetsFloor: j['meets_floor'] == true,
+        floorKnown: j['floor_known'] == true,
+        actualTax:
+            j['actual_tax'] == null ? null : Fmt.toDouble(j['actual_tax']),
+        actualKnown: j['actual_known'] == true,
+        shortfall:
+            j['shortfall'] == null ? null : Fmt.toDouble(j['shortfall']),
+        toleranceAmount: j['tolerance_amount'] == null
+            ? null
+            : Fmt.toDouble(j['tolerance_amount']),
+        excessOverTolerance: j['excess_over_tolerance'] == null
+            ? null
+            : Fmt.toDouble(j['excess_over_tolerance']),
+        penalty: j['penalty'] == null ? null : Fmt.toDouble(j['penalty']),
+        revisionOpen: j['revision_open'] == true,
+        revisionMonths: [
+          for (final m in (j['revision_months'] as List? ?? const []))
+            Fmt.toInt(m),
+        ],
+      );
+}
+
 /// The Form B working: a person with business income.
 ///
 /// The business is ONE source. Employment, rent and a share of a

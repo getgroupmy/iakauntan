@@ -56,6 +56,7 @@ import '../features/financials/filings_screen.dart';
 import '../features/financials/form_b_screen.dart';
 import '../features/financials/form_p_screen.dart';
 import '../features/financials/tax_computation_screen.dart';
+import '../features/financials/tax_estimate_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
@@ -1065,6 +1066,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             parentNavigatorKey: rootNavigatorKey,
             builder: (_, state) => TaxComputationScreen(
               computationId: state.pathParameters['id']!,
+            ),
+          ),
+          // The other half of the year. The computation to measure
+          // against is a QUERY parameter rather than a path segment
+          // because for most of the year there is not one, and a path
+          // that had to carry a placeholder would be a path that lies.
+          GoRoute(
+            path: '/tax-estimate/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) => TaxEstimateScreen(
+              estimateId: state.pathParameters['id']!,
+              computationId: state.uri.queryParameters['computation'],
             ),
           ),
           GoRoute(

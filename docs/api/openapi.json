@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0666",
+    "version": "0667",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -43228,6 +43228,72 @@
         }
       }
     },
+    "/rpc/open_tax_estimate": {
+      "post": {
+        "operationId": "open_tax_estimate",
+        "summary": "Starts, or reopens, the CP204 estimate for a basis period",
+        "description": "Starts, or reopens, the CP204 estimate for a basis period. The year of assessment comes from the period's end date. Pressing it again hands back the live estimate rather than making a second -- but a SUPERSEDED one is passed over, so a revised year opens its revision.\n\n`public.open_tax_estimate(p_org_id uuid, p_fiscal_year_id uuid, p_estimated_tax numeric, p_prior_estimate numeric)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_fiscal_year_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_estimated_tax": {
+                    "type": "number"
+                  },
+                  "p_prior_estimate": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_fiscal_year_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/org_module_surface": {
       "post": {
         "operationId": "org_module_surface",
@@ -62186,6 +62252,65 @@
         }
       }
     },
+    "/rpc/revise_tax_estimate": {
+      "post": {
+        "operationId": "revise_tax_estimate",
+        "summary": "Replaces an estimate with a revised one, keeping the original",
+        "description": "Replaces an estimate with a revised one, keeping the original. The revision is NOT refused outside the permitted months -- whether it is allowed is a question the screen asks with tax_estimate_exposure and a person answers, because a late revision is sometimes the right thing to record even when it will not be accepted.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_estimated_tax": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "p_estimate_id",
+                  "p_estimated_tax"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/revoke_customer_portal": {
       "post": {
         "operationId": "revoke_customer_portal",
@@ -69561,6 +69686,182 @@
         }
       }
     },
+    "/rpc/tax_estimate_exposure": {
+      "post": {
+        "operationId": "tax_estimate_exposure",
+        "summary": "Whether an estimate clears the floor against last year, and -- where a computation exists to measure against\u2026",
+        "description": "Whether an estimate clears the floor against last year, and -- where a computation exists to measure against -- how far under the real liability it fell and what that costs. Two different questions: an estimate can clear the floor and still be penalised.\n\n`public.tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_computation_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_estimate_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "estimated_tax": {
+                        "type": "number"
+                      },
+                      "prior_estimate": {
+                        "type": "number"
+                      },
+                      "floor_required": {
+                        "type": "number"
+                      },
+                      "meets_floor": {
+                        "type": "boolean"
+                      },
+                      "floor_known": {
+                        "type": "boolean"
+                      },
+                      "actual_tax": {
+                        "type": "number"
+                      },
+                      "actual_known": {
+                        "type": "boolean"
+                      },
+                      "shortfall": {
+                        "type": "number"
+                      },
+                      "tolerance_amount": {
+                        "type": "number"
+                      },
+                      "excess_over_tolerance": {
+                        "type": "number"
+                      },
+                      "penalty": {
+                        "type": "number"
+                      },
+                      "revision_open": {
+                        "type": "boolean"
+                      },
+                      "revision_months": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "format": "int32"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/tax_estimate_schedule": {
+      "post": {
+        "operationId": "tax_estimate_schedule",
+        "summary": "The instalments an estimate is paid in, with their dates",
+        "description": "The instalments an estimate is paid in, with their dates. Equal amounts with the last one carrying the rounding, so the schedule adds up to the estimate exactly.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_estimate_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "instalment_no": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "due_on": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "amount": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/tax_partnership_allocation": {
       "post": {
         "operationId": "tax_partnership_allocation",
@@ -76149,6 +76450,134 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_detail_submissions"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_estimate_rules": {
+      "get": {
+        "operationId": "select_tax_estimate_rules",
+        "summary": "Read tax_estimate_rules",
+        "description": "CP204 policy by year of assessment: the floor against last year, the tolerance and penalty for under-estimating, the instalment shape and when a revision is allowed. Every one of these has moved before.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_estimate_rules"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_estimates": {
+      "get": {
+        "operationId": "select_tax_estimates",
+        "summary": "Read tax_estimates",
+        "description": "A CP204 estimate for a basis period, and its revisions. A revision is a new row pointing at the one it replaces -- CP204A is its own form, and overwriting the original would lose the figure the 85% floor is measured against.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_estimates"
                   }
                 }
               }
@@ -98521,6 +98950,127 @@
           "org_id",
           "contact_id",
           "request_id"
+        ]
+      },
+      "tax_estimate_rules": {
+        "type": "object",
+        "properties": {
+          "year_of_assessment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "floor_percent_of_prior": {
+            "type": "number"
+          },
+          "under_tolerance_percent": {
+            "type": "number"
+          },
+          "under_penalty_percent": {
+            "type": "number"
+          },
+          "instalments": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first_instalment_month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "instalment_day": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "filing_days_before": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "revision_months": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "source": {
+            "type": "string"
+          },
+          "is_verified": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "year_of_assessment",
+          "floor_percent_of_prior",
+          "under_tolerance_percent",
+          "under_penalty_percent",
+          "instalments",
+          "first_instalment_month",
+          "instalment_day",
+          "filing_days_before"
+        ]
+      },
+      "tax_estimates": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fiscal_year_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "year_of_assessment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "estimated_tax": {
+            "type": "number"
+          },
+          "prior_estimate": {
+            "type": "number"
+          },
+          "revises_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision_month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first_period": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "fiscal_year_id",
+          "year_of_assessment"
         ]
       },
       "tax_other_income": {

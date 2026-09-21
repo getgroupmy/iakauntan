@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0666` (the highest applied migration).
-754 functions and 359 readable tables, of which
-286 functions only read.
+Schema version `0667` (the highest applied migration).
+758 functions and 361 readable tables, of which
+288 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**612 of 754 functions carry a `comment on
+**616 of 758 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (542)
+### general (546)
 
 Not gated on any module.
 
@@ -647,6 +647,7 @@ Not gated on any module.
 - `open_shared_ticket(p_token text)` *(writes)* — Opens a support ticket shared by link, for the customer who raised it.
 - `open_tax_computation(p_org_id uuid, p_fiscal_year_id uuid)` *(writes)* — Starts, or reopens, the computation for a basis period.
 - `open_tax_detail_request(p_token text)` *(writes)* — What we hold about one contact, plus the state list its form needs, for somebody holding their tax-details token and no account.
+- `open_tax_estimate(p_org_id uuid, p_fiscal_year_id uuid, p_estimated_tax numeric, p_prior_estimate numeric)` *(writes)* — Starts, or reopens, the CP204 estimate for a basis period.
 - `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
 - `org_payment_gateway_status(p_org_id uuid)` — Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what is configured without being shown the credentials.
 - `org_save_login_page(p_org_id uuid, p_title text, p_body text)` *(writes)* — Writes the heading and body shown on this company's own sign-in page, creating the row on first save.
@@ -813,6 +814,7 @@ Not gated on any module.
 - `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)* — Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss.
 - `revenue_schedule_due(p_org_id uuid)` — Deferred revenue not yet released, one row per period end — the shape recognise_revenue posts in.
 - `reverse_gl_entry(p_entry_id uuid, p_date date)` *(writes)* — Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given, numbered as a new journal and marked `is_reversal` pointing back at the original.
+- `revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` *(writes)* — Replaces an estimate with a revised one, keeping the original.
 - `revoke_customer_portal(p_contact_id uuid)` *(writes)* — Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a single document.
 - `revoke_document_share(p_document_id uuid)` *(writes)* — Turns off every share link for one sales document at once, and returns how many it turned off.
 - `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)* — Withdraws an employee's approved access to their own payslips, with a note saying why.
@@ -887,6 +889,8 @@ Not gated on any module.
 - `tax_computation_individual(p_computation_id uuid)` — The Form B working: the business as one source among several, less approved donations and personal reliefs, at the resident individual scale.
 - `tax_computation_lines(p_computation_id uuid)` — Every add-back and deduction in a computation, with the account or the typed adjustment it came from.
 - `tax_computation_misfiled(p_org_id uuid)` — Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account.
+- `tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` — Whether an estimate clears the floor against last year, and -- where a computation exists to measure against -- how far under the real liability it fell and what that costs.
+- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, with their dates.
 - `tax_partnership_allocation(p_computation_id uuid)`
 - `tax_partnership_summary(p_computation_id uuid)` — The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.
 - `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
@@ -1262,6 +1266,8 @@ inconsistent.
 - `tax_computations`
 - `tax_detail_requests`
 - `tax_detail_submissions`
+- `tax_estimate_rules`
+- `tax_estimates`
 - `tax_other_income`
 - `tax_partners`
 - `tax_relief_claims`
