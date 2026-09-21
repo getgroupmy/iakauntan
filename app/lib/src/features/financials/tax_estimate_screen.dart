@@ -48,6 +48,7 @@ class _TaxEstimateScreenState extends ConsumerState<TaxEstimateScreen> {
     ref.invalidate(taxEstimateProvider(widget.estimateId));
     ref.invalidate(taxEstimateScheduleProvider(widget.estimateId));
     ref.invalidate(taxEstimateExposureProvider(_key));
+    ref.invalidate(taxFirstPeriodProvider(widget.estimateId));
   }
 
   Future<void> _edit() async {
@@ -218,6 +219,8 @@ class _Estimate extends ConsumerWidget {
                       'low against. The penalty below is a separate '
                       'question and still applies.',
                 ),
+
+              _FirstPeriod(id: id),
 
               TaxSection(title: 'The ${e.form} estimate'),
               TaxLine('Estimated tax', e.estimatedTax, bold: true),
@@ -434,12 +437,18 @@ class _EstimateDialog extends ConsumerStatefulWidget {
 class _EstimateDialogState extends ConsumerState<_EstimateDialog> {
   final _estimate = TextEditingController();
   final _prior = TextEditingController();
+  final _capital = TextEditingController();
+  final _income = TextEditingController();
   bool _seeded = false;
+  bool _firstPeriod = false;
+  DateTime? _commencedOn;
 
   @override
   void dispose() {
     _estimate.dispose();
     _prior.dispose();
+    _capital.dispose();
+    _income.dispose();
     super.dispose();
   }
 
@@ -453,6 +462,22 @@ class _EstimateDialogState extends ConsumerState<_EstimateDialog> {
     _prior.text = row['prior_estimate'] == null
         ? ''
         : Fmt.toDouble(row['prior_estimate']).toStringAsFixed(2);
+    _firstPeriod = row['first_period'] == true;
+    _commencedOn = Fmt.parseDate(row['commenced_on']);
+    // Blank rather than "0.00" for the same reason as the prior
+    // estimate: a paid-up capital of nothing would pass the SME test
+    // on a figure nobody supplied.
+    _capital.text = row['paid_up_capital'] == null
+        ? ''
+        : Fmt.toDouble(row['paid_up_capital']).toStringAsFixed(2);
+    _income.text = row['gross_business_income'] == null
+        ? ''
+        : Fmt.toDouble(row['gross_business_income']).toStringAsFixed(2);
+  }
+
+  double? _figure(TextEditingController c) {
+    final text = c.text.trim().replaceAll(',', '');
+    return text.isEmpty ? null : double.tryParse(text);
   }
 
   Future<void> _save() async {
@@ -473,6 +498,16 @@ class _EstimateDialogState extends ConsumerState<_EstimateDialog> {
         'estimated_tax': estimate,
         'prior_estimate':
             priorText.isEmpty ? null : double.tryParse(priorText),
+        'first_period': _firstPeriod,
+        // Cleared along with the flag. A commencement date left behind
+        // on a company that is no longer a first period would sit
+        // there waiting to be believed the next time somebody ticked
+        // the box.
+        'commenced_on': !_firstPeriod || _commencedOn == null
+            ? null
+            : Fmt.iso(_commencedOn!),
+        'paid_up_capital': _firstPeriod ? _figure(_capital) : null,
+        'gross_business_income': _firstPeriod ? _figure(_income) : null,
       }),
     );
     if (done && mounted) Navigator.pop(context, true);
@@ -521,6 +556,91 @@ class _EstimateDialogState extends ConsumerState<_EstimateDialog> {
                     helperMaxLines: 3,
                   ),
                 ),
+                const SizedBox(height: Space.md),
+                const Divider(),
+                // Nothing infers this. The obvious rule -- the
+                // company's first financial year in this product --
+                // is wrong for every company that migrated in with
+                // years of history behind it, and applying the
+                // new-company rules to one of those would move a real
+                // deadline and cancel real instalments.
+                SwitchListTile(
+                  key: const ValueKey('estimate-first-toggle'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _firstPeriod,
+                  onChanged: (v) => setState(() => _firstPeriod = v),
+                  title: const Text('This is the first basis period'),
+                  subtitle: const Text(
+                    'A new business, not a new set of books. Nothing '
+                    'can work this out on its own.',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+                if (_firstPeriod) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _commencedOn == null
+                              ? 'Commenced operations: not set'
+                              : 'Commenced ${Fmt.date(_commencedOn!)}',
+                          key: const ValueKey('estimate-commenced'),
+                        ),
+                      ),
+                      TextButton(
+                        key: const ValueKey('estimate-pick-commenced'),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _commencedOn ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (picked != null) {
+                            setState(() => _commencedOn = picked);
+                          }
+                        },
+                        child: const Text('Set'),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'Not the incorporation date — a company '
+                    'incorporated in March may commence in September, '
+                    'and the deadline counts from the second.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: Space.md),
+                  TextField(
+                    key: const ValueKey('estimate-capital'),
+                    controller: _capital,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Paid-up ordinary share capital',
+                      prefixText: 'RM ',
+                      helperText: 'At the START of the basis period. '
+                          'Leave blank if unknown — blank schedules the '
+                          'instalments rather than assuming there are '
+                          'none.',
+                      helperMaxLines: 3,
+                    ),
+                  ),
+                  const SizedBox(height: Space.md),
+                  TextField(
+                    key: const ValueKey('estimate-income'),
+                    controller: _income,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Gross business income',
+                      prefixText: 'RM ',
+                      helperText: 'Both figures are needed before the '
+                          'exemption can be tested at all.',
+                      helperMaxLines: 2,
+                    ),
+                  ),
+                ],
               ],
             );
           },
@@ -615,4 +735,125 @@ class _ReviseDialogState extends ConsumerState<_ReviseDialog> {
       FilledButton(onPressed: _save, child: const Text('Revise')),
     ],
   );
+}
+
+/// How a first basis period differs.
+///
+/// Drawn only when the estimate says it IS one — an ordinary company
+/// should not be shown a panel about rules that do not apply to it.
+/// Inside, two answers and one question:
+///
+///   * the deadline, three months from commencing operations, beside
+///     the ordinary one it replaces — which for a company incorporated
+///     partway through a year has usually already passed, and seeing
+///     that is the point;
+///   * whether a qualifying new SME owes instalments at all;
+///   * and where the two figures that decide it have not been typed,
+///     a plain statement that the test could not be taken, because the
+///     instalments are scheduled meanwhile and somebody should know
+///     why.
+class _FirstPeriod extends ConsumerWidget {
+  const _FirstPeriod({required this.id});
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return AsyncView(
+      value: ref.watch(taxFirstPeriodProvider(id)),
+      onRetry: () => ref.invalidate(taxFirstPeriodProvider(id)),
+      skeleton: const CardRowsSkeleton(
+        rows: 2,
+        leading: false,
+        lines: 1,
+        trailing: 1,
+        trailingWidth: 100,
+      ),
+      builder: (fp) {
+        if (!fp.isFirstPeriod) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const TaxSection(
+              title: 'The first basis period',
+              hint: 'Different deadline, and possibly no instalments',
+            ),
+            if (fp.filingDueKnown)
+              _Notice(
+                key: const ValueKey('estimate-first-due'),
+                colour: scheme.surfaceContainerHighest,
+                onColour: scheme.onSurface,
+                icon: Icons.event_outlined,
+                text:
+                    'Due ${Fmt.date(fp.filingDue!)} — three months from '
+                    'commencing operations'
+                    '${fp.commencedOn == null ? '' : ' on '
+                        '${Fmt.date(fp.commencedOn!)}'}. '
+                    '${fp.ordinaryDateHasPassed
+                        ? 'The ordinary date, '
+                          '${Fmt.date(fp.ordinaryFilingDue!)}, passed '
+                          'before this company existed — it is not the '
+                          'one to work to.'
+                        : ''}',
+              )
+            else
+              _Notice(
+                key: const ValueKey('estimate-first-nodate'),
+                colour: scheme.surfaceContainerHighest,
+                onColour: scheme.onSurface,
+                icon: Icons.help_outline,
+                text:
+                    'The deadline runs three months from the day the '
+                    'business commenced operations, which nobody has '
+                    'entered. Enter it and the date appears — it is not '
+                    'the incorporation date.',
+              ),
+            if (fp.exemptInstalments)
+              _Notice(
+                key: const ValueKey('estimate-exempt'),
+                colour: scheme.surfaceContainerHighest,
+                onColour: scheme.onSurface,
+                icon: Icons.check_circle_outline,
+                text:
+                    'No instalments are payable. A qualifying new SME '
+                    'is relieved of them'
+                    '${fp.exemptUntilYa == null ? '' : ' through year of '
+                        'assessment ${fp.exemptUntilYa}'}. '
+                    'The estimate is still furnished.',
+              )
+            else if (fp.exemptionUntested)
+              _Notice(
+                key: const ValueKey('estimate-exempt-untested'),
+                colour: scheme.surfaceContainerHighest,
+                onColour: scheme.onSurface,
+                icon: Icons.help_outline,
+                text:
+                    'Whether instalments are payable at all has not '
+                    'been checked: it needs the paid-up capital at the '
+                    'start of the period and the gross business income, '
+                    'and neither is a figure this system holds. The '
+                    'instalments below are scheduled meanwhile — the '
+                    'safe way round, because missing one that was due '
+                    'is a penalty.',
+              )
+            else
+              _Notice(
+                key: const ValueKey('estimate-not-exempt'),
+                colour: scheme.surfaceContainerHighest,
+                onColour: scheme.onSurface,
+                icon: Icons.info_outline,
+                text:
+                    'Instalments are payable: the company is over the '
+                    'limit for the new-SME relief'
+                    '${fp.capitalLimit == null ? '' : ' '
+                        '(${Fmt.money(fp.capitalLimit!)} of capital, '
+                        '${Fmt.money(fp.turnoverLimit ?? 0)} of gross '
+                        'income)'}.',
+              ),
+          ],
+        );
+      },
+    );
+  }
 }

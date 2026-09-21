@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0670",
+    "version": "0671",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -62395,8 +62395,8 @@
     "/rpc/revise_tax_estimate": {
       "post": {
         "operationId": "revise_tax_estimate",
-        "summary": "Replaces an estimate with a revised one, keeping the original and carrying its form",
-        "description": "Replaces an estimate with a revised one, keeping the original and carrying its form. The revision is NOT refused outside the permitted months -- whether it is allowed is a question the screen asks with tax_estimate_exposure and a person answers, because a late revision is sometimes the right thing to record even when it will not be accepted.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` Writes. Requires a signed-in user.",
+        "summary": "Replaces an estimate with a revised one, keeping the original and carrying everything about it that is not\u2026",
+        "description": "Replaces an estimate with a revised one, keeping the original and carrying everything about it that is not the figure -- its form, and whether this is a first basis period with the facts that decide its deadline and its exemption. The revision is NOT refused outside the permitted months: whether it is allowed is a question the screen asks and a person answers.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -69938,11 +69938,113 @@
         }
       }
     },
+    "/rpc/tax_estimate_first_period": {
+      "post": {
+        "operationId": "tax_estimate_first_period",
+        "summary": "The two ways a first basis period differs: when the estimate is due, and whether a qualifying new SME owes\u2026",
+        "description": "The two ways a first basis period differs: when the estimate is due, and whether a qualifying new SME owes instalments at all. Unknown is never exempt -- the instalments are scheduled and the screen says the test could not be taken.\n\n`public.tax_estimate_first_period(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_estimate_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "is_first_period": {
+                        "type": "boolean"
+                      },
+                      "form": {
+                        "type": "string"
+                      },
+                      "commenced_on": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "filing_due": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "ordinary_filing_due": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "filing_due_known": {
+                        "type": "boolean"
+                      },
+                      "exempt_instalments": {
+                        "type": "boolean"
+                      },
+                      "exemption_known": {
+                        "type": "boolean"
+                      },
+                      "exempt_until_ya": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "paid_up_capital": {
+                        "type": "number"
+                      },
+                      "gross_business_income": {
+                        "type": "number"
+                      },
+                      "capital_limit": {
+                        "type": "number"
+                      },
+                      "turnover_limit": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/tax_estimate_schedule": {
       "post": {
         "operationId": "tax_estimate_schedule",
-        "summary": "The instalments an estimate is paid in, on the rhythm its FORM names -- twelve monthly for CP204, six\u2026",
-        "description": "The instalments an estimate is paid in, on the rhythm its FORM names -- twelve monthly for CP204, six bimonthly for CP500. Equal amounts with the last carrying the rounding, and each date clamped to the length of its month.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "The instalments an estimate is paid in, on the rhythm its FORM names -- and EMPTY where a qualifying new SME\u2026",
+        "description": "The instalments an estimate is paid in, on the rhythm its FORM names -- and EMPTY where a qualifying new SME owes none for its first two years of assessment. Equal amounts with the last carrying the rounding, each date clamped to the length of its month.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -70288,7 +70390,7 @@
       "post": {
         "operationId": "tax_upcoming_filings",
         "summary": "Every income tax obligation this company still has against its own basis periods, computed rather than\u2026",
-        "description": "Every income tax obligation this company still has against its own basis periods, computed rather than stored, with what is already late kept in the list and what has been filed or dismissed taken out of it. The e-filing date is shown beside the statutory one, never instead of it.\n\n`public.tax_upcoming_filings(p_org_id uuid, p_within_days integer)` Reads only. Requires a signed-in user.",
+        "description": "Every income tax obligation this company still has against its own basis periods, computed rather than stored, with what is already late kept in the list and what has been filed or dismissed taken out of it. A CP204 whose estimate says this is a first basis period follows the estimate's three-month deadline rather than the ordinary one, so the two screens cannot disagree.\n\n`public.tax_upcoming_filings(p_org_id uuid, p_within_days integer)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -99518,6 +99620,14 @@
           },
           "has_floor": {
             "type": "boolean"
+          },
+          "first_period_filing_months": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first_period_exempt_years": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "required": [
@@ -99587,6 +99697,16 @@
           },
           "form": {
             "type": "string"
+          },
+          "commenced_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "paid_up_capital": {
+            "type": "number"
+          },
+          "gross_business_income": {
+            "type": "number"
           }
         },
         "required": [

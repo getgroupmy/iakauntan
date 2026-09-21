@@ -2764,6 +2764,20 @@ class Repo {
     return [for (final r in rows) TaxFilingRecord.fromMap(r)];
   }
 
+  /// How a first basis period differs, where it is one.
+  Future<TaxFirstPeriod> taxEstimateFirstPeriod(String id) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_first_period',
+        params: {'p_estimate_id': id},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That estimate no longer exists.');
+    }
+    return TaxFirstPeriod.fromMap(rows.first);
+  }
+
   /// Starts, or reopens, the CP204 estimate for a financial year.
   Future<String> openTaxEstimate(
     String fiscalYearId, {

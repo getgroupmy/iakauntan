@@ -836,6 +836,12 @@ final taxFilingHistoryProvider =
       return requireRepo(ref).taxFilingHistory();
     });
 
+/// How a first basis period differs, where the estimate says it is one.
+final taxFirstPeriodProvider = FutureProvider.autoDispose
+    .family<TaxFirstPeriod, String>((ref, id) {
+      return requireRepo(ref).taxEstimateFirstPeriod(id);
+    });
+
 /// The CP204 estimate row itself.
 final taxEstimateProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, id) {

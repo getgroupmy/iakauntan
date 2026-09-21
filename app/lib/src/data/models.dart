@@ -2430,6 +2430,104 @@ class TaxFilingRecord {
   );
 }
 
+/// How a first basis period differs, and whether anybody has said so.
+///
+/// Two answers that look like details and are each worth money: when
+/// the estimate is actually due, and whether a qualifying new SME owes
+/// instalments at all.
+///
+/// [exemptionKnown] is the one to read carefully. It is FALSE both
+/// when this is not a first period and when the two figures the test
+/// needs have not been typed — and in the second case the instalments
+/// are scheduled anyway. That is the safe direction: skipping
+/// instalments that were due is a penalty, paying ones that were not
+/// is recoverable. The screen says the test could not be taken rather
+/// than letting it look like the test was failed.
+class TaxFirstPeriod {
+  TaxFirstPeriod({
+    required this.isFirstPeriod,
+    required this.form,
+    required this.filingDueKnown,
+    required this.exemptInstalments,
+    required this.exemptionKnown,
+    this.commencedOn,
+    this.filingDue,
+    this.ordinaryFilingDue,
+    this.exemptUntilYa,
+    this.paidUpCapital,
+    this.grossBusinessIncome,
+    this.capitalLimit,
+    this.turnoverLimit,
+  });
+
+  final bool isFirstPeriod;
+  final String form;
+
+  /// When the business commenced operations — not the incorporation
+  /// date. A company incorporated in March may commence in September,
+  /// and the first CP204 is counted from the second.
+  final DateTime? commencedOn;
+
+  /// Three months from commencing. Null where nobody has said when
+  /// that was: a deadline computed from a date nobody supplied is a
+  /// deadline somebody will trust.
+  final DateTime? filingDue;
+
+  /// What it would have been under the ordinary rule. Shown beside
+  /// [filingDue] rather than instead of it, because for a company
+  /// incorporated partway through a year the ordinary one has usually
+  /// already passed — and seeing that is the point.
+  final DateTime? ordinaryFilingDue;
+  final bool filingDueKnown;
+
+  final bool exemptInstalments;
+  final bool exemptionKnown;
+
+  /// The last year of assessment the exemption covers.
+  final int? exemptUntilYa;
+
+  final double? paidUpCapital;
+  final double? grossBusinessIncome;
+  final double? capitalLimit;
+  final double? turnoverLimit;
+
+  /// A first period whose SME test nobody has been able to take. The
+  /// state worth asking about, as distinct from one that was taken and
+  /// failed.
+  bool get exemptionUntested => isFirstPeriod && !exemptionKnown;
+
+  /// The ordinary deadline has already gone by the time the real one
+  /// arrives — which is the ordinary case for a company incorporated
+  /// partway through a year, and the reason both dates are shown.
+  bool get ordinaryDateHasPassed =>
+      filingDue != null &&
+      ordinaryFilingDue != null &&
+      ordinaryFilingDue!.isBefore(filingDue!);
+
+  factory TaxFirstPeriod.fromMap(Map<String, dynamic> j) => TaxFirstPeriod(
+    isFirstPeriod: j['is_first_period'] == true,
+    form: j['form']?.toString() ?? 'CP204',
+    commencedOn: Fmt.parseDate(j['commenced_on']),
+    filingDue: Fmt.parseDate(j['filing_due']),
+    ordinaryFilingDue: Fmt.parseDate(j['ordinary_filing_due']),
+    filingDueKnown: j['filing_due_known'] == true,
+    exemptInstalments: j['exempt_instalments'] == true,
+    exemptionKnown: j['exemption_known'] == true,
+    exemptUntilYa:
+        j['exempt_until_ya'] == null ? null : Fmt.toInt(j['exempt_until_ya']),
+    paidUpCapital: j['paid_up_capital'] == null
+        ? null
+        : Fmt.toDouble(j['paid_up_capital']),
+    grossBusinessIncome: j['gross_business_income'] == null
+        ? null
+        : Fmt.toDouble(j['gross_business_income']),
+    capitalLimit:
+        j['capital_limit'] == null ? null : Fmt.toDouble(j['capital_limit']),
+    turnoverLimit:
+        j['turnover_limit'] == null ? null : Fmt.toDouble(j['turnover_limit']),
+  );
+}
+
 /// Whether an estimate is allowed, and whether it is high enough.
 ///
 /// Two different questions with two different answers, and conflating

@@ -160,6 +160,140 @@ void main() {
     });
   });
 
+  group('a first basis period', () {
+    TaxFirstPeriod first({
+      bool isFirst = true,
+      bool dueKnown = true,
+      bool exempt = false,
+      bool known = true,
+      DateTime? due,
+      DateTime? ordinary,
+      // `due: null` cannot say "no deadline" through a `??` default,
+      // so the absence needs its own switch. Written this way round
+      // because the default IS a date for almost every case.
+      bool noDue = false,
+    }) => TaxFirstPeriod(
+      isFirstPeriod: isFirst,
+      form: 'CP204',
+      commencedOn: DateTime(2026, 9, 15),
+      filingDue: noDue ? null : (due ?? DateTime(2026, 12, 14)),
+      ordinaryFilingDue: ordinary ?? DateTime(2025, 12, 2),
+      filingDueKnown: dueKnown,
+      exemptInstalments: exempt,
+      exemptionKnown: known,
+      exemptUntilYa: exempt ? 2027 : null,
+      paidUpCapital: known ? 500000 : null,
+      grossBusinessIncome: known ? 1200000 : null,
+      capitalLimit: 2500000,
+      turnoverLimit: 50000000,
+    );
+
+    test('an untested exemption is not a failed one', () {
+      // The state worth asking about. Both mean "instalments are
+      // scheduled", and only one of them means somebody checked.
+      expect(first(known: false).exemptionUntested, isTrue);
+      expect(first(known: false).exemptInstalments, isFalse);
+    });
+
+    test('a tested one is not untested, whichever way it went', () {
+      expect(first(known: true, exempt: true).exemptionUntested, isFalse);
+      expect(first(known: true, exempt: false).exemptionUntested, isFalse);
+    });
+
+    test('and an ordinary company has no untested exemption at all', () {
+      // Not a first period: the question does not arise, and showing
+      // "we could not check" to a fifteen-year-old company would be
+      // asking it about a relief it cannot have.
+      expect(first(isFirst: false, known: false).exemptionUntested, isFalse);
+    });
+
+    test('the ordinary deadline has usually already passed', () {
+      // Which is why both dates are shown. A company incorporated in
+      // September is being measured against a date thirty days before
+      // the January its year opened.
+      expect(first().ordinaryDateHasPassed, isTrue);
+    });
+
+    test('but not when it has not', () {
+      expect(
+        first(
+          due: DateTime(2026, 3, 31),
+          ordinary: DateTime(2026, 6, 1),
+        ).ordinaryDateHasPassed,
+        isFalse,
+      );
+    });
+
+    test('and not when there is no real deadline to compare it with', () {
+      // Nobody has said when the business commenced, so there is
+      // nothing for the ordinary date to have passed BEFORE.
+      expect(
+        first(dueKnown: false, noDue: true).ordinaryDateHasPassed,
+        isFalse,
+      );
+    });
+
+    test('every first-period figure lands in its own field', () {
+      final fp = TaxFirstPeriod.fromMap(const {
+        'is_first_period': true,
+        'form': 'CP204',
+        'commenced_on': '2026-09-15',
+        'filing_due': '2026-12-14',
+        'ordinary_filing_due': '2025-12-02',
+        'filing_due_known': true,
+        'exempt_instalments': true,
+        'exemption_known': true,
+        'exempt_until_ya': 2027,
+        'paid_up_capital': 500000,
+        'gross_business_income': 1200000,
+        'capital_limit': 2500000,
+        'turnover_limit': 50000000,
+      });
+
+      expect(fp.isFirstPeriod, isTrue);
+      expect(fp.commencedOn, DateTime(2026, 9, 15));
+      expect(fp.filingDue, DateTime(2026, 12, 14));
+      expect(fp.ordinaryFilingDue, DateTime(2025, 12, 2));
+      expect(fp.filingDueKnown, isTrue);
+      expect(fp.exemptInstalments, isTrue);
+      expect(fp.exemptionKnown, isTrue);
+      expect(fp.exemptUntilYa, 2027);
+      expect(fp.paidUpCapital, 500000);
+      expect(fp.grossBusinessIncome, 1200000);
+      expect(fp.capitalLimit, 2500000);
+      expect(fp.turnoverLimit, 50000000);
+      expect(fp.ordinaryDateHasPassed, isTrue);
+      expect(fp.exemptionUntested, isFalse);
+    });
+
+    test('an untested one comes back with nulls, not zeroes', () {
+      // `Fmt.toDouble(null)` is 0, and a paid-up capital of zero would
+      // pass the SME test on a figure nobody supplied.
+      final fp = TaxFirstPeriod.fromMap(const {
+        'is_first_period': true,
+        'form': 'CP204',
+        'filing_due_known': false,
+        'exempt_instalments': false,
+        'exemption_known': false,
+      });
+      expect(fp.paidUpCapital, isNull);
+      expect(fp.grossBusinessIncome, isNull);
+      expect(fp.exemptUntilYa, isNull);
+      expect(fp.filingDue, isNull);
+      expect(fp.exemptionUntested, isTrue);
+      expect(fp.ordinaryDateHasPassed, isFalse);
+    });
+
+    test('an ordinary estimate reads as not a first period', () {
+      final fp = TaxFirstPeriod.fromMap(const {});
+      expect(fp.isFirstPeriod, isFalse);
+      expect(fp.form, 'CP204');
+      expect(fp.exemptInstalments, isFalse);
+      expect(fp.exemptionKnown, isFalse);
+      expect(fp.exemptionUntested, isFalse);
+    });
+  });
+
   group('reading the server back', () {
     test('every exposure figure lands in its own field', () {
       // Different numbers in every position, so a transposition

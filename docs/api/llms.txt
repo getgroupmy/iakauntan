@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0670` (the highest applied migration).
-762 functions and 363 readable tables, of which
-290 functions only read.
+Schema version `0671` (the highest applied migration).
+763 functions and 363 readable tables, of which
+291 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**620 of 762 functions carry a `comment on
+**621 of 763 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (550)
+### general (551)
 
 Not gated on any module.
 
@@ -816,7 +816,7 @@ Not gated on any module.
 - `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)* — Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss.
 - `revenue_schedule_due(p_org_id uuid)` — Deferred revenue not yet released, one row per period end — the shape recognise_revenue posts in.
 - `reverse_gl_entry(p_entry_id uuid, p_date date)` *(writes)* — Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given, numbered as a new journal and marked `is_reversal` pointing back at the original.
-- `revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` *(writes)* — Replaces an estimate with a revised one, keeping the original and carrying its form.
+- `revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` *(writes)* — Replaces an estimate with a revised one, keeping the original and carrying everything about it that is not the figure -- its form, and whether this is a first basis period with the facts that decide its deadline and its exemption.
 - `revoke_customer_portal(p_contact_id uuid)` *(writes)* — Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a single document.
 - `revoke_document_share(p_document_id uuid)` *(writes)* — Turns off every share link for one sales document at once, and returns how many it turned off.
 - `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)* — Withdraws an employee's approved access to their own payslips, with a note saying why.
@@ -892,7 +892,8 @@ Not gated on any module.
 - `tax_computation_lines(p_computation_id uuid)` — Every add-back and deduction in a computation, with the account or the typed adjustment it came from.
 - `tax_computation_misfiled(p_org_id uuid)` — Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account.
 - `tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` — Whether an estimate clears the floor against last year -- where its form HAS a floor, which CP500 does not -- and, where a computation exists to measure against, how far under the real liability it fell and what that costs.
-- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, on the rhythm its FORM names -- twelve monthly for CP204, six bimonthly for CP500.
+- `tax_estimate_first_period(p_estimate_id uuid)` — The two ways a first basis period differs: when the estimate is due, and whether a qualifying new SME owes instalments at all.
+- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, on the rhythm its FORM names -- and EMPTY where a qualifying new SME owes none for its first two years of assessment.
 - `tax_filing_history(p_org_id uuid, p_limit integer)` — Everything recorded against an obligation, including what was dismissed as not applicable and why.
 - `tax_partnership_allocation(p_computation_id uuid)`
 - `tax_partnership_summary(p_computation_id uuid)` — The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.

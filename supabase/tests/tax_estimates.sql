@@ -54,25 +54,37 @@ $$;
 -- ---------------------------------------------------------------------
 -- The rules are the published ones
 -- ---------------------------------------------------------------------
+-- Every lookup here names the FORM as well as the year. It did not,
+-- until `0670` gave the table a second row per year for CP500 -- at
+-- which point `select ... into` was picking whichever row the heap
+-- handed back first, and this file went on passing because that
+-- happened to be the CP204 one. It stopped being the CP204 one when
+-- `0671` rewrote the rows, and the assertion that had been measuring
+-- nothing in particular finally said so.
+--
+-- `select ... into` takes the first row and does not complain about
+-- the rest, so widening a table's key can silently change what an
+-- older test measures. Naming the key is the fix; the lesson is that
+-- a green suite is not evidence a query still means what it did.
 do $$
 declare v numeric; v_count integer; v_months integer[];
 begin
   select floor_percent_of_prior into v from public.tax_estimate_rules
-   where year_of_assessment = 2026;
+   where year_of_assessment = 2026 and form = 'CP204';
   perform pg_temp.check_eq('an estimate must be 85% of last year''s',
     v, 85);
   select under_tolerance_percent into v from public.tax_estimate_rules
-   where year_of_assessment = 2026;
+   where year_of_assessment = 2026 and form = 'CP204';
   perform pg_temp.check_eq('the under-estimation tolerance is 30%', v, 30);
   select under_penalty_percent into v from public.tax_estimate_rules
-   where year_of_assessment = 2026;
+   where year_of_assessment = 2026 and form = 'CP204';
   perform pg_temp.check_eq('and the penalty on the excess is 10%', v, 10);
   select instalments into v from public.tax_estimate_rules
-   where year_of_assessment = 2026;
+   where year_of_assessment = 2026 and form = 'CP204';
   perform pg_temp.check_eq('paid in twelve instalments', v, 12);
 
   select revision_months into v_months from public.tax_estimate_rules
-   where year_of_assessment = 2026;
+   where year_of_assessment = 2026 and form = 'CP204';
   perform pg_temp.check_eq('revisable in the sixth and ninth months',
     array_to_string(v_months, ','), '6,9');
 
