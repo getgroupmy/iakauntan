@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0665",
+    "version": "0666",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -8663,6 +8663,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/inbound_emails"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/individual_tax_rebates": {
+      "get": {
+        "operationId": "select_individual_tax_rebates",
+        "summary": "Read individual_tax_rebates",
+        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/individual_tax_rebates"
                   }
                 }
               }
@@ -69202,6 +69266,146 @@
         }
       }
     },
+    "/rpc/tax_computation_individual": {
+      "post": {
+        "operationId": "tax_computation_individual",
+        "summary": "The Form B working: the business as one source among several, less approved donations and personal reliefs\u2026",
+        "description": "The Form B working: the business as one source among several, less approved donations and personal reliefs, at the resident individual scale. `cp204_paid` carries CP500 instalments for an individual -- the column is older than the form.\n\n`public.tax_computation_individual(p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_computation_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_computation_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "year_of_assessment": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "period_from": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "period_to": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "profit_before_tax": {
+                        "type": "number"
+                      },
+                      "add_backs": {
+                        "type": "number"
+                      },
+                      "deductions": {
+                        "type": "number"
+                      },
+                      "balancing_charge": {
+                        "type": "number"
+                      },
+                      "adjusted_income": {
+                        "type": "number"
+                      },
+                      "adjusted_loss": {
+                        "type": "number"
+                      },
+                      "ca_current": {
+                        "type": "number"
+                      },
+                      "ca_used": {
+                        "type": "number"
+                      },
+                      "ca_carried_forward": {
+                        "type": "number"
+                      },
+                      "statutory_business": {
+                        "type": "number"
+                      },
+                      "other_income": {
+                        "type": "number"
+                      },
+                      "aggregate_income": {
+                        "type": "number"
+                      },
+                      "approved_donations": {
+                        "type": "number"
+                      },
+                      "donations_allowed": {
+                        "type": "number"
+                      },
+                      "total_income": {
+                        "type": "number"
+                      },
+                      "reliefs_claimed": {
+                        "type": "number"
+                      },
+                      "chargeable_income": {
+                        "type": "number"
+                      },
+                      "tax_charged": {
+                        "type": "number"
+                      },
+                      "rebate": {
+                        "type": "number"
+                      },
+                      "zakat_rebate": {
+                        "type": "number"
+                      },
+                      "s110_tax_deducted": {
+                        "type": "number"
+                      },
+                      "instalments_paid": {
+                        "type": "number"
+                      },
+                      "tax_payable": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/tax_computation_lines": {
       "post": {
         "operationId": "tax_computation_lines",
@@ -69338,6 +69542,174 @@
                       },
                       "treatment": {
                         "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/tax_partnership_allocation": {
+      "post": {
+        "operationId": "tax_partnership_allocation",
+        "summary": "Tax partnership allocation",
+        "description": "`public.tax_partnership_allocation(p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_computation_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_computation_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "partner_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "tax_reference": {
+                        "type": "string"
+                      },
+                      "share_percent": {
+                        "type": "number"
+                      },
+                      "salary": {
+                        "type": "number"
+                      },
+                      "interest_on_capital": {
+                        "type": "number"
+                      },
+                      "share_of_divisible": {
+                        "type": "number"
+                      },
+                      "capital_allowances": {
+                        "type": "number"
+                      },
+                      "statutory_income": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/tax_partnership_summary": {
+      "post": {
+        "operationId": "tax_partnership_summary",
+        "summary": "The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the\u2026",
+        "description": "The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.\n\n`public.tax_partnership_summary(p_computation_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_computation_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_computation_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "adjusted_income": {
+                        "type": "number"
+                      },
+                      "appropriations": {
+                        "type": "number"
+                      },
+                      "divisible_income": {
+                        "type": "number"
+                      },
+                      "partnership_adjusted": {
+                        "type": "number"
+                      },
+                      "total_allocated": {
+                        "type": "number"
+                      },
+                      "shares_total": {
+                        "type": "number"
+                      },
+                      "partner_count": {
+                        "type": "integer",
+                        "format": "int32"
                       }
                     }
                   }
@@ -75777,6 +76149,198 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_detail_submissions"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_other_income": {
+      "get": {
+        "operationId": "select_tax_other_income",
+        "summary": "Read tax_other_income",
+        "description": "Income a person has that this company's ledger does not: employment, rent, a share of a partnership. Joins the business at aggregate income. Form B only.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_other_income"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_partners": {
+      "get": {
+        "operationId": "select_tax_partners",
+        "summary": "Read tax_partners",
+        "description": "Who shares a partnership's income, in what ratio, and what they were appropriated. A salary to a partner is not an expense of the partnership -- it is added back and handed to that partner.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_partners"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_relief_claims": {
+      "get": {
+        "operationId": "select_tax_relief_claims",
+        "summary": "Read tax_relief_claims",
+        "description": "Personal reliefs claimed on a Form B. The amount is always stated even where the catalogue carries a cap: copying the cap in as the claim is how somebody claims relief they did not incur.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_relief_claims"
                   }
                 }
               }
@@ -85771,6 +86335,35 @@
           "message_id",
           "from_email",
           "to_email"
+        ]
+      },
+      "individual_tax_rebates": {
+        "type": "object",
+        "properties": {
+          "year_of_assessment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          },
+          "is_verified": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "year_of_assessment",
+          "threshold",
+          "amount"
         ]
       },
       "interviews": {
@@ -97736,6 +98329,12 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "form": {
+            "type": "string"
+          },
+          "approved_donations": {
+            "type": "number"
           }
         },
         "required": [
@@ -97922,6 +98521,131 @@
           "org_id",
           "contact_id",
           "request_id"
+        ]
+      },
+      "tax_other_income": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "computation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "computation_id",
+          "kind",
+          "amount"
+        ]
+      },
+      "tax_partners": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "computation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tax_reference": {
+            "type": "string"
+          },
+          "share_percent": {
+            "type": "number"
+          },
+          "salary": {
+            "type": "number"
+          },
+          "interest_on_capital": {
+            "type": "number"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "computation_id",
+          "name"
+        ]
+      },
+      "tax_relief_claims": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "computation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "relief_code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "computation_id",
+          "label",
+          "amount"
         ]
       },
       "tax_reliefs": {

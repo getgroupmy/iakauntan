@@ -712,6 +712,7 @@ jobs:
                    supabase/tests/beta_testers.sql \
                    supabase/tests/capital_allowances.sql \
                    supabase/tests/tax_computation.sql \
+                   supabase/tests/tax_forms_b_and_p.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/fs_mapping_is_total.sql \

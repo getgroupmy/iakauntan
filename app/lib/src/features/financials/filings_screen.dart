@@ -362,7 +362,34 @@ Future<void> _openTaxComputation(BuildContext context, WidgetRef ref) async {
       id = await repo.openTaxComputation(chosen.id);
     },
   );
-  if (ok && id != null && context.mounted) {
-    GoRouter.of(context).push('/tax-computation/$id');
+  // A local copy, because `id` is assigned inside the closure above
+  // and Dart will not promote a variable a closure captures — the
+  // null check holds and the type does not.
+  final computationId = id;
+  if (!ok || computationId == null || !context.mounted) return;
+
+  // Which return this company actually files. A sole proprietor filing
+  // a Form C would be wrong about the rate, the reliefs and the person
+  // liable, so the entity type decides rather than the reader.
+  //
+  // `enterprise` is a sole proprietorship registered under a trade
+  // name; `llp` files its own return and is closest to a company. An
+  // entity type nobody recognises gets the company form, which is what
+  // this product mostly holds.
+  final kind = ref.read(currentOrgProvider).valueOrNull?.entityType;
+  final path = switch (kind) {
+    'sole_proprietor' || 'enterprise' || 'individual' => '/form-b',
+    'partnership' => '/form-p',
+    _ => '/tax-computation',
+  };
+  await ref.read(repoProvider)!.saveTaxComputation(computationId, {
+    'form': switch (path) {
+      '/form-b' => 'B',
+      '/form-p' => 'P',
+      _ => 'C',
+    },
+  });
+  if (context.mounted) {
+    GoRouter.of(context).push('$path/$computationId');
   }
 }

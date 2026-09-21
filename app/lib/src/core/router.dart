@@ -53,6 +53,8 @@ import '../features/approvals/approvals_screen.dart';
 import '../features/collections/collections_screen.dart';
 import '../features/financials/filing_screen.dart';
 import '../features/financials/filings_screen.dart';
+import '../features/financials/form_b_screen.dart';
+import '../features/financials/form_p_screen.dart';
 import '../features/financials/tax_computation_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
@@ -1042,6 +1044,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           // The tax computation, beside the statutory filings rather
           // than under reports: it is a document with a state, opened
           // once a year and reviewed, not a report anybody runs.
+          // Form B and Form P are their own routes rather than a
+          // parameter on the computation: they are different documents
+          // with different middles, and a screen that switched on a
+          // string would be three screens in a trench coat.
+          GoRoute(
+            path: '/form-b/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) =>
+                FormBScreen(computationId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/form-p/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) =>
+                FormPScreen(computationId: state.pathParameters['id']!),
+          ),
           GoRoute(
             path: '/tax-computation/:id',
             parentNavigatorKey: rootNavigatorKey,

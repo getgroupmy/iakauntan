@@ -820,6 +820,45 @@ final taxComputationRowProvider = FutureProvider.autoDispose
       return requireRepo(ref).taxComputationRow(id);
     });
 
+/// The Form B working.
+final individualTaxProvider = FutureProvider.autoDispose
+    .family<IndividualTaxComputation, String>((ref, id) {
+      return requireRepo(ref).individualTaxComputation(id);
+    });
+
+/// What each partner carries into their own Form B.
+final partnershipAllocationProvider = FutureProvider.autoDispose
+    .family<List<PartnerAllocation>, String>((ref, id) {
+      return requireRepo(ref).partnershipAllocation(id);
+    });
+
+/// The head of a Form P.
+final partnershipSummaryProvider = FutureProvider.autoDispose
+    .family<PartnershipSummary, String>((ref, id) {
+      return requireRepo(ref).partnershipSummary(id);
+    });
+
+final taxOtherIncomeProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxOtherIncome(id);
+    });
+
+final taxReliefClaimsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxReliefClaims(id);
+    });
+
+final taxPartnersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxPartners(id);
+    });
+
+/// The reliefs catalogue PCB uses, for the Form B picker.
+final individualReliefsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>((ref, on) {
+      return requireRepo(ref).individualReliefs(on);
+    });
+
 /// The typed adjustments on a computation, with their ids.
 final taxAdjustmentsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, id) {

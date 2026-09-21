@@ -2237,6 +2237,219 @@ class TaxComputation {
   );
 }
 
+/// The Form B working: a person with business income.
+///
+/// The business is ONE source. Employment, rent and a share of a
+/// partnership join it at aggregate income, approved donations come
+/// off, personal reliefs come off after that, and the resident
+/// individual scale applies — the same scale PCB uses, so the monthly
+/// estimate and the annual return cannot disagree.
+class IndividualTaxComputation {
+  IndividualTaxComputation({
+    required this.yearOfAssessment,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.profitBeforeTax,
+    required this.addBacks,
+    required this.deductions,
+    required this.balancingCharge,
+    required this.adjustedIncome,
+    required this.adjustedLoss,
+    required this.caCurrent,
+    required this.caUsed,
+    required this.caCarriedForward,
+    required this.statutoryBusiness,
+    required this.otherIncome,
+    required this.aggregateIncome,
+    required this.approvedDonations,
+    required this.donationsAllowed,
+    required this.totalIncome,
+    required this.reliefsClaimed,
+    required this.chargeableIncome,
+    required this.taxCharged,
+    required this.rebate,
+    required this.zakatRebate,
+    required this.s110TaxDeducted,
+    required this.instalmentsPaid,
+    required this.taxPayable,
+  });
+
+  final int yearOfAssessment;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+
+  final double profitBeforeTax;
+  final double addBacks;
+  final double deductions;
+  final double balancingCharge;
+  final double adjustedIncome;
+  final double adjustedLoss;
+  final double caCurrent;
+  final double caUsed;
+  final double caCarriedForward;
+  final double statutoryBusiness;
+
+  final double otherIncome;
+  final double aggregateIncome;
+
+  /// What was claimed, which is not always what was allowed.
+  final double approvedDonations;
+
+  /// s.44(6) cannot take aggregate income below nothing, so a donation
+  /// larger than the income is allowed only up to it and the excess is
+  /// simply lost — not carried anywhere.
+  final double donationsAllowed;
+
+  final double totalIncome;
+  final double reliefsClaimed;
+  final double chargeableIncome;
+  final double taxCharged;
+
+  /// The flat rebate for a chargeable income at or under the
+  /// threshold. A cliff, not a taper.
+  final double rebate;
+
+  final double zakatRebate;
+  final double s110TaxDeducted;
+  final double instalmentsPaid;
+  final double taxPayable;
+
+  bool get isRefund => taxPayable < 0;
+  bool get hasLoss => adjustedLoss > 0;
+
+  /// Whether a donation was cut down to fit the income. Worth saying on
+  /// the screen: the claimed figure and the allowed one differ, and
+  /// nobody expects that.
+  bool get donationsRestricted => donationsAllowed < approvedDonations;
+
+  factory IndividualTaxComputation.fromMap(Map<String, dynamic> j) =>
+      IndividualTaxComputation(
+        yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+        periodFrom: Fmt.parseDate(j['period_from']),
+        periodTo: Fmt.parseDate(j['period_to']),
+        profitBeforeTax: Fmt.toDouble(j['profit_before_tax']),
+        addBacks: Fmt.toDouble(j['add_backs']),
+        deductions: Fmt.toDouble(j['deductions']),
+        balancingCharge: Fmt.toDouble(j['balancing_charge']),
+        adjustedIncome: Fmt.toDouble(j['adjusted_income']),
+        adjustedLoss: Fmt.toDouble(j['adjusted_loss']),
+        caCurrent: Fmt.toDouble(j['ca_current']),
+        caUsed: Fmt.toDouble(j['ca_used']),
+        caCarriedForward: Fmt.toDouble(j['ca_carried_forward']),
+        statutoryBusiness: Fmt.toDouble(j['statutory_business']),
+        otherIncome: Fmt.toDouble(j['other_income']),
+        aggregateIncome: Fmt.toDouble(j['aggregate_income']),
+        approvedDonations: Fmt.toDouble(j['approved_donations']),
+        donationsAllowed: Fmt.toDouble(j['donations_allowed']),
+        totalIncome: Fmt.toDouble(j['total_income']),
+        reliefsClaimed: Fmt.toDouble(j['reliefs_claimed']),
+        chargeableIncome: Fmt.toDouble(j['chargeable_income']),
+        taxCharged: Fmt.toDouble(j['tax_charged']),
+        rebate: Fmt.toDouble(j['rebate']),
+        zakatRebate: Fmt.toDouble(j['zakat_rebate']),
+        s110TaxDeducted: Fmt.toDouble(j['s110_tax_deducted']),
+        instalmentsPaid: Fmt.toDouble(j['instalments_paid']),
+        taxPayable: Fmt.toDouble(j['tax_payable']),
+      );
+}
+
+/// What one partner carries into their own Form B.
+class PartnerAllocation {
+  PartnerAllocation({
+    required this.partnerId,
+    required this.name,
+    required this.sharePercent,
+    required this.salary,
+    required this.interestOnCapital,
+    required this.shareOfDivisible,
+    required this.capitalAllowances,
+    required this.statutoryIncome,
+    this.taxReference,
+  });
+
+  final String partnerId;
+  final String name;
+  final String? taxReference;
+  final double sharePercent;
+
+  /// Appropriations, which belong to this partner alone. A salary to a
+  /// partner is not an expense of the partnership — a partner cannot
+  /// employ themselves — so it is added back and handed to them here.
+  final double salary;
+  final double interestOnCapital;
+
+  final double shareOfDivisible;
+  final double capitalAllowances;
+  final double statutoryIncome;
+
+  factory PartnerAllocation.fromMap(Map<String, dynamic> j) =>
+      PartnerAllocation(
+        partnerId: j['partner_id'] as String,
+        name: j['name']?.toString() ?? '',
+        taxReference: j['tax_reference'] as String?,
+        sharePercent: Fmt.toDouble(j['share_percent']),
+        salary: Fmt.toDouble(j['salary']),
+        interestOnCapital: Fmt.toDouble(j['interest_on_capital']),
+        shareOfDivisible: Fmt.toDouble(j['share_of_divisible']),
+        capitalAllowances: Fmt.toDouble(j['capital_allowances']),
+        statutoryIncome: Fmt.toDouble(j['statutory_income']),
+      );
+}
+
+/// The head of a Form P, and the two figures that catch a half-entered
+/// one.
+class PartnershipSummary {
+  PartnershipSummary({
+    required this.adjustedIncome,
+    required this.appropriations,
+    required this.divisibleIncome,
+    required this.partnershipAdjusted,
+    required this.totalAllocated,
+    required this.sharesTotal,
+    required this.partnerCount,
+  });
+
+  final double adjustedIncome;
+  final double appropriations;
+  final double divisibleIncome;
+
+  /// The partnership's real adjusted income: what the accounts showed
+  /// plus the appropriations added back.
+  final double partnershipAdjusted;
+
+  final double totalAllocated;
+  final double sharesTotal;
+  final int partnerCount;
+
+  /// A partnership whose ratios come to ninety allocates nine tenths of
+  /// its income and the missing tenth appears nowhere — the allocation
+  /// still adds up, down its own column, to the wrong number.
+  ///
+  /// A tolerance, not equality, and 0.05 rather than something
+  /// tighter. A deed that splits three ways writes 33.33 and comes to
+  /// 99.99; six ways at 16.67 comes to 100.02. Both are right and a
+  /// stricter check would put a red warning on most partnerships in
+  /// the country.
+  ///
+  /// Loose enough to admit the rounding, tight enough that a whole per
+  /// cent missing — which is a partner somebody forgot — still shows.
+  bool get sharesBalance =>
+      partnerCount > 0 && (sharesTotal - 100).abs() <= 0.05;
+
+  bool get isEmpty => partnerCount == 0;
+
+  factory PartnershipSummary.fromMap(Map<String, dynamic> j) =>
+      PartnershipSummary(
+        adjustedIncome: Fmt.toDouble(j['adjusted_income']),
+        appropriations: Fmt.toDouble(j['appropriations']),
+        divisibleIncome: Fmt.toDouble(j['divisible_income']),
+        partnershipAdjusted: Fmt.toDouble(j['partnership_adjusted']),
+        totalAllocated: Fmt.toDouble(j['total_allocated']),
+        sharesTotal: Fmt.toDouble(j['shares_total']),
+        partnerCount: Fmt.toInt(j['partner_count']),
+      );
+}
+
 /// One add-back or deduction, and where it came from.
 class TaxComputationLine {
   TaxComputationLine({

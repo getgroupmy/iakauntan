@@ -2694,6 +2694,169 @@ class Repo {
     return [for (final r in rows) TaxComputationLine.fromMap(r)];
   }
 
+  /// The Form B working.
+  Future<IndividualTaxComputation> individualTaxComputation(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_computation_individual',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That computation no longer exists.');
+    }
+    return IndividualTaxComputation.fromMap(rows.first);
+  }
+
+  /// What each partner carries into their own Form B.
+  Future<List<PartnerAllocation>> partnershipAllocation(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_partnership_allocation',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    return [for (final r in rows) PartnerAllocation.fromMap(r)];
+  }
+
+  /// The head of a Form P.
+  Future<PartnershipSummary> partnershipSummary(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_partnership_summary',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That computation no longer exists.');
+    }
+    return PartnershipSummary.fromMap(rows.first);
+  }
+
+  Future<List<Map<String, dynamic>>> taxOtherIncome(String id) async {
+    final rows = await client
+        .from('tax_other_income')
+        .select()
+        .eq('computation_id', id)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addTaxOtherIncome({
+    required String computationId,
+    required String kind,
+    String? label,
+    required double amount,
+  }) async {
+    await client.from('tax_other_income').insert({
+      'org_id': orgId,
+      'computation_id': computationId,
+      'kind': kind,
+      'label': label,
+      'amount': amount,
+    });
+  }
+
+  Future<void> removeTaxOtherIncome(String id) async {
+    await client.from('tax_other_income').delete().eq('id', id);
+  }
+
+  Future<List<Map<String, dynamic>>> taxReliefClaims(String id) async {
+    final rows = await client
+        .from('tax_relief_claims')
+        .select()
+        .eq('computation_id', id)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addTaxReliefClaim({
+    required String computationId,
+    String? reliefCode,
+    required String label,
+    required double amount,
+  }) async {
+    await client.from('tax_relief_claims').insert({
+      'org_id': orgId,
+      'computation_id': computationId,
+      'relief_code': reliefCode,
+      'label': label,
+      'amount': amount,
+    });
+  }
+
+  Future<void> removeTaxReliefClaim(String id) async {
+    await client.from('tax_relief_claims').delete().eq('id', id);
+  }
+
+  Future<List<Map<String, dynamic>>> taxPartners(String id) async {
+    final rows = await client
+        .from('tax_partners')
+        .select()
+        .eq('computation_id', id)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> saveTaxPartner({
+    required String computationId,
+    String? id,
+    required String name,
+    String? taxReference,
+    required double sharePercent,
+    required double salary,
+    required double interestOnCapital,
+  }) async {
+    final payload = {
+      'org_id': orgId,
+      'computation_id': computationId,
+      'name': name,
+      'tax_reference': taxReference,
+      'share_percent': sharePercent,
+      'salary': salary,
+      'interest_on_capital': interestOnCapital,
+    };
+    if (id == null) {
+      await client.from('tax_partners').insert(payload);
+    } else {
+      await client.from('tax_partners').update(payload).eq('id', id);
+    }
+  }
+
+  Future<void> removeTaxPartner(String id) async {
+    await client.from('tax_partners').delete().eq('id', id);
+  }
+
+  /// The reliefs catalogue PCB already uses, for the Form B picker.
+  ///
+  /// The schedule in force at [on], so a claim made for an older year
+  /// is offered that year's caps rather than this year's.
+  Future<List<Map<String, dynamic>>> individualReliefs(DateTime on) async {
+    final day = Fmt.iso(on);
+    final schedules = await client
+        .from('statutory_schedules')
+        .select('id')
+        .eq('body', 'pcb')
+        .lte('effective_from', day)
+        .or('effective_to.is.null,effective_to.gt.$day')
+        .order('effective_from', ascending: false)
+        .limit(1);
+    final list = (schedules as List).cast<Map<String, dynamic>>();
+    if (list.isEmpty) return const [];
+    final rows = await client
+        .from('tax_reliefs')
+        .select()
+        .eq('schedule_id', list.first['id'] as String)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
   /// Accounts whose treatment is for the other side of the ledger.
   ///
   /// Those lines are DROPPED from the computation rather than applied,

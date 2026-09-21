@@ -134,33 +134,33 @@ class _Computation extends ConsumerWidget {
                       '${Fmt.money(10500)} a year.',
                 ),
 
-              _Section(title: 'From the accounts'),
-              _Line('Profit before taxation', c.profitBeforeTax),
+              TaxSection(title: 'From the accounts'),
+              TaxLine('Profit before taxation', c.profitBeforeTax),
 
-              _Section(title: 'Add'),
-              _Line('Non-deductible expenses', c.addBacks),
+              TaxSection(title: 'Add'),
+              TaxLine('Non-deductible expenses', c.addBacks),
               if (c.balancingCharge > 0)
-                _Line('Balancing charge on disposals', c.balancingCharge),
+                TaxLine('Balancing charge on disposals', c.balancingCharge),
 
               if (c.deductions > 0) ...[
-                _Section(title: 'Less'),
-                _Line('Non-taxable income', -c.deductions),
+                TaxSection(title: 'Less'),
+                TaxLine('Non-taxable income', -c.deductions),
               ],
 
               const Divider(),
               if (c.hasLoss)
-                _Line('Adjusted loss', c.adjustedLoss, bold: true,
+                TaxLine('Adjusted loss', c.adjustedLoss, bold: true,
                     warn: true)
               else
-                _Line('Adjusted income', c.adjustedIncome, bold: true),
+                TaxLine('Adjusted income', c.adjustedIncome, bold: true),
 
-              _Section(title: 'Capital allowances'),
-              _Line('This year (Schedule 3)', c.caCurrent),
+              TaxSection(title: 'Capital allowances'),
+              TaxLine('This year (Schedule 3)', c.caCurrent),
               if (c.caBroughtForward > 0)
-                _Line('Brought forward', c.caBroughtForward),
-              _Line('Used against income', -c.caUsed),
+                TaxLine('Brought forward', c.caBroughtForward),
+              TaxLine('Used against income', -c.caUsed),
               if (c.caCarriedForward > 0)
-                _Line(
+                TaxLine(
                   'Unabsorbed, carried forward',
                   c.caCarriedForward,
                   // Not a loss, and labelled so. The two carry forward
@@ -170,21 +170,21 @@ class _Computation extends ConsumerWidget {
                 ),
 
               const Divider(),
-              _Line('Statutory income', c.statutoryIncome, bold: true),
+              TaxLine('Statutory income', c.statutoryIncome, bold: true),
 
               if (c.lossBroughtForward > 0) ...[
-                _Section(title: 'Losses'),
-                _Line('Brought forward', c.lossBroughtForward),
-                _Line('Used', -c.lossUsed),
+                TaxSection(title: 'Losses'),
+                TaxLine('Brought forward', c.lossBroughtForward),
+                TaxLine('Used', -c.lossUsed),
               ],
               if (c.lossCarriedForward > 0)
-                _Line('Losses carried forward', c.lossCarriedForward,
+                TaxLine('Losses carried forward', c.lossCarriedForward,
                     hint: 'To next year'),
 
               const Divider(),
-              _Line('Chargeable income', c.chargeableIncome, bold: true),
+              TaxLine('Chargeable income', c.chargeableIncome, bold: true),
 
-              _Section(
+              TaxSection(
                 title: 'Tax',
                 hint: c.smeKnown
                     ? (c.isSme
@@ -194,17 +194,17 @@ class _Computation extends ConsumerWidget {
                     : 'At the standard rate — the SME test has not been '
                           'taken',
               ),
-              _Line('Tax charged', c.taxCharged),
+              TaxLine('Tax charged', c.taxCharged),
               if (c.zakatRebate > 0)
-                _Line('Zakat rebate', -c.zakatRebate,
+                TaxLine('Zakat rebate', -c.zakatRebate,
                     hint: 'A rebate against the tax, capped at it'),
               if (c.s110TaxDeducted > 0)
-                _Line('Tax deducted at source (s.110)', -c.s110TaxDeducted),
+                TaxLine('Tax deducted at source (s.110)', -c.s110TaxDeducted),
               if (c.cp204Paid > 0)
-                _Line('CP204 instalments paid', -c.cp204Paid),
+                TaxLine('CP204 instalments paid', -c.cp204Paid),
 
               const Divider(),
-              _Line(
+              TaxLine(
                 c.isRefund ? 'Tax refundable' : 'Tax payable',
                 c.isRefund ? -c.taxPayable : c.taxPayable,
                 bold: true,
@@ -309,8 +309,13 @@ class _Workings extends ConsumerWidget {
   }
 }
 
-class _Section extends StatelessWidget {
-  const _Section({required this.title, this.hint});
+/// A heading inside a tax computation.
+///
+/// Public because Form B and Form P draw the same document with
+/// different middles — three copies of a computation's typography is
+/// three places for it to drift.
+class TaxSection extends StatelessWidget {
+  const TaxSection({super.key, required this.title, this.hint});
 
   final String title;
   final String? hint;
@@ -341,10 +346,16 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _Line extends StatelessWidget {
-  const _Line(
+/// One line of a tax computation: a label, a figure, and a reason.
+///
+/// Negatives in brackets, which is how a schedule is read — a minus
+/// sign at the front of a column of figures is easy to miss and changes
+/// the sense of the line entirely.
+class TaxLine extends StatelessWidget {
+  const TaxLine(
     this.label,
     this.value, {
+    super.key,
     this.bold = false,
     this.warn = false,
     this.hint,

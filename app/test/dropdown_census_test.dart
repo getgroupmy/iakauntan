@@ -60,6 +60,18 @@ const dropdownCensus = <String, int>{
   // for "Sdn Bhd". If that list ever reaches the size where somebody
   // would, this entry comes off and a `SearchablePicker` goes in.
   'features/auth/sign_in_screen.dart': 1,
+  // Two on Form B, and both are fixed sets rather than growing ones.
+  //
+  // The KIND of other income is the Act's list -- employment, rent,
+  // interest, a share of a partnership -- eight of them, closed, and
+  // shown all at once so somebody can see there is no ninth.
+  //
+  // The RELIEF is `0025`'s catalogue, a dozen rows that move with a
+  // Budget and not with anything a user does. It also carries a
+  // "Something else" entry, because a Form B can claim reliefs PCB
+  // does not model -- so the list is fixed and the escape hatch is a
+  // text field rather than a search.
+  'features/financials/form_b_screen.dart': 2,
   // The Schedule 3 class on a fixed asset. A statutory set of eight,
   // fixed by the Act and moved by a Budget rather than by anybody
   // using this app -- there is no "add a class" and there must not be,

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0665` (the highest applied migration).
-751 functions and 355 readable tables, of which
-283 functions only read.
+Schema version `0666` (the highest applied migration).
+754 functions and 359 readable tables, of which
+286 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**610 of 751 functions carry a `comment on
+**612 of 754 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (539)
+### general (542)
 
 Not gated on any module.
 
@@ -884,8 +884,11 @@ Not gated on any module.
 - `suggest_lots(p_item_id uuid, p_warehouse_id uuid, p_quantity numeric)`
 - `suggested_charge(p_payment_method_id uuid, p_amount numeric)` — What a payment method's stated rate comes to on this amount.
 - `tax_computation(p_computation_id uuid)` — The Form C working for one basis period, every figure derived from the ledger, the Schedule 3 schedule and the rates.
+- `tax_computation_individual(p_computation_id uuid)` — The Form B working: the business as one source among several, less approved donations and personal reliefs, at the resident individual scale.
 - `tax_computation_lines(p_computation_id uuid)` — Every add-back and deduction in a computation, with the account or the typed adjustment it came from.
 - `tax_computation_misfiled(p_org_id uuid)` — Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account.
+- `tax_partnership_allocation(p_computation_id uuid)`
+- `tax_partnership_summary(p_computation_id uuid)` — The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.
 - `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
 - `trace_lot(p_org_id uuid, p_lot_id uuid)`
 - `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` *(writes)* — Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together.
@@ -1059,6 +1062,7 @@ inconsistent.
 - `import_rows`
 - `inbound_email_attachments`
 - `inbound_emails`
+- `individual_tax_rebates`
 - `interviews`
 - `item_barcodes`
 - `item_categories`
@@ -1258,6 +1262,9 @@ inconsistent.
 - `tax_computations`
 - `tax_detail_requests`
 - `tax_detail_submissions`
+- `tax_other_income`
+- `tax_partners`
+- `tax_relief_claims`
 - `tax_reliefs`
 - `tax_treatments`
 - `tenancies`
