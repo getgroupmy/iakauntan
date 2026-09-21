@@ -215,14 +215,26 @@ jobs:
       # told the identity, the team and the profile by name. Those are
       # the three things automatic signing would have gone looking for.
       #
-      # UNVERIFIED FROM WHERE THIS WAS WRITTEN. There is no macOS here,
-      # so the next run is the first test of it. The failure to expect,
-      # if there is one, is the Pods: build settings given on an
-      # xcodebuild command line apply to EVERY target, and a pod that
-      # does not want signing can refuse a CODE_SIGN_IDENTITY it was
-      # handed. If that happens, the lead is `CODE_SIGNING_ALLOWED=NO`
-      # for the pod targets rather than anything about the certificate,
-      # which will look like the culprit and will not be.
+      # And why the settings go in an xcconfig rather than on the
+      # command line. They were on the command line, and run 2 died
+      # with about forty of these:
+      #
+      #     SwiftyGif does not support provisioning profiles, but
+      #     provisioning profile 1c72bae2-... has been manually
+      #     specified. Set the provisioning profile value to
+      #     "Automatic" in the build settings editor.
+      #
+      # A build setting given to `xcodebuild` applies to EVERY target
+      # it builds -- every pod, every Swift package -- and a framework
+      # that is never signed on its own refuses a profile it was
+      # handed. The setting was right for the one target that needed
+      # it and wrong for the forty that did not.
+      #
+      # `ios/Flutter/Release.xcconfig` is the base configuration of
+      # Runner's Release build and of nothing else: the pods read
+      # `Pods/Target Support Files/*.xcconfig`, and the Swift packages
+      # read neither. So appending there says the same thing to the
+      # one target that should hear it.
       # ---------------------------------------------------------------
       - name: Archive
         id: archive
@@ -258,6 +270,22 @@ jobs:
             --build-number="${{ github.run_number }}" \
             --dart-define=WEB_PUSH_PUBLIC_KEY="${WEB_PUSH_PUBLIC_KEY:-}"
 
+          # Appended, not written: the two #include lines already in
+          # there are what wire Flutter's own generated settings and
+          # the Pods-Runner config into the build, and replacing them
+          # would remove both.
+          cat >> ios/Flutter/Release.xcconfig <<CFG
+
+          // Added by .github/workflows/ios-release.yml for this build
+          // only, and only for the Runner target -- see the note above
+          // the step. A value in an xcconfig runs to the end of the
+          // line, so "Apple Distribution" needs no quoting.
+          CODE_SIGN_STYLE = Manual
+          DEVELOPMENT_TEAM = $TEAM_ID
+          PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID
+          CODE_SIGN_IDENTITY = Apple Distribution
+          CFG
+
           # `generic/platform=iOS` rather than `-sdk iphoneos`: the
           # destination is what an archive wants, and it does not pin an
           # architecture the way the sdk flag can.
@@ -266,11 +294,7 @@ jobs:
             -scheme Runner \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-            CODE_SIGN_IDENTITY="Apple Distribution"
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive"
 
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Runner.xcarchive" \

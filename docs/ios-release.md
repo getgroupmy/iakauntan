@@ -391,6 +391,8 @@ submit it. **Neither lane submits for review**, and nothing here could.
 | `422 Workflow does not have 'workflow_dispatch' trigger` | Part 0: `ios-release.yml` is not on the ref being dispatched (`GITHUB_RELEASE_REF`, default `main`). The trigger is fine; the file is on another branch |
 | Run summary: "Not set up yet" with a list | those Actions secrets are missing. The run is green because nothing failed |
 | `The profile is for X, not my.iakauntan.iakauntan` | the profile in 2.5 was made against the wrong App ID |
+| `Provisioning profile "…" doesn't include signing certificate "Apple Distribution: …"` | the profile and the `.p12` are from different certificates. A profile names the certificates it accepts, and a certificate made AFTER the profile is not one of them. Regenerate the profile (2.5) selecting the certificate you are actually signing with, and re-upload `IOS_PROVISIONING_PROFILE`. The certificate is not the problem, though it is what the message names |
+| `X does not support provisioning profiles, but provisioning profile … has been manually specified` | a signing setting reached the pods and Swift packages. Settings given to `xcodebuild` apply to every target; they belong in `ios/Flutter/Release.xcconfig`, which is Runner's alone |
 | `security import` fails | the `.p12` base64 wrapped (Linux needs `-w0`; macOS `base64 -i` does not wrap), or the password is wrong, or OpenSSL 3 on Linux needs `-legacy` — LibreSSL on macOS does not and rejects the flag |
 | Upload rejected, app not found | 2.3 was skipped |
 | `Error opening Certificate distribution.cer` | step (b) has not been done yet — the file comes back FROM Apple |
