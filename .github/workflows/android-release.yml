@@ -103,7 +103,36 @@ jobs:
               echo
               for name in $missing; do echo "* \`$name\`"; done
               echo
-              echo "See \`docs/android-release.md\` for where each comes from."
+              # The one refusal that is almost certainly not a missing
+              # secret but a ticked box.
+              #
+              # Setting this up has a fixed order: the keystore, then a
+              # BUILD-ONLY run, then that bundle uploaded by hand,
+              # because Play will not take the first one from the API.
+              # The service account is not needed until after all of
+              # that. So somebody halfway through, running this with
+              # the box left ticked, is asked for the one credential
+              # they correctly do not have yet -- and the honest answer
+              # is not "go and make it" but "you wanted the other box".
+              # Unquoted, so word splitting trims the leading space
+              # the accumulator leaves. Comparing against
+              # " PLAY_SERVICE_ACCOUNT" with that space baked in
+              # would break the moment the loop above changed.
+              if [ "$(echo $missing)" = "PLAY_SERVICE_ACCOUNT" ]; then
+                echo "**Everything needed to BUILD is here.** Only the"
+                echo "credential for sending to Play is missing, and if"
+                echo "you have not uploaded a bundle by hand yet, you do"
+                echo "not need it yet."
+                echo
+                echo "Run this again with **Send it to Play unticked**."
+                echo "It will build the bundle and attach it to the run"
+                echo "under Artifacts — that is the one you upload in the"
+                echo "Play Console, once, before the API will accept any."
+                echo
+                echo "See part 3 of \`docs/android-release.md\`."
+              else
+                echo "See \`docs/android-release.md\` for where each comes from."
+              fi
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
