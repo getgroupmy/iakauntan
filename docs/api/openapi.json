@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0671",
+    "version": "0672",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -70043,8 +70043,8 @@
     "/rpc/tax_estimate_schedule": {
       "post": {
         "operationId": "tax_estimate_schedule",
-        "summary": "The instalments an estimate is paid in, on the rhythm its FORM names -- and EMPTY where a qualifying new SME\u2026",
-        "description": "The instalments an estimate is paid in, on the rhythm its FORM names -- and EMPTY where a qualifying new SME owes none for its first two years of assessment. Equal amounts with the last carrying the rounding, each date clamped to the length of its month.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "The instalments an estimate is paid in, on the rhythm its FORM names, EMPTY where a qualifying new SME owes\u2026",
+        "description": "The instalments an estimate is paid in, on the rhythm its FORM names, EMPTY where a qualifying new SME owes none, and -- where the estimate has been revised -- with the instalments already due left at what was payable on their dates and the balance spread over those that remain. Says what was payable, never what was paid.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -70091,6 +70091,9 @@
                       },
                       "amount": {
                         "type": "number"
+                      },
+                      "set_by_revision": {
+                        "type": "boolean"
                       }
                     }
                   }

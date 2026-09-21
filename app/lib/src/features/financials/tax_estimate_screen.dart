@@ -353,8 +353,41 @@ class _Schedule extends ConsumerWidget {
                       ),
                     ),
                     Expanded(
-                      child: Text(
-                        r.dueOn == null ? '' : Fmt.date(r.dueOn!),
+                      child: Row(
+                        children: [
+                          Text(
+                            r.dueOn == null ? '' : Fmt.date(r.dueOn!),
+                          ),
+                          // A revised schedule has two kinds of row in
+                          // it, and the reader is entitled to know
+                          // which they are looking at: the early ones
+                          // were payable at the old figure on dates
+                          // that have passed.
+                          if (r.isWaived)
+                            Padding(
+                              padding: const EdgeInsets.only(left: Space.sm),
+                              child: Text(
+                                'nothing to pay',
+                                key: ValueKey('instalment-waived-${r.number}'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            )
+                          else if (r.setByRevision)
+                            Padding(
+                              padding: const EdgeInsets.only(left: Space.sm),
+                              child: Text(
+                                'revised',
+                                key: ValueKey('instalment-revised-${r.number}'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.tertiary,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     Text(Fmt.money(r.amount)),
@@ -365,6 +398,12 @@ class _Schedule extends ConsumerWidget {
             // The cast. An instalment plan that does not total the
             // thing it pays is the first thing anybody notices, so the
             // total is shown rather than assumed.
+            //
+            // After a DOWNWARD revision it deliberately does not come
+            // to the estimate: the year owes less than has already
+            // been billed, the remaining instalments are nil, and the
+            // excess comes back at assessment rather than through the
+            // schedule.
             Row(
               children: [
                 const SizedBox(width: 32),

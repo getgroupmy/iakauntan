@@ -2243,16 +2243,31 @@ class TaxInstalment {
     required this.number,
     required this.dueOn,
     required this.amount,
+    this.setByRevision = false,
   });
 
   final int number;
   final DateTime? dueOn;
   final double amount;
 
+  /// This instalment's amount was set by a revision rather than by the
+  /// original estimate. A revision does not re-open what has already
+  /// fallen due — it spreads the balance over what remains — so a
+  /// revised schedule has two kinds of row in it, and "this changed
+  /// after you started paying" is what somebody needs to see.
+  final bool setByRevision;
+
+  /// A remaining instalment a downward revision has reduced to
+  /// nothing. Not the same as an estimate of zero: the year owes less
+  /// than has already been billed, and the excess comes back at
+  /// assessment rather than through the schedule.
+  bool get isWaived => setByRevision && amount == 0;
+
   factory TaxInstalment.fromMap(Map<String, dynamic> j) => TaxInstalment(
     number: Fmt.toInt(j['instalment_no']),
     dueOn: Fmt.parseDate(j['due_on']),
     amount: Fmt.toDouble(j['amount']),
+    setByRevision: j['set_by_revision'] == true,
   );
 }
 

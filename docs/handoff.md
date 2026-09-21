@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `14d6d164` |
-| CI | green and APPLIED through run 2011 (`ae74039a`); 2012 (`14d6d164`) in flight |
-| Migrations | `0668` is the highest (the LHDN filing calendar) |
-| Live database | **level with the branch through `0667`.** `0668` was pushed and is waiting on run 2012 |
+| Head at time of writing | `e55c8e5f` plus `0672`, committed together |
+| CI | green and APPLIED through run 2015 (`e55c8e5f`) |
+| Migrations | `0672` is the highest (the revision re-spread) |
+| Live database | **level with the branch through `0671`.** `0672` is in this push |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 341 SQL assertion files, 48 Python gates, 5,269 Flutter tests, 32 deno tests |
-| API description | 759 functions, 362 tables, version `0668` |
+| Gates | 345 SQL assertion files, 48 Python gates, 5,299 Flutter tests, 32 deno tests |
+| API description | 763 functions, 363 tables, version `0672` |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
@@ -110,11 +110,11 @@ has not been asked. It is unusual, and if the default branch is ever
 moved to `main`, the deploy jobs move with it — at which point this
 branch stops deploying and `main` starts.
 
-Counts to expect from a clean run: **48** gates, **341** SQL assertion
-files, **32** deno tests, **5,269** widget tests with 1 skipped,
+Counts to expect from a clean run: **48** gates, **345** SQL assertion
+files, **32** deno tests, **5,299** widget tests with 1 skipped,
 analyser clean.
 
-Counting the SQL files: 343 sit in `supabase/tests/`, less `_helpers.sql`
+Counting the SQL files: 347 sit in `supabase/tests/`, less `_helpers.sql`
 and `_local_stack.sql`, which are included by the others rather than run.
 
 The branch carries `main`'s history — PR #3 merged `main` INTO it — so
@@ -144,6 +144,10 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `e55c8e5` | **The first year has its own rules (`0671`)**, and `0672` beside it |
+| `aa20715` | **A person pays on a different rhythm (`0670`) — CP500** |
+| `d4ba69d` | **A deadline that never clears is one nobody reads (`0669`)** |
+| `cc1de24` | The handoff, two migrations later |
 | `14d6d16` | **The dates LHDN counts from (`0668`) — the filing calendar** |
 | `ae74039` | **CP204: the estimate, before it becomes a penalty (`0667`)** |
 | `b4e128f` | The handoff, four migrations later |
@@ -284,12 +288,12 @@ message. Read those rather than the diffs.
    now exactly the way to get `BadDeviceToken` on every push. Both
    files carry the table instead.
 
-## The tax computations — `0664` through `0668`
+## The tax computations — `0664` through `0671`
 
-Five migrations built a thing this product did not have: the arithmetic
-between the accounts and a return, and the dates it is owed on. It is
-worth understanding as one piece, because each layer only makes sense
-on the one below.
+Eight migrations built a thing this product did not have: the
+arithmetic between the accounts and a return, the dates it is owed on,
+and a record of what was done about each one. It is worth understanding
+as one piece, because each layer only makes sense on the one below.
 
 **`0664` — Schedule 3 capital allowances.** Rates by asset class,
 effective-dated, with the motor caps and the small-value rule.
@@ -325,6 +329,39 @@ income tax, which carries the largest penalties of the three, had
 none. Nothing is stored per company, so a corrected rule corrects
 everybody rather than everybody who asks after today.
 
+**`0669` — what was done about each one.** `0668` had no way to say an
+obligation was dealt with, so its list was permanent — the failure its
+own header warned about. `tax_filings` records a filing keyed on the
+OBLIGATION (type plus period, not the fiscal year: a Form E covers a
+calendar year and a Form C the basis period, and both sit against one
+fiscal year). Filed and "does not apply" take a row off the list;
+merely started does NOT, because a calendar that cleared on the
+intention to do something would be worse than one that never cleared.
+
+**`0670` — CP500.** `0667` was company-shaped and `open_tax_estimate`
+never asked, so a sole proprietor got twelve monthly instalments on
+the fifteenth instead of six bimonthly on the thirtieth — twelve wrong
+dates printed as confidently as right ones. `tax_estimate_rules` gains
+a FORM, and CP500 has no floor at all: LHDN issues it, so there is
+nothing to fall short of. `floor_applies` is the third state that
+distinguishes that from "cannot be checked yet".
+
+**`0671` — the first basis period.** `0667` put `first_period` on every
+estimate and nothing read it. Both differences are now real: three
+months from commencing operations rather than thirty days before the
+period opens, and no instalments at all for a qualifying new SME's
+first two years. Nothing infers the flag — see below.
+
+**`0672` — the revision re-spread.** Measured, not guessed: revising
+RM120,000 to RM240,000 in the ninth month produced twelve instalments
+of RM20,000 starting in February, eight of them already past and none
+at a figure ever payable on its date. s.107C(7) spreads what is LEFT —
+the instalments already due stay where they were, and the revised
+total less everything already scheduled divides over the rest. Two
+revisions compose. A downward revision takes the remainder to nil
+rather than negative, because LHDN does not refund through the
+schedule.
+
 ### The five rules that are easy to get wrong and are each asserted
 
 1. **Capital allowances are NOT apportioned** for part-year ownership.
@@ -346,6 +383,15 @@ everybody rather than everybody who asks after today.
 5. **A partnership pays no tax.** It allocates. A partner's salary is
    not an expense — a partner cannot employ themselves — so it is added
    back and handed to that partner.
+6. **"N months from the date FOLLOWING the close" is not N months from
+   the close.** A period ending 30 June runs from 1 July and seven
+   months of it ends 31 January, not the 30th. February moves the
+   other way: 30 September, not the 28th.
+7. **Unknown is never the generous answer.** `0665` charges the
+   standard rate and says the SME test was not taken; `0671` schedules
+   the instalments and says the exemption was not tested. Both run
+   that way because the recoverable mistake is paying too much, and
+   the expensive one is a penalty.
 
 ### Things that fail silently here
 
@@ -360,6 +406,14 @@ everybody rather than everybody who asks after today.
 - **Partnership shares that do not come to 100** allocate a fraction of
   the income and the remainder appears nowhere. The allocation still
   adds up, down its own column, to the wrong total.
+- **A first basis period nobody has ticked** gets the ordinary CP204
+  deadline, which for a company incorporated partway through a year
+  passed before the company existed. Nothing can infer it — see the
+  next section — so the box being unticked is indistinguishable from a
+  company that is genuinely not new.
+- **A first period whose two SME figures are missing** is handed
+  instalments it may not owe. Deliberate and stated on the screen, but
+  it is money moving on an untested question.
 
 ### The limitations, stated to the user and still true
 
@@ -377,36 +431,56 @@ everybody rather than everybody who asks after today.
 - Form P assumes the accounts EXPENSED the partners' salaries. Where
   they were shown below the line the allocation over-states by that
   amount; the screen says so.
-- **`0667` does not model a new company's first basis period**, which
-  has its own timing and its own exemption from instalments.
-  `first_period` is on the estimate so the screen can say the rules
-  differ rather than quietly applying the wrong ones. CP500's
-  instalment rhythm for individuals — six bimonthly, on the 30th — is
-  not modelled either; `tax_estimate_rules` is company-shaped.
+- ~~`0667` does not model a new company's first basis period~~ — done
+  at `0671`, and CP500 at `0670`. What remains is that **nothing can
+  infer a first basis period**. The obvious rule, "the company's first
+  financial year in this product", is wrong for every company that
+  migrated in with history behind it, and `corp_entities` is a
+  secretarial firm's CLIENT list with no flag saying which row is the
+  company using the software. So it is a switch a person sets, and an
+  unticked one looks exactly like a company that is not new.
+- **The SME exemption test needs two figures nobody's ledger holds** —
+  paid-up capital at the start of the period and gross business
+  income. Both typed, and both null means the instalments are
+  scheduled.
 - **`0668` cannot know whether a particular obligation applies.** A
   CP58 appears for every trading company because the threshold test is
   about payments to agents this schema does not track, and a dormant
   company still gets its Form C because a dormant company still files
   one. It is a calendar, not an assessment of who is exempt.
-- **Nothing files.** No submission of anything, no instalment paid, and
-  nothing marks an obligation as met.
+- **A basis period that is not twelve months is still not modelled.**
+  A company changing its accounting date is the case, and `0665` says
+  so. `0671` does not change that: a first period shorter than a year
+  gets the full instalment count on the ordinary rhythm.
+- **Nothing files, and nothing is paid.** No submission of anything.
+  `0669` records that somebody SAYS a return was filed — a note with a
+  name on it, never verified with LHDN — and nothing tracks an
+  instalment as paid against the schedule `tax_estimate_schedule`
+  produces.
 
 ### Where they are
 
 Financial statements carries three actions: the calculator picks a
 financial year and opens the right form by entity type
 (`/tax-computation/:id`, `/form-b/:id`, `/form-p/:id`); the repeat
-icon opens the CP204 estimate (`/tax-estimate/:id`, with the
-computation as a query parameter where one exists); the notes icon
-opens the calendar (`/tax-calendar`). Fixed assets → the receipt icon
+icon opens the estimate (`/tax-estimate/:id`, with the computation as
+a query parameter where one exists — CP204 or CP500, decided from the
+entity type); the notes icon opens the calendar (`/tax-calendar`),
+which has a segmented toggle between what is falling due and what has
+been recorded. Fixed assets → the receipt icon
 opens the capital allowance schedule. The account editor carries the
 tax treatment picker, and **until accounts are tagged every computation
 is the profit unchanged** — which is not wrong, only empty, and the
 screen cannot warn about it.
 
-The calendar needs no posting permission, deliberately: it computes
-dates and writes nothing, and the person who most needs to see a
-deadline is often not the one who keys the return. The estimate opener
+The calendar needs no posting permission to READ, deliberately: it
+computes dates and the person who most needs to see a deadline is
+often not the one who keys the return. Recording against one does need
+it.
+
+The estimate's edit dialog is where a first basis period is declared,
+with the commencement date and the two SME figures behind the switch —
+they are meaningless without it and hidden until it is on. The estimate opener
 does NOT open a computation to measure against — it asks whether one
 exists, because opening one writes a document somebody then has to
 deal with, and the estimate screen is honest about not knowing.
@@ -485,20 +559,22 @@ deal with, and the estimate screen is honest about not knowing.
    worth doing. None is started; each is honest work rather than a
    gap somebody will trip over:
 
+   * ~~CP500 for individuals~~ — done at `0670`.
+   * ~~A company's first basis period~~ — done at `0671`.
+   * ~~Marking an obligation as met~~ — done at `0669`.
+   * **Tracking an instalment as PAID.** `tax_estimate_schedule` says
+     what was PAYABLE — after `0672`, correctly, even across two
+     revisions — and nothing records that any of it was paid. This is
+     the largest real gap left in the stack: a company that has paid
+     nine of twelve has no way to see it here, and the ledger cannot
+     tell a CP204 instalment from any other payment to LHDN.
    * **Form BE**, the return for a person with no business income —
-     due 30 April, two months before Form B, and `0668` names it in a
-     description rather than seeding it because nothing here knows
-     which individuals have a business source.
-   * **CP500 for individuals.** `0667`'s `tax_estimate_rules` is
-     company-shaped: twelve instalments on the 15th. An individual's
-     is six bimonthly on the 30th, revisable by 30 June on a CP502.
-     The table would need a form dimension rather than a second copy.
-   * **A company's first basis period**, which has its own CP204
-     timing and its own exemption from instalments. `first_period` is
-     already on the estimate for the screen to say so.
-   * **Marking an obligation as met.** `0668` computes and shows; it
-     has no equivalent of `corp_filings`, so nothing records that a
-     Form C was actually filed and nothing falls off the list.
+     due 30 April, two months before Form B. Low value: a person with
+     no business is not using an accounting product. `0668` names it
+     in a description rather than seeding it.
+   * **A basis period that is not twelve months**, which is a company
+     changing its accounting date. Stated as unmodelled since `0665`
+     and still is.
 
 5. **Task #11, the MIA headless scraper** — blocked, MIA unreachable
    from here. Do not start without the user.
@@ -593,6 +669,57 @@ After any migration: `python3 scripts/generate_api_description.py "$DB"`.
 ## Traps found this session
 
 Each of these was paid for once. None is obvious from the code.
+
+**Do not run the DB gates while `run_locally.sh` is rebuilding the same
+database.** It drops and rebuilds the local cluster's schema, so
+anything asking that database mid-run sees a half-built one:
+`generate_api_description.py` wrote 696 functions instead of 762, and
+`check_query_columns.py` and `check_rpc_grants.py` reported every new
+relation missing. None of it was real. Wait for "all SQL assertions
+passed", then regenerate and re-run.
+
+**`select ... into` takes the first row and says nothing about the
+rest.** So widening a table's key can silently change what an OLDER
+test measures. `tax_estimates.sql` looked up its rules by year alone;
+that was unambiguous until `0670` gave the table a second row per
+year, after which it was reading whichever row the heap handed back —
+and it kept passing, because that happened to be the right one.
+`0671` rewrote the rows and it finally failed. A green suite is not
+evidence a query still means what it did.
+
+**`scripts/mutate_sql.py` extracts a `create or replace function`
+block.** A bare `create` after a `drop` — which is what a changed
+return type needs — is invisible to it, and the sweep reports HARNESS
+ERROR rather than pretending to have tested anything. Write
+`drop ... ; create or replace ...`.
+
+**An OUT parameter sharing a name with a column is ambiguous.**
+`tax_estimate_exposure` gained an OUT parameter called `form` and its
+own `where form = e.form` stopped compiling. Postgres refuses rather
+than guessing, which is the good outcome — the guess would have
+compared the rules to an uninitialised output. Alias the table.
+
+**A migration that ALTERs is not idempotent.** A `create table` fails
+the second time with a message that stops psql; an `alter table ...
+add column` does too, and there is no re-running the file to recover
+from a failure halfway down it. Write the teardown alongside the
+migration — drop the columns, restore the old key and constraint,
+delete the seeded rows — and keep it until the migration is pushed.
+
+**`tenant_foreign_keys.sql` refuses `on delete set null` on a
+composite key.** The pair includes `org_id`, which is NOT NULL, so
+nulling the reference would null the tenant. NO ACTION, and usually
+the refusal is what you wanted anyway.
+
+**A surviving mutant in table-driven code is often a missing FIXTURE.**
+Not a missing assertion. Three of them this session: one fiscal year
+could not show that a recorded filing is keyed on the period; a
+Sdn Bhd fixture could not reach the Form B branch at all; and
+`floor_applies` was indistinguishable from `floor_known` until a
+company existed whose floor applied and was unknown.
+
+**Six and twelve both divide 60,000 evenly.** When a rhythm changes,
+the DATES are the assertions and the amounts prove nothing.
 
 **`mutate.py` replaces the FIRST occurrence in the file.** A mutant
 written as `periodFrom: Fmt.parseDate(j['period_from']),` matched four

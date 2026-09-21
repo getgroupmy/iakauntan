@@ -418,10 +418,62 @@ void main() {
         'instalment_no': 7,
         'due_on': '2026-08-15',
         'amount': 5001.25,
+        'set_by_revision': true,
       });
       expect(i.number, 7);
       expect(i.dueOn, DateTime(2026, 8, 15));
       expect(i.amount, 5001.25);
+      expect(i.setByRevision, isTrue);
+      expect(i.isWaived, isFalse);
+    });
+
+    test('an instalment the original set is not marked revised', () {
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 1,
+        'due_on': '2026-02-15',
+        'amount': 10000,
+        'set_by_revision': false,
+      });
+      expect(i.setByRevision, isFalse);
+      expect(i.isWaived, isFalse);
+    });
+
+    test('a row that says nothing about it reads as the original', () {
+      // The safe direction: an unrevised schedule is the ordinary
+      // case, and marking every row "revised" would make the flag
+      // useless on the screens where it matters.
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 1,
+        'amount': 10000,
+      });
+      expect(i.setByRevision, isFalse);
+    });
+
+    test('a revised instalment reduced to nothing is waived', () {
+      // A downward revision leaves the remaining instalments at nil.
+      // Distinct from an estimate of zero, where nothing was ever
+      // payable — the year owes less than has been billed and the
+      // excess comes back at assessment.
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 9,
+        'due_on': '2026-10-15',
+        'amount': 0,
+        'set_by_revision': true,
+      });
+      expect(i.isWaived, isTrue);
+    });
+
+    test('but an original instalment of nothing is not waived', () {
+      // An estimate of nothing gives twelve instalments of nothing,
+      // and calling those "waived" would claim a revision that never
+      // happened.
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 1,
+        'due_on': '2026-02-15',
+        'amount': 0,
+        'set_by_revision': false,
+      });
+      expect(i.isWaived, isFalse);
     });
 
     test('an instalment with no date reads as no date', () {

@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0671` (the highest applied migration).
+Schema version `0672` (the highest applied migration).
 763 functions and 363 readable tables, of which
 291 functions only read.
 
@@ -893,7 +893,7 @@ Not gated on any module.
 - `tax_computation_misfiled(p_org_id uuid)` — Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account.
 - `tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` — Whether an estimate clears the floor against last year -- where its form HAS a floor, which CP500 does not -- and, where a computation exists to measure against, how far under the real liability it fell and what that costs.
 - `tax_estimate_first_period(p_estimate_id uuid)` — The two ways a first basis period differs: when the estimate is due, and whether a qualifying new SME owes instalments at all.
-- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, on the rhythm its FORM names -- and EMPTY where a qualifying new SME owes none for its first two years of assessment.
+- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, on the rhythm its FORM names, EMPTY where a qualifying new SME owes none, and -- where the estimate has been revised -- with the instalments already due left at what was payable on their dates and the balance spread over those that remain.
 - `tax_filing_history(p_org_id uuid, p_limit integer)` — Everything recorded against an obligation, including what was dismissed as not applicable and why.
 - `tax_partnership_allocation(p_computation_id uuid)`
 - `tax_partnership_summary(p_computation_id uuid)` — The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.
