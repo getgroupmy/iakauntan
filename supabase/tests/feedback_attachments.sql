@@ -266,6 +266,41 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The grants a storage policy needs, which 0660 forgot and 0661 added
+-- ---------------------------------------------------------------------
+do $$
+declare v_missing text;
+begin
+  -- `0661`: a policy on `storage.objects` whose function the client
+  -- role cannot EXECUTE does not evaluate to false. It RAISES, and a
+  -- raise fails the whole statement -- for every bucket on the table,
+  -- not just this one. `bucket_survives_a_bad_path.sql` caught it on
+  -- its `mail` assertion, which is the collateral in one line.
+  --
+  -- Written as a sweep rather than two named checks: any `app`
+  -- function a storage policy comes to depend on later needs the same
+  -- grant, and would otherwise break every bucket on the day it lands.
+  select string_agg(p.proname, ', ' order by p.proname) into v_missing
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'app'
+     and p.proname in ('can_see_feedback', 'can_attach_to_feedback',
+                       'uuid_or_null', 'is_chat_participant',
+                       'can_read_attachment')
+     and not has_function_privilege('authenticated', p.oid, 'execute');
+  perform pg_temp.check_eq(
+    'every function a storage policy calls is callable by a client',
+    coalesce(v_missing, ''), '');
+
+  -- And the other direction, which is the `public` half of the same
+  -- asymmetry: these answer questions about the caller, so `anon`
+  -- must not be able to ask them.
+  perform pg_temp.check_eq('anon cannot ask who may see a report',
+    has_function_privilege('anon', 'app.can_see_feedback(uuid)',
+                           'execute')::text,
+    'false');
+end $$;
+
 do $$
 begin
   if has_function_privilege('anon',
