@@ -86,6 +86,61 @@ void main() {
     });
   });
 
+  group('the expenses app bar', () {
+    // The third one of these to ship. Two labelled buttons beside a
+    // title overflowed by 104 pixels at 412 wide — found by
+    // CONSTRUCTING the screen for the first time, which nothing had
+    // ever done. Flutter calls it an error in debug and silently
+    // clips it in release, so the pixels were simply gone on a phone.
+    Widget bar({required bool narrow}) => Scaffold(
+          appBar: AppBar(
+            title: const Text('Expenses'),
+            actions: [
+              if (!narrow)
+                TextButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.document_scanner_outlined,
+                        size: 18),
+                    label: const Text('Scan expense')),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: FilledButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text(narrow ? 'Record' : 'Record expense')),
+              ),
+              if (narrow)
+                PopupMenuButton<int>(
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 0, child: Text('Scan expense')),
+                  ],
+                ),
+            ],
+          ),
+          body: const SizedBox(),
+        );
+
+    testWidgets('fits a phone once it collapses', (tester) async {
+      await pump(tester, bar(narrow: true));
+      expect(tester.takeException(), isNull);
+      for (final f in [
+        find.text('Record'),
+        find.byIcon(Icons.more_vert),
+      ]) {
+        expect(tester.getRect(f).right, lessThanOrEqualTo(412), reason: '$f');
+      }
+    });
+
+    testWidgets('and would not have before', (tester) async {
+      // Proof the collapse does something. This is the arrangement
+      // that shipped.
+      await pump(tester, bar(narrow: false));
+      final error = tester.takeException();
+      expect(error, isFlutterError);
+      expect('$error', contains('overflowed'));
+    });
+  });
+
   group('an app bar with more actions than fit', () {
     // The shape the invoice editor produces once a document is posted.
     Widget bar({required bool narrow}) => Scaffold(

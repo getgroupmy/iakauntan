@@ -57,6 +57,18 @@ class ExpensesScreen extends ConsumerWidget {
     final expenses = ref.watch(expensesProvider);
     final canPost = ref.watch(canPostProvider);
 
+    // Two labelled buttons and a title do not fit a phone: this bar
+    // overflowed by 104 pixels at 412 wide, which Flutter reports as
+    // an error in debug and simply CLIPS in release. The same shape as
+    // the invoice editor's, and collapsed the same way — the primary
+    // action keeps its button with a shorter label and the secondary
+    // one goes into the overflow menu.
+    //
+    // 640 is the threshold `document_editor.dart` uses. One number,
+    // because two screens disagreeing about what "narrow" means is how
+    // one of them ends up wrong on a tablet.
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Expenses'),
@@ -64,7 +76,7 @@ class ExpensesScreen extends ConsumerWidget {
           // Scan first, and before the blank form, because that is the
           // order the work happens in: somebody is holding a receipt and
           // has not yet decided which account it belongs to.
-          if (canPost)
+          if (canPost && !narrow)
             TextButton.icon(
               onPressed: () => _scanExpense(context, ref),
               icon: const Icon(Icons.document_scanner_outlined, size: 18),
@@ -74,13 +86,22 @@ class ExpensesScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: FilledButton.icon(
+                key: const ValueKey('record-expense'),
                 onPressed: () => showDialog<void>(
                   context: context,
                   builder: (_) => const _ExpenseDialog(),
                 ),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Record expense'),
+                label: Text(narrow ? 'Record' : 'Record expense'),
               ),
+            ),
+          if (canPost && narrow)
+            PopupMenuButton<int>(
+              key: const ValueKey('expense-overflow'),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 0, child: Text('Scan expense')),
+              ],
+              onSelected: (_) => _scanExpense(context, ref),
             ),
         ],
       ),
