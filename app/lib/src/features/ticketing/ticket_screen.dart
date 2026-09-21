@@ -102,6 +102,12 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
       body: AsyncView(
         value: ticket,
         onRetry: () => ref.invalidate(ticketProvider(widget.id)),
+        // A header, the description, and the replies under it. A ticket
+        // that has not arrived yet is still that shape.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(rows: 6, leadingSize: 32, rowGap: Space.md),
+        ),
         builder: (t) => PageBody(
           child: ListView(
             children: [

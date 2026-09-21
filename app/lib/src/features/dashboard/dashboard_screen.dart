@@ -846,6 +846,9 @@ class _TrendCard extends ConsumerWidget {
               child: AsyncView(
                 value: trend,
                 onRetry: () => ref.invalidate(revenueTrendProvider),
+                // The same 240 the box above gives the real chart. Twelve
+                // months, so a label every other one along the bottom.
+                skeleton: const ChartSkeleton(height: 240, labels: 6),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return const EmptyState(

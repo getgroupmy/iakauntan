@@ -2251,6 +2251,19 @@ class _Basket extends ConsumerWidget {
           Expanded(
             child: AsyncView<List<Map<String, dynamic>>>(
               value: lines,
+              // The basket is a column of lines with a price at the end
+              // of each. Reopening a parked sale is the wait this
+              // covers, and what comes back is always that shape.
+              skeleton: const Padding(
+                padding: EdgeInsets.all(Space.md),
+                child: CardRowsSkeleton(
+                  rows: 4,
+                  leading: false,
+                  lines: 1,
+                  trailing: 1,
+                  trailingWidth: 64,
+                ),
+              ),
               builder: (r) => _BasketLines(
                 rows: r,
                 mods: mods,
@@ -2594,6 +2607,21 @@ class _BrowseState extends State<_Browse> {
         }
         return AsyncView<List<Map<String, dynamic>>>(
           value: menu,
+          // A grid of tiles to tap. The tile is 150 wide here because
+          // it is 150 wide below -- a menu skeleton whose tiles are a
+          // different size reflows the whole grid on arrival, which on
+          // the one screen somebody uses at speed is the worst place
+          // for it.
+          skeleton: const Padding(
+            padding: EdgeInsets.all(Space.sm),
+            child: TilesSkeleton(
+              count: 12,
+              wideAt: 900,
+              mediumAt: 450,
+              wideAspect: 1.0,
+              narrowAspect: 1.0,
+            ),
+          ),
           builder: (rows) {
             if (rows.isEmpty) {
               return const EmptyState(

@@ -63,6 +63,18 @@ class SettingsScreen extends ConsumerWidget {
       body: AsyncView(
         value: org,
         onRetry: () => refreshOrganization(ref),
+        // The settings cards are the same cards for every company. Only
+        // the name, the registration number and the switches inside
+        // them are waiting on the organisation.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 6,
+            leadingSize: 24,
+            trailing: 1,
+            rowGap: Space.lg,
+          ),
+        ),
         builder: (organization) {
           return SingleChildScrollView(
             child: PageBody(

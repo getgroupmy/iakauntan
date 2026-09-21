@@ -74,6 +74,15 @@ class CorpEntityScreen extends ConsumerWidget {
       body: AsyncView(
         value: entity,
         onRetry: () => ref.invalidate(corpEntityProvider(entityId)),
+        // Seven tabs, the same seven for every company, built inside
+        // the builder because the row is what they are about.
+        skeleton: const TabbedSkeleton(
+          tabs: 7,
+          body: Padding(
+            padding: EdgeInsets.all(Space.lg),
+            child: CardRowsSkeleton(rows: 5, leadingSize: 24, trailing: 1),
+          ),
+        ),
         builder: (e) {
           if (e == null) {
             return const EmptyState(

@@ -30,6 +30,18 @@ class MyHrScreen extends ConsumerWidget {
       body: AsyncView(
         value: me,
         onRetry: () => ref.invalidate(myEmployeeProvider),
+        // The self-service cards -- clock, leave, payslips, claims --
+        // are the same cards for everybody. What is waiting is which
+        // employee they belong to.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 4,
+            leadingSize: 24,
+            trailing: 1,
+            rowGap: Space.lg,
+          ),
+        ),
         builder: (employee) {
           if (employee == null) {
             return const EmptyState(

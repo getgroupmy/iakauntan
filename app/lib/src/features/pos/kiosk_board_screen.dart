@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // No `repository.dart` here, unlike its sibling screens. This one only
 // reads a provider and calls nothing on Repo, so the extension it would
@@ -113,6 +115,12 @@ class _Board extends ConsumerWidget {
     final board = ref.watch(kioskOrderBoardProvider(outletId));
     return AsyncView<List<Map<String, dynamic>>>(
       value: board,
+      // Two columns of order numbers -- being made, and ready -- on a
+      // screen whose whole job is to be the same shape all day.
+      skeleton: const Padding(
+        padding: EdgeInsets.all(Space.lg),
+        child: TilesSkeleton(count: 6, wideAspect: 1.2, narrowAspect: 2.0),
+      ),
       builder: (orders) {
         final making = [
           for (final o in orders)

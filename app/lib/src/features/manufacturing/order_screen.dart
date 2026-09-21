@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -35,6 +36,12 @@ class ManufacturingOrderScreen extends ConsumerWidget {
       body: AsyncView(
         value: order,
         onRetry: () => ref.invalidate(manufacturingOrderProvider(orderId)),
+        // A header and then the materials, one row each. Every order is
+        // that shape; the quantities are what is waiting.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(rows: 6, leadingSize: 24, trailing: 1),
+        ),
         builder: (mo) => _Body(orderId: orderId, mo: mo),
       ),
     );

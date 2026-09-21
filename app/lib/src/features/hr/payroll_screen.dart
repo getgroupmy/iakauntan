@@ -177,6 +177,17 @@ class PayrollRunScreen extends ConsumerWidget {
       body: AsyncView(
         value: runs,
         onRetry: () => ref.invalidate(payrollRunsProvider),
+        // A run's page is a header and the payslips under it, one row
+        // to an employee. Which run was asked for does not change that
+        // shape, only the names in it.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 6,
+            leadingSize: 32,
+            trailing: 1,
+          ),
+        ),
         builder: (list) {
           final run = list.where((r) => r.id == runId).firstOrNull;
           if (run == null) {

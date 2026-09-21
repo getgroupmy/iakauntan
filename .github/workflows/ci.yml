@@ -1257,6 +1257,14 @@ jobs:
       - name: Check no loading arm draws a spinner
         run: python3 scripts/check_loading_spinners.py
 
+      # And the other half of the same question. The gate above catches a
+      # spinner somebody wrote out; this one catches the spinner nobody
+      # wrote -- an AsyncView that passed neither `skeleton:` nor
+      # `loading:` and got the fallback circle by saying nothing. That is
+      # how all thirty-seven of the last batch arrived.
+      - name: Check every AsyncView has chosen bones or a circle
+        run: python3 scripts/check_async_skeletons.py
+
       # The app icons, which nothing else looks at. The analyser does
       # not read an asset catalogue, no test renders one, and a build
       # succeeds with a wrong-sized image, half a rename, or a "dark"
@@ -2064,6 +2072,9 @@ jobs:
 
       - name: The loading-spinner gate's own assertions
         run: python3 scripts/check_loading_spinners_test.py
+
+      - name: The AsyncView-skeleton gate's own assertions
+        run: python3 scripts/check_async_skeletons_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py

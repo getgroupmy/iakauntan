@@ -52,6 +52,18 @@ class _MobileAppAdminTabState extends ConsumerState<MobileAppAdminTab> {
     return AsyncView<Map<String, dynamic>?>(
       value: page,
       onRetry: () => ref.invalidate(landingPageAdminProvider),
+      // The store links and the three release cards, which are the same
+      // cards whether or not the row has anything in it -- this screen
+      // draws them for a page that has never been saved.
+      skeleton: const Padding(
+        padding: EdgeInsets.all(Space.lg),
+        child: CardRowsSkeleton(
+          rows: 5,
+          leadingSize: 24,
+          trailing: 1,
+          rowGap: Space.lg,
+        ),
+      ),
       builder: (row) {
         final r = row ?? const <String, dynamic>{};
         String? text(String key) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../../core/widgets.dart';
@@ -72,9 +73,15 @@ class PipelineScreen extends ConsumerWidget {
       body: AsyncView(
         value: stages,
         onRetry: () => ref.invalidate(pipelineStagesProvider),
+        skeleton: const BoardSkeleton(),
         builder: (stageList) => AsyncView(
           value: opportunities,
           onRetry: () => ref.invalidate(opportunitiesProvider),
+          // The same outline again, deliberately. The stages usually
+          // land first and the deals a moment later, and swapping the
+          // board for a circle in between would be the flicker this is
+          // meant to remove -- arriving backwards, which is worse.
+          skeleton: const BoardSkeleton(),
           builder: (deals) {
             if (stageList.isEmpty) {
               return const EmptyState(

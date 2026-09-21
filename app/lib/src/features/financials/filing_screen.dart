@@ -58,6 +58,18 @@ class FilingScreen extends ConsumerWidget {
       body: AsyncView(
         value: filing,
         onRetry: () => ref.invalidate(fsFilingProvider(filingId)),
+        // A banner and a column of cards, in that order, whatever the
+        // filing turns out to say. Only the values inside them are
+        // waiting on the row.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 5,
+            leading: false,
+            lines: 3,
+            rowGap: Space.lg,
+          ),
+        ),
         builder: (f) {
           if (f == null) {
             return const EmptyState(

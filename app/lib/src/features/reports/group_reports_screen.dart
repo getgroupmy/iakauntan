@@ -5,6 +5,7 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'report_pdf.dart';
@@ -333,6 +334,21 @@ class _GroupReport extends ConsumerWidget {
     return AsyncView(
       value: ref.watch(provider),
       onRetry: () => ref.invalidate(provider),
+      // A report is lines of a label and a figure, and the person
+      // has already said which report. What the rows decide is how
+      // MANY lines and what they say -- not that the page is a column
+      // of them.
+      skeleton: const Padding(
+        padding: EdgeInsets.all(Space.lg),
+        child: CardRowsSkeleton(
+          rows: 10,
+          leading: false,
+          lines: 1,
+          trailing: 1,
+          trailingWidth: 90,
+          rowGap: Space.sm,
+        ),
+      ),
       builder: (rows) {
         if (rows.isEmpty) return empty;
         final s = spec(rows);
