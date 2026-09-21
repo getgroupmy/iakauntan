@@ -10,7 +10,7 @@ import '../data/models.dart';
 import '../data/custom_fields_repository.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
-import '../features/admin/ios_release.dart';
+import '../features/admin/app_release.dart';
 import '../features/einvoice/received_einvoice.dart';
 import 'env.dart';
 import 'push.dart';
@@ -1002,8 +1002,9 @@ final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
 /// `autoDispose` because it is a list of workflow runs and goes stale
 /// the moment one starts; the card refreshes it rather than holding
 /// yesterday's answer for the length of a session.
-final iosReleasesProvider = FutureProvider.autoDispose<IosReleases>((ref) {
-  return ref.watch(platformRepoProvider).iosReleases();
+final appReleasesProvider = FutureProvider.autoDispose
+    .family<AppReleases, ReleasePlatform>((ref, platform) {
+  return ref.watch(platformRepoProvider).appReleases(platform);
 });
 
 /// The bank rules, in the order they are tried. 0625.

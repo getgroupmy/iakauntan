@@ -13,7 +13,7 @@ import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
 import '../landing/splash_screen.dart';
 import 'branding_admin.dart' show mimeForExtension;
-import 'ios_release.dart';
+import 'app_release.dart';
 
 /// Everything about the iOS and Android builds, in one place.
 ///
@@ -92,7 +92,15 @@ class _MobileAppAdminTabState extends ConsumerState<MobileAppAdminTab> {
                   onChanged: (patch) => _save(patch),
                 ),
                 const SizedBox(height: Space.lg),
-                const _ReleaseCard(),
+                // A card each, because they are two products with two
+                // stores, two sets of destinations and two very
+                // different costs — and one of them can be set up
+                // while the other is not.
+                const _ReleaseCard(ReleasePlatform.ios),
+                const SizedBox(height: Space.lg),
+                const _ReleaseCard(ReleasePlatform.android),
+                const SizedBox(height: Space.lg),
+                const _BothCard(),
                 const SizedBox(height: Space.lg),
                 const _ElsewhereCard(),
                 const SizedBox(height: Space.lg),
@@ -500,14 +508,37 @@ class _Elsewhere extends StatelessWidget {
 ///
 /// Both lanes are worth showing because they are genuinely different
 /// decisions, not two buttons for one thing.
-String releaseBlurb(String lane) => switch (lane) {
+String releaseBlurb(String choice) => switch (choice) {
   'testflight' =>
     'Builds and uploads to TestFlight. Your own testers can install it '
         'within minutes of Apple finishing processing.',
-  _ =>
+  'appstore' =>
     'Builds and uploads the same way, then you submit it for review in '
         'App Store Connect. Apple\'s review takes hours to days and '
         'nothing here can shorten it.',
+  'internal' =>
+    'Builds and uploads to the internal testing track. The testers on '
+        'that track can install it once Play has processed it, with no '
+        'review.',
+  'production' =>
+    'Builds, uploads, and rolls out to everybody. Play reviews it '
+        'first, which takes hours to days and nothing here can '
+        'shorten.',
+  // Alpha and beta are both closed testing and behave the same way,
+  // so they share a sentence — named explicitly rather than left to
+  // the fallback, because the fallback has to stay free for the case
+  // below.
+  'alpha' || 'beta' =>
+    'Builds and uploads to that closed testing track. Play reviews a '
+        'first release to it, and testers get it after that.',
+  // A destination this build does not know. It gets the most cautious
+  // sentence there is, and deliberately does not name a store: the
+  // only safe thing to say about an unrecognised destination is that
+  // it might be public and might be reviewed.
+  _ =>
+    'Builds and uploads. This destination is not one this screen '
+        'recognises, so check where it goes before pressing — it may '
+        'reach the public, and a store review may apply.',
 };
 
 /// A run, in a word.
@@ -546,7 +577,9 @@ String releaseBlurb(String lane) => switch (lane) {
 /// token that can start it. The console never sees a signing
 /// certificate or an App Store key.
 class _ReleaseCard extends ConsumerStatefulWidget {
-  const _ReleaseCard();
+  const _ReleaseCard(this.platform);
+
+  final ReleasePlatform platform;
 
   @override
   ConsumerState<_ReleaseCard> createState() => _ReleaseCardState();
@@ -554,7 +587,7 @@ class _ReleaseCard extends ConsumerStatefulWidget {
 
 class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
   final _notes = TextEditingController();
-  String _lane = 'testflight';
+  late String _choice = widget.platform.choices.first;
   bool _busy = false;
 
   @override
@@ -570,12 +603,10 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
     final go = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          _lane == 'appstore' ? 'Release to the App Store?' : 'Send to TestFlight?',
-        ),
+        title: Text('Release the ${widget.platform.label} app?'),
         content: Text(
-          '${releaseBlurb(_lane)}\n\n'
-          'It builds on a Mac, which takes twenty to thirty minutes.',
+          '${releaseBlurb(_choice)}\n\n'
+          '${widget.platform.buildTime}',
         ),
         actions: [
           TextButton(
@@ -595,8 +626,9 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Building. It appears below in a moment.',
-      action: () => ref.read(platformRepoProvider).releaseIosApp(
-        lane: _lane,
+      action: () => ref.read(platformRepoProvider).releaseApp(
+        widget.platform,
+        choice: _choice,
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       ),
     );
@@ -604,13 +636,13 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
     setState(() => _busy = false);
     if (ok) {
       _notes.clear();
-      ref.invalidate(iosReleasesProvider);
+      ref.invalidate(appReleasesProvider(widget.platform));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final runs = ref.watch(iosReleasesProvider);
+    final runs = ref.watch(appReleasesProvider(widget.platform));
     // `valueOrNull` and not `.value`: this is read on every build,
     // including the one where the provider is still in flight or has
     // failed, and `.value` throws on both. Unknown reads as "set up"
@@ -625,23 +657,29 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SectionHeader(
-              'Release the iOS app',
-              subtitle: 'Builds on a Mac and uploads to App Store Connect',
+            SectionHeader(
+              widget.platform.title,
+              subtitle: widget.platform.subtitle,
             ),
             SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'testflight', label: Text('TestFlight')),
-                ButtonSegment(value: 'appstore', label: Text('App Store')),
+              // Four destinations on Android, so it has to be allowed
+              // to wrap rather than overflow a narrow card.
+              segments: [
+                for (var i = 0; i < widget.platform.choices.length; i++)
+                  ButtonSegment(
+                    value: widget.platform.choices[i],
+                    label: Text(widget.platform.labels[i]),
+                  ),
               ],
-              selected: {_lane},
+              selected: {_choice},
+              showSelectedIcon: false,
               onSelectionChanged: _busy
                   ? null
-                  : (s) => setState(() => _lane = s.first),
+                  : (s) => setState(() => _choice = s.first),
             ),
             const SizedBox(height: Space.sm),
             Text(
-              releaseBlurb(_lane),
+              releaseBlurb(_choice),
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -660,9 +698,14 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
-                key: const ValueKey('start-ios-release'),
+                key: ValueKey('start-${widget.platform.name}-release'),
                 onPressed: _busy || unavailable != null ? null : _release,
-                icon: const Icon(Icons.ios_share, size: 18),
+                icon: Icon(
+                  widget.platform == ReleasePlatform.ios
+                      ? Icons.ios_share
+                      : Icons.android,
+                  size: 18,
+                ),
                 label: const Text('Start the build'),
               ),
             ),
@@ -672,9 +715,10 @@ class _ReleaseCardState extends ConsumerState<_ReleaseCard> {
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: Space.sm),
-            AsyncView<IosReleases>(
+            AsyncView<AppReleases>(
               value: runs,
-              onRetry: () => ref.invalidate(iosReleasesProvider),
+              onRetry: () =>
+                  ref.invalidate(appReleasesProvider(widget.platform)),
               skeleton: const CardRowsSkeleton(
                 rows: 3,
                 leadingSize: 24,
@@ -814,6 +858,167 @@ class _ReleaseRow extends StatelessWidget {
               icon: const Icon(Icons.open_in_new, size: 18),
               onPressed: () => launchExternal(url),
             ),
+    );
+  }
+}
+
+/// Both at once, for the ordinary case where a change belongs on both
+/// phones.
+///
+/// It is two dispatches, not one, and that is the thing this card has
+/// to be honest about. The workflows are independent: they run on
+/// different runners, take different times, and one can succeed while
+/// the other fails. Nothing here is a transaction, so the copy says
+/// "starts both" rather than anything that sounds atomic, and the
+/// result is reported per platform.
+///
+/// It sends each platform's FIRST destination — TestFlight and
+/// internal testing — rather than whatever the cards above happen to
+/// have selected. Two reasons. A button that silently depends on the
+/// state of two other cards is a button whose effect you cannot read
+/// off the screen. And these are the two destinations that reach
+/// testers without a review, which is what "build both" is almost
+/// always for; releasing to a store is a decision worth making one
+/// platform at a time, on the card that explains it.
+class _BothCard extends ConsumerStatefulWidget {
+  const _BothCard();
+
+  @override
+  ConsumerState<_BothCard> createState() => _BothCardState();
+}
+
+class _BothCardState extends ConsumerState<_BothCard> {
+  final _notes = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _releaseBoth() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Release both apps?'),
+        content: const Text(
+          'Starts two builds: iOS to TestFlight and Android to the '
+          'internal testing track.\n\n'
+          'They are independent — separate runners, different '
+          'durations, and one can fail while the other succeeds. '
+          'Neither reaches the public.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Start both'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final notes = _notes.text.trim().isEmpty ? null : _notes.text.trim();
+    final repo = ref.read(platformRepoProvider);
+
+    // Sequential, and each failure named. Starting them together with
+    // `Future.wait` would abandon the second the moment the first
+    // threw, and report one error for two attempts — so a green
+    // Android build would go unmentioned because iOS refused.
+    final failures = <String>[];
+    for (final platform in ReleasePlatform.values) {
+      try {
+        await repo.releaseApp(
+          platform,
+          choice: platform.choices.first,
+          notes: notes,
+        );
+      } catch (e) {
+        failures.add('${platform.label}: $e');
+      }
+      ref.invalidate(appReleasesProvider(platform));
+    }
+
+    if (!mounted) return;
+    setState(() => _busy = false);
+
+    final (said, ok) = switch (failures.length) {
+      0 => ('Both building. They appear in the cards above.', true),
+      final n when n == ReleasePlatform.values.length =>
+        ('Neither started. ${failures.first}', false),
+      // The half-success, which is the case worth wording carefully:
+      // one build IS running, and somebody who reads this as a plain
+      // failure will press again and start a second one.
+      _ => ('One started, one did not — ${failures.first}', false),
+    };
+    if (ok) _notes.clear();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(said),
+          backgroundColor:
+              ok ? context.colors.success : context.colors.danger,
+          duration: Duration(seconds: ok ? 4 : 6),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Disabled only when BOTH are unconfigured. With one set up, this
+    // still does something useful and says which half failed.
+    final configured = ReleasePlatform.values.any(
+      (p) => ref.watch(appReleasesProvider(p)).valueOrNull?.unavailable == null,
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              'Release both apps',
+              subtitle: 'iOS to TestFlight and Android to internal testing',
+            ),
+            Text(
+              'Two builds, started together. They run independently, so '
+              'one can finish long before the other — and one can fail '
+              'on its own.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: Space.md),
+            TextField(
+              controller: _notes,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'What changed',
+                helperText: 'Optional, and sent to both',
+              ),
+            ),
+            const SizedBox(height: Space.md),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                key: const ValueKey('start-both-releases'),
+                onPressed: _busy || !configured ? null : _releaseBoth,
+                icon: const Icon(Icons.phone_iphone, size: 18),
+                label: const Text('Start both builds'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

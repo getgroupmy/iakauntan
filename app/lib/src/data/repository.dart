@@ -12,7 +12,7 @@ import '../features/contacts/brought_forward.dart';
 import '../features/documents/transfer.dart';
 import '../features/einvoice/received_einvoice.dart';
 // `RepoMia` at the foot of this file returns these.
-import '../features/admin/ios_release.dart';
+import '../features/admin/app_release.dart';
 import '../features/mia/mia_credential.dart';
 import 'models.dart';
 
@@ -5271,10 +5271,10 @@ class PlatformRepo {
   /// app's opinion of what happened. A workflow that failed to start,
   /// or one somebody ran by hand from the Actions tab, both show up in
   /// the same list.
-  Future<IosReleases> iosReleases() async {
+  Future<AppReleases> appReleases(ReleasePlatform platform) async {
     final FunctionResponse res;
     try {
-      res = await client.functions.invoke('ios-release');
+      res = await client.functions.invoke(platform.fn);
     } on FunctionException catch (e) {
       // `invoke` THROWS on a non-2xx. It does not hand back a response
       // with a status to inspect, which is what the first version of
@@ -5286,11 +5286,13 @@ class PlatformRepo {
         e.details,
         orElse: 'The build list could not be read',
       );
-      if (releaseNotConfigured(e.status)) return IosReleases.unavailable(said);
+      if (releaseNotConfigured(e.status)) {
+        return AppReleases.unavailable(said);
+      }
       throw Exception(said);
     }
     final runs = (res.data as Map)['runs'] as List? ?? const [];
-    return IosReleases.runs([
+    return AppReleases.runs([
       for (final r in runs) Map<String, dynamic>.from(r as Map),
     ]);
   }
@@ -5301,13 +5303,20 @@ class PlatformRepo {
   /// the public: the first reaches your own testers, the second reaches
   /// App Review, and what happens after that is Apple's and takes as
   /// long as it takes.
-  Future<void> releaseIosApp({required String lane, String? notes}) async {
+  Future<void> releaseApp(
+    ReleasePlatform platform, {
+    required String choice,
+    String? notes,
+  }) async {
     try {
       await client.functions.invoke(
-        'ios-release',
+        platform.fn,
         body: {
           'action': 'release',
-          'lane': lane,
+          // `lane` for iOS and `track` for Android, because that is
+          // what each workflow declares. One name for both would be a
+          // 422 from GitHub naming neither the input nor the value.
+          platform.input: choice,
           if (notes != null) 'notes': notes,
         },
       );

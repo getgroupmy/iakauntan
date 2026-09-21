@@ -1279,6 +1279,13 @@ jobs:
       - name: Check the release workflows check for what they use
         run: python3 scripts/check_release_secrets.py
 
+      # Two copies of each destination list: the workflow's `choice`
+      # options, and the allow-list the function checks against before
+      # it ever reaches GitHub. Drift either way is a button that fails
+      # with a 422 naming neither the input nor the value.
+      - name: Check the release destinations agree
+        run: python3 scripts/check_release_choices.py
+
       # `-dontwarn` does not make a class exist. A script the Dart asks
       # for AND the R8 rules suppress builds cleanly and throws
       # NoClassDefFoundError on a device, in the one code path that
@@ -1534,8 +1541,8 @@ jobs:
       # Apple under this company's name. Everything it takes from a
       # browser is checked against a list, and these run rather than
       # only type-check for the same reason the two above do.
-      - run: deno check supabase/functions/ios-release/dispatch_test.ts
-      - run: deno test supabase/functions/ios-release/dispatch_test.ts
+      - run: deno check supabase/functions/_shared/release_test.ts
+      - run: deno test supabase/functions/_shared/release_test.ts
 
       # Which of an iPhone's two Apple tokens a given notification may
       # go to. `0658`.

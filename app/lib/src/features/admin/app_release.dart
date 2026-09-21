@@ -22,12 +22,78 @@
 library;
 
 /// The last few runs, or the reason there are none to show.
-class IosReleases {
-  const IosReleases.runs(this.runs) : unavailable = null;
+/// Which app, and everything the console needs to say about it.
+///
+/// The two are genuinely different products with different stores,
+/// different destinations and different costs, so they get a card
+/// each. What they share is every word of the machinery behind the
+/// button — see `supabase/functions/_shared/release.ts`, which holds
+/// the same split on the server.
+enum ReleasePlatform {
+  ios(
+    fn: 'ios-release',
+    label: 'iOS',
+    title: 'Release the iOS app',
+    subtitle: 'Builds on a Mac and uploads to App Store Connect',
+    choices: ['testflight', 'appstore'],
+    labels: ['TestFlight', 'App Store'],
+    // Said out loud in the confirmation, because it is the one number
+    // that decides whether somebody presses now or later: a macOS
+    // runner bills at ten times an Ubuntu one.
+    buildTime: 'It builds on a Mac, which takes twenty to thirty '
+        'minutes and costs about ten times an Ubuntu build.',
+  ),
+  android(
+    fn: 'android-release',
+    label: 'Android',
+    title: 'Release the Android app',
+    subtitle: 'Builds on Ubuntu and uploads to Google Play',
+    choices: ['internal', 'alpha', 'beta', 'production'],
+    labels: ['Internal', 'Alpha', 'Beta', 'Production'],
+    buildTime: 'It builds on Ubuntu, which takes about eight minutes.',
+  );
+
+  const ReleasePlatform({
+    required this.fn,
+    required this.label,
+    required this.title,
+    required this.subtitle,
+    required this.choices,
+    required this.labels,
+    required this.buildTime,
+  });
+
+  /// The edge function's name. The same string on both sides.
+  final String fn;
+
+  /// "iOS" or "Android", for a sentence.
+  final String label;
+  final String title;
+  final String subtitle;
+
+  /// How long it takes and what it costs, for the confirmation.
+  final String buildTime;
+
+  /// Every destination, in the order the workflow declares them. The
+  /// first is the default, and `scripts/check_release_choices.py`
+  /// holds this list to the workflow's own `options:`.
+  final List<String> choices;
+
+  /// What to call each of those on a button.
+  final List<String> labels;
+
+  /// The name the workflow gives its destination input. `lane` for
+  /// one and `track` for the other, and sending the wrong one is a
+  /// 422 that names neither.
+  String get input => this == ReleasePlatform.ios ? 'lane' : 'track';
+}
+
+class AppReleases {
+  const AppReleases.runs(this.runs) : unavailable = null;
 
   /// Releasing is not set up here yet, and [unavailable] says what it
   /// needs. Not an error: nothing is broken.
-  const IosReleases.unavailable(String this.unavailable)
+  const AppReleases.unavailable(String this.unavailable)
     : runs = const <Map<String, dynamic>>[];
 
   final List<Map<String, dynamic>> runs;

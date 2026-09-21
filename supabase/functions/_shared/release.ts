@@ -1,35 +1,78 @@
 /**
  * What the console is allowed to ask for, and what GitHub is told.
  *
+ * Shared by `ios-release` and `android-release`, which differ in three
+ * things and nothing else: which workflow file to dispatch, what the
+ * destination input is called, and which destinations are allowed.
+ * Everything around that — checking the caller is a platform
+ * administrator, holding the token, resolving the ref, trimming the
+ * run list, translating a refusal — is one implementation because a
+ * second copy is a second place for it to be wrong. That is the
+ * reasoning `index.ts` already gave for not re-implementing
+ * `am_i_platform_admin`.
+ *
  * Its own module so it can be tested without starting a server, the
  * same arrangement `send-push/routing.ts` has and for the same reason:
- * `index.ts` calls `serveFunction` at the top level.
+ * `index.ts` calls `serveFunction` at the top level. Nothing here
+ * imports supabase-js either, which keeps the tested half free of a
+ * dependency the local checker can only stub.
  *
  * The decisions here are small and the consequences of getting them
- * wrong are not. This function holds a token that can start a workflow
- * which signs a build with a distribution certificate and hands it to
- * Apple under this company's name. Everything it accepts from a browser
- * is therefore checked against a list written here rather than passed
- * through.
+ * wrong are not. These functions hold a token that can start a workflow
+ * which signs a build with a distribution certificate or an upload key
+ * and hands it to Apple or Google under this company's name.
+ * Everything accepted from a browser is checked against a list written
+ * here rather than passed through.
  */
 
-/** The workflow file. Named once, because a typo here is a 404. */
-export const WORKFLOW = "ios-release.yml";
+/** Which app, which workflow, and where a build may be sent. */
+export interface ReleasePlatform {
+  /** The edge function's name, and what a failure is tagged with. */
+  readonly fn: string;
+  /** The workflow file. Named once, because a typo here is a 404. */
+  readonly workflow: string;
+  /** What the destination input is called in that workflow. */
+  readonly input: string;
+  /** Every value that input accepts. */
+  readonly choices: readonly string[];
+  /** For the sentence about where an unset ref comes from. */
+  readonly label: string;
+}
 
-/** Where a build may be sent. */
-export type Lane = "testflight" | "appstore";
+export const IOS: ReleasePlatform = {
+  fn: "ios-release",
+  workflow: "ios-release.yml",
+  input: "lane",
+  choices: ["testflight", "appstore"],
+  label: "iOS",
+};
+
+export const ANDROID: ReleasePlatform = {
+  fn: "android-release",
+  workflow: "android-release.yml",
+  input: "track",
+  // The same four `android-release.yml` offers, in the same order.
+  // `scripts/check_release_choices.py` holds them to that.
+  choices: ["internal", "alpha", "beta", "production"],
+  label: "Android",
+};
 
 /**
- * The lane, or null if it is not one.
+ * The destination, or null if it is not one this platform offers.
  *
- * An allow-list rather than a cast. `lane` reaches the workflow as a
+ * An allow-list rather than a cast. The value reaches the workflow as a
  * `workflow_dispatch` input and a `choice` input GitHub does not
- * recognise is a 422 — but the reason to check it HERE is that this
- * value also decides what the summary says about App Review, and a
- * value nobody reasoned about should not get that far.
+ * recognise is a 422 — but the reason to check it HERE is that it also
+ * decides what the console says about review, and a value nobody
+ * reasoned about should not get that far.
  */
-export function laneOf(raw: unknown): Lane | null {
-  return raw === "testflight" || raw === "appstore" ? raw : null;
+export function choiceOf(
+  platform: ReleasePlatform,
+  raw: unknown,
+): string | null {
+  return typeof raw === "string" && platform.choices.includes(raw)
+    ? raw
+    : null;
 }
 
 /**
@@ -47,11 +90,15 @@ export function noteOf(raw: unknown): string {
 
 /** The body GitHub's dispatch endpoint takes. */
 export function dispatchBody(
+  platform: ReleasePlatform,
   ref: string,
-  lane: Lane,
+  choice: string,
   notes: string,
 ): Record<string, unknown> {
-  return { ref, inputs: { lane, ...(notes ? { notes } : {}) } };
+  return {
+    ref,
+    inputs: { [platform.input]: choice, ...(notes ? { notes } : {}) },
+  };
 }
 
 export interface RunSummary {
@@ -158,10 +205,14 @@ export function runsFrom(payload: unknown): RunSummary[] {
  * status is the useful part and guessing at the rest would be this
  * function inventing a diagnosis.
  */
-export function dispatchRefusal(status: number, said: string): string {
+export function dispatchRefusal(
+  platform: ReleasePlatform,
+  status: number,
+  said: string,
+): string {
   if (status === 422 && said.includes("workflow_dispatch")) {
     return "GitHub will not start this build because " +
-      `${WORKFLOW} is not on the branch it was asked to build. ` +
+      `${platform.workflow} is not on the branch it was asked to build. ` +
       "A dispatch names a ref — this function uses the repository's " +
       "own default branch, or GITHUB_RELEASE_REF when that is set — " +
       "and the workflow file has to exist THERE, whatever branch it " +
@@ -170,8 +221,8 @@ export function dispatchRefusal(status: number, said: string): string {
       "docs/ios-release.md.";
   }
   if (status === 404) {
-    return `GitHub cannot find ${WORKFLOW} in this repository. Check ` +
-      "GITHUB_REPOSITORY, and that the token can see it.";
+    return `GitHub cannot find ${platform.workflow} in this repository. ` +
+      "Check GITHUB_REPOSITORY, and that the token can see it.";
   }
   const tail = said.trim();
   return `GitHub refused to start the build (${status}).${

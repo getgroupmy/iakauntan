@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:iakauntan/src/features/admin/ios_release.dart';
+import 'package:iakauntan/src/features/admin/app_release.dart';
 import 'package:iakauntan/src/features/admin/mobile_app_admin.dart';
 
 /// What the console says about a release, and about a build it is
@@ -43,11 +43,19 @@ void main() {
       expect(releaseBlurb('testflight'), isNot(contains('submit')));
     });
 
-    test('and an unknown lane gets the more cautious of the two', () {
-      // Rather than an empty string or a throw. If a lane ever reaches
-      // here that this build does not know, the safer sentence is the
-      // one that warns about review.
-      expect(releaseBlurb('something-else'), releaseBlurb('appstore'));
+    test('and an unknown destination gets the most cautious sentence', () {
+      // Rather than an empty string or a throw.
+      //
+      // This asserted equality with the App Store blurb while iOS was
+      // the only platform. It cannot now: that sentence names App
+      // Store Connect, and an unknown destination might be an Android
+      // one. What matters is the PROPERTY — it must warn, and must not
+      // claim to know where the build goes.
+      final blurb = releaseBlurb('something-else');
+      expect(blurb, contains('review'));
+      expect(blurb, contains('not one this screen recognises'));
+      expect(blurb, isNot(contains('App Store Connect')));
+      expect(blurb, isNot(contains('Play')));
     });
   });
 
@@ -175,19 +183,94 @@ void main() {
 
   group('what the card is holding', () {
     test('a list of runs is configured', () {
-      expect(const IosReleases.runs([]).isConfigured, isTrue);
-      expect(const IosReleases.runs([]).unavailable, isNull);
+      expect(const AppReleases.runs([]).isConfigured, isTrue);
+      expect(const AppReleases.runs([]).unavailable, isNull);
     });
 
     test('and "not set up" is a result, not an error', () {
       // The whole point of the type. If this were a thrown exception
       // the console would draw `ErrorState` for it, which is the
       // behaviour being fixed.
-      const r = IosReleases.unavailable('It needs GITHUB_RELEASE_TOKEN.');
+      const r = AppReleases.unavailable('It needs GITHUB_RELEASE_TOKEN.');
       expect(r.isConfigured, isFalse);
       expect(r.unavailable, 'It needs GITHUB_RELEASE_TOKEN.');
       // And it holds no runs to draw, rather than null to guard.
       expect(r.runs, isEmpty);
+    });
+  });
+
+  group('the two platforms are two products', () {
+    test('each dispatches its own function and its own input name', () {
+      // The failure these prevent is silent in the worst way: an
+      // Android press that reaches ios-release would build the wrong
+      // app and hand it to the wrong store, with every step green.
+      expect(ReleasePlatform.ios.fn, 'ios-release');
+      expect(ReleasePlatform.android.fn, 'android-release');
+      expect(ReleasePlatform.ios.input, 'lane');
+      expect(ReleasePlatform.android.input, 'track');
+    });
+
+    test('every destination has a label, and the first is the default', () {
+      for (final platform in ReleasePlatform.values) {
+        // The card indexes labels by the choice's position. One short
+        // and it throws on build, for the last segment only — which is
+        // production on Android, the one nobody presses by accident
+        // and everybody needs eventually.
+        expect(
+          platform.labels.length,
+          platform.choices.length,
+          reason: '${platform.label} has ${platform.choices.length} '
+              'choices and ${platform.labels.length} labels',
+        );
+        expect(platform.choices, isNotEmpty);
+      }
+      // The first is what the card selects at rest, so it must be the
+      // safe one on both: testers, not the public.
+      expect(ReleasePlatform.ios.choices.first, 'testflight');
+      expect(ReleasePlatform.android.choices.first, 'internal');
+    });
+
+    test('every destination says what it does, and none is the default text',
+        () {
+      // A blurb that fell through to the fallback would quietly
+      // describe a closed test while rolling out to production.
+      final seen = <String>{};
+      for (final platform in ReleasePlatform.values) {
+        for (final choice in platform.choices) {
+          final blurb = releaseBlurb(choice);
+          expect(blurb, isNotEmpty);
+          seen.add(blurb);
+        }
+      }
+      // Alpha and beta share one deliberately; everything else is its
+      // own sentence. Five distinct for six destinations.
+      expect(seen.length, 5);
+    });
+
+    test('production says it reaches everybody and waits for review', () {
+      // The Android counterpart of the App Store assertion above, and
+      // the same reasoning: this is the one destination on that card
+      // that reaches the public.
+      final blurb = releaseBlurb('production');
+      expect(blurb, contains('everybody'));
+      expect(blurb, contains('review'));
+    });
+
+    test('internal testing does not claim a review it does not have', () {
+      final blurb = releaseBlurb('internal');
+      expect(blurb, contains('no review'));
+    });
+
+    test('the build cost is stated, and differs', () {
+      // It is the number that decides whether somebody presses now or
+      // later, and the two are an order of magnitude apart.
+      expect(ReleasePlatform.ios.buildTime, contains('Mac'));
+      expect(ReleasePlatform.ios.buildTime, contains('ten times'));
+      expect(ReleasePlatform.android.buildTime, contains('Ubuntu'));
+      expect(
+        ReleasePlatform.ios.buildTime == ReleasePlatform.android.buildTime,
+        isFalse,
+      );
     });
   });
 }

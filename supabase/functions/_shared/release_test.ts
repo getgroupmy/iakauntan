@@ -8,19 +8,20 @@
  */
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
+  ANDROID,
+  choiceOf,
   defaultBranchOf,
   dispatchBody,
   dispatchRefusal,
-  laneOf,
+  IOS,
   noteOf,
   refToBuild,
   runsFrom,
-  WORKFLOW,
-} from "./dispatch.ts";
+} from "./release.ts";
 
 Deno.test("the two lanes, and nothing else", () => {
-  assertEquals(laneOf("testflight"), "testflight");
-  assertEquals(laneOf("appstore"), "appstore");
+  assertEquals(choiceOf(IOS, "testflight"), "testflight");
+  assertEquals(choiceOf(IOS, "appstore"), "appstore");
 });
 
 Deno.test("a lane nobody wrote a workflow for is refused", () => {
@@ -28,12 +29,12 @@ Deno.test("a lane nobody wrote a workflow for is refused", () => {
   // unrecognised `choice` input anyway — but this value also decides
   // what the summary says about App Review, and a value nobody
   // reasoned about should not reach that.
-  assertEquals(laneOf("production"), null);
-  assertEquals(laneOf("TestFlight"), null);
-  assertEquals(laneOf(""), null);
-  assertEquals(laneOf(null), null);
-  assertEquals(laneOf(7), null);
-  assertEquals(laneOf({ lane: "appstore" }), null);
+  assertEquals(choiceOf(IOS, "production"), null);
+  assertEquals(choiceOf(IOS, "TestFlight"), null);
+  assertEquals(choiceOf(IOS, ""), null);
+  assertEquals(choiceOf(IOS, null), null);
+  assertEquals(choiceOf(IOS, 7), null);
+  assertEquals(choiceOf(IOS, { lane: "appstore" }), null);
 });
 
 Deno.test("a note is one line and bounded", () => {
@@ -50,7 +51,7 @@ Deno.test("and anything that is not a string is no note at all", () => {
 });
 
 Deno.test("the dispatch body carries the ref and the lane", () => {
-  assertEquals(dispatchBody("main", "appstore", "a note"), {
+  assertEquals(dispatchBody(IOS, "main", "appstore", "a note"), {
     ref: "main",
     inputs: { lane: "appstore", notes: "a note" },
   });
@@ -60,7 +61,7 @@ Deno.test("and leaves `notes` out when there is none", () => {
   // Rather than sending an empty string. GitHub records inputs on the
   // run, and a blank note is noise in a list somebody reads to find
   // out what a build was.
-  assertEquals(dispatchBody("main", "testflight", ""), {
+  assertEquals(dispatchBody(IOS, "main", "testflight", ""), {
     ref: "main",
     inputs: { lane: "testflight" },
   });
@@ -70,7 +71,7 @@ Deno.test("the workflow is named once", () => {
   // A typo here is a 404 from GitHub rather than anything that reads
   // like "the workflow does not exist", so it is a constant and this
   // pins it to the file on disk.
-  assertEquals(WORKFLOW, "ios-release.yml");
+  assertEquals(IOS.workflow, "ios-release.yml");
 });
 
 Deno.test("runs come back trimmed to what a console needs", () => {
@@ -140,12 +141,12 @@ Deno.test("a 422 about workflow_dispatch names the real cause", () => {
   // repository's default branch is not `main`, the workflow was on the
   // default branch the whole time, and the dispatch still failed
   // because `main` did not have it. The REF is what matters.
-  const said = dispatchRefusal(
+  const said = dispatchRefusal(IOS, 
     422,
     '{"message":"Workflow does not have \'workflow_dispatch\' trigger"}',
   );
   assertStringIncludes(said, "GITHUB_RELEASE_REF");
-  assertStringIncludes(said, WORKFLOW);
+  assertStringIncludes(said, IOS.workflow);
   // It must explain the REF, which is the actual mechanism.
   assertStringIncludes(said, "ref");
   // And it must not repeat the folklore that cost an evening — that a
@@ -168,23 +169,23 @@ Deno.test("but another 422 is not given that explanation", () => {
   // `lane` is a `choice` input, so an unrecognised value is also a 422.
   // Telling somebody to merge a branch for that would be worse than
   // saying nothing.
-  const said = dispatchRefusal(422, '{"message":"Unexpected inputs"}');
+  const said = dispatchRefusal(IOS, 422, '{"message":"Unexpected inputs"}');
   assertStringIncludes(said, "422");
   assertEquals(said.includes("GITHUB_RELEASE_REF"), false);
 });
 
 Deno.test("a 404 points at the repository and the token", () => {
-  const said = dispatchRefusal(404, "");
+  const said = dispatchRefusal(IOS, 404, "");
   assertStringIncludes(said, "GITHUB_REPOSITORY");
-  assertStringIncludes(said, WORKFLOW);
+  assertStringIncludes(said, IOS.workflow);
 });
 
 Deno.test("and anything else keeps its status and whatever was said", () => {
-  assertStringIncludes(dispatchRefusal(500, "boom"), "500");
-  assertStringIncludes(dispatchRefusal(500, "boom"), "boom");
+  assertStringIncludes(dispatchRefusal(IOS, 500, "boom"), "500");
+  assertStringIncludes(dispatchRefusal(IOS, 500, "boom"), "boom");
   // No trailing space when GitHub said nothing at all.
   assertEquals(
-    dispatchRefusal(503, "   "),
+    dispatchRefusal(IOS, 503, "   "),
     "GitHub refused to start the build (503).",
   );
 });
@@ -226,4 +227,68 @@ Deno.test("the ref is the override, else the default branch, else nothing", () =
   // a signing problem.
   assertEquals(refToBuild(undefined, null), null);
   assertEquals(refToBuild("", null), null);
+});
+
+Deno.test("the two platforms differ in exactly three things", () => {
+  // Everything else about a release is one implementation. If these
+  // ever stop differing, one of them is dispatching the other's
+  // workflow — which would build the wrong app and upload it to the
+  // wrong store, with every step reporting success.
+  assertEquals(IOS.workflow, "ios-release.yml");
+  assertEquals(ANDROID.workflow, "android-release.yml");
+  assertEquals(IOS.input, "lane");
+  assertEquals(ANDROID.input, "track");
+  assertEquals(IOS.choices, ["testflight", "appstore"]);
+  assertEquals(ANDROID.choices, ["internal", "alpha", "beta", "production"]);
+});
+
+Deno.test("each platform refuses the other's destinations", () => {
+  // The failure this prevents is quiet: `track: "testflight"` would
+  // reach android-release.yml, whose `track` is a `choice` input, and
+  // come back a 422 that says "Unexpected inputs" and explains nothing.
+  assertEquals(choiceOf(ANDROID, "internal"), "internal");
+  assertEquals(choiceOf(ANDROID, "production"), "production");
+  assertEquals(choiceOf(ANDROID, "testflight"), null);
+  assertEquals(choiceOf(ANDROID, "appstore"), null);
+
+  assertEquals(choiceOf(IOS, "testflight"), "testflight");
+  assertEquals(choiceOf(IOS, "internal"), null);
+  assertEquals(choiceOf(IOS, "production"), null);
+
+  // And neither takes anything that is not a string it listed.
+  for (const platform of [IOS, ANDROID]) {
+    assertEquals(choiceOf(platform, ""), null);
+    assertEquals(choiceOf(platform, null), null);
+    assertEquals(choiceOf(platform, 1), null);
+    assertEquals(choiceOf(platform, "INTERNAL"), null);
+  }
+});
+
+Deno.test("the dispatch body names the input each workflow declares", () => {
+  // `lane` for one, `track` for the other. Sending the wrong key is a
+  // 422 from GitHub rather than a build of the wrong thing, but it is
+  // a 422 nobody can read.
+  assertEquals(
+    dispatchBody(ANDROID, "some-branch", "internal", "why"),
+    { ref: "some-branch", inputs: { track: "internal", notes: "why" } },
+  );
+  assertEquals(
+    dispatchBody(IOS, "some-branch", "testflight", ""),
+    { ref: "some-branch", inputs: { lane: "testflight" } },
+  );
+});
+
+Deno.test("a refusal names the workflow that was actually asked for", () => {
+  // The 422 sentence is the one people act on. Naming ios-release.yml
+  // in an Android refusal would send somebody to the wrong file.
+  const said = dispatchRefusal(
+    ANDROID,
+    422,
+    '{"message":"Workflow does not have \'workflow_dispatch\' trigger"}',
+  );
+  assertStringIncludes(said, "android-release.yml");
+  assertEquals(said.includes("ios-release.yml"), false);
+
+  const missing = dispatchRefusal(ANDROID, 404, "");
+  assertStringIncludes(missing, "android-release.yml");
 });
