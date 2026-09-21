@@ -370,7 +370,7 @@ class _TimeEntrySheetState extends ConsumerState<_TimeEntrySheet> {
                 const SizedBox(height: Space.md),
                 DropdownButtonFormField<String?>(
                   key: const ValueKey('time-activity'),
-                  value: _activity,
+                  initialValue: _activity,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Activity'),
                   items: [

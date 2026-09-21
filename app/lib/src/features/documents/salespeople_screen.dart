@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -156,9 +157,15 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
                 future: _report,
                 builder: (context, snap) {
                   if (snap.connectionState != ConnectionState.done) {
-                    return const Padding(
-                      padding: EdgeInsets.all(Space.xxl),
-                      child: Center(child: CircularProgressIndicator()),
+                    // Five columns, which is what `_Report` draws.
+                    // Outlining a different number would reflow the
+                    // instant the rows land, which is the flicker a
+                    // skeleton exists to remove.
+                    return const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(Space.lg),
+                        child: TableSkeleton(columns: 5, rows: 6),
+                      ),
                     );
                   }
                   if (snap.hasError) return Text('${snap.error}');

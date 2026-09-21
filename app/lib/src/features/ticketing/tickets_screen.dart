@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'teams_screen.dart';
@@ -126,6 +127,7 @@ class _TicketsScreenState extends ConsumerState<TicketsScreen> {
       body: AsyncView(
         value: tickets,
         onRetry: () => ref.invalidate(ticketsProvider(_q)),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

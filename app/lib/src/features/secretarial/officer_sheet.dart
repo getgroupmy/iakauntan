@@ -300,7 +300,7 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
                 const SizedBox(height: Space.sm),
                 DropdownButtonFormField<String>(
                   key: const ValueKey('officer-role'),
-                  value: _role,
+                  initialValue: _role,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: [

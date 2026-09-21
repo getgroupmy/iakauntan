@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/row_actions.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -91,6 +92,7 @@ class _ClaimsScreenState extends ConsumerState<ClaimsScreen> {
         onRetry: () => _mine
             ? ref.invalidate(claimsAwaitingMeProvider)
             : ref.invalidate(claimsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: _mine
@@ -301,43 +303,60 @@ class _PostClaimDialogState extends ConsumerState<_PostClaimDialog> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: Space.md),
-            RadioListTile<bool>(
-              value: true,
+            // One `RadioGroup` around both, with the bank picker
+            // between them -- it is inside the group's child and the
+            // group only claims the radios below it, so a picker in
+            // the middle changes nothing.
+            //
+            // `enabled: canReimburse` in place of the old
+            // `onChanged: canReimburse ? ... : null`, because
+            // `RadioGroup.onChanged` is not nullable. Same refusal,
+            // and still the important one: a company with no bank
+            // account cannot choose to pay out of one.
+            RadioGroup<bool>(
               groupValue: _reimburseNow && canReimburse,
-              onChanged: canReimburse
-                  ? (_) => setState(() => _reimburseNow = true)
-                  : null,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Reimburse now'),
-              subtitle: Text(canReimburse
-                  ? 'Paid straight out of a bank account'
-                  : 'No bank account has been set up yet'),
-            ),
-            if (_reimburseNow && canReimburse)
-              Padding(
-                padding: const EdgeInsets.only(left: 32, bottom: Space.sm),
-                child: SearchablePicker<String>(
-                  options: bankPickerOptions(accounts),
-                  createLabel: 'Add bank account',
-                  // 0529 made this list writable for the first
-                  // time. Until then a company that opened a
-                  // second account had nowhere in the product to
-                  // say so.
-                  onCreate: (typed) =>
-                      createBankAccountFromPicker(context, typed: typed),
-                  value: _bankAccountId,
-                  label: 'Pay from',
-                  onChanged: (v) => setState(() => _bankAccountId = v),
-                ),
+              onChanged: (v) => setState(() => _reimburseNow = v ?? false),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RadioListTile<bool>(
+                    value: true,
+                    enabled: canReimburse,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Reimburse now'),
+                    subtitle: Text(canReimburse
+                        ? 'Paid straight out of a bank account'
+                        : 'No bank account has been set up yet'),
+                  ),
+                  if (_reimburseNow && canReimburse)
+                    Padding(
+                      padding:
+                          const EdgeInsets.only(left: 32, bottom: Space.sm),
+                      child: SearchablePicker<String>(
+                        options: bankPickerOptions(accounts),
+                        createLabel: 'Add bank account',
+                        // 0529 made this list writable for the first
+                        // time. Until then a company that opened a
+                        // second account had nowhere in the product to
+                        // say so.
+                        onCreate: (typed) =>
+                            createBankAccountFromPicker(context, typed: typed),
+                        value: _bankAccountId,
+                        label: 'Pay from',
+                        onChanged: (v) => setState(() => _bankAccountId = v),
+                      ),
+                    ),
+                  RadioListTile<bool>(
+                    value: false,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Accrue it'),
+                    subtitle: const Text(
+                        'Recognise the expense now and pay the employee '
+                        'later'),
+                  ),
+                ],
               ),
-            RadioListTile<bool>(
-              value: false,
-              groupValue: _reimburseNow && canReimburse,
-              onChanged: (_) => setState(() => _reimburseNow = false),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Accrue it'),
-              subtitle: const Text(
-                  'Recognise the expense now and pay the employee later'),
             ),
           ],
         ),
@@ -772,7 +791,11 @@ class _ApprovalChain extends ConsumerWidget {
             AsyncView(
               value: steps,
               onRetry: () => ref.invalidate(claimApprovalsProvider(claimId)),
-              loading: const LinearProgressIndicator(),
+              // The chain of who has to agree, an icon each for where it
+              // has got to. Three, because most chains are one or two
+              // and an outline longer than the answer reads as content
+              // that vanished.
+              skeleton: const CardRowsSkeleton(rows: 3, leadingSize: 24),
               builder: (list) {
                 if (list.isEmpty) {
                   return Text(

@@ -79,10 +79,32 @@ dependencies:
   # the platform recorder on Android and iOS, so one call site covers
   # all of them. Both of these need microphone permission on mobile,
   # which the manifests below declare.
-  record: ^5.2.0
+  # 6.x, not 7.x, and no longer because it CANNOT be. `record: ^7.1.1`
+  # requires Flutter 3.47.4, which ci.yml now pins -- so 7.x would
+  # resolve. It is not taken because 6.2.1 is the version the iOS build
+  # was actually made to work with: `record_linux` in the 5.x
+  # resolution broke the Dart build on every platform, and 6.2.1 is
+  # where that was settled by hand on a Mac with Xcode in front of it.
+  # Moving it is a change to test on a device, not a constraint to
+  # relax in passing.
+  #
+  # 5.x is not an option either: it resolves record_linux 0.7.2 against
+  # record_platform_interface 1.6.0, where RecordLinux is missing
+  # startStream and carries the old hasPermission signature, and that
+  # stops the DART build on every platform.
+  record: ^6.2.1
   # Playing one back. Chosen over just_audio for having a web
   # implementation in the same package rather than a federated one.
   audioplayers: ^6.1.0
+  # Somewhere to draw a Turnstile challenge on a phone. Cloudflare
+  # publishes no native SDK -- the widget is a browser widget -- so the
+  # only way iOS and Android can produce a captcha token is to host the
+  # real page in a webview. See features/auth/captcha_native.dart.
+  #
+  # Android and iOS only: webview_flutter endorses no web or desktop
+  # implementation, so nothing is enrolled into the web bundle by
+  # adding it, and `captchaAvailable` still says no on desktop.
+  webview_flutter: ^4.10.0
   # Real PDFs for the documents a secretary has to print, sign
   # and lodge. Markdown is fine for a diff; it is not fine for
   # something that goes in a minute book.
@@ -107,6 +129,50 @@ dependencies:
   # engine code is unchanged apart from the import — and it tracks
   # `flutter_webrtc ^1.5.2`, so nothing else here is held back.
   mediasfu_mediasoup_client: ^0.1.4
+  # Passkeys on Android and iOS. Corbado's plugin, which is the only
+  # maintained route to Credential Manager and ASAuthorization from
+  # Flutter -- there is no way to run a WebAuthn ceremony on a phone
+  # without a platform plugin, and a webview cannot do it either.
+  #
+  # `^2.21.1` now that ci.yml pins Flutter 3.47.4. It was 2.21.1
+  # EXACTLY when the pin was 3.32.0: 2.22.0 and up name Flutter
+  # 3.35.0, and a caret would have resolved to the newest on a
+  # developer's newer SDK and failed `pub get` in CI -- green where it
+  # was typed, red where it is checked, which is the worst shape a
+  # version constraint can have. That is no longer the situation, and
+  # an exact pin kept past its reason is a pin nobody can explain.
+  #
+  # `passkeys_platform_interface` is named beside it because
+  # `passkey_native.dart` imports its types directly, and a transitive
+  # dependency is not a promise.
+  #
+  # AND SEE `dependency_overrides` BELOW. Adding this plugin without
+  # that override white-screened production once: `passkeys` federates
+  # `passkeys_web`, Flutter enrols it into the WEB bundle, and its
+  # registrant calls a JS global this app does not load -- before
+  # `runApp`, so every page goes blank. `docs/passkeys.md` has the
+  # whole story and `scripts/check_web_plugin_registrant.py` is the
+  # tripwire.
+  passkeys: ^2.21.1
+  passkeys_platform_interface: ^2.8.0
+  # Loading skeletons: a grey outline of the rows on the way, instead
+  # of a spinner on an empty page. It paints any ordinary widget tree
+  # as bones, so what the app writes is the SHAPE and nothing else --
+  # no colours to keep in step with the theme, and no second rendering
+  # of every list to maintain beside the real one.
+  #
+  # `^3.0.0` resolves under the pinned SDK: 3.0.0 names Flutter
+  # >=3.32.0 and ci.yml pins 3.47.4. Checked rather than assumed,
+  # because `record: ^7.1.1` was not and turned a push red.
+  #
+  # See core/skeletons.dart for where a skeleton is honest and where it
+  # is a guess -- the pre-sign-in pages keep their spinner, and so does
+  # every button somebody has just pressed.
+  skeletonizer: ^3.0.0
+  # The ZIP half of an .xlsx, which is a ZIP of XML. Already present
+  # transitively through `pdf`; named here because `core/xlsx.dart`
+  # imports it directly and a transitive dependency is not a promise.
+  archive: ^4.0.9
   # The signalling socket. Already present transitively through
   # supabase_flutter; named here because `call_engine.dart` imports it
   # directly and a transitive dependency is not a promise.
@@ -123,6 +189,34 @@ dev_dependencies:
   # imports it directly. Deliberately a dev dependency: no shipped code
   # decodes a PNG at runtime.
   image: ^4.5.4
+
+# The one override in this file, and it is load-bearing.
+#
+# `passkeys` federates a WEB implementation, `passkeys_web`, and
+# Flutter generates `web_plugin_registrant.dart` from the platform
+# declarations of every package in the tree. So adding the plugin FOR A
+# PHONE silently enrols the web half into the web bundle as well. There
+# is no per-platform dependency in a pubspec and nothing asks whether
+# you wanted it.
+#
+# The real `PasskeysWeb.registerWith` ends in an unconditional call to
+# a JS global from Corbado's `bundle.js`. This app does not load that
+# file and `script-src 'self'` would refuse it if it tried, so the call
+# throws inside `registerPlugins()` -- which runs BEFORE `runApp`. Every
+# page of the app goes blank, the landing page included. It shipped
+# that way once.
+#
+# This points the package at a local no-op that registers and does
+# nothing else. Nothing is lost: the web half of this app has never
+# used the plugin, it calls the browser's own WebAuthn through
+# `passkey_web.dart`, which is also why it survives a strict CSP.
+#
+# `scripts/check_web_plugin_registrant.py` refuses a `passkeys`
+# dependency without this, and refuses a VERSION override in place of a
+# `path:` one -- a version override is still the real implementation.
+dependency_overrides:
+  passkeys_web:
+    path: packages/passkeys_web
 
 flutter:
   uses-material-design: true

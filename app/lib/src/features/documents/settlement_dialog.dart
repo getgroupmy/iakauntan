@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -425,33 +426,57 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: Space.sm),
+              // Two groups and never both, because a receipt is asking
+              // where money LANDS and a payment is asking where it
+              // comes FROM -- and on a client account those are
+              // different questions with different consequences.
+              //
+              // `RadioGroup` per branch rather than `groupValue` on
+              // each tile: Flutter deprecated the per-tile form after
+              // 3.32, and here it is what kept the two sets honest.
+              // One group around both branches would have let a
+              // destination and a source share a selection.
               if (_isReceipt)
-                for (final d in ReceiptDestination.values)
-                  RadioListTile<ReceiptDestination>(
-                    key: ValueKey('destination-${d.name}'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: d,
-                    groupValue: _destination,
-                    title: Text(receiptDestinationLabel(d)),
-                    subtitle: Text(receiptDestinationHint(d),
-                        style: Theme.of(context).textTheme.bodySmall),
-                    onChanged: (v) =>
-                        setState(() => _destination = v ?? _destination),
-                  )
-              else
-                for (final s in PaymentSource.values)
-                  RadioListTile<PaymentSource>(
-                    key: ValueKey('source-${s.name}'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: s,
-                    groupValue: _source,
-                    title: Text(paymentSourceLabel(s)),
-                    subtitle: Text(paymentSourceHint(s),
-                        style: Theme.of(context).textTheme.bodySmall),
-                    onChanged: (v) => setState(() => _source = v ?? _source),
+                RadioGroup<ReceiptDestination>(
+                  groupValue: _destination,
+                  onChanged: (v) =>
+                      setState(() => _destination = v ?? _destination),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final d in ReceiptDestination.values)
+                        RadioListTile<ReceiptDestination>(
+                          key: ValueKey('destination-${d.name}'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          value: d,
+                          title: Text(receiptDestinationLabel(d)),
+                          subtitle: Text(receiptDestinationHint(d),
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ),
+                    ],
                   ),
+                )
+              else
+                RadioGroup<PaymentSource>(
+                  groupValue: _source,
+                  onChanged: (v) => setState(() => _source = v ?? _source),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final s in PaymentSource.values)
+                        RadioListTile<PaymentSource>(
+                          key: ValueKey('source-${s.name}'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          value: s,
+                          title: Text(paymentSourceLabel(s)),
+                          subtitle: Text(paymentSourceHint(s),
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ),
+                    ],
+                  ),
+                ),
               if (_isFreeAmount) ...[
                 const SizedBox(height: Space.sm),
                 TextField(
@@ -645,7 +670,7 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                   child: methods.isEmpty
                       ? DropdownButtonFormField<String>(
                           key: const ValueKey('settlement-mode'),
-                          value: _paymentMode,
+                          initialValue: _paymentMode,
                           isExpanded: true,
                           decoration:
                               const InputDecoration(labelText: 'Method'),
@@ -662,7 +687,7 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                         )
                       : DropdownButtonFormField<String?>(
                           key: const ValueKey('settlement-method'),
-                          value: _paymentMethodId,
+                          initialValue: _paymentMethodId,
                           isExpanded: true,
                           decoration:
                               const InputDecoration(labelText: 'Method'),
@@ -931,9 +956,18 @@ class _OpenDocumentsState extends ConsumerState<_OpenDocuments> {
 
     return AsyncView(
       value: docs,
-      loading: const Padding(
+      // Outlined rather than spun, and it was doing neither before:
+      // this was a padded copy of `AsyncView`'s own default, which is
+      // the circle. The rows coming are a checkbox, a document number
+      // over an open balance, and a 130-wide amount box.
+      skeleton: const Padding(
         padding: EdgeInsets.all(Space.lg),
-        child: Center(child: CircularProgressIndicator()),
+        child: CardRowsSkeleton(
+          rows: 3,
+          leadingSize: 24,
+          trailing: 1,
+          trailingWidth: 130,
+        ),
       ),
       builder: (list) {
         if (list.isEmpty) {

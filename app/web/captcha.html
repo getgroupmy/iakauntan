@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!--
+  The Turnstile challenge, hosted for the phone apps.
+
+  Cloudflare publishes no native SDK: Turnstile is a browser widget. So
+  iOS and Android draw this page in a webview and read the token back
+  out of it. `lib/src/features/auth/captcha_native.dart` is the other
+  half.
+
+  WHY A HOSTED PAGE rather than an HTML string loaded into the webview.
+  A Turnstile site key is scoped to a list of domains, and the widget
+  refuses to render on an origin that is not on it. A string loaded
+  into a webview has no useful origin -- `about:blank`, or a base URL
+  the app asserts rather than one the browser verified -- so the widget
+  either refuses or depends on the key being left unscoped, which is
+  the protection turned off. Served from the same domain as the web
+  app, this page is on an origin the key already allows, because the
+  web app's own sign-in form uses it.
+
+  The site key arrives as `?k=`, not baked in: it lives in the console
+  under branding so it can be changed without a release, which is the
+  whole arrangement `captcha.dart` describes. It is public by design.
+
+  Nothing else is on this page. No analytics, no fonts, no app bundle:
+  it loads inside a sign-in screen, and every extra request is another
+  thing that can hang in front of somebody trying to log in.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Security check</title>
+  <style>
+    /* Transparent, so the webview takes the colour of the form around
+       it rather than punching a white rectangle into a dark theme. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+    }
+    #box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 70px;
+    }
+    /* Said in the page rather than left to the widget, because a
+       webview that renders nothing is indistinguishable from one that
+       has not loaded, and the app cannot tell those apart either. */
+    #failed {
+      display: none;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #b00020;
+      padding: 8px 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="box"></div>
+  <div id="failed">The security check could not load.</div>
+
+  <script src="captcha.js" defer></script>
+</body>
+</html>

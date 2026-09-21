@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'recipes_screen.dart' show trimNumber;
@@ -97,6 +98,7 @@ class _RequirementDialog extends ConsumerWidget {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: rows,
           onRetry: () => ref.invalidate(posRecipeRequirementProvider(itemId)),
+          skeleton: const ListSkeleton(rows: 4, leading: false),
           builder: (list) {
             if (list.isEmpty) {
               return const EmptyState(

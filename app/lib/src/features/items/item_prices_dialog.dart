@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
@@ -72,6 +73,8 @@ class _ItemPricesDialog extends ConsumerWidget {
                 AsyncView(
                   value: prices,
                   onRetry: () => ref.invalidate(itemPricesProvider(item.id)),
+                  skeleton: const CardRowsSkeleton(
+                      rows: 3, leading: false, trailing: 2),
                   builder: (list) => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -364,6 +367,8 @@ class _PriceLevelsDialog extends ConsumerWidget {
               AsyncView(
                 value: levels,
                 onRetry: () => ref.invalidate(priceLevelsProvider),
+                skeleton: const CardRowsSkeleton(
+                    rows: 3, leading: false, trailing: 1),
                 builder: (list) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

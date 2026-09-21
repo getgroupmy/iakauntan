@@ -8,6 +8,7 @@ import 'core/router.dart';
 import 'core/theme.dart';
 import 'data/reserved_names_repository.dart';
 import 'features/landing/landing_content.dart';
+import 'features/landing/splash_screen.dart';
 import 'features/landing/unknown_workspace_screen.dart';
 
 class IAkauntanApp extends ConsumerWidget {
@@ -81,11 +82,19 @@ class IAkauntanApp extends ConsumerWidget {
       // `valueOrNull` while the lookup is in flight, so the ordinary
       // app draws first and this replaces it — the alternative is a
       // blank screen on every page load for the sake of the rare one.
-      builder: (context, child) =>
-          ref.watch(workspaceLookupProvider).valueOrNull?.host ==
-                  WorkspaceHost.unknown
-              ? const UnknownWorkspaceScreen()
-              : child ?? const SizedBox.shrink(),
+      // `0653`. The splash, outside everything else so it covers the
+      // unknown-workspace page as well as the app: it is the first
+      // screen, and "first" has to mean first. In the apps only, and
+      // for what is LEFT of five seconds after the process started --
+      // see `core/splash.dart`, which is where both of those are
+      // decided.
+      builder: (context, child) => SplashGate(
+        child:
+            ref.watch(workspaceLookupProvider).valueOrNull?.host ==
+                WorkspaceHost.unknown
+            ? const UnknownWorkspaceScreen()
+            : child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }

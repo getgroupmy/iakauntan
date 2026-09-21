@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/platform_live.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
@@ -36,6 +37,7 @@ class ModulesAdminTab extends ConsumerWidget {
             child: AsyncView<List<Map<String, dynamic>>>(
               value: modules,
               onRetry: () => ref.invalidate(platformModulesAdminProvider),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (rows) => ListView(
                 padding: const EdgeInsets.only(bottom: 96),
                 children: [

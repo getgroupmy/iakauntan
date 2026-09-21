@@ -126,7 +126,7 @@ class _TicketShareDialogState extends ConsumerState<_TicketShareDialog> {
                     width: 140,
                     child: DropdownButtonFormField<int>(
                       isExpanded: true,
-                      value: _days,
+                      initialValue: _days,
                       decoration: const InputDecoration(labelText: 'Valid'),
                       items: const [
                         DropdownMenuItem(value: 7, child: Text('7 days')),

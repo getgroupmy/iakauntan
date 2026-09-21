@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 
 /// Naming the units on one document line.
@@ -165,9 +166,17 @@ class _LotDialogState extends ConsumerState<LotDialog> {
       content: SizedBox(
         width: 520,
         child: _loading
+            // A heading line, then a row per batch or serial number,
+            // each with a reference and a quantity box.
             ? const Padding(
-                padding: EdgeInsets.all(Space.xl),
-                child: Center(child: CircularProgressIndicator()),
+                padding: EdgeInsets.symmetric(vertical: Space.md),
+                child: CardRowsSkeleton(
+                  rows: 4,
+                  leading: false,
+                  lines: 1,
+                  trailing: 1,
+                  trailingWidth: 110,
+                ),
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,

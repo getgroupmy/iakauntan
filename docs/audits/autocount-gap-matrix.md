@@ -28,7 +28,7 @@ finishing work on things that already exist.
 | G5 | Sales | Recurring invoices: frequency, end rule, pause, generation log, scheduled creation | **Present** | `recurring_documents` (`frequency`, `interval_count`, `start_date`, `end_date`, `max_occurrences`, `occurrences`, `next_run_date`, `last_run_date`, `last_document_id`, `auto_post`, `auto_email`, `is_active`, `last_error`, `last_error_at`); `create_recurring_document`, `advance_recurring_document`, `raise_recurring_document`; `recurring_journals` separately; route `/recurring-documents`; generated server-side by `run_daily_jobs` on pg_cron, not on book-open | **—** | Nothing to build. One nicety: the run "log" is three columns on the row rather than a table, so a company cannot see the last twelve runs. Note it, do not build it yet |
 | G6 | Data | Excel import of sales invoices, credit notes; AR/AP opening balances as outstanding invoices | **Partial** | `import_batches`, `import_rows`, `import_accounts`, `import_bank_transactions`; **`0150_import_open_items.sql` imports AR/AP opening balances as open items** — the migration case the handoff singles out is already done; per-row provenance (`import_source`, `import_ref`, `import_batch_id`, `imported_at`) from 0610; `/import` with per-importer column headings | **M** | The hard half is done. What is missing is importing **transactions**: sales invoices, credit notes, purchase invoices and journals, with a validation report before commit and de-dup by document number |
 | G7 | Accounting | Knock Off Entry: many-to-many allocation from a standalone screen, from any side | **Partial**, and this verdict understated the gap — see §3.2 | `payment_allocations` carries `receipt_id`, `payment_id`, **`credit_note_id`**, `invoice_id`, `bill_id`, `amount`, `discount_amount`, `withholding_id`, `contra_id`, `deposit_id`, `pdc_id`, `discount_entry_id` — so credit note → invoice, contra, deposits, post-dated cheques and withholding are all already allocatable; `apply_on_account.dart`, `deposit_apply_sheet.dart`, `allocate_payment_with_discount`, `create_contra`, `/contra` | **M** | Richer than AutoCount's on the data side. Missing: a **standalone screen** — pick a debtor, see both sides, apply many-to-many in one action — plus journal → invoice allocation (no `journal_entry_id` on the table) and a printable knock-off listing |
-| G8 | Reports | Customisable P&L / Balance Sheet layouts with formula rows | **Missing** | `report_spec.dart` is the internal spec shared by screen and PDF, not a user-facing builder. MBRS taxonomy mapping exists in Financial Statements and is the natural place to hang one | **L** | Real gap, and a Pro-plan feature in AutoCount. Low urgency for an SME, high for an accounting firm |
+| ~~G8~~ | Reports | Customisable P&L / Balance Sheet layouts with formula rows | **Built (0637)** | `report_layouts` + `report_layout_rows`; `report_with_layout` composes the report in SQL; builder at `/reports/layout/:kind`. The verdict was accurate — see §3.9 for what it cost to do properly | **L** | Real gap, and a Pro-plan feature in AutoCount |
 | G9 | Platform | Own subscription invoice issued as an LHDN e-Invoice | **Missing** | `platform_invoices` already carries `issuer_name`, `issuer_registration_no`, `issuer_sst_no`, `issuer_address`, `bill_to_name`, `bill_to_registration_no`, `bill_to_tin`, `bill_to_address`, `tax_rate`, `tax_amount` — the data an e-Invoice needs is there. But `einvoice_documents_source_table_check` admits only `sales_documents` and `einvoice_consolidations` (widened by 0616), so a platform invoice cannot be prepared | **M** | Worth doing for what it says: a company selling e-Invoicing that does not e-Invoice its own customers is a question a prospect will ask. Small once the source table is admitted |
 
 ---
@@ -403,6 +403,65 @@ list are both facts to be looked up rather than inferred.
 
 A `boolean` nobody reads would be the third dead settings column this
 audit has found. Left out on purpose.
+
+### 3.9 G8: an accurate verdict, and three house rules that caught me
+
+After six wrong verdicts this one was right in every particular:
+`report_spec.dart` composes fixed sections in Dart and no user can
+change them. Worth recording, because the pattern of this audit has
+been verdicts that dissolved on contact with the code, and this is the
+counter-example.
+
+**The composition moved into the database.** Not a stylistic
+preference: the moment a user can edit a layout, "gross profit" stops
+being presentation and becomes a rule on a document somebody signs.
+`report_with_layout` returns rows already totalled and both renderers
+draw what they are given, so the screen and the PDF cannot disagree.
+
+**A formula is a list of signed references, not an expression.** The
+obvious design is a text column and an evaluator. A parser in SQL over
+user text is a hazard with no upside, and a precedence bug in a figure
+somebody signs is the worst kind to find late. What real layouts need
+is addition and subtraction of rows already computed, so a formula row
+carries `[{"row": <key>, "sign": 1}]`. Multiplication and division are
+absent by design: a ratio is not a line of a P&L.
+
+A formula may only reference rows ABOVE it. That single rule is what
+makes a cycle impossible rather than merely detected — you cannot refer
+to what has not been computed yet — and it is enforced twice, in
+`save_layout_rows` so the builder can say which row is wrong, and in
+the reader so a hand-written row cannot get past it.
+
+**Three house rules caught defects in the first draft**, and each was a
+real one rather than a style point:
+
+  * `live_change_feed.sql` refused it because the first version SEEDED
+    the standard layout into the tables the first time a report was
+    opened. A P&L is the most-read screen in the product; that would
+    have written five rows and woken every colleague's feed to announce
+    a layout nobody chose. The standard layout is now a set-returning
+    function that nothing stores until somebody opens the builder.
+  * `utc_is_not_today.sql` refused `p_to date default current_date`.
+    `current_date` is UTC; at 7am in Kuala Lumpur on the 1st it is
+    still the 31st, and the report would have stopped a day short.
+  * `check_stable_writers.py` refused the temporary table the first
+    draft gathered balances into. PostgREST runs a STABLE function in a
+    READ ONLY transaction, so `create temporary table` fails with 25006
+    — the report would not have run from the app at all. The balances
+    are an array of a composite type now, and the function stays
+    STABLE, which is the honest description of a report.
+
+**The project and department filters survive.** `report_profit_loss
+_by_dimension` has offered them since `0088` and the screen exposes
+them; a layout-composed P&L that could not filter would have been a
+regression dressed as a feature. A balance sheet REFUSES a dimension
+rather than ignoring one, because opening balances carry none and a
+silently unfiltered figure would balance and be wrong.
+
+**What is not built:** account CODE RANGES as a section selector.
+Account codes here are text and a company may renumber its chart, so a
+layout pinned to '5000'–'5999' empties silently the day somebody does.
+Naming accounts outright survives a renumbering because it holds ids.
 
 ### A separate, small PR
 

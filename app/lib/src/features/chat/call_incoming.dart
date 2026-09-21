@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/callkit.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -17,10 +18,23 @@ import 'call_screen.dart';
 /// `chat_incoming_calls` keys on this participant's state rather than on
 /// the call's.
 ///
-/// What it does not do is ring while the app is closed. That needs a
-/// push notification and a platform channel per operating system, and
-/// neither exists yet; until then a call reaches somebody who has the
-/// app open.
+/// On iOS it is no longer the only way a call arrives. A VoIP push
+/// wakes the app and `AppDelegate.swift` reports the call to CallKit,
+/// which draws the system's own full-screen ring — over the lock
+/// screen, before any of this has run. What comes back is an answer or
+/// a decline that has already happened, and this widget takes it from
+/// `callkit.dart` and finishes the job: join, open the call, and tell
+/// the system when the app is done with it.
+///
+/// So the sheet below is for every other platform, and for the one iOS
+/// case where CallKit drew nothing — a ring the system refused, under
+/// Do Not Disturb or from a blocked caller, which reports no `ringing`
+/// event. On an iPhone where CallKit DID ring, the sheet stays down:
+/// otherwise the person would get the system's call screen and, behind
+/// it, this app asking the same question again.
+///
+/// Android still has neither. A full-screen incoming call there is a
+/// notification with a full-screen intent, which needs Firebase first.
 class IncomingCallWatcher extends ConsumerStatefulWidget {
   const IncomingCallWatcher({super.key, required this.child});
 
@@ -36,6 +50,125 @@ class _IncomingCallWatcherState extends ConsumerState<IncomingCallWatcher> {
   /// a second sheet for the same ringing phone.
   final _shown = <String>{};
 
+  /// Calls the system's own screen has already settled.
+  ///
+  /// Separate from [_shown] because they mean different things: that
+  /// one says a sheet has been drawn, this one says drawing a sheet
+  /// would be WRONG. Somebody who answered on the CallKit screen has
+  /// said yes, and putting the app's own "answer or decline?" in front
+  /// of them afterwards would ask twice and let them say no to a call
+  /// they are already on.
+  final _settledByTheSystem = <String>{};
+
+  /// What the push said about each call the system rang.
+  ///
+  /// Kept because the answer does not repeat it: `ringing` carries who
+  /// is calling and whether it is video, `answered` carries only the
+  /// id, and on a cold start both arrive in the same drain. The
+  /// alternative was reading `chatIncomingCallsProvider`, and `.value`
+  /// on a provider THROWS when it is in an error state — here that
+  /// would be inside a platform-channel callback, where nothing
+  /// catches it. See `scripts/check_async_value.py`.
+  final _rang = <String, CallKitEvent>{};
+
+  @override
+  void initState() {
+    super.initState();
+    // Before anything else: an answer may have happened before this
+    // application ran at all. See `callkit.dart`.
+    listenForCallKit(_handleCallKit);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final events = await drainCallKitEvents();
+      if (mounted) _handleCallKit(events);
+    });
+  }
+
+  @override
+  void dispose() {
+    stopListeningForCallKit();
+    super.dispose();
+  }
+
+  /// What the system's call screen did, in the order it did it.
+  void _handleCallKit(List<CallKitEvent> events) {
+    for (final event in events) {
+      switch (event.kind) {
+        case CallKitEventKind.ringing:
+          // The sheet must not ALSO appear. CallKit draws a full-screen
+          // ring whether or not this app is in front, so on an iPhone
+          // with the app open the person would otherwise get the
+          // system's call screen and, behind it, this app asking the
+          // same question again.
+          //
+          // `_shown` and not `_settledByTheSystem`: nothing has been
+          // decided yet, and if the answer never comes the call simply
+          // stops ringing. And a ring the system REFUSED — Do Not
+          // Disturb, a blocked caller — never emits this at all, so the
+          // sheet is still the fallback in the one case where CallKit
+          // drew nothing.
+          _shown.add(event.callId);
+          _rang[event.callId] = event;
+        
+        case CallKitEventKind.answered:
+          _settledByTheSystem.add(event.callId);
+          _shown.add(event.callId);
+          unawaited(_answeredElsewhere(event.callId));
+        case CallKitEventKind.ended:
+          _settledByTheSystem.add(event.callId);
+          _shown.add(event.callId);
+          unawaited(_declineQuietly(event.callId));
+      }
+    }
+  }
+
+  /// Answered on the system's screen: join and open the call, with no
+  /// sheet in between.
+  Future<void> _answeredElsewhere(String callId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    try {
+      await repo.chatJoinCall(callId);
+    } catch (_) {
+      // The call was over before the app got here — the commonest case
+      // by far, because answering a call that has already stopped
+      // ringing is something CallKit allows. Nothing to say: the
+      // system's screen has already closed.
+      await reportCallKitEnded(callId);
+      return;
+    }
+    if (!mounted) return;
+    ref.invalidate(chatIncomingCallsProvider);
+
+    final rang = _rang[callId];
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CallScreen(
+          callId: callId,
+          // What the system's own screen said, so the app does not
+          // rename the call halfway through answering it.
+          title: rang?.caller ?? 'Call',
+          video: rang?.video ?? false,
+        ),
+      ),
+    );
+    // The app is done with it, so the system has to be told or the
+    // green bar stays across the top of the phone.
+    await reportCallKitEnded(callId);
+    _rang.remove(callId);
+    if (mounted) ref.invalidate(chatIncomingCallsProvider);
+  }
+
+  /// Declined on the system's screen, or hung up there.
+  Future<void> _declineQuietly(String callId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    // `decline` rather than `leave`: this is only ever reached for a
+    // call this device had not joined, because a call it HAD joined is
+    // ended by the call screen itself.
+    await repo.chatDeclineCall(callId).catchError((_) {});
+    if (mounted) ref.invalidate(chatIncomingCallsProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(chatIncomingCallsProvider, (_, next) {
@@ -43,6 +176,8 @@ class _IncomingCallWatcherState extends ConsumerState<IncomingCallWatcher> {
       if (calls == null || calls.isEmpty) return;
       final call = calls.first;
       final id = call['id'] as String;
+      // The system got there first. Asking again would be asking twice.
+      if (_settledByTheSystem.contains(id)) return;
       if (!_shown.add(id)) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_ring(call));

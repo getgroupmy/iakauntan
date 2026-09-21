@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -148,7 +149,10 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
             AsyncView(
               value: files,
               onRetry: () => ref.invalidate(attachmentsProvider(_key)),
-              loading: const LinearProgressIndicator(),
+              // Two, because most records carry one or two files and an
+              // outline longer than the answer reads as attachments
+              // that disappeared.
+              skeleton: const ListSkeleton(rows: 2),
               builder: (list) => list.isEmpty
                   ? Text(
                       'Nothing attached.',

@@ -13,6 +13,9 @@
  *   action = "validate-tin"-> confirm a TIN matches an identifier
  *   action = "certificate" -> read a XAdES signing certificate, prove the
  *                             key matches it, and put it on file
+ *   action = "receive"     -> read a document a SUPPLIER sent us and
+ *                             keep it. The only inbound action here;
+ *                             every other one pushes.
  *
  * And one caller that is not a person at all:
  *
@@ -31,6 +34,7 @@ import { cancel } from "./cancel.ts";
 import { validateTin } from "./tin.ts";
 import { saveCertificate } from "./certificate.ts";
 import { fileConsolidations } from "./consolidations.ts";
+import { receiveDocument } from "./receive.ts";
 import { isSchedulerCall } from "../_shared/scheduler.ts";
 
 serveFunction("myinvois.failed", async (req: Request) => {
@@ -78,10 +82,12 @@ serveFunction("myinvois.failed", async (req: Request) => {
         return json(await validateTin(ctx));
       case "certificate":
         return json(await saveCertificate(ctx));
+      case "receive":
+        return json(await receiveDocument(ctx));
       default:
         return fail(
           `Unknown action "${action}". Expected submit, status, cancel, ` +
-            `validate-tin or certificate.`,
+            `validate-tin, certificate or receive.`,
         );
     }
   } catch (err) {

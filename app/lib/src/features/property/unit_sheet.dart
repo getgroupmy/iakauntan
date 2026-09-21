@@ -270,7 +270,7 @@ class _UnitSheetState extends ConsumerState<_UnitSheet> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       key: const ValueKey('unit-type'),
-                      value: types.contains(_type) ? _type : types.first,
+                      initialValue: types.contains(_type) ? _type : types.first,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: [

@@ -259,7 +259,7 @@ class _SchemeSheetState extends ConsumerState<_SchemeSheet> {
               children: [
                 DropdownButtonFormField<String>(
                   key: const ValueKey('strata-stage'),
-                  value: _stage,
+                  initialValue: _stage,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Managed by',

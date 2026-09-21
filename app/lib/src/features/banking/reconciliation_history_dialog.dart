@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -102,6 +103,7 @@ class _HistoryDialogState extends ConsumerState<_HistoryDialog> {
           value: register,
           onRetry: () =>
               ref.invalidate(bankReconciliationsProvider(widget.bankAccountId)),
+          skeleton: const ListSkeleton(rows: 4, leading: false),
           builder: (rows) {
             if (rows.isEmpty) {
               return const Padding(

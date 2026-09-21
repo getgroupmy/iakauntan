@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -168,6 +169,12 @@ class _StockCardDialogState extends ConsumerState<_StockCardDialog> {
               child: AsyncView(
                 value: card,
                 onRetry: () => ref.invalidate(stockCardProvider(_query)),
+                // Six columns, read off `_CardHeader`: date, movement,
+                // warehouse, in/out, balance, value. The count is the
+                // whole reason `TableSkeleton` exists separately — an
+                // outline with the wrong number of them reflows the
+                // moment the rows land.
+                skeleton: const TableSkeleton(columns: 6, rows: 8),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return const Padding(

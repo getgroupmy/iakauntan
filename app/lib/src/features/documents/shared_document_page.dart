@@ -222,6 +222,12 @@ class _Header extends StatelessWidget {
                 'Reg. ${company['registration_no']}',
               if ((company['sst_registration_no']?.toString() ?? '').isNotEmpty)
                 'SST ${company['sst_registration_no']}',
+              // The same line the PDF carries. This page and that file
+              // are one document seen two ways, and a registration on
+              // one and not the other is a customer reading a different
+              // tax invoice from the one in their inbox.
+              if ((company['tourism_tax_reg_no']?.toString() ?? '').isNotEmpty)
+                'TTx ${company['tourism_tax_reg_no']}',
               if ((company['address']?.toString() ?? '').isNotEmpty)
                 company['address'].toString(),
               if ((company['phone']?.toString() ?? '').isNotEmpty)

@@ -703,7 +703,7 @@ class _KindField extends ConsumerWidget {
         DropdownButtonFormField<String>(
           key: const ValueKey('scan-document-kind'),
           isExpanded: true,
-          value: current,
+          initialValue: current,
           decoration: InputDecoration(
             labelText: 'What this is',
             // The hedge is in the label, where it belongs: "might be"

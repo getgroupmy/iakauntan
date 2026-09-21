@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -37,6 +38,7 @@ class StatutoryRatesTab extends ConsumerWidget {
     return AsyncView(
       value: schedules,
       onRetry: () => ref.invalidate(statutorySchedulesProvider),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) {
         final unverified = list.where((s) => s['is_verified'] != true).length;
 

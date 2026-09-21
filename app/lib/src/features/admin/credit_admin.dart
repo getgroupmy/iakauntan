@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -27,6 +28,7 @@ class CreditAdminTab extends ConsumerWidget {
     return AsyncView(
       value: balances,
       onRetry: () => ref.invalidate(platformCreditProvider),
+      skeleton: const CardRowsSkeleton(rows: 4, trailing: 2),
       builder: (rows) => SingleChildScrollView(
         child: PageBody(
           maxWidth: 980,
@@ -74,7 +76,8 @@ class CreditAdminTab extends ConsumerWidget {
                         value: invoices,
                         onRetry: () =>
                             ref.invalidate(platformInvoicesProvider),
-                        loading: const LinearProgressIndicator(),
+                        skeleton: const CardRowsSkeleton(
+                            rows: 3, leading: false, trailing: 2),
                         builder: (list) => list.isEmpty
                             ? const Text('Nothing sold yet.')
                             : Column(children: [

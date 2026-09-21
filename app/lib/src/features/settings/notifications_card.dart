@@ -3,27 +3,72 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/push.dart';
+import '../../core/surface.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+
+/// What to call the thing being notified, on the build looking at it.
+///
+/// Four words of copy with a reason behind them: permission belongs to
+/// this browser on this machine, or to this app on this handset, and
+/// switching it on here does nothing for the same person anywhere else.
+/// A card that said "you" would be describing something that does not
+/// exist.
+String pushDeviceNoun(Surface surface) =>
+    surface == Surface.web ? 'browser' : 'device';
+
+/// Why this build cannot be notified at all, said usefully.
+///
+/// Three different facts wearing one [PushStatus], and the difference
+/// matters to whoever is reading: a browser is missing a feature and
+/// could be swapped, an Android build is missing a Firebase project
+/// that somebody has to create, and a desktop simply is not a thing
+/// this is built for.
+String pushUnsupportedNote(Surface surface) => switch (surface) {
+  Surface.web =>
+    'This browser cannot be notified while the app is closed. '
+        'Notifications work in Chrome, Edge and Firefox, and on Safari '
+        'once the app has been added to the home screen.',
+  Surface.android =>
+    'Notifications on Android go through Firebase, and this build has '
+        'no Firebase project. See docs/push-notifications.md.',
+  // iOS reaches this only on a build whose Dart is ahead of its
+  // AppDelegate, which is a rebuild rather than anything a person can
+  // act on. Said the same way as a desktop, which simply is not a thing
+  // this is built for.
+  Surface.ios || Surface.desktop =>
+    'This device cannot be notified while the app is closed.',
+};
 
 /// Turning on the notification that arrives when the app is closed.
 ///
 /// Unlike everything else on this screen it is not company
 /// configuration: permission belongs to this browser on this machine,
-/// and switching it on here does nothing for the same person on their
-/// phone. So it says which device it is talking about.
+/// or to this app on this handset, and switching it on here does
+/// nothing for the same person anywhere else. So it says which device
+/// it is talking about.
 ///
-/// The button asks the browser for permission, and it only exists as a
-/// button because of Safari: the prompt has to come from something the
-/// person pressed, and a browser that has refused once will not be asked
-/// again by anybody. Asking on start-up would spend that one chance on
+/// The button asks for permission, and it only exists as a button
+/// because of Safari and iOS alike: the prompt has to come from
+/// something the person pressed, and neither will ask a second time
+/// once refused. Asking on start-up would spend that one chance on
 /// somebody who had not yet decided they wanted it.
 class NotificationsCard extends ConsumerWidget {
-  const NotificationsCard({super.key});
+  const NotificationsCard({super.key, this.surface});
+
+  /// Which build this is, overridable so a test can be both.
+  ///
+  /// `currentSurface` reads `kIsWeb`, which is a compile-time constant:
+  /// a widget test on the Dart VM can never see the browser half of the
+  /// copy below, and a test that cannot see half of what it covers is
+  /// half a test.
+  final Surface? surface;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(pushStatusProvider);
+    final surface = this.surface ?? currentSurface;
 
     return Card(
       child: Padding(
@@ -38,8 +83,18 @@ class NotificationsCard extends ConsumerWidget {
             AsyncView(
               value: status,
               onRetry: () => ref.invalidate(pushStatusProvider),
-              loading: const LinearProgressIndicator(),
-              builder: (state) => _Body(state: state),
+              // One row, whatever the answer turns out to be: a
+              // sentence about where notifications stand and a button
+              // to change it. Which sentence and which button depend on
+              // the status; that there is one of each does not.
+              skeleton: const CardRowsSkeleton(
+                rows: 1,
+                leading: false,
+                lines: 1,
+                trailing: 1,
+                trailingWidth: 96,
+              ),
+              builder: (state) => _Body(state: state, surface: surface),
             ),
           ],
         ),
@@ -49,9 +104,10 @@ class NotificationsCard extends ConsumerWidget {
 }
 
 class _Body extends ConsumerStatefulWidget {
-  const _Body({required this.state});
+  const _Body({required this.state, required this.surface});
 
   final PushStatus state;
+  final Surface surface;
 
   @override
   ConsumerState<_Body> createState() => _BodyState();
@@ -70,14 +126,16 @@ class _BodyState extends ConsumerState<_Body> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
-          PushStatus.on => 'This browser will be notified',
+          PushStatus.on => 'This ${pushDeviceNoun(widget.surface)} will be notified',
           // Said as its own sentence rather than folded into a generic
-          // failure: the browser will not ask again, and the only way
-          // back is its own site settings.
-          PushStatus.denied =>
-            'This browser refused. Allow notifications for this site in '
-                'the browser\'s own settings, then try again.',
-          _ => 'Could not turn notifications on for this browser',
+          // failure: nothing will ask again, and the only way back is
+          // settings this app cannot open.
+          PushStatus.denied => widget.surface == Surface.web
+              ? 'This browser refused. Allow notifications for this site '
+                    'in the browser\'s own settings, then try again.'
+              : 'Notifications were refused. iOS will not ask again — '
+                    'allow them for iAkauntan in Settings, then try again.',
+          _ => 'Could not turn notifications on for this ${pushDeviceNoun(widget.surface)}',
         }),
       ),
     );
@@ -97,12 +155,9 @@ class _BodyState extends ConsumerState<_Body> {
       // Not a failure and not worth a warning colour: this build simply
       // has no way to do it, and saying which one would be needed is
       // more useful than an apology.
-      PushStatus.unsupported => const _Note(
+      PushStatus.unsupported => _Note(
         icon: Icons.notifications_off_outlined,
-        text:
-            'This device cannot be notified while the app is closed. '
-            'Notifications work in Chrome, Edge and Firefox, and on '
-            'Safari once the app has been added to the home screen.',
+        text: pushUnsupportedNote(widget.surface),
       ),
       PushStatus.notConfigured => const _Note(
         icon: Icons.build_outlined,
@@ -110,21 +165,24 @@ class _BodyState extends ConsumerState<_Body> {
             'Notifications are not switched on for this installation. '
             'It needs a VAPID key pair — see docs/push-notifications.md.',
       ),
-      PushStatus.denied => const _Note(
+      PushStatus.denied => _Note(
         icon: Icons.block,
-        text:
-            'This browser has refused notifications for this site. It '
-            'will not ask again, so it has to be changed in the '
-            'browser\'s own site settings.',
+        text: widget.surface == Surface.web
+            ? 'This browser has refused notifications for this site. It '
+                  'will not ask again, so it has to be changed in the '
+                  'browser\'s own site settings.'
+            : 'Notifications were refused on this device. iOS will not '
+                  'ask again, so they have to be allowed for iAkauntan '
+                  'in Settings.',
       ),
       PushStatus.askable => Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
-              'Be told about messages and calls when this browser is in '
-              'the background. The notification says who it is from and '
-              'never what it says.',
-              style: TextStyle(fontSize: 12),
+              'Be told about messages and calls when this '
+              '${pushDeviceNoun(widget.surface)} is in the background. The '
+              'notification says who it is from and never what it says.',
+              style: const TextStyle(fontSize: 12),
             ),
           ),
           const SizedBox(width: Space.md),
@@ -144,10 +202,11 @@ class _BodyState extends ConsumerState<_Body> {
             color: context.colors.success,
           ),
           const SizedBox(width: Space.sm),
-          const Expanded(
+          Expanded(
             child: Text(
-              'This browser will be notified about messages and calls.',
-              style: TextStyle(fontSize: 12),
+              'This ${pushDeviceNoun(widget.surface)} will be notified about messages '
+              'and calls.',
+              style: const TextStyle(fontSize: 12),
             ),
           ),
           TextButton(

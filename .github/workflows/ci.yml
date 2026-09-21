@@ -42,9 +42,38 @@ jobs:
       # `value` argument, --fatal-infos turned that into 37 errors, and
       # analyze started failing on code nobody had touched. Bump this
       # deliberately, with the deprecations fixed in the same commit.
+      #
+      # 3.47.4, raised from 3.32.0, and the reason is the `android` job
+      # below rather than anything about Dart. Flutter 3.32.0's OWN
+      # Gradle plugin sets `fileMode` on a Copy task:
+      #
+      #     packages/flutter_tools/gradle/src/main/kotlin/
+      #       FlutterPlugin.kt:715
+      #     // TODO(gmackall): Replace with filePermissions... once
+      #     //   minimum supported Gradle version is 8.3.
+      #     @Suppress("DEPRECATION")
+      #     fileMode = 420
+      #
+      # Gradle 8.3 deprecated that property and Gradle 9 REMOVED it.
+      # `app/android/gradle/wrapper/gradle-wrapper.properties` pins
+      # Gradle 9.3.1, and `settings.gradle.kts` declares AGP 9.1.0
+      # which itself requires Gradle 9 -- so Flutter 3.32.0 cannot
+      # compile its own plugin here, and `assembleDebug` died on
+      # "Unresolved reference 'fileMode'" in `:gradle:compileKotlin`.
+      #
+      # That was not a CI problem. The Android build was broken for
+      # anybody on the pinned SDK, and the job added in the previous
+      # commit is the first thing that ever said so.
+      #
+      # 3.35.0 is the first stable whose plugin drops `fileMode`
+      # (checked against the tags rather than recalled). 3.47.4 is
+      # taken instead because it is the newest stable and because
+      # `record: ^7.1.1` names it -- so the version that unblocks
+      # Android is also the version that ends the other constraint
+      # this repository was working around.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.32.0
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - run: flutter pub get
@@ -69,8 +98,307 @@ jobs:
         working-directory: .
         run: python3 scripts/check_web_plugin_registrant.py
 
+      # The other half of passkeys on a phone, and the half that fails
+      # SILENTLY. A passkey is bound to a domain, the operating system
+      # verifies the binding by fetching one file, and every way of
+      # getting that wrong presents identically: a button that does
+      # nothing. Absent is allowed — neither file can be written without
+      # the Play App Signing SHA-256 or the Apple team id, and a
+      # placeholder is worse than nothing. Present and wrong is refused.
+      - name: Check the passkey association is not half-configured
+        working-directory: .
+        run: python3 scripts/check_passkey_association.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
+
+      # The workbook writer, read back by parsers that know nothing
+      # about how it was written. `core/xlsx.dart` builds `.xlsx` by
+      # hand and `app/test/xlsx_test.dart` can only ask it what it
+      # wrote -- one implementation asserting against itself, which on
+      # a file format proves the bytes are what the author intended and
+      # not that they are a workbook. Nothing here can open Excel;
+      # openpyxl is the nearest thing, and the gate REQUIRES it rather
+      # than skipping, because a check that silently does not run is
+      # worse than no check.
+      #
+      # `working-directory: .` because this job defaults to `app` and
+      # the script lives at the root, and the script itself runs
+      # `flutter test` from `app`.
+      - name: Check the generated workbook is a workbook
+        working-directory: .
+        run: |
+          pip install --quiet openpyxl
+          python3 scripts/check_xlsx.py
+
+  # =====================================================================
+  # The iOS build
+  #
+  # Added after a fresh checkout could not be built on a Mac at all, and
+  # nothing here noticed: every other job in this file is
+  # `ubuntu-latest`, so the iOS target had never been compiled by CI.
+  # What broke was not Dart -- analyze and test were green throughout --
+  # but the native integration underneath it: a deployment target the
+  # pods refused, and a Podfile that was never committed.
+  #
+  # That is the class of failure this job exists for. A Dart mistake is
+  # already caught by `flutter` above, on a runner that costs a tenth as
+  # much; what only a Mac can tell us is whether the plugins, the pods
+  # and the deployment target still agree.
+  # =====================================================================
+  ios-scope:
+    name: Does this push touch iOS
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Two commits, so the diff below has something to compare
+          # against. A shallow clone of one has no parent and every
+          # path reads as changed.
+          fetch-depth: 2
+      - id: decide
+        # A macOS runner bills at ten times an Ubuntu one, so this does
+        # not run on every push. It runs when something that can move
+        # the NATIVE build moves: the iOS project itself, or the
+        # dependency set, since adding a plugin is the ordinary way an
+        # iOS build breaks.
+        #
+        # A pull request and a manual run always build, because those
+        # are the two moments somebody is asking the question directly.
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "not a push — building"
+            exit 0
+          fi
+          changed=$(git diff --name-only "${{ github.event.before }}" \
+                      "${{ github.sha }}" 2>/dev/null || echo ALL)
+          if [ "$changed" = "ALL" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "no usable diff — building rather than guessing"
+            exit 0
+          fi
+          # This workflow file is in the list so that a change to the
+          # iOS job below is tested by the iOS job below. Leaving it
+          # out meant the one push guaranteed to need a Mac was the one
+          # push that skipped it.
+          if echo "$changed" | grep -qE '^(app/(ios/|pubspec\.(yaml|lock)$)|\.github/workflows/ci\.yml$)'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "iOS or dependencies moved — building"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "nothing native changed — skipping the Mac"
+          fi
+
+  ios:
+    name: Build the iOS app
+    runs-on: macos-latest
+    timeout-minutes: 45
+    needs: [ios-scope]
+    if: needs.ios-scope.outputs.build == 'true'
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      # The one file whose absence is not a build error but a missing
+      # commit, checked BEFORE twenty minutes of pod resolution so the
+      # failure names the cause.
+      #
+      # `Podfile` is not generated and is not ignored -- it was simply
+      # never committed, and it is where the deployment target lives.
+      # Without it Flutter writes a default one pinned lower than
+      # Google ML Kit accepts, and the build dies deep inside CocoaPods
+      # on a message about a pod nobody here has heard of.
+      - name: The Podfile has to be in the repository
+        run: |
+          if [ ! -f ios/Podfile ]; then
+            echo "::error file=app/ios/Podfile::ios/Podfile is missing."
+            echo
+            echo "It is not generated and not gitignored — it has never"
+            echo "been committed. It carries the iOS deployment target,"
+            echo "which Google ML Kit requires to be 15.5 or higher."
+            echo
+            echo "Commit ios/Podfile and ios/Podfile.lock from a machine"
+            echo "where 'pod install' has been run."
+            exit 1
+          fi
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # The same pin as the `flutter` job, and for the same reason
+          # given there. Two jobs building the same app on two SDKs
+          # would make a green tick mean less than it appears to.
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # BEFORE the build, not after. The first version of this job had it
+      # afterwards, the build failed on the deployment target, and this
+      # step -- the one that names the cause in a sentence -- was
+      # skipped because the step it explains had already failed.
+      #
+      # Both files, because they are read by different things and only
+      # one of them is read by the thing that fails. CocoaPods reads the
+      # PODFILE: with no `platform` line it assigns iOS 12.0 to Runner
+      # and resolves every pod against that, before `post_install` runs,
+      # whatever `project.pbxproj` says. A check on the project file
+      # alone passed while the build failed for exactly the reason the
+      # check exists to catch.
+      - name: The deployment target is what ML Kit needs, in both files
+        run: |
+          set -euo pipefail
+          need=15.5
+
+          # What CocoaPods reads.
+          podfile=$(grep -oE "^platform :ios, *'[0-9.]+'" ios/Podfile |
+                    grep -oE "[0-9.]+" || true)
+          if [ -z "$podfile" ]; then
+            echo "::error file=app/ios/Podfile::No platform line in ios/Podfile."
+            echo
+            echo "CocoaPods then assigns iOS 12.0 to Runner and resolves"
+            echo "every pod against it, whatever the project file says."
+            echo "Add: platform :ios, '$need'"
+            exit 1
+          fi
+
+          # What Xcode reads.
+          project=$(grep -o "IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*" \
+                      ios/Runner.xcodeproj/project.pbxproj |
+                    sed 's/.*= //' | sort -V | head -1)
+
+          echo "Podfile platform:  $podfile"
+          echo "project.pbxproj:   $project"
+
+          for pair in "Podfile:$podfile" "project.pbxproj:$project"; do
+            what=${pair%%:*}
+            got=${pair#*:}
+            if [ "$(printf '%s\n%s\n' "$need" "$got" | sort -V | head -1)" \
+                 != "$need" ]; then
+              echo "::error::$what says $got; Google ML Kit needs $need."
+              exit 1
+            fi
+          done
+
+          # Agreeing matters as much as being high enough: a Podfile
+          # above the project builds pods the app cannot load, and the
+          # failure names a pod rather than the disagreement.
+          if [ "$podfile" != "$project" ]; then
+            echo "::error::Podfile says $podfile and project.pbxproj says $project. Keep them in step."
+            exit 1
+          fi
+
+      # `--no-codesign` because this job answers "does it compile and
+      # link", which is the question a signing identity does not change.
+      # Signing belongs to a release, needs secrets, and would make
+      # every pull request from a fork fail on something unrelated to
+      # the diff.
+      - name: Build
+        run: flutter build ios --no-codesign --debug
+
+  android:
+    name: Build the Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    # No scope gate, unlike the iOS job above, and the difference is
+    # money rather than judgement: a macOS runner bills at ten times an
+    # Ubuntu one, so the Mac is asked for only when something native
+    # moved. This runner costs what every other job here costs, so it
+    # runs on every push -- which is the better arrangement, because
+    # the commonest way an Android build breaks is a plugin added for
+    # some entirely unrelated reason.
+    steps:
+      - uses: actions/checkout@v4
+
+      # `jetbrains`, and that is not a preference. `android/gradle/
+      # gradle-daemon-jvm.properties` names `toolchainVendor=jetbrains`
+      # and `toolchainVersion=21`, so Gradle looks for a JetBrains
+      # Runtime and refuses to start its daemon without one. A Temurin
+      # 21 -- what a runner has installed already -- does not satisfy a
+      # vendor criterion, and the failure is a Gradle message about
+      # toolchain provisioning that says nothing about this file.
+      #
+      # Matching what the repository asks for rather than editing the
+      # repository to match the runner: that file came from a developer
+      # machine running `updateDaemonJvm`, and changing it here would
+      # move the disagreement rather than remove it.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: jetbrains
+          java-version: '21'
+
+      # The Gradle wrapper's PROPERTIES are committed and the `gradlew`
+      # script is not, which is deliberate and worth stating because it
+      # looks like an omission. Flutter's Gradle tooling writes a
+      # `gradlew` when one is missing and leaves an existing
+      # `gradle-wrapper.properties` alone, so the version this project
+      # pins is the version that runs. A missing properties file would
+      # silently build on whatever Flutter ships with instead.
+      - name: The Gradle version has to be the one this project pins
+        run: |
+          set -euo pipefail
+          props=android/gradle/wrapper/gradle-wrapper.properties
+          if [ ! -f "$props" ]; then
+            echo "::error file=app/$props::$props is missing."
+            echo
+            echo "Flutter will then generate a wrapper pinned to"
+            echo "whatever the SDK ships with, and this job stops"
+            echo "testing the Gradle this project actually uses."
+            exit 1
+          fi
+          grep -oE 'gradle-[0-9.]+-(all|bin)\.zip' "$props"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # The same pin as the `flutter` and `ios` jobs, and for the
+          # same reason given in the first of them.
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # BEFORE the build, for the reason the iOS job's deployment-target
+      # check is before its build: Gradle refuses the FIRST plugin whose
+      # compileSdk is too low and then stops, so its message names one
+      # of five and costs six minutes to get. This reads all of them off
+      # the pub cache in a second, and says which ones the floor in
+      # `app/android/build.gradle.kts` is carrying.
+      #
+      # It is not a gate the build depends on -- the floor is what makes
+      # the build work. It is how the floor stops being invisible, and
+      # how it eventually becomes unnecessary: each plugin drops off the
+      # list when its own release compiles against 36, and when the list
+      # empties the floor can go. It DOES fail on a plugin pinned above
+      # the floor, which is the one case the floor cannot fix.
+      - name: Every plugin compiles against the API the app needs
+        working-directory: .
+        run: python3 scripts/check_android_compile_sdk.py
+
+      # `--debug`, and not `appbundle` or `--release`. A release build
+      # needs a signing configuration, which needs the upload keystore,
+      # which is a secret this repository does not hold and must not --
+      # and a pull request from a fork would fail on it rather than on
+      # the diff. A debug APK is signed with the automatically generated
+      # debug key and compiles all the same code, which is what this
+      # job is for: the Dart, the plugin manifests, the manifest merge,
+      # and every native dependency resolving against this minSdk.
+      #
+      # That last one is the point. `passkeys_android` brings
+      # Credential Manager, `google_mlkit_text_recognition` brings ML
+      # Kit, `flutter_webrtc` brings its own native libraries -- any of
+      # them can demand a higher minSdk than this app declares, and the
+      # manifest merger is the only thing that says so.
+      - name: Build
+        run: flutter build apk --debug
 
   database:
     name: Statutory engine and ledger rules
@@ -200,6 +528,7 @@ jobs:
                    supabase/tests/settlement_discount.sql \
                    supabase/tests/statutory_charges.sql \
                    supabase/tests/employee_documents.sql \
+                   supabase/tests/notes.sql \
                    supabase/tests/project_budget.sql \
                    supabase/tests/ticket_share.sql \
                    supabase/tests/fs_statutory_order.sql \
@@ -313,6 +642,7 @@ jobs:
                    supabase/tests/audit_trail_filters.sql \
                    supabase/tests/payment_methods.sql \
                    supabase/tests/tariff_code.sql \
+                   supabase/tests/report_layouts.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/account_closure.sql \
                    supabase/tests/trigger_reachable_grants.sql \
@@ -327,10 +657,13 @@ jobs:
                    supabase/tests/timesheets.sql \
                    supabase/tests/collections.sql \
                    supabase/tests/approvals.sql \
+                   supabase/tests/year_end_close.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
+                   supabase/tests/fs_mapping_is_total.sql \
                    supabase/tests/view_security.sql \
                    supabase/tests/profile_visibility.sql \
+                   supabase/tests/my_profile.sql \
                    supabase/tests/credit_control.sql \
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/stock_transfers.sql \
@@ -383,6 +716,8 @@ jobs:
                    supabase/tests/contact_types.sql \
                    supabase/tests/credit_hold_is_visible.sql \
                    supabase/tests/contact_records.sql \
+                   supabase/tests/contact_delete.sql \
+                   supabase/tests/sub_accounts.sql \
                    supabase/tests/prospect_quotation.sql \
                    supabase/tests/contact_import_codes.sql \
                    supabase/tests/document_numbering.sql \
@@ -439,6 +774,7 @@ jobs:
                    supabase/tests/pos_einvoice_consolidation.sql \
                    supabase/tests/einvoice_totals_reconcile.sql \
                    supabase/tests/einvoice_signing_certificate.sql \
+                   supabase/tests/received_einvoice.sql \
                    supabase/tests/mia_credentials.sql \
                    supabase/tests/ssm_register_lookup.sql \
                    supabase/tests/ssm_api_tables.sql \
@@ -551,6 +887,17 @@ jobs:
       - name: Check every ordering says which direction it means
         run: python3 scripts/check_order_direction.py
 
+      # The console tells open clients what it changed by broadcasting
+      # the changed table's NAME to a public topic. From `0322` until
+      # `0652` it broadcast to `landing` while the app subscribed to
+      # `platform`, so every message went to a topic with nobody on it
+      # -- silently, because an empty topic is not an error at either
+      # end. It was reported as "the mobile app only updates when I
+      # relaunch it". Neither half is wrong alone, so only something
+      # reading BOTH languages can see it.
+      - name: Check the broadcast topic is one the app subscribes to
+        run: python3 scripts/check_realtime_topic.py
+
       # `docs/unreachable.md` described this sweep for months as a thing
       # to run when you remember, and this is what that meant: `0559`
       # built the personal-mailbox model and nothing could reach it,
@@ -561,6 +908,34 @@ jobs:
       # No database needed: it reads the Dart.
       - name: Check every repository method and provider is reached
         run: python3 scripts/check_unreachable.py
+
+      # The same question of the SCHEMA, which on a project whose first
+      # rule is that the database IS the application is the layer that
+      # matters most. It found twenty columns nothing mentioned at all,
+      # two of them capabilities the product could not reach:
+      # `tax_codes.is_inclusive`, so no document could be raised at a
+      # tax-inclusive price (0641), and
+      # `organizations.tourism_tax_reg_no`, so an operator registered
+      # under the Tourism Tax Act had nowhere to record the number
+      # RMCD issued (0642).
+      #
+      # No database needed: it reads docs/api/openapi.json, which the
+      # step further down already refuses to let disagree with the
+      # schema.
+      - name: Check every column is written and read by something
+        run: python3 scripts/check_orphan_columns.py
+
+      # And the same question of the DOCUMENT TYPES, which is where a
+      # stale claim survived longest: `docs/gaps-against-autocount.md`
+      # named five types as having no screen while four of them had
+      # one, and called the fifth "the one that will be missed" when
+      # returning goods to a supplier is done by a purchase credit
+      # note. The gate refuses a type with no screen, a screen for a
+      # type the database has not -- which would be an insert refused
+      # by a check constraint rather than a sentence -- and an
+      # exemption that has rotted either way.
+      - name: Check every document type has a screen
+        run: python3 scripts/check_document_types.py
 
       # `0531`. STABLE is a promise that a function does not write, and
       # PostgREST believes it: such a function runs in a READ ONLY
@@ -591,6 +966,27 @@ jobs:
       # widget tests, passes the SQL tests, and then takes out a whole
       # screen in the browser — it lives inside a string literal, so this
       # is the only place the two halves meet.
+      # The gate's own assertions, and they run FIRST. It has had three
+      # holes — a `.select(` on the next line, a string split across
+      # lines, and a nested embed checked against the `.from()` table
+      # instead of its parent — and each time it reported the app clean
+      # while a screen answered PGRST201 on load. A gate with no test is
+      # a gate that reports what it reports. This needs no database.
+      - name: Check the embeds gate still catches what it claims to
+        run: python3 scripts/check_embeds_test.py
+
+      # Two SDK calls rotate the access token, and one of them does not
+      # say so: `mfa.listFactors()` reads like a getter and refreshes
+      # the session as its first line. From `initState` that is a loop —
+      # the refresh reloads the providers, the widget is re-created, and
+      # it asks again. Settings reloaded itself every two seconds until
+      # the token endpoint's rate limit returned 429 and GoTrue signed
+      # the person out.
+      - name: Check no widget rotates the token while being drawn
+        run: |
+          python3 scripts/check_token_rotators_test.py
+          python3 scripts/check_token_rotators.py
+
       - name: Check the client's embeds resolve against this schema
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
@@ -629,22 +1025,26 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_undocumented_writes.py "$DB"
 
-      # The seam `0618` came in through. A new function in `public` is
-      # executable by postgres and nobody else -- PostgreSQL grants
-      # PUBLIC on creation and 0165's event trigger revokes it -- so
-      # every caller needs an explicit grant in the migration, and
-      # forgetting one is invisible: PostgREST answers 42501, the edge
-      # function catches it with everything else, and the feature simply
-      # never happens.
+      # The seam `0618` came in through: a function whose caller cannot
+      # reach it, which is invisible everywhere else. PostgREST answers
+      # 42501, the edge function catches it with everything else, and
+      # the feature simply never happens.
       #
-      # It cost months. 0618 found ten functions whose callers could not
-      # reach them, including both RPCs `send-push` needs, which means
-      # no push notification had ever been delivered, and both halves of
-      # a customer paying an invoice they were sent. Then the pattern
-      # spread by being copied: 0612 and 0616 repeated it.
+      # 0618 found ten of them, including both RPCs `send-push` needs
+      # and both halves of a customer paying an invoice they were sent,
+      # and the pattern then spread by being copied: 0612 and 0616
+      # repeated it. Its diagnosis was read off `supabase start`, which
+      # is NOT the database those functions run in -- the hosted project
+      # has a default privilege granting `service_role` EXECUTE on
+      # everything created in `public`, so how much of that was a real
+      # outage is not established by the evidence 0618 had. The grants
+      # it wrote are right either way: a feature must not depend on a
+      # default nobody in this repository wrote down.
+      # `supabase/tests/_local_stack.sql` has the whole argument.
       #
       # `function_grants.sql` asserts the other direction -- nothing in
-      # `public` callable by nobody -- and cannot see the more specific
+      # `public` callable by nobody, and nothing reachable by a stranger
+      # that is not on a named list -- and cannot see the more specific
       # fault, a function granted to `authenticated` and called by the
       # service role or the reverse. This reads the CALL, so it can.
       #
@@ -793,6 +1193,26 @@ jobs:
       # themselves that way and none is a finding.
       - name: Check no initState invalidates a provider
         run: python3 scripts/check_initstate_ref.py
+
+      # And the last spinner. `core/skeletons.dart` sets out when an
+      # outline is honest and `AsyncView` is where that choice is made
+      # -- a screen that passes `skeleton:` gets bones, one that does
+      # not gets the circle, deliberately. This refuses the third case:
+      # a `loading:` arm that draws a `CircularProgressIndicator`
+      # itself, which is the same decision made where nothing records
+      # it. Four survived a hundred and thirty conversions that way.
+      # A `LinearProgressIndicator` is untouched -- forty-five of them,
+      # and a bar under a heading already drawn claims no shape.
+      - name: Check no loading arm draws a spinner
+        run: python3 scripts/check_loading_spinners.py
+
+      # The app icons, which nothing else looks at. The analyser does
+      # not read an asset catalogue, no test renders one, and a build
+      # succeeds with a wrong-sized image, half a rename, or a "dark"
+      # variant that is a copy of the light one. The first anybody
+      # hears is a home screen.
+      - name: Check the app icons are whole on both phones
+        run: python3 scripts/check_app_icons.py
 
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
@@ -1011,6 +1431,44 @@ jobs:
       - run: deno check supabase/functions/_shared/web_push_test.ts
       - run: deno test --allow-read supabase/functions/_shared/web_push_test.ts
 
+      # APNs, for the iPhones that do not go through Firebase. `0657`.
+      #
+      # `--allow-env` because the last assertion is about what
+      # `apnsFromEnv` does with four secrets that have to agree: all
+      # four, none, or the half-configured case that has to throw rather
+      # than quietly report iPhones as skipped.
+      #
+      # The signature is verified against its own public key rather than
+      # a stored vector, unlike web push above — because what is worth
+      # asserting is that Apple could verify it, not that this
+      # implementation still emits the same bytes. (It does: Deno's
+      # ECDSA is deterministic, which a surviving mutant proved and the
+      # comment that used to sit here denied.)
+      - run: deno check supabase/functions/_shared/apns_test.ts
+      - run: deno test --allow-env supabase/functions/_shared/apns_test.ts
+
+      # What the console may ask for when it starts an iOS release.
+      #
+      # `ios-release` holds a token that can dispatch a workflow which
+      # signs a build with a distribution certificate and hands it to
+      # Apple under this company's name. Everything it takes from a
+      # browser is checked against a list, and these run rather than
+      # only type-check for the same reason the two above do.
+      - run: deno check supabase/functions/ios-release/dispatch_test.ts
+      - run: deno test supabase/functions/ios-release/dispatch_test.ts
+
+      # Which of an iPhone's two Apple tokens a given notification may
+      # go to. `0658`.
+      #
+      # Pure, and executed rather than only type-checked, because every
+      # way of getting it wrong is silent: Apple refuses a misrouted
+      # push in a JSON body nobody reads, and a PushKit push delivered
+      # to an app with nothing to report it to CallKit gets that app
+      # killed by iOS and its registration revoked. What somebody would
+      # notice is that their phone stopped ringing.
+      - run: deno check supabase/functions/send-push/routing_test.ts
+      - run: deno test supabase/functions/send-push/routing_test.ts
+
       # Billplz, and the one thing that has to be right.
       #
       # `billplz-callback` is the only function deployed without
@@ -1112,6 +1570,28 @@ jobs:
       - run: deno check supabase/functions/_shared/ubl_test.ts
       - run: deno test supabase/functions/_shared/ubl_test.ts
 
+      # And the other direction, which this product has never had:
+      # `einvoice_*` is entirely outbound, and MyInvois makes every
+      # supplier send one. The audit's A17.
+      #
+      # Most of these assertions are a ROUND TRIP against the builder
+      # above — build a document from a known row, read it back, and
+      # every field has to survive. That needs no sample from LHDN, no
+      # credentials and no sandbox, and it fails the moment either side
+      # drifts. The rest are about a document somebody ELSE wrote:
+      # identifiers in a different order, numbers as strings, "NA"
+      # where an identifier should be, and a payload that is not a
+      # document at all. None of them may throw, because the screen
+      # that throws is the one that was going to explain what arrived.
+      - run: deno check supabase/functions/_shared/ubl_parse_test.ts
+      - run: deno test supabase/functions/_shared/ubl_parse_test.ts
+
+      # The join between the parser above and 0650's table: how the
+      # document arrives, what is stored, and whether it was addressed
+      # to this company at all.
+      - run: deno check supabase/functions/myinvois/receive_test.ts
+      - run: deno test supabase/functions/myinvois/receive_test.ts
+
       # And the client that carries it there. Nothing in this reaches
       # the network -- `fetch` is replaced, which is the only way to see
       # the request the client BUILDS rather than the reply it got, and
@@ -1193,6 +1673,36 @@ jobs:
       # every unsigned filing in the country.
       - run: deno check supabase/functions/myinvois/consolidations_test.ts
       - run: deno test supabase/functions/myinvois/consolidations_test.ts
+
+      # How many times a document LHDN will not accept is sent again.
+      # `einvoice_documents.retry_count` was a column nothing wrote to,
+      # while the bulk picker selects `invalid` -- the status of a
+      # document MyInvois has REJECTED, which is almost never
+      # transient. So the same document was rendered, signed and
+      # submitted on every sweep for ever, against an API that is
+      # rate-limited and counts submissions per taxpayer.
+      #
+      # The assertion with teeth is that the ceiling and the PICKER
+      # agree: `submit.ts` filters with `.lt("retry_count",
+      # MAX_ATTEMPTS)` and `isExhausted` draws the same line from the
+      # other side, so if one moves the sweep either gives up early or
+      # never gives up.
+      - run: deno check supabase/functions/myinvois/retry_test.ts
+      - run: deno test supabase/functions/myinvois/retry_test.ts
+
+      # What was in a submission, without what it weighed.
+      # `einvoice_submissions.request_payload` was a column nothing
+      # wrote to, beside a `response_payload` that was written -- so a
+      # rejected submission recorded the rejection and not the request
+      # that caused it.
+      #
+      # The assertion that matters is the one about what is NOT in it:
+      # a submission is up to 100 documents and 5 MB, the documents are
+      # already stored one per row, and a manifest that quietly
+      # included the base64 would make this the largest table in the
+      # database inside a year holding a second copy of them.
+      - run: deno check supabase/functions/myinvois/manifest_test.ts
+      - run: deno test supabase/functions/myinvois/manifest_test.ts
 
       # The forty lines that stand in for a Google SDK. A real RSA key
       # is generated in the test process and the assertion the function
@@ -1439,6 +1949,27 @@ jobs:
       # invisible. Both are pinned.
       - name: The call graph's own assertions
         run: python3 scripts/sql_call_graph_test.py
+      # The mutation harness's own, and specifically which SDK it
+      # reaches for. It prepended a hardcoded `/opt/flutter-sdk/bin`,
+      # and when the Flutter pin moved that path still existed and
+      # still held a working `flutter` -- just the wrong one. Every
+      # mutant then ran against a compiler this repository no longer
+      # uses, and the run reported the control killed along with
+      # everything else. A harness that lies is worse than no harness.
+      - name: The mutation harness's own assertions
+        run: python3 scripts/mutate_test.py
+
+      - name: The orphan-column sweep's own assertions
+        run: python3 scripts/check_orphan_columns_test.py
+
+      - name: The document-type gate's own assertions
+        run: python3 scripts/check_document_types_test.py
+
+      - name: The loading-spinner gate's own assertions
+        run: python3 scripts/check_loading_spinners_test.py
+
+      - name: The icon gate's own assertions
+        run: python3 scripts/check_app_icons_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py
@@ -1532,6 +2063,8 @@ jobs:
     concurrency:
       group: migrate-${{ github.ref }}
       cancel-in-progress: false
+    outputs:
+      superseded: ${{ steps.tip.outputs.superseded }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       # The database password from Settings → Database. The only new
@@ -1543,6 +2076,59 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Has this commit already been passed?
+      #
+      # This job serialises on a concurrency group, but a group decides
+      # that two runs do not OVERLAP -- not which of them goes first.
+      # Two pushes a minute apart can reach this step in either order,
+      # and when the newer one takes the slot first the older one finds
+      # migrations on the hosted project that its own checkout does not
+      # have. `supabase db push` refuses that, correctly and loudly:
+      # from where it stands a remote version with no local file is
+      # indistinguishable from somebody having DELETED a migration,
+      # which is the drift this job exists to catch.
+      #
+      # The refusal is right. Reporting it as a failure is not. It puts
+      # a red cross on a commit whose every test passed -- and
+      # `CLAUDE.md` makes a red run the project's real failure signal,
+      # so a red run that is not a failure spends the thing that rule
+      # buys. It happened to `0b5e900`, whose tests, iOS build and
+      # Android build all passed and which carried no migration at all.
+      #
+      # So the question is asked directly: is this still the tip of the
+      # branch? Anything else has been superseded, and a superseded run
+      # must not apply, must not deploy -- an older bundle laid over a
+      # newer one is a rollback nobody asked for -- and must not be
+      # reported as broken.
+      #
+      # The `deploy` job already reasons this way and says so, with
+      # `cancel-in-progress: true` and "a newer commit should supersede
+      # an in-flight deploy of an older one". This job had the same
+      # problem and none of that.
+      - name: Has this commit already been passed?
+        id: tip
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin "$GITHUB_REF_NAME"
+          tip="$(git rev-parse FETCH_HEAD)"
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "superseded=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Superseded by $tip. Not applying, not deploying."
+          {
+            echo "### Superseded"
+            echo
+            echo "\`$GITHUB_SHA\` is no longer the tip of"
+            echo "\`$GITHUB_REF_NAME\` -- \`$tip\` is."
+            echo
+            echo "Every check on this commit ran and is reported above."
+            echo "What it does not do is apply migrations or deploy, because"
+            echo "the newer commit has or will, and an older bundle laid over"
+            echo "a newer one is a rollback nobody asked for."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check the credentials are present
         id: creds
@@ -1684,7 +2270,9 @@ jobs:
       # empty database on every run, so a file that does not work in its
       # own position never reaches this job.
       - name: Apply
-        if: steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true'
+        if: >-
+          steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true' &&
+          steps.tip.outputs.superseded != 'true'
         # The pending list comes in through the environment rather than
         # `${{ }}` inside the script. An expression is pasted in as text
         # before bash reads the line, so a value carrying a backtick —
@@ -1721,7 +2309,9 @@ jobs:
       # only one of them is good news, so a table that parses to no rows
       # at all fails the job instead of passing it quietly.
       - name: Confirm the project is level
-        if: steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true'
+        if: >-
+          steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true' &&
+          steps.tip.outputs.superseded != 'true'
         run: |
           set -euo pipefail
           scripts/ci/retry.sh -o /tmp/after.txt supabase migration list --linked
@@ -1799,7 +2389,8 @@ jobs:
     needs: [flutter, database, edge, sfu, migrate]
     if: >-
       github.event_name != 'pull_request' &&
-      github.ref_name == github.event.repository.default_branch
+      github.ref_name == github.event.repository.default_branch &&
+      needs.migrate.outputs.superseded != 'true'
     concurrency:
       group: functions-${{ github.ref }}
       cancel-in-progress: false
@@ -1926,7 +2517,8 @@ jobs:
     needs: [flutter, database, edge, migrate]
     if: >-
       github.event_name != 'pull_request' &&
-      github.ref_name == github.event.repository.default_branch
+      github.ref_name == github.event.repository.default_branch &&
+      needs.migrate.outputs.superseded != 'true'
     # False, like the functions job. A cancelled upload is not obviously
     # atomic, and the recovery from half a deploy is another deploy —
     # which is exactly what cancelling prevented.
@@ -2121,7 +2713,8 @@ jobs:
       needs.flutter.result == 'success' &&
       needs.database.result == 'success' &&
       needs.migrate.result != 'failure' &&
-      needs.migrate.result != 'cancelled'
+      needs.migrate.result != 'cancelled' &&
+      needs.migrate.outputs.superseded != 'true'
     # On the job rather than the workflow. A newer commit should supersede
     # an in-flight deploy of an older one — but not cancel the older
     # commit's tests, which are the record of whether that commit was
@@ -2182,7 +2775,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         if: steps.creds.outputs.ready == 'true'
         with:
-          flutter-version: 3.32.0
+          flutter-version: 3.47.4
           channel: stable
           cache: true
 
@@ -2309,6 +2902,14 @@ jobs:
           cp deploy/vercel-output-config.json .vercel/output/config.json
           test -f .vercel/output/static/index.html
           test -f .vercel/output/static/canvaskit/canvaskit.wasm
+          # The phones' half of the security check. It ships in the web
+          # bundle because a Turnstile site key is scoped to domains and
+          # the widget refuses to render anywhere else -- so if this is
+          # missing from the deploy, Android and iOS cannot sign in at
+          # all and the web app is perfectly fine, which is the hardest
+          # direction to notice.
+          test -f .vercel/output/static/captcha.html
+          test -f .vercel/output/static/captcha.js
 
           # A marker the deploy can be checked against afterwards.
           # Written here rather than compiled into the bundle because it
@@ -2337,11 +2938,28 @@ jobs:
 
           # --yes so a first deploy into a fresh project cannot sit waiting
           # on a confirmation prompt that nobody is there to answer.
+          #
+          # Wrapped in `retry.sh` for the reason that script was written:
+          # CI must not cry wolf. Run 1951 went red here on `Error: fetch
+          # failed` AFTER the upload had finished — one lost packet
+          # talking to Vercel's API, on a commit whose diff was Swift and
+          # Dart. Eleven of twelve jobs had already passed.
+          #
+          # Retrying a deploy is safe in the way that matters, and it is
+          # worth writing down because it is NOT safe in the way `db
+          # push` is. A retry does not resume the first attempt, it makes
+          # a second deployment — but from the same prebuilt output of
+          # the same commit, so the two are identical and the alias ends
+          # up on whichever succeeded. The cost is a duplicate row in the
+          # deployments list, which is cheaper than a red branch nobody
+          # reads.
           if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
-            url="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")"
+            url="$(scripts/ci/retry.sh -o /tmp/vercel-url.txt \
+                     vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")"
             echo "### Deployed to production" >> "$GITHUB_STEP_SUMMARY"
           else
-            url="$(vercel deploy --prebuilt --yes --token="$VERCEL_TOKEN")"
+            url="$(scripts/ci/retry.sh -o /tmp/vercel-url.txt \
+                     vercel deploy --prebuilt --yes --token="$VERCEL_TOKEN")"
             echo "### Preview deploy" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "$url" >> "$GITHUB_STEP_SUMMARY"

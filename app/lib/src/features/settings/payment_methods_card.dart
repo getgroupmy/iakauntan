@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -58,7 +59,16 @@ class PaymentMethodsCard extends ConsumerWidget {
             AsyncView(
               value: methods,
               onRetry: () => ref.invalidate(paymentMethodsProvider),
-              loading: const LinearProgressIndicator(),
+              // Three lines and nothing at the front: the name, what
+              // kind of payment it is with its charge, and the account
+              // the charge is posted to.
+              skeleton: const CardRowsSkeleton(
+                rows: 3,
+                leading: false,
+                lines: 3,
+                trailing: 1,
+                rowGap: 16,
+              ),
               builder: (list) => list.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
@@ -270,7 +280,7 @@ class PaymentMethodDialogState extends ConsumerState<PaymentMethodDialog> {
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String?>(
                 key: const ValueKey('payment-method-mode'),
-                value: _mode,
+                initialValue: _mode,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Reports on an e-Invoice as',

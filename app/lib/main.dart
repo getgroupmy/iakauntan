@@ -4,10 +4,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'src/app.dart';
 import 'src/core/env.dart';
+import 'src/core/splash.dart';
 import 'src/core/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // `0653`. Stamped here, before anything slow, because the splash is
+  // held for what is LEFT of five seconds from this moment rather than
+  // for five seconds from the first frame. `Supabase.initialize` below
+  // waits up to fifteen seconds, and a cold start that showed the
+  // system splash, then this one for a further five, would be the
+  // longest wait on the slowest network -- which is exactly backwards.
+  markSplashStart();
 
   // Refuse to start on a build that was configured with nothing.
   //

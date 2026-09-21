@@ -581,4 +581,133 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0639: the department a claimed cost belongs to
+--
+-- `expenses` carried a `project_code` and no `department_code`, so a
+-- cost claimed on an expense reached `gl_lines` with a null department
+-- however carefully it had been coded -- and the P&L's department
+-- filter answered confidently while omitting every one of them.
+--
+-- A department whose spending arrived that way read as a department
+-- that had UNDERSPENT. That is the worst shape a reporting hole can
+-- take: an error that reads as an error gets fixed, and this one read
+-- as good news.
+--
+-- What is asserted is the whole path, header and line, plus the two
+-- legs that must NOT carry it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.split_org('Claimed Costs Sdn Bhd');
+  v_bank uuid;
+  v_exp uuid;
+  v_entry uuid;
+  v_tax_acct uuid;
+begin
+  insert into public.departments (org_id, code, name)
+  values (v_org, 'OPS', 'Operations'), (v_org, 'MKT', 'Marketing');
+
+  select id into v_bank from public.bank_accounts where org_id = v_org
+   limit 1;
+  if v_bank is null then
+    insert into public.bank_accounts (org_id, name, account_id)
+    values (v_org, 'Current', (select id from public.accounts
+                                where org_id = v_org and code = '1110'))
+    returning id into v_bank;
+  end if;
+
+  -- A whole claim for one department, which is the common case: a trip.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-D1', '6100',
+                              100, 0, 100, v_bank);
+  update public.expenses set department_code = 'OPS' where id = v_exp;
+  v_entry := public.post_expense(v_exp);
+
+  perform pg_temp.check_eq('the claimed cost carries its department',
+    (select department_code from public.gl_lines
+      where entry_id = v_entry
+        and account_id = (select id from public.accounts
+                           where org_id = v_org and code = '6100')),
+    'OPS');
+
+  -- And the bank leg does NOT. A payment out of an account is not a
+  -- departmental cost, and putting one on it would make every
+  -- department's figures include the cash it spent as well as the
+  -- expense that spent it.
+  perform pg_temp.check_true('but the bank leg does not',
+    (select department_code is null from public.gl_lines
+      where entry_id = v_entry and credit > 0));
+
+  -- A split claim, where each line answers for itself. The line wins
+  -- over the header, the same way `project_code` already does.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-D2', '6100',
+                              300, 0, 300, v_bank);
+  update public.expenses set department_code = 'OPS' where id = v_exp;
+  perform public.set_expense_split(v_exp, jsonb_build_array(
+    jsonb_build_object(
+      'account_id', (select id from public.accounts
+                      where org_id = v_org and code = '6100'),
+      'amount', 200, 'department_code', 'MKT'),
+    jsonb_build_object(
+      'account_id', (select id from public.accounts
+                      where org_id = v_org and code = '6200'),
+      'amount', 100)));
+  v_entry := public.post_expense(v_exp);
+
+  perform pg_temp.check_eq('a split line overrides the header',
+    (select department_code from public.gl_lines
+      where entry_id = v_entry and debit = 200),
+    'MKT');
+
+  perform pg_temp.check_eq('and a line that names none falls back to it',
+    (select department_code from public.gl_lines
+      where entry_id = v_entry and debit = 100),
+    'OPS');
+
+  -- So one claim reaches two departments, which is the reason the
+  -- column is on the line as well as the header.
+  perform pg_temp.check_eq('one claim, two departments',
+    (select count(distinct department_code)::int from public.gl_lines
+      where entry_id = v_entry and debit > 0), 2);
+
+  -- Input tax is not a departmental cost either. Asserted separately
+  -- from the bank leg because it is a DEBIT, so a rule written as
+  -- "only debits carry a department" would pass the test above and
+  -- still double-count here.
+  select id into v_tax_acct from public.accounts
+   where org_id = v_org and code = '1410';
+  v_exp := pg_temp.an_expense(v_org, 'EXP-D3', '6100',
+                              100, 6, 106, v_bank);
+  update public.expenses set department_code = 'OPS' where id = v_exp;
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_true('and reclaimed tax carries no department',
+    (select department_code is null from public.gl_lines
+      where entry_id = v_entry and account_id = v_tax_acct));
+
+  -- Null stays null. Most claims have no departmental meaning, and a
+  -- dimension that has to be filled in is a dimension people type
+  -- anything into.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-D4', '6100',
+                              40, 0, 40, v_bank);
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_eq('a claim may name no department at all',
+    (select count(*)::int from public.gl_lines
+      where entry_id = v_entry and department_code is not null), 0);
+
+  -- The project is untouched by any of this. Both dimensions are
+  -- independent, and a claim can carry one, the other or both.
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-7', 'Job seven');
+  v_exp := pg_temp.an_expense(v_org, 'EXP-D5', '6100',
+                              70, 0, 70, v_bank);
+  update public.expenses
+     set department_code = 'MKT', project_code = 'JOB-7'
+   where id = v_exp;
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_eq('and carries both dimensions at once',
+    (select project_code || '/' || department_code from public.gl_lines
+      where entry_id = v_entry and debit = 70),
+    'JOB-7/MKT');
+end $$;
+
 rollback;

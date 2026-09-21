@@ -22,17 +22,29 @@ misses.
 
 It has already cost months. `0618` found ten functions whose callers
 could not reach them, including both RPCs `send-push` needs to read its
-recipients and retire dead tokens, which means no push notification had
-ever been delivered; and both halves of a customer paying an invoice
-they were sent. The pattern then spread by being copied: `0612` and
-`0616` repeated it in migrations written two days and one day before
-0618.
+recipients and retire dead tokens, and both halves of a customer paying
+an invoice they were sent. The pattern then spread by being copied:
+`0612` and `0616` repeated it in migrations written two days and one
+day before 0618.
+
+0618 said of those ten that no push notification had ever been
+delivered. That went further than its evidence: it measured `supabase
+start`, and the functions run in the linked hosted project, which
+carries a default privilege granting `service_role` EXECUTE on
+everything created in `public`. Whether the outage happened is not
+settled here and does not need to be -- a feature that works only
+because of a default nobody in this repository wrote down is a feature
+waiting to stop. The explicit grants are the fix either way.
+`supabase/tests/_local_stack.sql` carries the argument and the three
+hosted observations behind it.
 
 `function_grants.sql` asserts the other direction -- that nothing in
-`public` is callable by nobody. That catches a function with no grant at
-all and cannot catch the more specific fault: a function granted to
-`authenticated` and called by the service role, or the reverse. This
-does, because it reads the CALL rather than the catalog alone.
+`public` is callable by nobody, and that nothing is reachable by a
+stranger unless it is on a named list. That catches a function with no
+grant at all and cannot catch the more specific fault: a function
+granted to `authenticated` and called by the service role, or the
+reverse. This does, because it reads the CALL rather than the catalog
+alone.
 
 ## What is checked
 

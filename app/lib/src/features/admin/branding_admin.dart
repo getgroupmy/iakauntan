@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
@@ -72,6 +73,10 @@ class _BrandingAdminTabState extends ConsumerState<BrandingAdminTab> {
     return AsyncView(
       value: page,
       onRetry: () => ref.invalidate(landingPageAdminProvider),
+      // Fields rather than rows: this tab is an editor for one record
+      // — a wordmark, two logos, two colours — and the boxes are drawn
+      // before the record arrives to fill them.
+      skeleton: const FormSkeleton(fields: 4),
       builder: (row) {
         final r = row ?? const <String, dynamic>{};
         return SingleChildScrollView(

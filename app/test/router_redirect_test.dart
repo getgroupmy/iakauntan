@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/router.dart';
@@ -161,6 +162,178 @@ void main() {
     });
   });
 
+  group('what counts as the app', () {
+    test('a phone is', () {
+      for (final p in [TargetPlatform.android, TargetPlatform.iOS]) {
+        debugDefaultTargetPlatformOverride = p;
+        expect(runningInTheApp, isTrue, reason: '$p');
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    test('and a desktop build is not', () {
+      // Named as the two platforms rather than as "not web", so a
+      // Linux or Windows build keeps the front page. There is no
+      // desktop build today; there is also no reason for one to lose a
+      // page because of a rule about app stores.
+      for (final p in [
+        TargetPlatform.linux,
+        TargetPlatform.macOS,
+        TargetPlatform.windows,
+      ]) {
+        debugDefaultTargetPlatformOverride = p;
+        expect(runningInTheApp, isFalse, reason: '$p');
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    // NOT ASSERTED, and worth saying so rather than leaving a gap that
+    // looks like coverage: the `!kIsWeb` half of `runningInTheApp`.
+    //
+    // It is the half that matters most. Flutter web in Safari on an
+    // iPhone answers `TargetPlatform.iOS` to `defaultTargetPlatform`
+    // -- that getter is about which look and feel to adopt, not about
+    // how the code was compiled -- so without `!kIsWeb` the shopfront
+    // would disappear for every visitor on a phone browser, which is
+    // most of them.
+    //
+    // `flutter test` runs on the VM, where `kIsWeb` is a const false
+    // and the compiler folds the whole condition away. Removing it
+    // here changes nothing that any test in this file can observe, and
+    // a mutation run says so. What would catch it is `flutter test
+    // --platform chrome`, which this repository does not run.
+  });
+
+  group('the app has no shopfront', () {
+    String? app(
+      String path, {
+      bool signedIn = false,
+      bool? hasOrg = true,
+      bool atCompanyDoor = false,
+      String? landing,
+    }) => routeFor(
+      path: path,
+      signedIn: signedIn,
+      recovering: false,
+      hasOrg: hasOrg,
+      isPlatformAdmin: false,
+      nativeApp: true,
+      atCompanyDoor: atCompanyDoor,
+      landingRoute: landing,
+    );
+
+    test('so it opens at the sign-in form', () {
+      // The whole request, in one line. On the web `/` is the landing
+      // page and the form is one button away; nobody installs an
+      // accounting system from an app store to read about accounting
+      // systems.
+      expect(app('/'), '/signin');
+    });
+
+    test('and the web still gets its front page', () {
+      // The other half, and the one that would be quietly lost. This
+      // is a redirect on the address everybody types.
+      expect(go('/'), isNull);
+      expect(go('/', signedIn: true), isNull);
+    });
+
+    test('the old address goes the same way and not through the new one', () {
+      // `/welcome` redirects to `/` on the web, and on a phone that
+      // would be a hop through a page that only exists to redirect
+      // again. Said once.
+      expect(app('/welcome'), '/signin');
+    });
+
+    test('signing out leaves somebody at the form rather than a shopfront', () {
+      // On the web this answer is `/`. In the app there is no `/` to
+      // be at, and answering `/` would send them through a marketing
+      // page for the product they have open.
+      expect(app('/dashboard'), '/signin');
+      expect(app('/settings'), '/signin');
+    });
+
+    test('and it defers to the door rule rather than overriding it', () {
+      // `atCompanyDoor` is a fact about a browser's address bar, and a
+      // build in an app store has none -- `workspaceLookupProvider`
+      // answers `platform` for a native build by construction, so this
+      // combination does not arise today.
+      //
+      // Asserted anyway, and for what it says about the SHAPE of the
+      // rule rather than about the case: the app's `/` is answered by
+      // asking what the door itself answers, so if this app ever does
+      // learn whose address it is, one rule decides and not two. A
+      // flat `/signin` here would have been a second opinion that
+      // silently outranked the first.
+      expect(app('/', atCompanyDoor: true), '/login');
+    });
+
+    test('somebody already signed in reaches their books, not the form', () {
+      // In one hop, which is the assertion. Answering `/signin` here
+      // and letting that redirect on again put a platform operator
+      // through four screens' worth of rebuilds -- `/`, `/signin`,
+      // `/dashboard`, `/admin` -- and the sweep below refused it.
+      expect(app('/', signedIn: true), '/dashboard');
+      expect(app('/welcome', signedIn: true), '/dashboard');
+      expect(app('/', signedIn: true, landing: '/pos'), '/pos');
+    });
+
+    test('and an operator with no company of their own reaches the console', () {
+      // The case that found the extra hops. Platform staff belong to
+      // no organization at all, so `/signin` answers `/dashboard` and
+      // `/dashboard` answers `/admin` -- three screens on the web, and
+      // four in the app until `/` stopped answering `/signin` and
+      // started answering what `/signin` would have.
+      //
+      // Followed rather than asserted one step at a time, because the
+      // thing that matters is where somebody who opens the app ends
+      // up, not which rule did it.
+      var at = '/';
+      final seen = <String>{at};
+      for (var hop = 0; hop < 5; hop++) {
+        final next = routeFor(
+          path: at,
+          signedIn: true,
+          recovering: false,
+          hasOrg: false,
+          isPlatformAdmin: true,
+          nativeApp: true,
+        );
+        if (next == null) break;
+        at = next;
+        seen.add(at);
+      }
+      expect(at, '/admin');
+      expect(seen, hasLength(lessThanOrEqualTo(3)), reason: '$seen');
+    });
+
+    test('and the form itself is left alone', () {
+      // The rule is about `/`. A visitor who is already at the door
+      // must not be moved, or the app opens on a screen it immediately
+      // navigates away from.
+      expect(app('/signin'), isNull);
+    });
+
+    test('the pages read before signing in are still reachable', () {
+      // Terms, privacy and contact are linked from the form itself,
+      // and a policy you have to sign in to read is not a policy. The
+      // app rule must not swallow them.
+      for (final path in ['/terms', '/privacy', '/contact']) {
+        expect(app(path), isNull, reason: path);
+        expect(app(path, signedIn: true), isNull, reason: path);
+      }
+    });
+
+    test('and so are the four pages that need no account at all', () {
+      // A director signing one resolution, a customer opening their
+      // own invoice, a diner with a QR sticker. None of them has an
+      // account and none of them is going to make one.
+      for (final path in ['/sign/abc', '/share/abc', '/menu/abc',
+                          '/tax-details/abc']) {
+        expect(app(path), isNull, reason: path);
+      }
+    });
+  });
+
   test('no visitor can be sent round in a circle', () {
     // The assertion this file exists for. Every path, under every
     // combination of what can be known, followed until it settles.
@@ -188,6 +361,12 @@ void main() {
       for (final recovering in [true, false]) {
         for (final hasOrg in [true, false, null]) {
           for (final admin in [true, false, null]) {
+            // The app is swept too, and it is the surface most able to
+            // brick itself: `/` is where the router starts and in the
+            // app it is never a destination, so the rule that moves
+            // somebody off it is exactly the shape of rule that can
+            // send them round.
+            for (final native in [true, false]) {
             for (final start in paths) {
               var at = start;
               final seen = <String>{at};
@@ -198,6 +377,7 @@ void main() {
                   recovering: recovering,
                   hasOrg: hasOrg,
                   isPlatformAdmin: admin,
+                  nativeApp: native,
                 );
                 if (next == null) break;
                 expect(
@@ -206,7 +386,7 @@ void main() {
                   reason:
                       'loop from $start: $seen — signedIn: $signedIn, '
                       'recovering: $recovering, hasOrg: $hasOrg, '
-                      'admin: $admin',
+                      'admin: $admin, native: $native',
                 );
                 at = next;
               }
@@ -214,8 +394,10 @@ void main() {
               expect(
                 seen.length,
                 lessThanOrEqualTo(3),
-                reason: 'from $start it took ${seen.length} hops: $seen',
+                reason: 'from $start it took ${seen.length} hops: $seen '
+                    '(native: $native)',
               );
+            }
             }
           }
         }

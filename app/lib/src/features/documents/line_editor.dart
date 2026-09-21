@@ -1210,7 +1210,7 @@ class _TaxField extends StatelessWidget {
         for (final t in taxCodes)
           PickerOption<String>(
             value: t.id,
-            label: t.rate == 0 ? t.code : '${t.code} (${Fmt.percent(t.rate)})',
+            label: t.pickerLabel,
             sublabel: t.name,
             keywords: [t.name],
           ),
@@ -1223,10 +1223,15 @@ class _TaxField extends StatelessWidget {
       allowEmpty: true,
       emptyLabel: 'No tax',
       onChanged: (v) {
-        final tax = taxCodes.where((t) => t.id == v).firstOrNull;
-        line
-          ..taxCodeId = v
-          ..taxRate = tax?.rate ?? 0;
+        // The other moment `app.calc_document_line` resolves a code:
+        // changing it on a line is a new choice. Through the shared
+        // function so that this and `applyItemToLine` cannot answer it
+        // differently — which is exactly how the tax code went missing
+        // from the narrow card once already.
+        applyTaxCodeToLine(
+          line,
+          taxCodes.where((t) => t.id == v).firstOrNull,
+        );
         onChanged();
       },
     );

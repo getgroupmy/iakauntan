@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import '../shared/attachments_card.dart';
 import 'expiring_documents.dart';
 
 /// The three lists that hang off an employee and had nowhere to live:
@@ -226,6 +228,10 @@ class _Section extends ConsumerWidget {
         AsyncView(
           value: rows,
           onRetry: () => ref.invalidate(employeeRowsProvider(arg)),
+          // Two, and deliberately few. This block is reused for
+          // dependants, qualifications and the rest, and every one of
+          // them is a short list under a heading inside a longer page.
+          skeleton: const ListSkeleton(rows: 2, leading: false),
           builder: (list) => list.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: Space.sm),
@@ -373,7 +379,7 @@ class _DependantDialogState extends ConsumerState<_DependantDialog> {
               ),
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String>(
-                value: _relationship,
+                initialValue: _relationship,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Relationship'),
                 items: const [
@@ -545,7 +551,7 @@ class _DocumentDialogState extends ConsumerState<_DocumentDialog> {
               ),
               const SizedBox(height: Space.md),
               DropdownButtonFormField<String>(
-                value: _type,
+                initialValue: _type,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Kind'),
                 items: const [
@@ -583,6 +589,32 @@ class _DocumentDialogState extends ConsumerState<_DocumentDialog> {
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'Notes'),
               ),
+              // The document itself, which this section tracked the
+              // expiry of and had no way to hold. `employee_documents`
+              // carries a `file_path` column from `0025` that nothing
+              // ever wrote to; the attachments module is how every
+              // other file in this product reaches a row, and the
+              // database already knew about this one —
+              // `app.can_read_attachment` names `employee_documents`
+              // explicitly, keeps the ledger audience out ("an
+              // accounts clerk does not get to read a passport") and
+              // lets the employee it is about read their own. All of
+              // that existed and no screen had placed the card.
+              //
+              // Only on a SAVED row. An attachment hangs off a record
+              // id, and there is no id until Save — offering the box
+              // first would be offering somewhere to put a file that
+              // has nowhere to go.
+              if (widget.row != null) ...[
+                const SizedBox(height: Space.lg),
+                AttachmentsCard(
+                  key: const ValueKey('employee-document-files'),
+                  table: 'employee_documents',
+                  recordId: widget.row!['id'] as String,
+                  title: 'The document',
+                  subtitle: 'The scan or photograph of it',
+                ),
+              ],
             ],
           ),
         ),

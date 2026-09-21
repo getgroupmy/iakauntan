@@ -1477,6 +1477,10 @@ class _Footer extends StatelessWidget {
 
     link('privacy', 'Privacy', content.privacyUrl);
     link('terms', 'Terms', content.termsUrl);
+    // `0651`. Below Terms, and with no column to fall back to: there
+    // has never been a `termsOfServiceUrl`, so this appears only once
+    // somebody has written and published the page here.
+    link('terms-of-service', 'Terms of Service', null);
     link('contact', 'Contact us', null);
 
     // The same 760 the bar and the hero fold at, read from the real

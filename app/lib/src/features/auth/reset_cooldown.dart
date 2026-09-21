@@ -181,3 +181,39 @@ bool looksUnknownAddress({String? code, String? message}) {
 const resetNoAccount =
     'We have no account for that address. Check it for a typo, or '
     'create an account.';
+
+/// Whether "Continue with Google" is drawn — `0645`.
+///
+/// Two conditions, and the second is not a preference. The operator has
+/// to have switched it on, AND this has to be the web build:
+/// `signInWithOAuth` comes back through a `redirectTo`, and neither
+/// platform registers a URL scheme — `AndroidManifest.xml` has none in
+/// its intent filters and `Info.plist` has no `CFBundleURLSchemes` — so
+/// on a phone the provider has nowhere to send somebody back to.
+/// Drawing the button there would be a way out of the app with no way
+/// back in.
+///
+/// A function rather than `switch && kIsWeb` inline, so the rule can be
+/// asserted on both surfaces without a web build. When a scheme is
+/// registered this is the one place that changes.
+bool googleButtonShown({required bool offered, required bool onWeb}) =>
+    offered && onWeb;
+
+/// What it says when the provider hands back a refusal.
+///
+/// The first one everybody meets is the provider not being enabled in
+/// the Supabase dashboard, and GoTrue's own sentence for it names
+/// neither a dashboard nor a provider — so somebody reads an error
+/// about a "provider" and has nowhere to go with it.
+///
+/// The server's words are kept where there are any, because a refusal
+/// this does not know about is better read than replaced. They are
+/// added to rather than overwritten.
+String googleProblem(String? fromServer) {
+  const advice =
+      'Signing in with Google is not available. If you are the operator, '
+      'enable Google in the Supabase dashboard under Authentication → '
+      'Providers and add its client ID and secret.';
+  final said = (fromServer ?? '').trim();
+  return said.isEmpty ? advice : '$said. $advice';
+}

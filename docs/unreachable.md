@@ -1246,6 +1246,169 @@ The enum sweeps ask which *values* of a column are unreachable. This
 one asks the same question of the column itself, and it turns out to
 have two distinct answers that need telling apart.
 
+### It is a gate now: `scripts/check_orphan_columns.py`
+
+Described here for months as a thing to run by hand, which is the
+failure this whole file is about. Run as a gate it found twenty columns
+that nothing at all mentions, and two of them were the valuable case
+above — the engine reading something nothing could set:
+
+- `tax_codes.is_inclusive`, a column since `0003`.
+  `app.calc_document_line` could always compute a tax-inclusive line
+  and nothing ever set the flag, so **no document in this product
+  could be raised at a price that includes its tax**. Closed by `0641`.
+- `organizations.tourism_tax_reg_no`, a column since `0001`, written on
+  the line after `sst_registration_no`. Its neighbour is asked for at
+  onboarding, edited in settings, printed on every PDF, shown to the
+  customer and sent to LHDN; this one had no form, no print and no
+  payload, so **an operator registered under the Tourism Tax Act had
+  nowhere to record the number RMCD issued**. Closed by `0642`.
+
+The mechanical part still cannot tell the two cases apart, which is
+what this section says and remains true. So the script does not try:
+every one of the thirteen columns it clears is named in one of four
+lists in its own source, with the reason, and the lists are the finding
+rather than the exemption —
+
+- `DELIBERATE` (3) — decided against, with the decision written down.
+  `organizations.registered_country_code` is the clean one: a
+  registered office is in Malaysia by statute (Companies Act 2016
+  s.46), so the column can only ever hold its default and a country
+  field beside the registered address would offer a choice that does
+  not exist.
+- `SUPERSEDED` (4) — the vestigial half of a mechanism something else
+  does properly. `accounts.opening_balance_date` is the one to read:
+  the date of an opening balance is on the journal
+  `import_opening_balances` posts, and meanwhile six statutory reports
+  still add `accounts.opening_balance` into their opening figure
+  **dateless**, whatever period was asked for.
+
+  An earlier version of this section said the demo seeds write that
+  figure. **They do not** — the `opening_balance` they write is on
+  `bank_accounts`, a different table, where it is read correctly.
+  Nothing writes the one on `accounts`. What made it worth `0643`
+  rather than a note is that anybody *could*: `authenticated` held
+  UPDATE on the table and the policy asks only `app.can_post`, so a
+  PATCH straight at PostgREST was accepted from whoever may post a
+  journal — and the amount would sit in the opening figure of every
+  period, in no journal, with the trial balance no longer balancing
+  and no entry to point at. A trigger scoped to the API roles closed
+  it; the six reports are untouched, because the term is provably
+  zero while nothing can write it.
+- `WHOLE_TABLE_UNREACHED` — the column is not the finding, the table
+  is. Two were listed: notes attachable to anything, and MBRS
+  disclosures.
+
+  `public.notes` came off the list, and what it turned up was worse
+  than a missing screen. Its four policies were the naive version —
+  `is_org_member` to read, `can_write` to edit or **delete anybody's**
+  — written before the question had been thought through. A note is
+  filed against a ROW, so a note on an `employee_documents` row
+  ("passport expires in March") would have been readable by every
+  member of the company, and one on a `payslips` row too. That is the
+  exact hole `app.can_read_attachment` exists to close for the file
+  itself. `0644` replaced all four before anything is built on them:
+  reading asks the same question the row asks, writing asks
+  `app.can_attach_to`, editing asks authorship as well, and
+  `created_by` is set by a trigger from `auth.uid()` and never moves.
+  Nothing was lost, because the table is empty everywhere — nothing
+  could write to it. `notes.sql` proves the passport case, with the
+  clerk who IS an org member as the specimen.
+
+  The table still has no screen, and whether it should is a real
+  question both ways: `activities` already carries a CRM timeline and
+  many tables carry their own `notes` text column, so pinning a note
+  is not a feature until there are notes.
+
+  `public.fs_disclosures` is the one left, and it turned out not to be
+  a missing screen either. **There are no disclosure codes to key it
+  on.** `mbrs_elements` seeds `sofp` (16 elements) and `soploci` (9)
+  and nothing else, so of the five members of `app.fs_statement`
+  three — `socie`, `socf` and `disclosure` — have no element at all;
+  the word `'disclosure'` appears exactly once in `0171`, in the enum
+  that declares it. Its policies are properly module-gated, so unlike
+  `notes` there was no hole to close. Closing it needs the taxonomy
+  elements for those statements, which `0171` already says must come
+  from "the mTool taxonomy in use before the first live lodgement" —
+  the same blocker as `mbrs_elements.taxonomy_version`.
+
+  What *did* close was the silence. `fs_prepare` iterates
+  `mbrs_elements`, `fs_freeze` stores what it returns, and the filing
+  screen drew a section per statement **present** — so a preparer read
+  two sections, exported them and was three statements short at the
+  counter, with a `'Disclosures'` heading sitting ready in the code
+  that would never appear. `missingStatementsNote` names what is not
+  in the export and says a lodgement carries all five. It deliberately
+  does not claim WHICH of the two reasons applies — no element loaded,
+  or no figures for this company — because the export cannot tell
+  those apart, and it names both ways out instead.
+- `KNOWN_GAPS` — a ratchet, in the shape `check_unreachable.py` uses
+  for the providers nobody had drawn. **The number goes down.** It
+  started at four and is **empty**; all four were closed rather than
+  kept, and the gate's own source records each one. The one with teeth
+  was `einvoice_documents.retry_count`: `submit.ts` and
+  `consolidations.ts` wrote `last_attempt_at` at every failure site and
+  never touched the count, while `0007` indexes
+  `(org_id, status, last_attempt_at)` as the retry picker — so a
+  document that could never succeed was re-submitted on every sweep,
+  against an API that is rate-limited and counts submissions.
+  `myinvois/retry.ts` stops the sweep at five now, never a person.
+
+Two things closing those four turned up that the sweep could not have
+reported, and both were worse than the column that led to them:
+
+- **A rejected e-Invoice's UBL was discarded.** `submit.ts` stored
+  `ubl_payload` on the accepted path and nothing on the rejected one,
+  so of every document LHDN ever formed an opinion about, the only one
+  whose bytes were thrown away was the one that was refused. The
+  rejection named a field on a document nobody could look at.
+- **`corp_entities.phone`**, unreachable exactly as
+  `correspondence_email` was and invisible to the sweep. See the
+  limitation below.
+
+The lesson both times: **read the row beside a column the sweep
+reports.** Two of the four closures found a second fault that way, and
+neither would have been found by fixing the reported column alone.
+
+Some decisions this file records are not in those lists, because the
+gate does not report the column at all: a mention in ANOTHER
+migration's prose counts. `bank_transactions.value_date` is the
+specimen — `0369` explains at length why writing it to no consequence
+is the failure rather than a smaller version of the fix, and that
+paragraph is itself why the sweep clears it. So is
+`employees.eis_no`, which stays unwritten because PERKESO issues one
+number for SOCSO and EIS and `socso_no` is it.
+
+Two things the gate cannot see, both written in its header and both
+found by breaking it on purpose:
+
+- **A column its own later migration names, and nothing else.** Revert
+  the Dart half of `0642` and this still passes, because `0642` names
+  `tourism_tax_reg_no`. Proved, not assumed;
+  `check_orphan_columns_test.py` carries a named assertion for each of
+  the two columns the sweep found, so a revert is caught by something.
+- **A column whose name is an ordinary word.**
+  `corp_entities.phone` was unreachable in exactly the way
+  `corp_entities.correspondence_email` was — declared on the next line
+  of `0061`, asked for by nothing — and the sweep cannot see it,
+  because a name is matched as a word across the whole tree and
+  `phone` appears in a hundred places with nothing to do with that
+  table. Nor can it see `notes`, `status`, `code` or `name`. Matching
+  `table.column` instead does not help: almost nothing writes the
+  pair, since a `select *` names no column and `_blank('phone')` names
+  no table. So the sweep finds the unusually-named half, and the way
+  to find the rest is to **read the row beside a column it does
+  report**. That is how `phone` was found.
+- **Its own documentation, if you let it read it.** The first version
+  searched `docs` and `scripts` too. `scripts` holds the gate itself,
+  whose exemption lists name every column they clear as a string
+  literal — so naming a column in the list gave it a second mention
+  and it would never have been reported again. Ten of thirteen entries
+  were exempting nothing and three real orphans were hidden by prose
+  elsewhere, and the gate reported success. The same trap
+  `check_web_plugin_registrant.py` and `check_android_compile_sdk.py`
+  each fell into, one layer out.
+
 ```python
 # Every column of every base table, against app/lib and the edge
 # functions, and against the migrations with the declaration blanked

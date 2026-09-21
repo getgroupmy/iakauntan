@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 // `RepoPos` is an extension, and a Dart extension is only in scope
 // where its declaring library is imported.
@@ -132,6 +133,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       ),
       body: AsyncView<List<Map<String, dynamic>>>(
         value: registers,
+        skeleton: const ListSkeleton(rows: 3, subtitle: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -182,6 +184,7 @@ class _Stations extends ConsumerWidget {
     final stations = ref.watch(posKitchenStationsProvider(outletId));
     return AsyncView<List<Map<String, dynamic>>>(
       value: stations,
+      skeleton: const ListSkeleton(rows: 6, leading: false, subtitle: false),
       builder: (rows) {
         if (rows.isEmpty) {
           return const EmptyState(
@@ -246,6 +249,7 @@ class _Board extends ConsumerWidget {
     final board = ref.watch(kitchenDisplayProvider(stationId));
     return AsyncView<List<Map<String, dynamic>>>(
       value: board,
+      skeleton: const CardRowsSkeleton(rows: 4, trailing: 1),
       builder: (tickets) {
         if (tickets.isEmpty) {
           return const EmptyState(

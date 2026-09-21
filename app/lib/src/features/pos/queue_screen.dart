@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -227,6 +228,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: outlets,
         onRetry: () => ref.invalidate(posOutletsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (shops) {
           if (shops.isEmpty) {
             return const EmptyState(
@@ -272,6 +274,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                 child: AsyncView<List<Map<String, dynamic>>>(
                   value: queue,
                   onRetry: () => ref.invalidate(posQueueProvider(outlet)),
+                  skeleton: const ListSkeleton(rows: 6),
                   builder: (rows) {
                     if (rows.isEmpty) {
                       return const EmptyState(

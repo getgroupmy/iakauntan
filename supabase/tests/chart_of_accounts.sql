@@ -328,4 +328,194 @@ begin
     'and an outsider cannot touch another company''s chart', not v_took);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0643: an opening balance is a journal, not a figure on an account
+--
+-- `accounts.opening_balance` is added into the opening figure of six
+-- statutory reports -- trial balance, general ledger, balance sheet,
+-- cash flow, changes in equity, group trial balance -- signed by the
+-- account's type and read WITHOUT A DATE, whatever period was asked
+-- for. `accounts.opening_balance_date` sits on the next line of `0003`
+-- and nothing has ever read it.
+--
+-- Nothing writes the figure either. What made it worth a guard is that
+-- ANYBODY COULD: `authenticated` holds UPDATE on the table and the
+-- policy asks only `app.can_post`, so a PATCH straight at PostgREST
+-- was accepted from whoever may post a journal -- and then the amount
+-- is in the opening figure of every period including ones before the
+-- company converted, it is in no journal, and the trial balance no
+-- longer balances with no entry to point at.
+--
+-- The proof is here rather than in the migration because it needs an
+-- organization, an account and a signed-in caller. `0643` tried to
+-- create one and tripped `app.add_creator_as_owner`: there is no
+-- `auth.uid()` at migration time. Its own self-check reads the trigger
+-- definition instead -- before, both statements, per row.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Imbangan Pembukaan Sdn Bhd');
+  v_id   uuid;
+  v_took boolean;
+  v_said text;
+  v_import integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  select id into v_id from public.accounts
+   where org_id = v_org and code = '1000' and not is_group
+   limit 1;
+  if v_id is null then
+    select id into v_id from public.accounts
+     where org_id = v_org and not is_group limit 1;
+  end if;
+  perform pg_temp.check_true('the company has a chart to edit',
+    v_id is not null);
+
+  -- The premise: this caller MAY edit the chart. Without it every
+  -- refusal below could be somebody with no permissions at all.
+  perform pg_temp.check_true('and this caller may post', app.can_post(v_org));
+
+  -- ------------------------------------------------------------------
+  -- The write that used to be accepted
+  -- ------------------------------------------------------------------
+  begin
+    set local role authenticated;
+    update public.accounts set opening_balance = 50000 where id = v_id;
+    v_took := true;
+  exception when insufficient_privilege then
+    v_took := false;
+    v_said := sqlerrm;
+  end;
+  reset role;
+  perform pg_temp.check_true(
+    'an opening balance cannot be written onto an account', not v_took);
+
+  -- And the refusal says where it belongs. A bare "permission denied"
+  -- sends somebody looking for a role they already have.
+  perform pg_temp.check_true('and says where it belongs instead',
+    v_said like '%dated journal%'
+      and v_said like '%import_opening_balances%');
+
+  -- The date beside it, which nothing reads and which would be the
+  -- half somebody sets while trying to make the figure legitimate.
+  begin
+    set local role authenticated;
+    update public.accounts
+       set opening_balance_date = current_date where id = v_id;
+    v_took := true;
+  exception when insufficient_privilege then
+    v_took := false;
+  end;
+  reset role;
+  perform pg_temp.check_true('nor the date beside it', not v_took);
+
+  -- An INSERT carrying the figure, which a guard on updates alone
+  -- would miss -- and it is the easier of the two to do by accident,
+  -- because a new account is a whole row.
+  begin
+    set local role authenticated;
+    insert into public.accounts
+      (org_id, code, name, account_type, account_subtype, opening_balance)
+    values (v_org, '1099', 'Kas Pembukaan', 'asset', 'current_asset', 1);
+    v_took := true;
+  exception when insufficient_privilege then
+    v_took := false;
+    v_said := sqlerrm;
+  end;
+  reset role;
+  perform pg_temp.check_true(
+    'nor an account created with one already on it', not v_took);
+
+  -- The INSERT path's own message, which is a second `raise` in the
+  -- guard and was asserted by nothing: a mutant that gutted it
+  -- survived while the update path's identical sentence kept the
+  -- sweep green. Two messages, two assertions.
+  perform pg_temp.check_true('and that refusal says it too',
+    v_said like '%dated journal%'
+      and v_said like '%import_opening_balances%');
+
+  -- ------------------------------------------------------------------
+  -- The controls, and the reason any of the above means anything
+  -- ------------------------------------------------------------------
+  -- A guard that refused every write would pass all four assertions
+  -- and stop the chart of accounts working.
+  -- No handler on any of the three: they are expected to SUCCEED, so
+  -- a throw should come out as itself rather than as `expected true`.
+  -- `check_blind_catches.py` refuses a `when others` for the same
+  -- reason -- and caught these three when they were written that way.
+  set local role authenticated;
+  update public.accounts set name = 'Kas Kecil' where id = v_id;
+  reset role;
+  perform pg_temp.check_eq('an ordinary edit still goes through',
+    (select name from public.accounts where id = v_id), 'Kas Kecil');
+
+  set local role authenticated;
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, '1098', 'Kas Baru', 'asset', 'current_asset');
+  reset role;
+  perform pg_temp.check_true('and an account can still be created',
+    exists (select 1 from public.accounts
+             where org_id = v_org and code = '1098'));
+
+  -- Writing the value it already holds is not a change. The guard is
+  -- on the CHANGE and not on the column, because the upsert path sends
+  -- a whole row -- a guard on the column would refuse every save.
+  set local role authenticated;
+  update public.accounts set opening_balance = 0 where id = v_id;
+  reset role;
+  perform pg_temp.check_eq(
+    'and a row that sends the same zero back is not a change',
+    (select opening_balance from public.accounts where id = v_id), 0);
+
+  -- ------------------------------------------------------------------
+  -- And the mechanism that is right still works
+  -- ------------------------------------------------------------------
+  -- `import_opening_balances` posts a GL entry dated `p_as_at` with
+  -- `source = 'opening_balance'`, so the date is on the journal, the
+  -- figure is in the ledger, and it balances because it is a double
+  -- entry like everything else. The guard must not have closed this.
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- The call gets its own statement, and the assertion reads the
+  -- VARIABLE. Written inline inside `check_true(...)` it ran TWICE --
+  -- the label printed twice and the import happened twice, because a
+  -- volatile function in a plpgsql simple expression can be
+  -- re-evaluated when the statement it is posting invalidates a
+  -- cached plan. An assertion that silently does its own setup twice
+  -- is an assertion about a state nobody wrote down.
+  --
+  -- `account_code`, not `code`: the first version used the wrong key
+  -- and the importer answered "1 of 1 rows have a problem", which is
+  -- the right answer and says nothing about the guard.
+  -- It returns a TABLE of per-row outcomes, not a scalar, so the
+  -- rows are counted rather than assigned.
+  select count(*)::int into v_import
+    from public.import_opening_balances(
+      v_org,
+      jsonb_build_array(
+        jsonb_build_object('account_code', '1210', 'debit', '500'),
+        jsonb_build_object('account_code', '3100', 'credit', '500')),
+      date '2026-01-01',
+      true)
+   where status <> 'error';
+  perform pg_temp.check_eq('the dated route is still open', v_import, 2);
+  perform pg_temp.check_eq('and it ran once, not twice',
+    (select count(*)::int from public.gl_entries
+      where org_id = v_org and source = 'opening_balance'), 1);
+
+  perform pg_temp.check_true(
+    'and it puts the figure in a dated journal, not on the account',
+    exists (select 1 from public.gl_entries e
+             where e.org_id = v_org
+               and e.source = 'opening_balance'
+               and e.entry_date = date '2026-01-01'));
+  perform pg_temp.check_eq(
+    'leaving the account''s own column at zero',
+    (select opening_balance from public.accounts where id = v_id), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -88,6 +89,7 @@ class _StallsScreenState extends ConsumerState<StallsScreen>
       ),
       body: AsyncView(
         value: outlets,
+        skeleton: const ListSkeleton(rows: 3, subtitle: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -175,6 +177,7 @@ class _StallListState extends ConsumerState<_StallList> {
       body: AsyncView(
         value: stalls,
         onRetry: _reload,
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -538,6 +541,8 @@ class _SettleTabState extends ConsumerState<_SettleTab> {
         Text('Already paid', style: Theme.of(context).textTheme.titleSmall),
         AsyncView(
           value: settled,
+          skeleton: const CardRowsSkeleton(
+              rows: 3, leading: false, lines: 1, trailing: 2),
           builder: (list) => Column(
             children: [
               if (list.isEmpty)

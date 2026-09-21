@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -179,6 +180,7 @@ class _MyTime extends ConsumerWidget {
     return AsyncView(
       value: entries,
       onRetry: () => ref.invalidate(myTimeEntriesProvider(period)),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(
@@ -286,6 +288,7 @@ class _Unbilled extends ConsumerWidget {
     return AsyncView(
       value: projects,
       onRetry: () => ref.invalidate(projectsProvider),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) {
         if (list.isEmpty) {
           return EmptyState(
@@ -492,6 +495,7 @@ class _Rates extends ConsumerWidget {
       body: AsyncView(
         value: rates,
         onRetry: () => ref.invalidate(billingRatesProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

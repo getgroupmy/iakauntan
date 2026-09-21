@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'modifier_sheet.dart';
@@ -279,6 +280,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       body: SafeArea(
         child: AsyncView<List<Map<String, dynamic>>>(
           value: registers,
+          skeleton: const ListSkeleton(rows: 3, subtitle: false),
           builder: (rows) {
             // Only the kiosks. Pointing this screen at a staff till
             // would be a sale with nobody behind it, and
@@ -449,6 +451,7 @@ class _Ordering extends ConsumerWidget {
                 flex: 2,
                 child: AsyncView<List<Map<String, dynamic>>>(
                   value: menu,
+                  skeleton: const CardRowsSkeleton(rows: 6, trailing: 1),
                   builder: (rows) => _Menu(
                     rows: rows,
                     category: category,
@@ -656,6 +659,7 @@ class _Tray extends StatelessWidget {
         Expanded(
           child: AsyncView<List<Map<String, dynamic>>>(
             value: lines,
+            skeleton: const ListSkeleton(rows: 6, leading: false),
             builder: (rows) => rows.isEmpty
                 ? const Center(child: Text('Nothing yet'))
                 : ListView(

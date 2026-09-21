@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ea_form_repository.dart';
@@ -98,6 +99,10 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
     return AsyncView(
       value: settings,
       onRetry: () => ref.invalidate(payrollSettingsProvider),
+      // An editor for one record: the employer's EPF, SOCSO and LHDN
+      // numbers. The boxes are drawn before the record arrives to fill
+      // them, which is exactly what a form skeleton says.
+      skeleton: const FormSkeleton(fields: 5),
       builder: (row) {
         if (!_loaded && row != null) {
           _loaded = true;
@@ -154,7 +159,7 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                               'Leave this off if the company is not liable',
                         ),
                         DropdownButtonFormField<String?>(
-                          value: _hrdf,
+                          initialValue: _hrdf,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Liability',
@@ -193,7 +198,7 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                           subtitle: 'Which day of the month salaries are paid',
                         ),
                         DropdownButtonFormField<int>(
-                          value: _payDay,
+                          initialValue: _payDay,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Day of month',
@@ -509,6 +514,7 @@ class _SetupList extends ConsumerWidget {
       body: AsyncView(
         value: rows,
         onRetry: () => ref.invalidate(setupRowsProvider(arg)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.tune,
@@ -768,7 +774,7 @@ class _EaBoxField extends ConsumerWidget {
     return DropdownButtonFormField<String>(
       key: const ValueKey('setup-ea-category'),
       isExpanded: true,
-      value: current.isEmpty ? '' : current,
+      initialValue: current.isEmpty ? '' : current,
       decoration: InputDecoration(labelText: label, helperText: helper),
       items: [
         const DropdownMenuItem(value: '', child: Text('Gross salary or bonus')),

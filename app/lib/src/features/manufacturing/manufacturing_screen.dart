@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../stock/new_warehouse_dialog.dart';
@@ -146,6 +147,7 @@ class _Orders extends ConsumerWidget {
           child: AsyncView(
             value: orders,
             onRetry: () => ref.invalidate(manufacturingOrdersProvider),
+            skeleton: const ListSkeleton(rows: 6, leading: false),
             builder: (list) => list.isEmpty
                 ? EmptyState(
                     icon: Icons.precision_manufacturing_outlined,
@@ -224,6 +226,7 @@ class _Recipes extends ConsumerWidget {
     return AsyncView(
       value: boms,
       onRetry: () => ref.invalidate(bomsProvider),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) => list.isEmpty
           ? const EmptyState(
               icon: Icons.account_tree_outlined,
@@ -289,6 +292,7 @@ class _WorkCentres extends ConsumerWidget {
     return AsyncView(
       value: centres,
       onRetry: () => ref.invalidate(workCentresProvider),
+      skeleton: const ListSkeleton(rows: 6, leading: false),
       builder: (list) => list.isEmpty
           ? const EmptyState(
               icon: Icons.factory_outlined,

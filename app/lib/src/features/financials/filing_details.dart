@@ -303,7 +303,7 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       key: const ValueKey('filing-framework'),
-                      value: _framework,
+                      initialValue: _framework,
                       isExpanded: true,
                       decoration:
                           const InputDecoration(labelText: 'Framework'),
@@ -323,7 +323,7 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       key: const ValueKey('filing-audit-status'),
-                      value: _auditStatus,
+                      initialValue: _auditStatus,
                       isExpanded: true,
                       decoration:
                           const InputDecoration(labelText: 'Audit status'),
@@ -391,7 +391,7 @@ class _DetailsDialogState extends ConsumerState<_DetailsDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String?>(
                       key: const ValueKey('filing-opinion'),
-                      value: _opinion,
+                      initialValue: _opinion,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Opinion'),
                       items: [

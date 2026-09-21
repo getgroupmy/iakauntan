@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -60,8 +61,12 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
   /// The three auth pages are wording on a screen that always draws —
   /// `login` joined them in `0348`, and gating it would leave a blank
   /// heading over the form at every company address at once.
-  bool get _gated =>
-      const {'terms', 'privacy', 'contact'}.contains(widget.slug);
+  bool get _gated => const {
+    'terms',
+    'terms-of-service',
+    'privacy',
+    'contact',
+  }.contains(widget.slug);
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +75,7 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
     return AsyncView<Map<String, SitePage>>(
       value: pages,
       onRetry: () => ref.invalidate(sitePageDraftsProvider),
+      skeleton: const FormSkeleton(fields: 4),
       builder: (rows) {
         final page = rows[widget.slug];
         if (_loadedFor != widget.slug) {
@@ -142,6 +148,15 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                     ),
                   ),
                 ),
+                // `0653`. Whether the apps link this page at the foot
+                // of the sign-in screen, one switch per platform, on
+                // the page's own tab rather than collected elsewhere:
+                // this is a fact about Terms of Use, and the place
+                // somebody who has just published it is standing.
+                if (signinLinkColumns(widget.slug) != null) ...[
+                  const SizedBox(height: Space.lg),
+                  _AppLinkCard(slug: widget.slug),
+                ],
                 if (widget.slug == 'signin') ...[
                   const SizedBox(height: Space.lg),
                   const _SigninPanelCard(),
@@ -213,6 +228,7 @@ String sitePageLabel(String slug) => switch (slug) {
   'signin' => 'Sign in page',
   'signup' => 'Sign up page',
   'terms' => 'Terms of Use',
+  'terms-of-service' => 'Terms of Service',
   'privacy' => 'Privacy Policy',
   'contact' => 'Contact us',
   _ => slug,
@@ -229,6 +245,10 @@ String sitePageHint(String slug) => switch (slug) {
   'terms' =>
     'Linked from the footer once published, and reachable at '
         '/terms.',
+  'terms-of-service' =>
+    'Linked from the footer once published, and reachable at '
+        '/terms-of-service. Separate from Terms of Use: this is the '
+        'contract for the service, that one is the rules for the site.',
   'privacy' =>
     'Linked from the footer once published, and reachable at '
         '/privacy.',
@@ -259,6 +279,127 @@ String sitePageBodyHelp(String slug) => switch (slug) {
         'at". Your name is added after it.',
   _ => 'Left empty, the screen uses the wording the product ships with.',
 };
+
+/// The columns that say whether the apps link a page from the sign-in
+/// screen, or null for a page they never link.
+///
+/// One map rather than a `switch` in three places. `0653`.
+({String ios, String android})? signinLinkColumns(String slug) =>
+    switch (slug) {
+      'terms' => (
+        ios: 'signin_show_terms_ios',
+        android: 'signin_show_terms_android',
+      ),
+      'terms-of-service' => (
+        ios: 'signin_show_terms_of_service_ios',
+        android: 'signin_show_terms_of_service_android',
+      ),
+      'privacy' => (
+        ios: 'signin_show_privacy_ios',
+        android: 'signin_show_privacy_android',
+      ),
+      // Contact us is not one of them. The three above are what an app
+      // store asks a build about; an address to write to is not, and a
+      // switch nobody would ever move is worse than an absent one.
+      _ => null,
+    };
+
+/// Whether the two apps link this page from the foot of the sign-in
+/// screen.
+///
+/// `0653`. Two switches for one link, because the two stores' review
+/// rules are different rules changed on different days -- the same
+/// argument `0638` makes for splitting the passkey switch.
+///
+/// Both ship ON, unlike nearly everything else in this console, and the
+/// card says why: a link is drawn only where the page is PUBLISHED, so
+/// on a deployment that has not pressed Publish these offer nothing at
+/// all. Shipping them off would only mean a second switch to find.
+class _AppLinkCard extends ConsumerStatefulWidget {
+  const _AppLinkCard({required this.slug});
+
+  final String slug;
+
+  @override
+  ConsumerState<_AppLinkCard> createState() => _AppLinkCardState();
+}
+
+class _AppLinkCardState extends ConsumerState<_AppLinkCard> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = signinLinkColumns(widget.slug)!;
+    final row = ref.watch(landingPageAdminProvider).valueOrNull;
+    // Absent reads as ON here, the way `signin_show_register_mobile`
+    // is read: a payload saved before the column existed, or still in
+    // flight, must not draw a switch in the off position for a
+    // deployment nobody has switched anything off on.
+    bool on(String key) => row?[key] != false;
+    final label = sitePageLabel(widget.slug);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'At the bottom of the sign-in screen in the apps',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'The website already links this from the footer on every '
+              'page. The apps have no footer and no landing page, so '
+              'without these the only way to it in an app is the '
+              'consent line under the Register button — which somebody '
+              'signing in never sees.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: Space.sm),
+            _Switch(
+              value: on(columns.ios),
+              busy: _busy,
+              title: 'Link $label in the iOS app',
+              subtitle:
+                  'Drawn only once this page is published, whichever '
+                  'way this is set — a link to a page that answers '
+                  '"not written yet" is worse than no link.',
+              onChanged: (v) => _save({columns.ios: v}),
+            ),
+            _Switch(
+              value: on(columns.android),
+              busy: _busy,
+              title: 'Link $label in the Android app',
+              subtitle:
+                  'One switch per store, because the two stores ask '
+                  'for different things at review and change their '
+                  'minds on different days.',
+              onChanged: (v) => _save({columns.android: v}),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save(Map<String, dynamic> patch) async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingPage(patch),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      ref.invalidate(landingPageAdminProvider);
+      // The sign-in screen reads `landing_page()`, not the table.
+      invalidatePlatformTable(ref, 'landing_page');
+    }
+  }
+}
 
 /// The one-tap demo logins, switched on and off.
 ///
@@ -402,6 +543,13 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
       _siteKey.text = '${row['turnstile_site_key'] ?? ''}';
     }
     bool on(String key) => row?[key] == true;
+    // For the one switch on this screen that ships ON. Absent reads as
+    // on, the way `landing_cms.dart` already reads the twelve way-in
+    // switches — a payload saved before the column existed, or still
+    // in flight, must not draw a switch in the off position for a
+    // deployment where the door is open. `on` above is the right
+    // answer for every switch that ships off, and the wrong one here.
+    bool onUnlessOff(String key) => row?[key] != false;
 
     return Card(
       child: Padding(
@@ -506,6 +654,33 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'is always drawn.',
                 onChanged: (v) => _save({'signin_show_register': v}),
               ),
+            // `0638`. The same question asked again for the apps,
+            // because it can have a different answer there: an app
+            // store has rules about what an account costs and who may
+            // open one, and "may a stranger sign up here" is not
+            // necessarily the same answer on the website and in the
+            // build in the store.
+            //
+            // A veto over the switch above rather than a replacement
+            // for it — the app draws the link when both are on — so it
+            // is drawn beside it and says so. Ships ON, unlike the two
+            // passkey switches, because it takes something away.
+            if (!widget.login)
+              _Switch(
+                value: onUnlessOff('signin_show_register_mobile'),
+                busy: _busy,
+                title: 'Offer an account in the apps',
+                subtitle:
+                    'The same link in the iOS and Android apps. Both '
+                    'this and the switch above have to be on for the '
+                    'apps to draw it, so turning this off closes the '
+                    'door in the apps and leaves the website alone. It '
+                    'does not stop anybody registering — the website '
+                    'still does, and an invitation still works. To '
+                    'close registration everywhere, use Signups in '
+                    'Platform settings.',
+                onChanged: (v) => _save({'signin_show_register_mobile': v}),
+              ),
             // `0579`. The passkey button, and the only switch on this
             // screen that ships OFF.
             //
@@ -522,12 +697,50 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 title: 'Offer a passkey',
                 subtitle:
                     'Draws "Sign in with a passkey" under the '
-                    'button. Turn passkeys on in the Supabase dashboard '
-                    'FIRST — until then every press is refused. The '
-                    'button is also absent on a device with no '
-                    'fingerprint reader, face camera or PIN, and on '
-                    'Android and iOS, which cannot reach one yet.',
+                    'button ON THE WEBSITE. Turn passkeys on in the '
+                    'Supabase dashboard FIRST — until then every press '
+                    'is refused. The button is also absent in a browser '
+                    'that cannot run the ceremony at all. The apps have '
+                    'their own two switches below: each surface needs '
+                    'something different done to it first, and they are '
+                    'not finished on the same day.',
                 onChanged: (v) => _save({'signin_show_passkey': v}),
+              ),
+            // `0638`. The same button in the two apps, and one switch
+            // each rather than one between them.
+            //
+            // Each of these needs the dashboard setting above AND a
+            // file served from the domain that names this build, and
+            // the two files are different files written by different
+            // people. A single switch would turn the button on for
+            // whichever surface was not ready.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_passkey_android'),
+                busy: _busy,
+                title: 'Offer a passkey in the Android app',
+                subtitle:
+                    'Needs the Supabase setting above, AND an '
+                    'assetlinks.json served from this domain naming the '
+                    'app package and BOTH signing certificates — the '
+                    'upload key and Play App Signing. Listing only the '
+                    'first works on the developer\'s handset and '
+                    'nowhere else. See docs/passkeys.md.',
+                onChanged: (v) => _save({'signin_show_passkey_android': v}),
+              ),
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_passkey_ios'),
+                busy: _busy,
+                title: 'Offer a passkey in the iOS app',
+                subtitle:
+                    'Needs the Supabase setting above, AND an '
+                    'Associated Domains entitlement on the app, AND an '
+                    'apple-app-site-association served from this '
+                    'domain. Apple caches that file for about a day, so '
+                    'a correction is not immediate. See '
+                    'docs/passkeys.md.',
+                onChanged: (v) => _save({'signin_show_passkey_ios': v}),
               ),
             // `0613`. Same order and the same reason as the passkey
             // above: GoTrue sends the mail, and until a sender is
@@ -547,6 +760,26 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'everybody who presses it gets nothing and waits. '
                     'See docs/magic-link.md.',
                 onChanged: (v) => _save({'signin_show_magic_link': v}),
+              ),
+            // `0645`. Continue with Google, and it says BOTH walls
+            // rather than only the one an operator can clear. A
+            // console that mentioned the dashboard and not the phones
+            // would have somebody turn it on, test it on a handset and
+            // conclude the switch is broken.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_google'),
+                busy: _busy,
+                title: 'Continue with Google',
+                subtitle:
+                    'Draws a Google button on the sign-in form. Enable '
+                    'Google in the Supabase dashboard under '
+                    'Authentication → Providers FIRST, with its client '
+                    'ID and secret — without them the button lands on '
+                    'an error page. WEB ONLY however this is set: the '
+                    'apps register no URL scheme for the provider to '
+                    'return to, so the button is not drawn there.',
+                onChanged: (v) => _save({'signin_show_google': v}),
               ),
             const Divider(height: Space.lg),
             // The captcha. A box rather than a switch: there is nothing

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -82,6 +83,7 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
             child: AsyncView<List<Map<String, dynamic>>>(
               value: summary,
               onRetry: () => ref.invalidate(posVoidSummaryProvider(_range)),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (rows) {
                 final written = bills.valueOrNull ?? const [];
                 final given = discounts.valueOrNull ?? const [];

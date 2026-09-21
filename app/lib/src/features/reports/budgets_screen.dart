@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -92,6 +93,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: budgets,
         onRetry: () => ref.invalidate(budgetsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -195,6 +197,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
             onRetry: () => ref.invalidate(
               budgetVsActualProvider((budget: id, from: _from, to: _to)),
             ),
+            skeleton: const ListSkeleton(rows: 6, leading: false),
             builder: (rows) {
               if (rows.isEmpty) {
                 return const Padding(
@@ -321,7 +324,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
               children: [
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: year,
+                  initialValue: year,
                   decoration: const InputDecoration(labelText: 'From which year'),
                   items: [
                     for (final y in years)
@@ -421,7 +424,7 @@ class _BudgetDialogState extends ConsumerState<_BudgetDialog> {
           ),
           DropdownButtonFormField<String>(
             isExpanded: true,
-            value: _year,
+            initialValue: _year,
             decoration: const InputDecoration(labelText: 'Which year'),
             items: [
               for (final y in years)
@@ -510,6 +513,7 @@ class _BudgetGrid extends ConsumerWidget {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: lines,
                 onRetry: () => ref.invalidate(budgetLinesProvider(id)),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return Padding(

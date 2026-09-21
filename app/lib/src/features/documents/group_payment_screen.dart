@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -150,6 +151,7 @@ class _GroupPaymentState extends ConsumerState<GroupPaymentScreen> {
       body: AsyncView(
         value: open,
         onRetry: () => ref.invalidate(openAcrossCompaniesProvider(_kind)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           // Grouped by company, in the order the server sent them,
           // which is by company name.

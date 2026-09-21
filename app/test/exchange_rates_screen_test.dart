@@ -227,10 +227,25 @@ void main() {
       // rate is overridden, this company's own is changed.
       expect(find.widgetWithText(TextButton, 'Override'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Change'), findsOneWidget);
-      // Two, not three. The app bar's date picker is a
-      // `TextButton.icon`, which is a private subclass and so is NOT
-      // matched by `byType` at all.
-      expect(find.byType(TextButton), findsNWidgets(2));
+      // One per row and nothing else in the body. Counted UNDER the
+      // Scaffold's body rather than across the screen, because the app
+      // bar has a date picker of its own.
+      //
+      // This used to be `findsNWidgets(2)` over the whole tree, with a
+      // comment explaining that the app bar's `TextButton.icon` is a
+      // private subclass `byType` does not match. That was true and
+      // stopped being true: on Flutter 3.47 it is matched, the count
+      // became 3, and the test failed on an SDK bump without anything
+      // about this screen having changed. An assertion that depends on
+      // which private class a factory returns is an assertion about
+      // Flutter, not about the product.
+      expect(
+        find.descendant(
+          of: find.byType(Card).first,
+          matching: find.byType(TextButton),
+        ),
+        findsNWidgets(2),
+      );
     });
 
     testWidgets('a viewer is offered none', (tester) async {
@@ -247,7 +262,15 @@ void main() {
       // rates. Both rows are there, each with what it actually says.
       expect(find.text('1 SGD = 3.12 MYR'), findsOneWidget);
       expect(find.text('no rate'), findsOneWidget);
-      expect(find.byType(TextButton), findsNothing);
+      // Scoped to the body for the reason given above: the app bar's
+      // date picker is not a rate button and never was.
+      expect(
+        find.descendant(
+          of: find.byType(Card).first,
+          matching: find.byType(TextButton),
+        ),
+        findsNothing,
+      );
     });
   });
 

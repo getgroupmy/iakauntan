@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 
 /// Batches and serial numbers: what is on hand, what is about to go out
@@ -150,7 +151,12 @@ class _Table extends StatelessWidget {
       future: future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          // A list of lots, each a code and a line of detail. The shape
+          // is decided before the rows arrive, so it is drawn.
+          return const Padding(
+            padding: EdgeInsets.all(Space.lg),
+            child: ListSkeleton(rows: 7, leading: false),
+          );
         }
         if (snap.hasError) {
           return Center(child: Padding(

@@ -70,14 +70,37 @@ void main() {
 
   group('this build', () {
     test('reports honestly whether it can ask for a passkey', () {
-      // False under the test runner, which is not a browser. The point
-      // of asserting it is that it is a real answer rather than a
-      // hopeful true: `PasskeyButton` draws nothing when this is false,
-      // so a wrong true here is a button that cannot work.
-      expect(passkeysAvailable, isFalse);
+      // TRUE under the test runner now, and the old assertion that it
+      // was false is what `0638` changed. The runner resolves the
+      // `dart.library.io` arm of the conditional import, which used to
+      // be `passkey_stub.dart` -- a file whose entire purpose was to
+      // say no because no phone could reach an authenticator. It is
+      // `passkey_native.dart` now, and a phone can.
+      //
+      // The stub is still there and still says false. Nothing reaches
+      // it: `dart.library.js_interop` takes the web and
+      // `dart.library.io` takes everything else, so it is the
+      // fallback for a platform Dart does not have. Left in place
+      // rather than deleted, because deleting it makes the conditional
+      // import unparseable.
+      expect(passkeysAvailable, isTrue);
     });
 
-    test('and a build that cannot ask does not pretend to try', () async {
+    test('and asking whether it will work is a separate question',
+        () async {
+      // The distinction the two exist for, and it survives
+      // `passkeysAvailable` flipping to true. `passkeysAvailable` is
+      // "is there any code here that could try"; `passkeysUsable()` is
+      // "will the platform answer", and only the second goes and finds
+      // out.
+      //
+      // Under the runner there is no Credential Manager and no
+      // `ASAuthorization`, so the platform channel raises
+      // `MissingPluginException` and the `on Object` in
+      // `passkeysUsable` turns it into a no. That catch is the thing
+      // asserted here: without it the sign-in screen's capability
+      // check throws instead of answering, which draws no button and
+      // logs an exception rather than drawing no button quietly.
       expect(await passkeysUsable(), isFalse);
     });
   });
@@ -132,19 +155,17 @@ void main() {
       // places it usually goes: iCloud Keychain, Google Password
       // Manager, a phone over a QR code, and a security key on USB.
       //
-      // The test runner is not a browser, so the answer here is false
-      // either way. What is asserted is the SHAPE: one question, about
-      // the browser, answered without asking the machine anything —
-      // which is what stops the narrow check coming back.
-      expect(passkeysAvailable, isFalse);
+      // The same restraint is written into `passkey_native.dart` for
+      // the same reason, and it matters more on a phone than it did in
+      // a browser: an Android handset with no screen lock still has
+      // Google Password Manager, and an iPhone with Face ID switched
+      // off still has the keychain.
+      //
+      // What is asserted is the SHAPE, because the answer itself needs
+      // a platform to ask: one question, about whether the ceremony can
+      // run at all, with nothing asked about the hardware in front of
+      // the person. That is what stops the narrow check coming back.
       expect(passkeysUsable, isA<Function>());
-    });
-
-    test('and a build that cannot ask still says so honestly', () async {
-      // Widening the check must not turn into claiming a build can do
-      // something it cannot. Under the runner there is no WebAuthn at
-      // all, and the answer stays no.
-      expect(await passkeysUsable(), isFalse);
     });
   });
 }

@@ -18,12 +18,6 @@
 /// round refuses every sign-in on the project, including yours.
 /// Whether a captcha is being asked for at all.
 /// Whether this build can draw one.
-///
-/// The web can. Android and iOS cannot yet: Turnstile has no native
-/// SDK and needs a webview, which this app does not carry. Said out
-/// loud rather than left as a silent false, because the dashboard
-/// switch protects the whole PROJECT — turning it on while a platform
-/// cannot produce a token locks that platform out of signing in.
 /// What the form says when it cannot draw one but one is expected.
 /// What it says when somebody has not passed it yet.
 /// The widget itself, or nothing at all when no key is configured.
@@ -38,21 +32,40 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'captcha_controller.dart';
 export 'captcha_controller.dart' show CaptchaController;
-import 'captcha_stub.dart' if (dart.library.js_interop) 'captcha_web.dart';
+import 'captcha_stub.dart'
+    if (dart.library.js_interop) 'captcha_web.dart'
+    if (dart.library.io) 'captcha_native.dart';
 
 /// Whether a captcha is being asked for at all.
 bool captchaOn(String? siteKey) => (siteKey ?? '').trim().isNotEmpty;
 
 /// Whether this build can draw one.
 ///
-/// The web can. Android and iOS cannot yet: Turnstile has no native
-/// SDK and needs a webview, which this app does not carry. Said out
-/// loud rather than left as a silent false, because the dashboard
-/// switch protects the whole PROJECT — turning it on while a platform
-/// cannot produce a token locks that platform out of signing in.
-bool get captchaAvailable => kIsWeb;
+/// The web draws it directly. Android and iOS draw `web/captcha.html`
+/// in a webview and read the token back — Turnstile has no native SDK,
+/// so hosting the real page is the only way a phone can produce a
+/// token at all. See `captcha_native.dart`.
+///
+/// Desktop still cannot: `webview_flutter` endorses Android and iOS
+/// only. Written as those two rather than as "not web", so a Linux
+/// build says so on the screen instead of failing at runtime on a
+/// plugin that is not there.
+///
+/// This matters more than it looks. The dashboard switch protects the
+/// whole PROJECT: with it on, GoTrue wants a token from every platform,
+/// and a platform that cannot produce one is locked out of signing in
+/// entirely. That was the state of iOS and Android until this existed.
+bool get captchaAvailable =>
+    kIsWeb ||
+    defaultTargetPlatform == TargetPlatform.android ||
+    defaultTargetPlatform == TargetPlatform.iOS;
 
 /// What the form says when it cannot draw one but one is expected.
+///
+/// Desktop only, now. Android and iOS draw the challenge in a webview
+/// and no longer reach this; it is kept because a Linux or Windows
+/// build still has nowhere to draw one, and saying so beats a form
+/// that silently cannot be submitted.
 const captchaUnavailable =
     'This app cannot complete the security check on this device. Use '
     'the web app to sign in.';
@@ -72,6 +85,37 @@ const captchaBroken =
     'The security check could not load, so signing in is not possible '
     'from here. It is blocked by this site rather than by you — please '
     'tell whoever runs it.';
+
+/// The same sentence, plus which of the failures it was.
+///
+/// `web/captcha.js` already distinguishes FOUR of them — no site key,
+/// Cloudflare's script not fetched, the challenge refused, the render
+/// throwing — and the app threw the reason away and printed one
+/// sentence for all four. So a report of "the security check will not
+/// load" could not be told from any other, and the only way to find out
+/// which was to guess and ship a build.
+///
+/// Each line names what somebody would actually do about it. The raw
+/// reason is carried at the end for anything this does not recognise,
+/// because a new reason invented in the page must not become invisible
+/// here — which is exactly the failure this is fixing.
+String captchaBrokenBecause(String? why) {
+  final detail = switch ((why ?? '').trim()) {
+    '' => null,
+    'no site key' =>
+      'No site key reached the app, so there was nothing to draw.',
+    'script blocked' =>
+      "Cloudflare's script could not be fetched — a blocked network, a "
+          'captive portal, or a policy refusing it.',
+    'challenge error' =>
+      'Cloudflare refused the challenge. The commonest cause is a site '
+          'key whose domain list does not include this one.',
+    'render threw' => 'The widget would not draw on this page.',
+    'no webview' => 'This build has no webview to draw it in.',
+    final other => 'The page reported: $other.',
+  };
+  return detail == null ? captchaBroken : '$captchaBroken $detail';
+}
 
 /// The widget itself, or nothing at all when no key is configured.
 ///
@@ -109,6 +153,10 @@ class CaptchaField extends StatefulWidget {
 class _CaptchaFieldState extends State<CaptchaField> {
   bool _failed = false;
 
+  /// Which failure it was, for [captchaBrokenBecause]. Null until one
+  /// happens, and null again for a failure that carried no reason.
+  String? _why;
+
   Widget _note(String text) => Padding(
     padding: const EdgeInsets.only(top: 12),
     child: Text(text, style: Theme.of(context).textTheme.bodySmall),
@@ -118,16 +166,19 @@ class _CaptchaFieldState extends State<CaptchaField> {
   Widget build(BuildContext context) {
     if (!captchaOn(widget.siteKey)) return const SizedBox.shrink();
     if (!captchaAvailable) return _note(captchaUnavailable);
-    if (_failed) return _note(captchaBroken);
+    if (_failed) return _note(captchaBrokenBecause(_why));
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: TurnstileWidget(
         siteKey: widget.siteKey!.trim(),
         onToken: widget.onToken,
         controller: widget.controller,
-        onFailed: () {
+        onFailed: (why) {
           if (!mounted || _failed) return;
-          setState(() => _failed = true);
+          setState(() {
+            _failed = true;
+            _why = why;
+          });
           widget.onFailed?.call();
         },
       ),

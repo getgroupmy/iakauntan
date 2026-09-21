@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -57,7 +58,7 @@ class AccessTypesCard extends ConsumerWidget {
             AsyncView(
               value: types,
               onRetry: () => ref.invalidate(accessTypesProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const ListSkeleton(rows: 3, leading: false),
               builder: (list) => list.isEmpty
                   // Said plainly, because "none" here is not a gap to be
                   // nagged about. Every member has full access to the

@@ -17,6 +17,104 @@ import 'package:iakauntan/src/features/financials/mtool_csv.dart';
 /// re-reading it, and a comma in a company's account name that split a
 /// row would move money between lines in a statutory filing.
 void main() {
+  // What is NOT in the export, which the screen used to say nothing
+  // about.
+  //
+  // `mbrs_elements` seeds `sofp` (16 elements) and `soploci` (9) and
+  // nothing else, so on today's taxonomy `socie`, `socf` and
+  // `disclosure` have no elements at all. `fs_prepare` iterates the
+  // table, `fs_freeze` stores what it returns, and the screen draws a
+  // section per statement PRESENT — so a preparer read two sections,
+  // exported them, and was three statements short at the counter with
+  // nothing having said so.
+  group('the statements a lodgement is missing', () {
+    test('three of five, on the taxonomy as seeded', () {
+      expect(
+        missingStatements(['sofp', 'soploci']),
+        ['Changes in equity', 'Cash flows', 'Disclosures'],
+      );
+    });
+
+    test('and they are named in the order a lodgement presents them', () {
+      // Not alphabetical and not the order the export happened to
+      // return. A preparer reads this against a template.
+      expect(
+        missingStatements([]),
+        [
+          'Statement of financial position',
+          'Profit or loss and other comprehensive income',
+          'Changes in equity',
+          'Cash flows',
+          'Disclosures',
+        ],
+      );
+    });
+
+    test('nothing is missing when all five are there', () {
+      expect(
+        missingStatements(fsStatements.keys),
+        isEmpty,
+      );
+      expect(missingStatementsNote(fsStatements.keys), isNull);
+    });
+
+    test('the note names them rather than counting them', () {
+      // "Three statements are missing" is something somebody then has
+      // to work out, and the point of saying it is that they should
+      // not have to.
+      final said = missingStatementsNote(['sofp', 'soploci'])!;
+
+      expect(said, contains('Changes in equity'));
+      expect(said, contains('Cash flows'));
+      expect(said, contains('Disclosures'));
+      expect(said, isNot(contains('3 ')));
+    });
+
+    test('and reads as a sentence with one missing', () {
+      // `a, b and c` for three; no stray "and" for one.
+      final said = missingStatementsNote([
+        'sofp',
+        'soploci',
+        'socie',
+        'socf',
+      ])!;
+
+      expect(said, contains('Not in this export: Disclosures.'));
+      expect(said, isNot(contains(' and Disclosures')));
+    });
+
+    test('it says a lodgement needs all five', () {
+      // The fact a preparer is missing. Without it the sentence reads
+      // as a note about this company rather than about the file.
+      expect(missingStatementsNote(['sofp'])!, contains('all five'));
+    });
+
+    test('and does not claim which of the two reasons applies', () {
+      // A statement is absent either because no taxonomy element for
+      // it is loaded or because this company has no figures for it,
+      // and the export cannot tell those apart. Claiming one would be
+      // wrong half the time.
+      final said = missingStatementsNote(['sofp'])!;
+
+      expect(said, isNot(contains('no figures')));
+      expect(said, isNot(contains('nothing posted')));
+      // It names both ways out instead.
+      expect(said, contains('mbrs_elements'));
+      expect(said, contains('mTool'));
+    });
+
+    test('an unknown statement code does not hide a real one', () {
+      // `fs_export` returns whatever `mbrs_elements.statement` holds,
+      // and the enum could gain a member before this map does. An
+      // unrecognised code must not make a missing statement look
+      // present.
+      expect(
+        missingStatements(['sofp', 'soploci', 'something_new']),
+        ['Changes in equity', 'Cash flows', 'Disclosures'],
+      );
+    });
+  });
+
   group('the mTool export', () {
     test('one row per element, in the order the database gave', () {
       final csv = mtoolCsv(const [

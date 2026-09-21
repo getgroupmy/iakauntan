@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -45,9 +46,15 @@ class TodoCard extends ConsumerWidget {
               ),
             ),
             todos.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
+              // Outlined as the card's own rows and NOT as
+              // `ListSkeleton`: a to-do is a checkbox and two short
+              // lines, about forty-eight tall, where a `ListTile` with
+              // a subtitle is seventy-two. Five of those is a card half
+              // as tall again as the one that replaces it.
+              loading: () => CardRowsSkeleton(
+                rows: limit,
+                leadingSize: 24,
+                rowGap: Space.md,
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),

@@ -285,7 +285,7 @@ class TaxDetailsFormState extends State<TaxDetailsForm> {
             const SizedBox(height: Space.lg),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _idType,
+              initialValue: _idType,
               key: const ValueKey('tax-details-id-type'),
               decoration: const InputDecoration(labelText: 'ID type'),
               items: const [
@@ -363,7 +363,7 @@ class TaxDetailsFormState extends State<TaxDetailsForm> {
             // on offering the old ones. See 0627.
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _stateCode,
+              initialValue: _stateCode,
               key: const ValueKey('tax-details-state'),
               decoration: const InputDecoration(labelText: 'State'),
               items: [

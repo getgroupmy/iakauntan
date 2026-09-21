@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -86,6 +87,7 @@ class JournalsScreen extends ConsumerWidget {
             child: AsyncView(
               value: journals,
               onRetry: () => ref.invalidate(journalsProvider),
+              skeleton: const ListSkeleton(rows: 6, leading: false),
               builder: (list) => list.isEmpty
                   ? const EmptyState(
                       icon: Icons.menu_book_outlined,

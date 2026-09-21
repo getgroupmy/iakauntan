@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -94,6 +95,7 @@ class _MattersScreenState extends ConsumerState<MattersScreen> {
       body: AsyncView(
         value: matters,
         onRetry: () => ref.invalidate(mattersProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(
@@ -390,7 +392,7 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _matterType,
+                  initialValue: _matterType,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Matter type'),
                   items: [

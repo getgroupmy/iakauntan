@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -231,6 +232,17 @@ class _Books extends ConsumerWidget {
     return AsyncView(
       value: summary,
       onRetry: () => ref.invalidate(dashboardProvider),
+      // The four tiles above the fold, and only those. What is below
+      // them -- the trend chart, the receivables card, the activity
+      // list -- has its own `AsyncView` and its own outline further
+      // down this file, so drawing a bone for it here would be a
+      // second guess at a shape that is already being drawn.
+      //
+      // The counts and breakpoints are `_MetricGrid`'s own. They are
+      // repeated rather than shared because they are its layout and
+      // not a constant, and a skeleton grid that disagrees reflows the
+      // instant the figures land.
+      skeleton: const TilesSkeleton(),
       builder: (data) {
         // What this person asked to see. The e-Invoice banner is not on
         // the list on purpose: it is a REFUSAL waiting to be dealt with
@@ -618,7 +630,12 @@ class ModuleDashboardPane extends ConsumerWidget {
     }
 
     final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
+    // `tileColumns`, shared with `TilesSkeleton` in core/skeletons.dart.
+    // The skeleton drawn while these figures load has to break at the
+    // same widths, or it reflows the instant they arrive -- and nothing
+    // would report that, because the outline and the figures are never
+    // on screen together.
+    final columns = tileColumns(width);
 
     return GridView.count(
       crossAxisCount: columns,
@@ -683,7 +700,12 @@ class _MetricGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
+    // `tileColumns`, shared with `TilesSkeleton` in core/skeletons.dart.
+    // The skeleton drawn while these figures load has to break at the
+    // same widths, or it reflows the instant they arrive -- and nothing
+    // would report that, because the outline and the figures are never
+    // on screen together.
+    final columns = tileColumns(width);
 
     // The same series the chart below uses; the tiles show its shape so the
     // top row answers "which way is this going" without scrolling.
@@ -977,10 +999,11 @@ class _ReceivablesCard extends ConsumerWidget {
             AsyncView(
               value: aging,
               onRetry: () => ref.invalidate(arAgingProvider),
-              loading: const SizedBox(
-                height: 120,
-                child: Center(child: CircularProgressIndicator()),
-              ),
+              // Rows, and the card is a fixed height whichever way
+              // this goes -- so the outline says what is coming
+              // instead of a circle in a box that is already the right
+              // size for a list.
+              skeleton: const ListSkeleton(rows: 3, leading: false),
               builder: (all) {
                 // The aged listing carries the credits too — unapplied
                 // receipts and unused credit notes — because that is
@@ -1069,10 +1092,7 @@ class _ActivitiesCard extends ConsumerWidget {
             AsyncView(
               value: activities,
               onRetry: () => ref.invalidate(activitiesProvider),
-              loading: const SizedBox(
-                height: 120,
-                child: Center(child: CircularProgressIndicator()),
-              ),
+              skeleton: const ListSkeleton(rows: 3, leading: false),
               builder: (rows) {
                 if (rows.isEmpty) {
                   return const EmptyState(

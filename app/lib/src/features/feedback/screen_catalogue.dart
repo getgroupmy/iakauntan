@@ -189,6 +189,7 @@ final List<ScreenModule> appScreenCatalogue = [
   ScreenModule('Compliance', [
     ScreenArea('LHDN', [
       AppScreen('e-Invoice', '/einvoice'),
+      AppScreen('Received e-Invoices', '/einvoice/received'),
       AppScreen('Outgoing email', '/email'),
     ]),
     ScreenArea('SSM', [

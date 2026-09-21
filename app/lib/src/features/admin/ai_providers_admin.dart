@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/platform_live.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // `RepoAiProviders` is an extension, and a Dart extension is only in
@@ -54,6 +55,7 @@ class AiProvidersAdminTab extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: catalogue,
         onRetry: () => ref.invalidate(aiProviderCatalogueProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false, subtitle: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(

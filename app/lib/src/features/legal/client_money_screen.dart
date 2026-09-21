@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -68,6 +69,7 @@ class ClientMoneyScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(
                   inbound ? clientReceiptsProvider : clientPayoutsProvider,
                 ),
+                skeleton: const ListSkeleton(rows: 5, leading: false),
                 builder: (list) => list.isEmpty
                     ? EmptyState(
                         icon: inbound

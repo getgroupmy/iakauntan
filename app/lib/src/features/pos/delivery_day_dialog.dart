@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -133,6 +134,7 @@ class _DayDialogState extends ConsumerState<_DayDialog> {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: outlets,
                 onRetry: () => ref.invalidate(posDeliveryDayProvider(_date)),
+                skeleton: const ListSkeleton(rows: 4, leading: false),
                 builder: (shops) {
                   if (shops.isEmpty) {
                     return const EmptyState(

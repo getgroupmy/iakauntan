@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/time_terminals_repository.dart';
@@ -47,6 +48,7 @@ class TimeTerminalsTab extends ConsumerWidget {
       body: AsyncView(
         value: terminals,
         onRetry: () => ref.invalidate(timeTerminalsProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => ListView(
           padding: const EdgeInsets.all(Space.lg),
           children: [
@@ -327,6 +329,7 @@ class _Enrolments extends ConsumerWidget {
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(terminalEnrolmentsProvider(terminal.id)),
+      skeleton: const CardRowsSkeleton(rows: 3, trailing: 1),
       builder: (list) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -474,6 +477,8 @@ class _UnmatchedPunches extends ConsumerWidget {
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(unmatchedPunchesProvider),
+      skeleton: const CardRowsSkeleton(
+          rows: 4, leadingSize: 24, trailing: 2),
       builder: (list) {
         if (list.isEmpty) return const SizedBox.shrink();
         return Card(

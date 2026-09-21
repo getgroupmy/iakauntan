@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -107,6 +108,7 @@ class _TemplateDialogState extends ConsumerState<_TemplateDialog> {
         child: AsyncView<List<BusinessDocument>>(
           value: docs,
           onRetry: () => ref.invalidate(documentsProvider),
+          skeleton: const ListSkeleton(rows: 4),
           builder: (list) {
             final candidates = templateCandidates(list);
             if (candidates.isEmpty) {
@@ -134,26 +136,40 @@ class _TemplateDialogState extends ConsumerState<_TemplateDialog> {
                       ?.copyWith(color: context.scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: Space.sm),
+                // `RadioGroup` OUTSIDE the list, not inside the
+                // builder. Flutter deprecated the per-tile
+                // `groupValue`/`onChanged` after 3.32, and the group
+                // has to be an ancestor of every radio it owns -- one
+                // per row would be one group per row, and nothing
+                // would ever deselect anything else.
+                //
+                // `enabled: !_saving` on the tile in place of the old
+                // `onChanged: _saving ? null : ...`, because
+                // `RadioGroup.onChanged` is not nullable. Same
+                // behaviour: the rows stop responding while the save
+                // is in flight, so nobody can point the schedule at a
+                // second document mid-write.
                 Expanded(
-                  child: ListView.separated(
-                    itemCount: candidates.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) {
-                      final d = candidates[i];
-                      return RadioListTile<String>(
-                        key: ValueKey('template-${d.id}'),
-                        dense: true,
-                        value: d.id,
-                        groupValue: _documentId,
-                        onChanged: _saving
-                            ? null
-                            : (v) => setState(() => _documentId = v),
-                        title: Text(
-                          templateLabel(d),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    },
+                  child: RadioGroup<String>(
+                    groupValue: _documentId,
+                    onChanged: (v) => setState(() => _documentId = v),
+                    child: ListView.separated(
+                      itemCount: candidates.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final d = candidates[i];
+                        return RadioListTile<String>(
+                          key: ValueKey('template-${d.id}'),
+                          dense: true,
+                          value: d.id,
+                          enabled: !_saving,
+                          title: Text(
+                            templateLabel(d),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],

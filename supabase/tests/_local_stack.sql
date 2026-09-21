@@ -84,31 +84,91 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
 -- ---------------------------------------------------------------------
--- An open question about FUNCTIONS, left open on purpose
+-- And FUNCTIONS, which took three migrations and two CI runs to settle
 --
--- There is no default privilege for functions here, and `c2d2d15` is
--- the record of why: one was added on the strength of `0165`'s comment,
--- it made this machine more generous than the hosted project, and it
--- was reverted.
+-- Supabase ships
 --
--- `0621` found evidence pointing the other way and could not settle it
--- either. Its apply-time check asserted that `public.set_sst_registration`
--- is NOT executable by `service_role` -- true here, and it failed four
--- times against the hosted project, where it is. `0145` grants that
--- function to `authenticated` alone and `0181` replaces it granting
--- nothing, so no migration in this repository put it there.
+--     alter default privileges in schema public
+--       grant all on functions to anon, authenticated, service_role
 --
--- So a `public` function on the hosted project carries at least a
--- `service_role` grant these migrations did not write, and this file
--- does not reproduce it. The difference is in the safe direction --
--- this machine is stricter, so a missing grant fails here first -- and
--- it is written down rather than guessed at, because guessing is what
--- c2d2d15 was.
+-- so a new function in `public` arrives executable by all three, and
+-- `0165`'s event trigger then strips PUBLIC and `anon` -- leaving
+-- `authenticated` and `service_role`. In schema `app` there is no such
+-- default, so a new function there arrives callable by nobody. Both are
+-- reproduced below.
 --
--- Settling it needs `\df+` on the hosted project against a function
--- created after 0165 and granted to nobody. Until then, do not add a
--- line here on the strength of this note either.
+-- ## Why this took so long, and it is worth knowing
+--
+-- Because CI has TWO databases and nobody said which was being read.
+-- `supabase start` brings up the CLI's local stack, and that is where
+-- `function_grants.sql` and every other file in this directory runs.
+-- The migrations are pushed to the LINKED HOSTED PROJECT, in a
+-- different job. The two do not have the same default privileges.
+--
+-- Every piece of evidence in the argument is correct about the database
+-- it came from:
+--
+--   * `0165` said it verified the default against the hosted project,
+--     and it did: after revoking PUBLIC from sixteen functions, the
+--     nine in `public` were still reachable by `anon` and the seven in
+--     `app` were not -- which is precisely a default that covers
+--     `public` and not `app`.
+--   * `0617` believed `0165`, taught this file the same default, and
+--     **CI refused it** -- against the CLI stack, where the default ACL
+--     really is `{postgres=X/postgres}`.
+--   * `0618` read that refusal as proof that `0165` had misread itself,
+--     and wrote the strict rule down twice. It was reading the CLI
+--     stack.
+--   * `0621`'s apply-time check failed four times against the hosted
+--     project because `set_sst_registration` is executable there by
+--     `service_role`, which no migration in this repository granted.
+--   * CI run 1941: `0657` DROPPED `public.push_targets`, created it
+--     again, revoked it `from public` alone, and its own self-check
+--     found `authenticated` could still execute it. A dropped function
+--     takes its grants with it, so that grant was written by nothing
+--     but a default privilege.
+--
+-- Three hosted observations against one local one. `0618`'s conclusion
+-- is the one that was wrong, and the two files that encode it --
+-- `function_grants.sql` and `trigger_reachable_grants.sql` -- are
+-- corrected in the same commit as these lines.
+--
+-- ## What it does NOT mean
+--
+-- It does not mean anything is open that was thought closed. Counted
+-- both ways on this machine, with the default and without it, **738 of
+-- the 760 functions in `public` are executable by `authenticated`
+-- either way**: the default adds nothing, because every function here
+-- already carries an explicit grant or an explicit revoke. The twenty-two
+-- that are closed are closed by a revoke, and they stay closed.
+--
+-- What it changes is the GATE. Until now a migration that forgot to
+-- revoke could not fail on this machine, because there was no grant to
+-- fail against -- so `0657` passed 333 local files and was refused by
+-- CI twenty minutes later. Now it fails here first, which is the
+-- direction every other line in this section exists to get right.
+--
+-- `0141` and `0143` write `from public, anon, authenticated` in full,
+-- and every migration should: revoking from the PUBLIC pseudo-role does
+-- not touch a grant held directly by a role.
 -- ---------------------------------------------------------------------
+alter default privileges for role postgres in schema public
+  grant execute on functions to anon, authenticated, service_role;
+-- And deliberately NOT in schema `app`, which is the half of `0165`'s
+-- observation that pins the shape: the seven functions it revoked there
+-- were not reachable by `anon` afterwards, and the nine in `public`
+-- were.
+--
+-- `for role postgres` is load-bearing, and CI run 1947 is the evidence.
+-- A default ACL governs only what ONE role creates, and a check that
+-- reads `pg_default_acl` without filtering on `defaclrole` reads
+-- somebody else's: `supabase start` has a row for functions in `public`
+-- that mentions `authenticated`, under a role that is not the one
+-- applying the migrations, and a new function there is still callable
+-- by nobody. The note about `supabase_admin` above says the same thing
+-- about TABLES and `0498` is the migration that learned it. So a test
+-- that wants to know what a new function arrives with must CREATE one
+-- and look, which is what `function_grants.sql` now does.
 
 -- The second entry, which governs only what `supabase_admin` creates
 -- and therefore governs nothing in this schema. Here so that a check

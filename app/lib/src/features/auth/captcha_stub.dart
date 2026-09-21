@@ -21,7 +21,7 @@ class TurnstileWidget extends StatelessWidget {
   final ValueChanged<String?> onToken;
 
   /// Never called here; the compile-time other half of [onFailed].
-  final VoidCallback onFailed;
+  final ValueChanged<String?> onFailed;
 
   /// Likewise: there is no widget here to run again.
   final CaptchaController? controller;

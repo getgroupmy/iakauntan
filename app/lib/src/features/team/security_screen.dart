@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -183,7 +184,9 @@ class _EventList extends ConsumerWidget {
     return AsyncView(
       value: events,
       onRetry: () => ref.invalidate(securityLogProvider(kind)),
-      loading: const LinearProgressIndicator(),
+      // An icon each for what happened — signed in, signed out,
+      // exported, refused — and a line underneath saying where from.
+      skeleton: const ListSkeleton(rows: 6, trailing: false),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(

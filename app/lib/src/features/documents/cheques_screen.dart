@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -169,6 +170,7 @@ class ChequesScreen extends ConsumerWidget {
               onRetry: () => ref.invalidate(
                 postDatedChequesProvider((direction: null, status: null)),
               ),
+              skeleton: const ListSkeleton(rows: 6),
               builder: (list) {
                 if (list.isEmpty) {
                   return const EmptyState(

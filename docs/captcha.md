@@ -52,24 +52,88 @@ payload the app can read.
 Doing 5 before 2 refuses every sign-in on the project — including
 yours — because GoTrue starts demanding a token no form is sending.
 
-## The trap: the switch covers the whole project
+## The switch covers the whole project, and the phones are in it
 
 Attack Protection is a project-wide setting. It applies to every client
-that talks to GoTrue, not only the web app.
+that talks to GoTrue, not only the web app. So the phones have to be
+able to produce a token before it is pressed.
 
-**The Android and iOS builds cannot draw a Turnstile widget.** Turnstile
-is a browser widget with no native SDK; embedding it on a phone needs a
-webview, and this app does not carry one. Until it does, enabling the
-protection locks every phone out of signing in.
+They can. `captcha_native.dart` draws the challenge in a webview and
+reads the token back out of it; `web/captcha.html` is the other half.
+This section used to say the opposite — "the Android and iOS builds
+cannot draw a Turnstile widget… this app does not carry one" — and went
+on saying it after `879b692` built it.
 
-The app says so rather than failing silently: on a platform that cannot
-draw the widget, the form prints "This app cannot complete the security
-check on this device. Use the web app to sign in." That is honest, and
-it is not a substitute for knowing this before pressing the switch.
+### Why a hosted page and not an HTML string
 
-If the mobile apps are in use, the options are: leave the protection off
-until a webview-backed widget is written, or accept that mobile sign-in
-stops.
+Every short guide to Turnstile on mobile loads an HTML string into the
+webview with a `data:` URI. That does not work here, and the reason is
+worth keeping: **a Turnstile site key is scoped to a list of domains**,
+and the widget refuses to render on an origin that is not on it. A
+string loaded into a webview has no useful origin — `about:blank`, or a
+base URL the app asserts rather than one the browser verified. So the
+widget either refuses, or it only works because the key was left
+unscoped, which is the protection switched off.
+
+`captcha.html` is served from the same domain as the web app, which is
+an origin the key already allows because the web sign-in form uses it.
+
+### Where the phone looks for it
+
+`CAPTCHA_HOST`, a `--dart-define`, defaulting to `https://iakauntan.com`
+— the same arrangement as `PRODUCTION_URL`. Nothing in `ci.yml` sets
+it, which is correct for this deployment and is the thing to change
+first on any other: a mobile build that does not set it points its
+sign-in screen at a page on somebody else's domain.
+
+### The iOS-only trap, which cost a release
+
+The webview delegate refuses navigations that leave the host, because a
+sign-in screen is the last place to follow one somebody else chose.
+Written as `url.startsWith(host)` that guard **shuts every iPhone out
+of signing in**, and Android is fine.
+
+Turnstile draws itself in an IFRAME served from
+`challenges.cloudflare.com`, and the two plugins disagree about whether
+the app is consulted for a subframe:
+
+- `webview_flutter_android` asks only about the main frame, and says why
+  in its own source: "the client is only allowed to stop navigations
+  that target the main frame because overridden URLs are passed to
+  `loadUrl` and `loadUrl` cannot load a subframe."
+- `webview_flutter_wkwebview` calls the callback from
+  `decidePolicyForNavigationAction` for EVERY navigation action and
+  passes `isMainFrame` through rather than acting on it.
+
+So on iOS the guard cancelled Turnstile's own iframe, nothing rendered,
+and the form said "The security check could not load, so signing in is
+not possible from here" — correctly, about a page with nothing wrong
+with it. The guard is `captchaMayNavigate`, it takes `isMainFrame`, and
+`captcha_native_test.dart` pins all four cases, because there is no
+browser test in CI and running the app on one platform cannot find it.
+
+A subframe is not left unguarded by that: the page's own
+Content-Security-Policy decides what it may embed, which is where it
+belongs and what `scripts/check_csp_allows.py` asserts.
+
+### And the error handler it exposed
+
+Cancelling that navigation is how WebKit raised `NSURLErrorCancelled`
+(-999), and the plugin reports EVERY navigation error through
+`didFailProvisionalNavigation` with `isForMainFrame` hardcoded to true
+— so the cancelled iframe arrived at the app as a main-frame failure,
+which is how a widget that was only being refused ended up reported as
+a page that could not load.
+
+That leaves a second fault behind it, independent of the first: -999 is
+raised routinely whenever a new `loadRequest` supersedes one in flight,
+and that is exactly what `CaptchaController` does when a form has spent
+its token and asks for a fresh challenge. Read as a failure it locks
+the sign-in form for good. `captchaLoadFailed` names -999 and lets it
+pass; Android's own codes run -1 to -16, so nothing collides with it. A
+page that genuinely cannot be fetched still fails, because a form that
+submits without a token is refused by GoTrue with nothing on the screen
+to explain it.
 
 ## How wide the box is
 

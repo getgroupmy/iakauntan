@@ -221,7 +221,7 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
                   const SizedBox(height: Space.md),
                   DropdownButtonFormField<String>(
                     key: const ValueKey('budget-period'),
-                    value: periodId,
+                    initialValue: periodId,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Period'),
                     items: [

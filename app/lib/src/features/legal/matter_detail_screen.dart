@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -80,7 +81,8 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen>
         children: [
           AsyncView(
             value: summaries,
-            loading: const LinearProgressIndicator(),
+            skeleton: const CardRowsSkeleton(
+                rows: 2, leading: false, trailing: 2),
             builder: (list) {
               final s =
                   list.where((e) => e.matterId == widget.matterId).firstOrNull;
@@ -280,6 +282,7 @@ class _ClientLedgerTab extends ConsumerWidget {
       body: AsyncView(
         value: txns,
         onRetry: () => ref.invalidate(clientTransactionsProvider(matterId)),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -442,7 +445,7 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _type,
+                  initialValue: _type,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Type'),
                   items: const [
@@ -805,6 +808,7 @@ class _TimeTab extends ConsumerWidget {
       body: AsyncView(
         value: entries,
         onRetry: () => ref.invalidate(timeEntriesProvider(matterId)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -1014,7 +1018,7 @@ class _TimeDialogState extends ConsumerState<_TimeDialog> {
               ]),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _activity,
+                initialValue: _activity,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Activity'),
                 items: const [
@@ -1106,6 +1110,7 @@ class _DisbursementsTab extends ConsumerWidget {
       body: AsyncView(
         value: items,
         onRetry: () => ref.invalidate(disbursementsProvider(matterId)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(
@@ -1230,7 +1235,7 @@ class _DisbursementDialogState extends ConsumerState<_DisbursementDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _paidFrom,
+                initialValue: _paidFrom,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Paid from',

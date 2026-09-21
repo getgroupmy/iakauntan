@@ -36,7 +36,9 @@ should be quoted to a customer.
 The **iAkauntan** side is verified, the same way the other two gap
 documents verify it: by reading the migrations in this repository, not a
 summary of them. Where a claim is "we do not have this", it means no
-migration defines it — checked by name across all 306.
+migration defines it — checked by name across all 306, which is how
+many there were when this was written. There are 647 now, and the
+two corrections below are what that difference cost.
 
 ## What Rillet is, and why most of it does not apply
 
@@ -67,7 +69,7 @@ of publishing an ERP's API, and iAkauntan publishes nothing:
 | MCP server | official, OAuth 2.0 + PKCE | none |
 | `.well-known/` discovery | yes | none |
 | Documented error format | RFC 9457 `problem+json` | none |
-| Idempotency on writes | `Idempotency-Key`, 24h | **none — see below** |
+| Idempotency on writes | `Idempotency-Key`, 24h | `idempotency_keys`, 24h — `0307`–`0308` |
 | Pagination contract | keyset, `next_cursor`, 2h TTL | none |
 | API versioning | `X-Rillet-API-Version` header | none |
 
@@ -84,14 +86,29 @@ building anything new, and it can be regenerated in CI so it cannot
 drift — the same discipline `scripts/check_embeds.py` already applies to
 the client's queries.
 
-### The one that is a real defect, not a gap
+### The one that was a real defect, not a gap
 
-**There is no idempotency key anywhere in the schema.** Checked by name:
-no `idempotency_key` column, no `p_idempotency` parameter, nothing. The
-word appears in eleven migrations and every occurrence is prose — functions
-that happen to be idempotent because they check state first, such as
-`post_document` refusing a document that already carries a
-`gl_entry_id`.
+> **Closed at `0307`–`0308`**, and this heading said otherwise for
+> months while the section at the foot of this page said it was done.
+> A document that contradicts itself is worse than either half, and the
+> stale half here was the one a reader reaches FIRST — the table above
+> said `none`, and so did the first sentence under this heading. The
+> argument is kept because it is why the thing was built.
+
+~~**There is no idempotency key anywhere in the schema.** Checked by
+name: no `idempotency_key` column, no `p_idempotency` parameter,
+nothing. The word appears in eleven migrations and every occurrence is
+prose — functions that happen to be idempotent because they check state
+first, such as `post_document` refusing a document that already carries
+a `gl_entry_id`.~~
+
+`public.idempotency_keys` carries the key, a fingerprint of the
+arguments and the answer; `app.idempotency_begin/end` wrap the write;
+`app.sweep_idempotency_keys` clears them after a day from the nightly
+pass. Fifteen migrations name the column now. A retry with the same key
+returns the first call's answer, and the same key with different
+arguments is refused rather than quietly answered — which is the half a
+gateway usually gets wrong.
 
 Inside the Flutter client that has been survivable: one client, and it
 controls its own retries. It stops being survivable the moment anything
@@ -171,12 +188,14 @@ Checked, and already present:
 
 In order, cheapest first:
 
-1. **Idempotency keys on the write RPCs.** A real defect, worth fixing
-   regardless of any API plan.
-2. **Describe the surface that already exists** — OpenAPI generated
-   from `pg_proc`, plus `llms.txt`, regenerated in CI.
-3. **Decide on revenue recognition.** An accounting hole with a real
-   MFRS 15 argument behind it, and a substantial build.
+1. ~~**Idempotency keys on the write RPCs.** A real defect, worth
+   fixing regardless of any API plan.~~ Done at `0307`–`0308`.
+2. ~~**Describe the surface that already exists** — OpenAPI generated
+   from `pg_proc`, plus `llms.txt`, regenerated in CI.~~ Done; both are
+   in `docs/api/` and CI refuses a description that has drifted.
+3. ~~**Decide on revenue recognition.** An accounting hole with a real
+   MFRS 15 argument behind it, and a substantial build.~~ Done at
+   `0309`–`0313`.
 4. **Contracts, usage billing and ARR** — only on a decision to sell to
    subscription businesses.
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -205,6 +206,11 @@ class _StallItemsDialogState extends ConsumerState<_StallItemsDialog> {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: items,
           onRetry: () => ref.invalidate(itemStallsProvider),
+          skeleton: const ListSkeleton(
+            rows: 4,
+            leading: false,
+            subtitle: false,
+          ),
           builder: (all) {
             final mine = itemsOnStall(all, _stallId);
             return Column(

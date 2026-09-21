@@ -319,4 +319,122 @@ begin
       'public.statement_balance(uuid, date)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The OTHER statement, and the two rules it was missing
+--
+-- The PDF a customer is handed is not this function. It is the
+-- OPEN-ITEM statement -- one line per document still outstanding --
+-- built in the client from `Repo.outstandingFor`, and both styles are
+-- legitimate. What neither of them is, is a list of documents that were
+-- never issued.
+--
+-- That query filtered `balance_amount > 0` and `deleted_at is null` and
+-- nothing else, while `report_ar_aging` -- the same open-item question
+-- asked in SQL -- also requires `d.gl_entry_id is not null` and
+-- `d.status <> 'void'`. So:
+--
+--   * a DRAFT invoice carries its full `balance_amount` from the moment
+--     its lines are typed, and went out as money due;
+--   * a VOIDED one keeps its balance as well, because
+--     `void_sales_document` sets the status and reverses the ledger
+--     entry and never touches the column.
+--
+-- Both reached a document that goes to a customer, and both made it
+-- disagree with the ageing report by exactly their own value.
+--
+-- The predicates below are the ones the repository now sends, written
+-- out rather than referred to: this file is the only place the two
+-- languages can be compared, and a predicate named but not run proves
+-- nothing about either.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_c uuid; v_ac uuid;
+  v_draft uuid; v_void uuid; v_real uuid;
+  v_open integer; v_aged numeric; v_openval numeric;
+begin
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Probe Open Items');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  select id into v_ac from public.accounts
+   where org_id = v_org and account_type = 'revenue' and not is_group
+   limit 1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CU', 'A customer', 'customer') returning id into v_c;
+
+  -- One of each: never issued, cancelled, and real.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'OI-DRAFT', date '2026-02-01', date '2026-03-01',
+          v_c, 'MYR', 1, 'draft')
+  returning id into v_draft;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (v_org, v_draft, 1, 'item', 'Still being written', 1, 5000, v_ac, 0);
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'OI-VOID', date '2026-02-01', date '2026-03-01',
+          v_c, 'MYR', 1, 'draft')
+  returning id into v_void;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (v_org, v_void, 1, 'item', 'Raised in error', 1, 3000, v_ac, 0);
+  perform app.post_sales_document_internal(v_void);
+  perform public.void_sales_document(v_void, 'Wrong customer');
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'OI-REAL', date '2026-02-01', date '2026-03-01',
+          v_c, 'MYR', 1, 'draft')
+  returning id into v_real;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (v_org, v_real, 1, 'item', 'Work done', 1, 1200, v_ac, 0);
+  perform app.post_sales_document_internal(v_real);
+
+  -- The two that must not be on it still carry a balance. Asserted
+  -- rather than assumed, because if this ever stops being true the
+  -- filters below stop being the thing that saves the statement and
+  -- nothing would say so.
+  perform pg_temp.check_true('a draft carries its full balance',
+    (select balance_amount from public.sales_documents where id = v_draft) > 0);
+  perform pg_temp.check_true('and so does a voided document',
+    (select balance_amount from public.sales_documents where id = v_void) > 0);
+
+  -- What the app now asks for.
+  select count(*), coalesce(sum(d.balance_amount), 0)
+    into v_open, v_openval
+    from public.sales_documents d
+   where d.org_id = v_org
+     and d.contact_id = v_c
+     and d.doc_type in ('invoice', 'credit_note', 'debit_note', 'refund_note')
+     and d.balance_amount > 0
+     and d.gl_entry_id is not null
+     and d.status <> 'void'
+     and d.deleted_at is null;
+
+  perform pg_temp.check_eq('the open-item list holds the real invoice alone',
+    v_open::text, '1');
+  perform pg_temp.check_eq('and it is worth what was actually issued',
+    v_openval::text, '1200.00');
+
+  -- And the ageing report, asked the same question its own way, agrees.
+  select coalesce(sum(a.base_outstanding), 0) into v_aged
+    from public.report_ar_aging(v_org, date '2026-03-15') a;
+  perform pg_temp.check_eq('which is what the ageing report says too',
+    v_aged::text, v_openval::text);
+
+  raise notice
+    'open items: a draft and a void are on neither the statement nor the '
+    'ageing report';
+end $$;
+
 rollback;

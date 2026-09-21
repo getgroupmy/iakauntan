@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -52,7 +53,7 @@ class _AccessList extends ConsumerWidget {
     return AsyncView(
       value: people,
       onRetry: () => ref.invalidate(chatAccessListProvider),
-      loading: const LinearProgressIndicator(),
+      skeleton: const CardRowsSkeleton(rows: 4, trailing: 1),
       builder: (list) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -101,7 +102,8 @@ class _Links extends ConsumerWidget {
     return AsyncView(
       value: links,
       onRetry: () => ref.invalidate(chatLinksProvider),
-      loading: const LinearProgressIndicator(),
+      skeleton: const CardRowsSkeleton(
+          rows: 3, leadingSize: 24, lines: 1, trailing: 1),
       builder: (list) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

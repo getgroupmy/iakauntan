@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -169,6 +170,7 @@ class LandedCostScreen extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: runs,
         onRetry: () => ref.invalidate(landedCostRunsProvider(null)),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -483,7 +485,7 @@ class _ChargeRow extends StatelessWidget {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: charge.basis,
+                  initialValue: charge.basis,
                   isDense: true,
                   decoration: const InputDecoration(
                     labelText: 'Spread by',
@@ -610,6 +612,7 @@ class _RunSheet extends ConsumerWidget {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: preview,
                 onRetry: () => ref.invalidate(landedCostPreviewProvider(id)),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (rows) => ListView.separated(
                   shrinkWrap: true,
                   itemCount: rows.length,

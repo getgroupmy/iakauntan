@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 
 /// Handing the company to somebody else, and the record of it having
@@ -48,6 +49,9 @@ class HandoverCard extends ConsumerWidget {
         AsyncView(
           value: history,
           onRetry: () => ref.invalidate(companyTransferHistoryProvider),
+          // Two, and no more. Most companies have never changed hands
+          // at all, so this list is short wherever it is not empty.
+          skeleton: const ListSkeleton(rows: 2, leading: false),
           builder: (rows) => Card(
             child: Column(
               children: [

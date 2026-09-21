@@ -48,10 +48,65 @@ class _TwoFactorCardState extends ConsumerState<TwoFactorCard> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _read();
   }
 
-  Future<void> _load() async {
+  /// The factors already on the session.
+  ///
+  /// NOT `mfa.listFactors()`, which is the obvious call and is the
+  /// reason Settings used to reload itself every two seconds until it
+  /// signed the person out. Its own doc comment says what it does --
+  /// "Automatically refreshes the session to get the latest list of
+  /// factors" -- and its body is `await _client.refreshSession()`
+  /// before it reads anything. So a READ rotated the token, the
+  /// rotation emitted `tokenRefreshed`, and until `userIdentityProvider`
+  /// existed that reloaded every provider downstream of
+  /// `currentUserProvider`, which disposed and re-created this card,
+  /// whose `initState` called it again. `core/providers.dart` has the
+  /// measurements and the sign-out at the end of them.
+  ///
+  /// Nothing is lost by not asking. The factors arrive with every token
+  /// response and `listFactors` returns exactly what is read here,
+  /// filtered the same way -- verified TOTP factors. What the refresh
+  /// was buying was a list one round trip fresher than the session, on
+  /// a screen whose list only changes when the person on it changes it.
+  ///
+  /// The two places that DO need a refresh -- after enrolling and after
+  /// removing -- call [_reload], because those change the JWT's own
+  /// `aal` and `amr` claims and a stale session would then be wrong
+  /// about what the person has.
+  void _read() {
+    // Guarded, and `_load` was too -- this is the same guard for the
+    // same reason, kept rather than dropped with the call it used to
+    // wrap. Two-factor is a project-level setting, so on a project
+    // without it there may be no session to read factors off, and this
+    // card is one of a dozen on the Settings page. A card that cannot
+    // read its own state should be ABSENT, which is what `_factors ==
+    // null` draws; it must not take the page down.
+    //
+    // Found by a widget test rather than by reasoning: it asserts the
+    // account card is reachable with no company, does not stand up
+    // Supabase, and `supabaseProvider` throws on the way in. The old
+    // catch swallowed that and the first version of this method did
+    // not, which turned a card into a broken screen.
+    List<Factor> totp;
+    try {
+      final user = ref.read(supabaseProvider).auth.currentUser;
+      totp = [
+        for (final f in user?.factors ?? const <Factor>[])
+          if (f.factorType == FactorType.totp &&
+              f.status == FactorStatus.verified)
+            f,
+      ];
+    } catch (_) {
+      if (mounted) setState(() => _factors = null);
+      return;
+    }
+    if (mounted) setState(() => _factors = totp);
+  }
+
+  /// After enrolling or removing, where the session really is stale.
+  Future<void> _reload() async {
     try {
       final res = await ref.read(supabaseProvider).auth.mfa.listFactors();
       if (!mounted) return;
@@ -110,7 +165,7 @@ class _TwoFactorCardState extends ConsumerState<TwoFactorCard> {
         // Nothing to tell anybody. They cancelled; the tidying is ours.
       }
     }
-    await _load();
+    await _reload();
   }
 
   /// A name somebody will recognise in a list of two.
@@ -150,7 +205,7 @@ class _TwoFactorCardState extends ConsumerState<TwoFactorCard> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-    await _load();
+    await _reload();
   }
 
   @override

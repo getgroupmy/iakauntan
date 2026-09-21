@@ -307,7 +307,7 @@ class _TenancySheetState extends ConsumerState<_TenancySheet> {
                   const SizedBox(width: Space.md),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _status,
+                      initialValue: _status,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Status'),
                       items: [

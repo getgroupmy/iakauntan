@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -84,6 +85,15 @@ class _PlatformTrailAdminTabState extends ConsumerState<PlatformTrailAdminTab> {
                   value: trail,
                   onRetry: () =>
                       ref.invalidate(platformAuditTrailProvider(_table)),
+                  // A sentence and the figures underneath it, with
+                  // nothing in front: `_TrailTile` is a Column, not a
+                  // ListTile, and outlining it as one would make the
+                  // card half as tall again as its contents.
+                  skeleton: const CardRowsSkeleton(
+                    rows: 4,
+                    leading: false,
+                    rowGap: Space.md,
+                  ),
                   builder: (rows) {
                     if (rows.isEmpty) {
                       return const EmptyState(
@@ -124,6 +134,9 @@ class _PlatformTrailAdminTabState extends ConsumerState<PlatformTrailAdminTab> {
                 AsyncView<List<SecurityEvent>>(
                   value: events,
                   onRetry: () => ref.invalidate(platformSecurityLogProvider),
+                  // This one IS a ListTile — a dense one, with an icon
+                  // that says whether the read was refused.
+                  skeleton: const ListSkeleton(rows: 4, trailing: false),
                   builder: (rows) {
                     if (rows.isEmpty) {
                       return const EmptyState(

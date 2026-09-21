@@ -6,6 +6,7 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ea_form_repository.dart';
@@ -77,8 +78,11 @@ class _ClockCard extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(Space.lg),
         child: today.when(
-          loading: () => const SizedBox(
-              height: 72, child: Center(child: CircularProgressIndicator())),
+          // The card is an icon, two lines and the controls at the
+          // end whatever the punch says; only which words and which
+          // button are waiting on the record.
+          loading: () => const CardRowsSkeleton(
+              leadingSize: 48, trailing: 2, trailingWidth: 56, rowGap: 0),
           error: (e, _) => Text('$e'),
           data: (record) {
             final clockedIn = record?.clockIn != null && record?.clockOut == null;

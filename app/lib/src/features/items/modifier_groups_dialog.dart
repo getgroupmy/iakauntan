@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -72,6 +73,7 @@ class _ModifierGroupsDialog extends ConsumerWidget {
               AsyncView(
                 value: groups,
                 onRetry: () => ref.invalidate(posModifierGroupsProvider),
+                skeleton: const CardRowsSkeleton(rows: 3, trailing: 1),
                 builder: (list) {
                   if (list.isEmpty) {
                     return const Padding(
@@ -183,6 +185,8 @@ class _GroupTile extends ConsumerWidget {
         AsyncView(
           value: options,
           onRetry: () => ref.invalidate(posModifierOptionsProvider(id)),
+          skeleton: const CardRowsSkeleton(
+              rows: 3, leading: false, lines: 1, trailing: 2),
           builder: (list) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

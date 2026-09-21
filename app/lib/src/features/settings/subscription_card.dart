@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -119,7 +120,8 @@ class _SubscriptionCardState extends ConsumerState<SubscriptionCard> {
             AsyncView(
               value: charges,
               onRetry: () => ref.invalidate(moduleChargesProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 4, leading: false, trailing: 2),
               builder: (month) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -156,7 +158,8 @@ class _SubscriptionCardState extends ConsumerState<SubscriptionCard> {
             AsyncView(
               value: invoices,
               onRetry: () => ref.invalidate(creditInvoicesProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 3, leading: false, trailing: 2),
               builder: (rows) {
                 if (rows.isEmpty) {
                   return Padding(

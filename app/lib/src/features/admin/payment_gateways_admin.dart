@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
@@ -39,6 +40,7 @@ class PaymentGatewaysAdminTab extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: gateways,
         onRetry: () => ref.invalidate(platformGatewaysAdminProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -256,7 +258,7 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: _mode,
+                initialValue: _mode,
                 decoration: const InputDecoration(
                   labelText: 'Mode',
                   helperText: 'Sandbox until a real payment has gone through',

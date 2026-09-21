@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // `RepoOcrCatalog` is an extension, and a Dart extension is only in
@@ -48,6 +49,7 @@ class OcrCatalogAdminTab extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: catalog,
         onRetry: () => ref.invalidate(ocrProviderCatalogProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(

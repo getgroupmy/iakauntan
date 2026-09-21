@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
@@ -691,13 +692,10 @@ class _Statements extends ConsumerWidget {
 
   final String filingId;
 
-  static const _titles = {
-    'sofp': 'Statement of financial position',
-    'soploci': 'Profit or loss and other comprehensive income',
-    'socie': 'Changes in equity',
-    'socf': 'Cash flows',
-    'disclosure': 'Disclosures',
-  };
+  // `fsStatements` rather than a copy. The list is also what
+  // `missingStatements` reads to work out what is NOT here, and two
+  // copies would let the note disagree with the headings above it.
+  static const _titles = fsStatements;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -706,6 +704,7 @@ class _Statements extends ConsumerWidget {
     return AsyncView(
       value: rows,
       onRetry: () => ref.invalidate(fsExportProvider(filingId)),
+      skeleton: const TableSkeleton(columns: 3, rows: 6),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(
@@ -724,9 +723,34 @@ class _Statements extends ConsumerWidget {
               .add(r);
         }
 
+        // What is NOT here, said out loud.
+        //
+        // The sections below are drawn from whatever the export
+        // contains, so a statement with no rows simply does not appear
+        // — and `mbrs_elements` seeds `sofp` and `soploci` only, so
+        // three of the five are always absent on today's taxonomy. A
+        // preparer read two sections, exported them, and was three
+        // statements short at the counter with nothing having said so.
+        final absent = missingStatementsNote(byStatement.keys);
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (absent != null)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.lg),
+                child: Card(
+                  key: const ValueKey('fs-missing-statements'),
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.info_outline,
+                      color: context.colors.warning,
+                    ),
+                    title: const Text('A lodgement needs all five'),
+                    subtitle: Text(absent),
+                  ),
+                ),
+              ),
             for (final entry in byStatement.entries) ...[
               Padding(
                 padding: const EdgeInsets.only(top: Space.lg, bottom: Space.sm),

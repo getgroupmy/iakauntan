@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -137,6 +138,7 @@ class _WeighedListState extends ConsumerState<_WeighedList> {
       body: AsyncView(
         value: items,
         onRetry: _reload,
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -280,6 +282,7 @@ class _FormatListState extends ConsumerState<_FormatList> {
       body: AsyncView(
         value: formats,
         onRetry: _reload,
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -449,7 +452,7 @@ class _FormatSheetState extends ConsumerState<_FormatSheet> {
             const SizedBox(height: Space.md),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _kind,
+              initialValue: _kind,
               decoration: const InputDecoration(labelText: 'That number is'),
               items: const [
                 DropdownMenuItem(

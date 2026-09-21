@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -96,6 +97,7 @@ class BankRulesCard extends ConsumerWidget {
             AsyncView<List<Map<String, dynamic>>>(
               value: rules,
               onRetry: () => ref.invalidate(bankRulesProvider),
+              skeleton: const ListSkeleton(rows: 4, leading: false),
               builder: (rows) => rows.isEmpty
                   ? const EmptyState(
                       icon: Icons.rule_outlined,

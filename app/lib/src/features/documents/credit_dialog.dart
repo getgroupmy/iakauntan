@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -149,6 +150,7 @@ class _CreditDialogState extends ConsumerState<_CreditDialog> {
         width: 460,
         child: AsyncView(
           value: remaining,
+          skeleton: const FormSkeleton(fields: 4),
           builder: (rows) {
             // Seeded once with everything still creditable: the common
             // case is the customer brought the lot back, and a dialog

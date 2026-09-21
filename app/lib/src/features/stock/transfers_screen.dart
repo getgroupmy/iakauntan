@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -194,6 +195,7 @@ class _TransferListState extends ConsumerState<_TransferList> {
       body: AsyncView(
         value: transfers,
         onRetry: _reload,
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -680,6 +682,7 @@ class _ConversionListState extends ConsumerState<_ConversionList> {
       body: AsyncView(
         value: conversions,
         onRetry: _reload,
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
         if (rows.isEmpty) {
           return const EmptyState(
@@ -1008,6 +1011,7 @@ class _TimesDialogState extends ConsumerState<_TimesDialog> {
                 value: outputs,
                 onRetry: () =>
                     ref.invalidate(itemConversionOutputsProvider(id)),
+                skeleton: const ListSkeleton(rows: 3, leading: false),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return Text('Nothing — nobody said what comes out.',

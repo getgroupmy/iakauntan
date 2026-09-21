@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -62,6 +63,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       body: AsyncView(
         value: checklists,
         onRetry: () => ref.invalidate(onboardingChecklistsProvider(_openOnly)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? const EmptyState(
                 icon: Icons.checklist_rtl_outlined,
@@ -304,6 +306,15 @@ class _TasksDialog extends ConsumerWidget {
           child: AsyncView(
             value: tasks,
             onRetry: () => ref.invalidate(onboardingTasksProvider(id)),
+            // `_TaskRow` is a CheckboxListTile, so the thing at the
+            // front is a checkbox and not a face: 24, as
+            // `CardRowsSkeleton`'s own comment argues.
+            skeleton: const CardRowsSkeleton(
+              rows: 5,
+              leadingSize: 24,
+              lines: 1,
+              rowGap: Space.xs,
+            ),
             builder: (list) => Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

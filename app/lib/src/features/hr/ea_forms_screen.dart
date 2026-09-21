@@ -5,6 +5,7 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ea_form_repository.dart';
@@ -122,6 +123,7 @@ class _EaFormsScreenState extends ConsumerState<EaFormsScreen> {
       body: AsyncView(
         value: rows,
         onRetry: () => ref.invalidate(eaFormsProvider(_year)),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(

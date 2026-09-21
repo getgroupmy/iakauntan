@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'recurring_template_dialog.dart';
@@ -64,6 +65,7 @@ class _RecurringDocumentsScreenState
       body: AsyncView(
         value: rows,
         onRetry: () => ref.invalidate(recurringDocumentsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (list) => list.isEmpty
             ? const EmptyState(
                 icon: Icons.event_repeat_outlined,

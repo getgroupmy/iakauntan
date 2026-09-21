@@ -73,11 +73,16 @@ void main() {
   });
 
   group('the console form', () {
-    // A published page is a decision on the three the footer links to,
+    // A published page is a decision on the four the footer links to,
     // and no decision at all on the two that always draw. A switch that
     // changes nothing is worse than an absent one.
     test('knows which pages have something to publish', () {
-      for (final slug in ['terms', 'privacy', 'contact']) {
+      for (final slug in [
+        'terms',
+        'terms-of-service',
+        'privacy',
+        'contact',
+      ]) {
         expect(sitePageHint(slug), contains('once published'), reason: slug);
       }
       for (final slug in ['signin', 'signup']) {
@@ -89,15 +94,24 @@ void main() {
       }
     });
 
-    test('names all five, and names them the same way twice', () {
-      const slugs = ['signin', 'signup', 'terms', 'privacy', 'contact'];
+    test('names all six, and names them the same way twice', () {
+      const slugs = [
+        'signin',
+        'signup',
+        'terms',
+        'terms-of-service',
+        'privacy',
+        'contact',
+      ];
       for (final slug in slugs) {
         // A label that fell through to the raw slug would put "privacy"
         // in the operator's menu, which is a bug that ships silently.
         expect(sitePageLabel(slug), isNot(slug), reason: slug);
         expect(sitePageHint(slug), isNotEmpty, reason: slug);
       }
-      expect(slugs.map(sitePageLabel).toSet(), hasLength(5));
+      // Six distinct labels. Two pages sharing one would be `0651`'s
+      // failure mode exactly: an operator editing the wrong document.
+      expect(slugs.map(sitePageLabel).toSet(), hasLength(6));
     });
   });
 
@@ -197,13 +211,42 @@ void main() {
     });
   });
 
-  test('the shipped heading matches the console label for the three '
+  test('the shipped heading matches the console label for the four '
       'pages that have both', () {
     // Two names for the same page, in two files. They drift, and the
     // drift shows up as an operator looking for "Terms of Use" in a
     // console section called something else.
-    for (final slug in ['terms', 'privacy', 'contact']) {
+    for (final slug in [
+      'terms',
+      'terms-of-service',
+      'privacy',
+      'contact',
+    ]) {
       expect(defaultSitePageTitle(slug), sitePageLabel(slug), reason: slug);
+    }
+  });
+
+  test('terms of use and terms of service are told apart everywhere', () {
+    // `0651` adds a page BESIDE the terms rather than renaming them,
+    // and the one way that goes wrong quietly is two controls reading
+    // the same. An operator with both in the console has to be able to
+    // tell which one they are editing.
+    expect(sitePageLabel('terms'), isNot(sitePageLabel('terms-of-service')));
+    expect(
+      defaultSitePageTitle('terms'),
+      isNot(defaultSitePageTitle('terms-of-service')),
+    );
+    expect(sitePageLabel('terms-of-service'), 'Terms of Service');
+    expect(sitePageLabel('terms'), 'Terms of Use');
+  });
+
+  test('every linked page says where it ends up', () {
+    // The hint under the box is the only place the console says what
+    // pressing Publish does. A page added without one is a page an
+    // operator publishes without knowing where it goes.
+    for (final slug in ['terms', 'terms-of-service', 'privacy', 'contact']) {
+      expect(sitePageHint(slug), isNotEmpty, reason: slug);
+      expect(sitePageHint(slug), contains('/$slug'), reason: slug);
     }
   });
 }

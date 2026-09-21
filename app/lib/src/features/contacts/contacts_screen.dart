@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../shared/scan_intake.dart';
+import 'contact_delete.dart';
 import 'contact_editor.dart';
 import 'contact_records.dart';
 
@@ -114,6 +116,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       body: AsyncView(
         value: contacts,
         onRetry: () => ref.invalidate(contactsProvider),
+        // Rows, with an avatar and an amount. The shape is known
+        // before the names are.
+        skeleton: const ListSkeleton(),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(
@@ -136,7 +141,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: list.length,
             separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
-            itemBuilder: (context, i) => _ContactTile(contact: list[i]),
+            itemBuilder: (context, i) =>
+                _ContactTile(contact: list[i], canWrite: canWrite),
           );
         },
       ),
@@ -144,13 +150,21 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 }
 
-class _ContactTile extends StatelessWidget {
-  const _ContactTile({required this.contact});
+class _ContactTile extends ConsumerWidget {
+  const _ContactTile({required this.contact, required this.canWrite});
 
   final Contact contact;
 
+  /// Whether this person may change this company's records at all.
+  ///
+  /// The button is absent rather than disabled where they may not. A
+  /// greyed-out delete on every row of a read-only view is an offer
+  /// being withdrawn two hundred times; `0654`'s function refuses it
+  /// anyway, which is where the rule actually lives.
+  final bool canWrite;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
 
     return ListTile(
@@ -218,6 +232,29 @@ class _ContactTile extends StatelessWidget {
               child: StatusChip(contact.contactType, compact: true),
             ),
           ),
+          // `0654`. At the right end of the row, as asked for. It
+          // asks before it does anything, and where the contact has
+          // documents or ledger entries behind it the server refuses
+          // and the refusal names them.
+          if (canWrite)
+            IconButton(
+              key: ValueKey('delete-${contact.id}'),
+              tooltip: 'Delete this contact',
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: () async {
+                final gone = await confirmAndDeleteContact(
+                  context,
+                  ref,
+                  id: contact.id,
+                  name: contact.name,
+                );
+                // Only on success, and `invalidate` rather than a
+                // local removal: the list is a provider, and a row
+                // taken out of a copy of it comes back on the next
+                // keystroke in the search box.
+                if (gone) ref.invalidate(contactsProvider);
+              },
+            ),
           const Icon(Icons.chevron_right, size: 18),
         ],
       ),

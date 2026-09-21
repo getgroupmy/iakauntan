@@ -178,7 +178,7 @@ class _LogAttemptSheetState extends ConsumerState<_LogAttemptSheet> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: _channel,
+                  initialValue: _channel,
                   decoration: const InputDecoration(labelText: 'How'),
                   items: [
                     for (final e in _channels.entries)
@@ -191,7 +191,7 @@ class _LogAttemptSheetState extends ConsumerState<_LogAttemptSheet> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: _outcome,
+                  initialValue: _outcome,
                   decoration: const InputDecoration(labelText: 'What happened'),
                   items: [
                     for (final e in _outcomes.entries)

@@ -5,6 +5,12 @@ accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for
 Malaysian businesses. `README.md` is the real orientation — read it before
 changing anything statutory.
 
+**Picking up work in progress?** `docs/handoff.md` carries the state of
+the branch, what is applied to the live database, what is blocked on the
+user, and the traps that have already been paid for once. It is written
+to be read by a session that has none of the preceding conversation —
+including one signed in as a different account.
+
 Three things to know before you touch the code:
 
 - **The database is the application.** Business rules live in SQL — numbered,

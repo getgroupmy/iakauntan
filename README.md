@@ -941,6 +941,87 @@ e-mail with an access type; when the invited person registers, the
 database claims the pending invitation and drops them into the right
 company with the right role.
 
+### The app opens at the form, not the front page
+
+`/` is the landing page on the web, and that is deliberate: somebody who typed
+`iakauntan.com` has not come to sign in, they have come to find out what this
+is. Nobody installs an accounting system from an app store to read about
+accounting systems, so on iOS and Android `/` and `/welcome` resolve to the
+sign-in form instead — in one hop, by asking what `/signin` itself answers,
+because returning `/signin` flat put a signed-in platform operator through
+four screens' worth of router rebuilds and the loop-freedom sweep in
+`router_redirect_test.dart` refused it.
+
+`core/surface.dart` is the one place that decides which surface this is. The
+`kIsWeb` test in it comes first and is load-bearing: Flutter web in Safari on
+an iPhone answers `TargetPlatform.iOS` to `defaultTargetPlatform`, because
+that getter is about which look and feel to adopt rather than how the code was
+compiled — so a check on the platform alone would take the front page away
+from most of the product's visitors.
+
+### Three passkey switches and a mobile register veto
+
+`0638`. Platform console → Site pages → Sign-in now carries five switches
+where it carried two:
+
+* **Offer a passkey** — the website (`signin_show_passkey`, `0579`).
+* **Offer a passkey in the Android app** (`signin_show_passkey_android`).
+* **Offer a passkey in the iOS app** (`signin_show_passkey_ios`).
+* **Offer an account** — the website (`signin_show_register`).
+* **Offer an account in the apps** (`signin_show_register_mobile`).
+
+The three passkey switches are separate because the three surfaces need three
+different things done to them before the button can work: all of them need
+passkeys switched on for the project in the Supabase dashboard, Android
+additionally needs an `assetlinks.json` served from the domain, and iOS
+additionally needs an Associated Domains entitlement and an
+`apple-app-site-association`. Those are finished on different days by
+different people, and two of them can be wrong in a way nothing in the app can
+detect until somebody presses the button. One switch would mean the first
+surface to be ready turning the button on for the two that are not. All three
+ship **off**; `docs/passkeys.md` is the list.
+
+`signin_show_register_mobile` ships **on**, unlike the other two, because it
+takes something away rather than offering something new — a switch that ships
+in the state which changes behaviour is a migration that changes behaviour. It
+is a *veto* over `signin_show_register` rather than a replacement: the app
+draws the link when both are on, so an operator who wants strangers to sign up
+on the website and not in the app turns this one off and leaves the other
+alone.
+
+None of the five is a security control. `signup_enabled` is, and `0563`
+enforces it with a trigger on `auth.users`; these decide only what is drawn.
+
+### Loading skeletons, and where they are the wrong answer
+
+`core/skeletons.dart`, over the `skeletonizer` package. `AsyncView` takes an
+optional `skeleton:`, and where a screen supplies one it draws a grey outline
+of the rows on the way instead of a spinner on an empty page.
+
+**Opt-in, not the default**, and the line is about honesty rather than taste.
+`core/page_waiting.dart` argues the opposite case for the pages a visitor sees
+before signing in, and it is still right: those are operator-edited, so how
+many bullets sit beside the form and whether there is a panel at all are things
+the payload is about to decide. A skeleton there is a *guess* at a shape, and a
+guess that turns out wrong is the same flicker in fainter grey. A list of
+invoices is not that — rows, in a list, each with a name and an amount — so
+drawing the shape says something true. A skeleton belongs where the layout is
+already decided and only the values are missing.
+
+Spinners stay for anything a person has just pressed. A spinner in a button
+means "your press is being dealt with": it is about time passing, not about a
+shape, and a bone in its place would say nothing.
+
+The one thing worth testing hard is the geometry. A skeleton grid that breaks
+at different widths from the real grid reflows the instant the data lands —
+which is exactly the flicker a skeleton exists to remove, and nothing would
+ever report it, because the outline and the content are never on screen at the
+same moment. So `tileColumns` is a single shared function that both the
+dashboard's metric grids and `TilesSkeleton` call, and `skeletons_test.dart`
+samples widths either side of both breakpoints. Sampling only 1200, 800 and
+400 did not catch a hardcoded copy — every one of them falls on the same side
+of almost any plausible pair of breakpoints.
+
 ### Forgetting and changing a password
 
 Two different situations, and they are deliberately not the same screen.
@@ -1148,11 +1229,24 @@ assertions passed by hand and failed from a clean build. `0071` writes
 that fix down. **A clean build from the migrations is the only thing that
 tests the migrations**, which is the whole reason that job exists.
 
-Both jobs that touch Flutter pin `flutter-version: 3.32.0` rather than
+Every job that touches Flutter pins `flutter-version: 3.47.4` rather than
 tracking `channel: stable`. A newer stable deprecated `DropdownButtonFormField`'s
 `value` argument; with `--fatal-infos` that turned into 37 errors in code
 nobody had touched. Bump the pin deliberately, with the deprecations
-fixed in the same commit.
+fixed in the same commit — which is exactly what the 3.32.0 → 3.47.4 bump
+was: 137 analyzer issues, 109 of them that same `value` → `initialValue`
+rename, ten `Radio.groupValue` uses that now want a `RadioGroup` ancestor,
+and eight `experimental_member_use` warnings on GoTrue's passkey API.
+
+The bump was forced by the `android` job rather than chosen. Flutter 3.32.0's
+own Gradle plugin sets `fileMode` on a `Copy` task; Gradle 8.3 deprecated that
+property and Gradle 9 removed it. `app/android` pins Gradle 9.3.1 and AGP
+9.1.0, so Flutter 3.32.0 could not compile its own plugin and `assembleDebug`
+died on `Unresolved reference 'fileMode'`. That was not a CI problem — the
+Android build was broken for anybody on the pinned SDK, and the Android job
+is the first thing that ever said so. 3.35.0 is the first stable whose plugin
+drops `fileMode`; 3.47.4 is taken because it is the newest stable and because
+`record: ^7.1.1` names it.
 
 Supabase's linter reports no errors. Two warnings remain and are expected:
 `citext` and `pg_trgm` living in `public` (moving them would break the
@@ -1808,8 +1902,32 @@ Stated plainly so nothing here is mistaken for finished:
   on it — the database does not require `aal2` on anything, so it stops
   somebody with the password and not the phone and would not stop a
   client that never drew the dialog, and that page says what closing
-  the gap would take. What is still missing is **OAuth**, which needs a
-  provider's credentials in the dashboard
+  the gap would take. **OAuth** was the last of these, and the line
+  that stood here said it "needs a provider's credentials in the
+  dashboard" — which implied code waiting on a secret. Checked rather
+  than re-read, like the three entries below: there was no OAuth code
+  at all. Nothing called `signInWithOAuth`, named an `OAuthProvider` or
+  drew a provider button, so the credentials would have had nothing to
+  arrive at.
+
+  `0645` writes it: **Continue with Google**, Platform console → Site
+  pages, off by default like every other way in. Google alone, because
+  that is the account a Malaysian business has; a second provider is a
+  column, a switch and a button when somebody asks for one.
+
+  Two walls rather than the usual one, and the console says both. The
+  provider needs a client ID and secret in the Supabase dashboard, or
+  the button lands on an error page — the same argument the magic link
+  makes about SMTP. And **the button is drawn on the web only, however
+  the switch is set**: `signInWithOAuth` returns through a `redirectTo`
+  and neither platform registers a URL scheme — `AndroidManifest.xml`
+  has none in its intent filters, `Info.plist` has no
+  `CFBundleURLSchemes` — so on a phone a provider would have nowhere
+  to send the visitor back to, and the button would be a way out of
+  the app with no way back in. That is a platform file rather than a
+  line of Dart, the same class of blocker as the two passkey
+  association files, and `googleButtonShown` is the one place that
+  changes when a scheme exists
 - Migration from another accounting system. `docs/migrating-from-autocount.md`
   plans one from AutoCount Cloud and named what had to be built first —
   that **no table recorded where a row came from**, so no import could be
@@ -1826,19 +1944,71 @@ Stated plainly so nothing here is mistaken for finished:
 ### Built, but not reachable from the app
 
 Worse than unbuilt, because the schema suggests otherwise.
-`docs/gaps-against-autocount.md` has the detail; the short version is
-that four capabilities exist in the database with **zero references in
-`app/lib`**:
+`docs/gaps-against-autocount.md` has the detail.
 
-- **Multi-currency.** `ref_currencies`, `exchange_rates` and a `currency`
-  and `exchange_rate` on every document and journal. The editor holds
-  `_currency`, reads it from a saved document and writes it back, but no
-  widget ever changes it — so no foreign-currency document can be raised,
-  and there is no revaluation function to restate balances if one could be
-- ~~**Project and department dimensions.**~~ Both are now written from
-  the document header and read by the P&L's dimension filter. See
-  `docs/departmental-accounting.md`, which also names what is still not
-  covered: expenses and manual journals offer no department, so costs
-  arriving by those two routes are under-reported by department
-- **Price levels.** `price_levels` and `item_prices`, unused by the line
-  editor
+**This list is empty.** All three entries are closed, and two of them
+were not closed by building anything — they were closed by *checking*.
+Multi-currency and price levels had both been built and the list never
+caught up; the dimensions entry was half true, and `0639`/`0640` built
+the other half.
+
+The sentence that stood here said the list "was four items and is now
+one". Both halves were wrong, and neither was checked: the section has
+had three bullets in every commit it appears in, and by the time that
+sentence was written all three were struck through. It is the exact
+failure this section is about — a claim about the code, believed rather
+than read — made in the paragraph introducing a list whose own rule is
+that each entry says what was *verified*. It is worth leaving the
+correction visible rather than quietly fixing the number.
+
+Each entry below says what was verified rather than what was believed:
+
+- ~~**Multi-currency.**~~ Stale on both counts, and checked rather than
+  re-read: the document editor's header carries an
+  `onCurrencyChanged: _changeCurrency`, so a foreign-currency document
+  can be raised; and `revalue_foreign_balances` exists, reachable from
+  Settings → "Post revaluation". `_changeCurrency` drops any typed rate
+  when the currency moves, which is the part worth knowing — a rate
+  typed for dollars is not a rate for euros, and carrying it across
+  would be the same silent mis-statement as defaulting to 1
+- ~~**Project and department dimensions.**~~ Both are written from the
+  document header and read by the P&L's dimension filter. See
+  `docs/departmental-accounting.md`.
+
+  **Manual journals** now carry a department too, per line rather than
+  per journal — the entry that moves a cost from Sales to Marketing
+  touches both, and a header field could not say so. That needed no
+  schema change at all: `gl_lines.department_code` has existed as long
+  as the dimensions have and `app.create_gl_entry_internal` has always
+  read `department_code` off each line's JSON. Nothing sent it. Which is
+  why it is asserted in two places — `supabase/tests/pricing_and_dimensions.sql`
+  and `app/test/journal_problem_test.dart` — because nothing in the
+  database changed, so nothing in the database would notice if the app
+  stopped sending it again.
+
+  **Expenses now do too**, `0639`, at both levels — the header's for a
+  whole claim and `expense_lines.department_code` for one line of a
+  split, coalesced the line over the header exactly as `project_code`
+  already was. `expenses.project_code` had existed since the dimensions
+  did with nothing in the app setting it, so the expense editor gained
+  both pickers in the same change.
+
+  Two legs deliberately carry NEITHER dimension: reclaimed input tax
+  and the payment out of the bank account. Neither is a departmental
+  cost, and putting one on them would make every department's figures
+  include the SST it reclaimed and the cash it spent on top of the
+  expense that is the actual cost. Both are asserted separately, and the
+  tax one matters most — it is a DEBIT, so a rule written as "only
+  debits carry a department" passes the bank assertion and still
+  double-counts
+- ~~**Price levels.**~~ Stale, and wired end to end: `item_price()`
+  (`0088`) resolves a named price, then a quantity break, then the
+  level's percentage adjustment, then the list price; `Repo.itemPrice`
+  calls it; the document editor passes it to the line editor as
+  `priceFor` on sales documents where a contact is known; and the line
+  editor applies the list price first and corrects it after, so a line
+  is never briefly priced at nothing. `item_prices_dialog.dart` is where
+  the prices and the levels themselves are maintained.
+
+  Purchase documents deliberately get no `priceFor`: a price level is
+  what we charge a customer, not what a supplier charges us

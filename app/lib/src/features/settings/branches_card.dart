@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/address_field.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/places_repository.dart';
@@ -58,7 +59,17 @@ class BranchesCard extends ConsumerWidget {
             AsyncView(
               value: branches,
               onRetry: () => ref.invalidate(branchesProvider),
-              loading: const LinearProgressIndicator(),
+              // The code sits in a fixed 72-pixel column, so it is
+              // outlined as a word and not as a face: `leadingHeight`
+              // keeps the bone one line tall instead of seventy-two,
+              // which is what a square of that width would be.
+              skeleton: const CardRowsSkeleton(
+                rows: 3,
+                leadingSize: 56,
+                leadingHeight: 14,
+                trailing: 1,
+                rowGap: 12,
+              ),
               builder: (list) => list.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),

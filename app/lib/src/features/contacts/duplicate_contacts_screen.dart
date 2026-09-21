@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'contact_records.dart' show contactRoleLabel, contactRoleIcon;
@@ -31,6 +32,7 @@ class DuplicateContactsScreen extends ConsumerWidget {
       body: AsyncView(
         value: groups,
         onRetry: () => ref.invalidate(contactDuplicatesProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false, subtitle: false),
         builder: (list) {
           if (list.isEmpty) {
             return const EmptyState(

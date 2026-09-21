@@ -146,6 +146,12 @@ const dropdownCensus = <String, int>{
   // difference has to be readable at a glance, which is what a
   // dropdown of two labelled options is for.
   'features/settings/settings_screen.dart': 2,
+  // `0655`. One: which subtype a sub-account is filed as. A FIXED set
+  // -- the subtypes of its parent's type, at most eight, straight out
+  // of `accountSubtypes` -- and it cannot grow, because a new subtype
+  // is an enum value in a migration. The TYPE itself is not asked at
+  // all: a sub-account is always the same kind as its parent.
+  'features/settings/sub_account_dialog.dart': 1,
   'features/settings/tax_code_dialog.dart': 2,
   // The four kinds of entity SSM registers: Company, Business, Audit
   // Firm, Limited Liability Partnership. Not a list that grows -- it is

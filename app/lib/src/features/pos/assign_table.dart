@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 
@@ -235,6 +236,7 @@ class _AssignTableSheetState extends ConsumerState<AssignTableSheet> {
             Flexible(
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: plan,
+                skeleton: const ListSkeleton(rows: 6),
                 builder: (rows) {
                   // A table with two bills on it appears twice on the
                   // plan, which is the truth there and a duplicate

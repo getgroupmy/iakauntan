@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -170,6 +171,7 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
       ),
       body: AsyncView<Map<String, dynamic>?>(
         value: existing,
+        skeleton: const FormSkeleton(fields: 6),
         builder: (site) {
           if (site != null) _hydrate(site);
           return SingleChildScrollView(
@@ -219,7 +221,7 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
                       const SizedBox(height: Space.md),
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: _tenure,
+                        initialValue: _tenure,
                         decoration: const InputDecoration(
                           labelText: 'Tenure',
                           helperText:

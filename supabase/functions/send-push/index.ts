@@ -41,24 +41,45 @@
  * nothing else — but it should be a decision somebody makes on purpose.
  *
  * ---------------------------------------------------------------------
- * Two transports, configured independently
+ * Three transports, configured independently
  *
  * A browser is not reached through Firebase. `pushManager.subscribe`
  * hands back an endpoint and two keys, and anybody with a VAPID key
  * pair can post to it — no Google project, no third party. So web push
  * goes straight out from `_shared/web_push.ts`, encrypted under RFC 8291
- * to keys only that browser holds, and Firebase carries the phones.
+ * to keys only that browser holds.
  *
- * Neither is required. A deployment with only the key pair reaches every
- * browser and reports the phones as skipped, and the response says which
- * — a half-configured system that looks like it worked is the failure
- * this whole function is arranged to avoid.
+ * An iPhone need not go through Firebase either. `0657` and
+ * `_shared/apns.ts` address APNs directly with a `.p8`, which is both
+ * one fewer party in the middle and the only way to send the PushKit
+ * VoIP push a real CallKit incoming-call screen needs — FCM cannot, and
+ * a banner is not a ringing phone. Which service an iOS row uses is
+ * `device_tokens.transport`, because the tokens are not interchangeable
+ * and sending one to the other service fails silently.
+ *
+ * Apple is TWO of those transports, not one. `apns` is the alert token
+ * and `apns_voip` is the PushKit token, one handset holds both, and
+ * which of them a given notification may go to is `appleDelivery` — see
+ * `0658`, and see that function for why sending to the wrong one costs
+ * more than a dropped notification.
+ *
+ * Android is Firebase and nothing else. There is no direct equivalent.
+ *
+ * None of the three is required. A deployment with only the VAPID pair
+ * reaches every browser and reports the phones as skipped, and the
+ * response says which — a half-configured system that looks like it
+ * worked is the failure this whole function is arranged to avoid.
  *
  * Secrets, which live only in Edge Functions → Secrets:
  *   WEB_PUSH_PUBLIC_KEY   VAPID public key, base64url  (browsers)
  *   WEB_PUSH_PRIVATE_KEY  VAPID private key, base64url (browsers)
  *   WEB_PUSH_SUBJECT      mailto: or https: contact    (optional)
  *   FCM_SERVICE_ACCOUNT   the Firebase service account JSON, whole
+ *   APNS_KEY_P8           the .p8 auth key, PEM            (iPhones)
+ *   APNS_KEY_ID           its 10-character Key ID          (iPhones)
+ *   APNS_TEAM_ID          the Apple team identifier        (iPhones)
+ *   APNS_TOPIC            the app's bundle identifier      (iPhones)
+ *   APNS_PRODUCTION       "true" for the production host, else sandbox
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -71,17 +92,16 @@ import {
 import { requireEnv } from "../_shared/env.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { sendWebPush, vapidFromEnv } from "../_shared/web_push.ts";
+import {
+  apnsFromEnv,
+  ApnsKeys,
+  apnsPushType,
+  sendApns,
+} from "../_shared/apns.ts";
+
+import { appleDelivery, Target, transportOf } from "./routing.ts";
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
-
-interface Target {
-  user_id: string;
-  token: string;
-  platform: "android" | "ios" | "web";
-  /** Browsers only: what the payload is encrypted to. See 0143. */
-  p256dh: string | null;
-  auth: string | null;
-}
 
 /**
  * One Firebase message, shaped per platform.
@@ -197,6 +217,15 @@ serveFunction("send-push.failed", async (req: Request) => {
     // by anything.
     const vapid = vapidFromEnv();
 
+    // `0657`. Throws rather than answering null when it is HALF set,
+    // which is somebody midway through a job — see `apnsFromEnv`.
+    let apns: ApnsKeys | null;
+    try {
+      apns = apnsFromEnv();
+    } catch (error) {
+      return fail((error as Error).message, 500);
+    }
+
     const raw = Deno.env.get("FCM_SERVICE_ACCOUNT");
     let account: (ServiceAccount & { project_id?: string }) | null = null;
     if (raw) {
@@ -285,11 +314,30 @@ serveFunction("send-push.failed", async (req: Request) => {
     // cannot exist — but this is the code that would encrypt to nothing
     // if it ever did, so it checks.
     const web = list.filter(
-      (t) => t.platform === "web" && t.p256dh && t.auth,
+      (t) => transportOf(t) === "web" && t.p256dh && t.auth,
     );
-    const mobile = list.filter((t) => t.platform !== "web");
+    // `0657`. Firebase and APNs are both "a phone", and which one a row
+    // is on is the row's own business rather than its platform's.
+    const mobile = list.filter((t) => transportOf(t) === "fcm");
+    // `0658`. Both Apple transports need the same four secrets, so they
+    // are one question for configuration and two for routing.
+    const apple = list.filter(
+      (t) => transportOf(t) === "apns" || transportOf(t) === "apns_voip",
+    );
+    // The handsets that will be rung through CallKit, so the alert row
+    // belonging to each of them can stay quiet about the same call.
+    const ringing = new Set(
+      list
+        .filter((t) => transportOf(t) === "apns_voip")
+        .map((t) => t.device_id)
+        .filter((id): id is string => Boolean(id)),
+    );
 
-    if ((web.length === 0 || !vapid) && (mobile.length === 0 || !account)) {
+    if (
+      (web.length === 0 || !vapid) &&
+      (mobile.length === 0 || !account) &&
+      (apple.length === 0 || !apns)
+    ) {
       // Said plainly and with a 503, because the alternative is silence:
       // messages arrive, notifications do not, and nothing anywhere says
       // why. Which secret is missing depends on who was in the room.
@@ -298,7 +346,10 @@ serveFunction("send-push.failed", async (req: Request) => {
           ? "WEB_PUSH_PUBLIC_KEY and WEB_PUSH_PRIVATE_KEY (browsers)"
           : null,
         mobile.length > 0 && !account
-          ? "FCM_SERVICE_ACCOUNT (Android and iOS)"
+          ? "FCM_SERVICE_ACCOUNT (Android, and iOS through Firebase)"
+          : null,
+        apple.length > 0 && !apns
+          ? "APNS_KEY_P8, APNS_KEY_ID, APNS_TEAM_ID and APNS_TOPIC (iOS)"
           : null,
       ].filter(Boolean).join(", ");
 
@@ -329,6 +380,12 @@ serveFunction("send-push.failed", async (req: Request) => {
     // than counted as sent, so a half-configured deployment is visible
     // in the response instead of looking like it worked.
     let skipped = 0;
+    // `0658`. A registration that exists and is healthy but is the
+    // wrong token for THIS notification: a PushKit token during a
+    // message, or the alert token of a handset already being rung.
+    // Counted separately from `skipped`, which means nobody configured
+    // the transport, because the two need opposite responses.
+    let unsuited = 0;
 
     const isCall = kind === "call";
 
@@ -409,6 +466,81 @@ serveFunction("send-push.failed", async (req: Request) => {
       );
     };
 
+    /**
+     * Straight to Apple, with no Google in the middle. `0657`.
+     *
+     * A call goes as a VoIP push, which is the entire reason this path
+     * exists: `apns-push-type: voip` to the `.voip` topic is what wakes
+     * the app to draw a full-screen CallKit ring. FCM cannot send one,
+     * so through Firebase the best an iPhone gets is a banner.
+     */
+    const toApple = async (target: Target, delivery: "alert" | "voip") => {
+      // `0658`. Not `apnsPushType(kind)`: what this row can carry is
+      // decided by which of Apple's two services issued its token, and
+      // a call reaching an alert token is a banner rather than a ring.
+      const pushType = delivery === "voip" ? apnsPushType("call") : "alert";
+      const result = await sendApns(
+        apns!,
+        target.token,
+        pushType === "voip"
+          // A VoIP payload is not an alert and must not carry an `aps`
+          // alert block: the OS hands the whole thing to the app, which
+          // is what lets it ring rather than draw a banner.
+          ? payload
+          : {
+            aps: {
+              alert: {
+                title: payload.title,
+                // A handset with no PushKit token still hears about the
+                // call, and "sent a message" would be a lie about it.
+                body: isCall
+                  ? `${payload.sender_name} is calling`
+                  : `${payload.sender_name} sent a message`,
+              },
+              sound: "default",
+            },
+            // The same fields the other two transports carry, and the
+            // same omission: the message text is not among them.
+            ...payload,
+          },
+        {
+          pushType,
+          // Forty-five seconds for a call, matching
+          // `chat_calls.ringing_until` — except that APNs counts an
+          // expiry as an absolute time, and 0 means "now or never".
+          // A ring arriving after the caller gave up is worse than none.
+          expiration: isCall
+            ? Math.floor(Date.now() / 1000) + 45
+            : Math.floor(Date.now() / 1000) + 86400,
+          priority: 10,
+        },
+      );
+
+      if (result.ok) {
+        sent += 1;
+        return;
+      }
+      if (result.dead) {
+        await admin.rpc("forget_device_token", { p_token: target.token });
+        forgotten += 1;
+        return;
+      }
+      failed += 1;
+      console.error(
+        JSON.stringify({
+          event: "push.refused",
+          status: result.status,
+          platform: target.platform,
+          transport: transportOf(target),
+          // Apple's own word, and worth logging by name: half of them
+          // are configuration rather than the handset. `BadDeviceToken`
+          // in particular means the sandbox and production hosts have
+          // been crossed, which no amount of retrying fixes.
+          problem: result.reason,
+        }),
+      );
+    };
+
     // One access token for every phone in the room rather than one each.
     const accessToken = (account && mobile.length > 0)
       ? await googleAccessToken(account, FCM_SCOPE)
@@ -419,19 +551,36 @@ serveFunction("send-push.failed", async (req: Request) => {
     // somebody has already missed.
     await Promise.all(
       list.map(async (target) => {
-        const browser = target.platform === "web";
-        if (browser ? !vapid || !target.p256dh : !accessToken) {
+        const transport = transportOf(target);
+        const isApple = transport === "apns" || transport === "apns_voip";
+        const ready = transport === "web"
+          ? Boolean(vapid && target.p256dh)
+          : isApple
+          ? Boolean(apns)
+          : Boolean(accessToken);
+        if (!ready) {
           skipped += 1;
           return;
         }
+        // Decided before the send rather than inside it, so that "this
+        // token is not for this" is an outcome of its own rather than a
+        // rejection from Apple that reads like a broken handset.
+        const delivery = isApple ? appleDelivery(target, isCall, ringing) : null;
+        if (isApple && delivery === null) {
+          unsuited += 1;
+          return;
+        }
         try {
-          await (browser ? toBrowser(target) : toMobile(target, accessToken!));
+          if (transport === "web") await toBrowser(target);
+          else if (isApple) await toApple(target, delivery!);
+          else await toMobile(target, accessToken!);
         } catch (error) {
           failed += 1;
           console.error(
             JSON.stringify({
               event: "push.failed",
               platform: target.platform,
+              transport,
               error: (error as Error).message,
             }),
           );
@@ -439,7 +588,14 @@ serveFunction("send-push.failed", async (req: Request) => {
       }),
     );
 
-    return json({ sent, failed, forgotten, skipped, targets: list.length });
+    return json({
+      sent,
+      failed,
+      forgotten,
+      skipped,
+      unsuited,
+      targets: list.length,
+    });
   } catch (error) {
     return failUnexpected(error, "send-push.failed", req);
   }

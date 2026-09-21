@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -89,6 +90,7 @@ class _NewGroupDialogState extends ConsumerState<NewGroupDialog> {
               child: AsyncView(
                 value: directory,
                 onRetry: () => ref.invalidate(chatDirectoryProvider),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (all) {
                   final rows = q.isEmpty
                       ? all
@@ -209,6 +211,14 @@ class MembersSheet extends ConsumerWidget {
         child: AsyncView(
           value: members,
           onRetry: () => ref.invalidate(chatMembersProvider(conversationId)),
+          // The thing at the front is a ten-pixel dot saying whether
+          // somebody is there, not a face.
+          skeleton: const CardRowsSkeleton(
+            rows: 4,
+            leadingSize: 10,
+            lines: 1,
+            rowGap: Space.sm,
+          ),
           builder: (list) => Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

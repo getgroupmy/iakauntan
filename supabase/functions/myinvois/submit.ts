@@ -29,6 +29,8 @@ import {
 } from "../_shared/myinvois.ts";
 import { buildUblDocument, EinvoiceLineRow, EinvoiceRow } from "../_shared/ubl.ts";
 import { SIGNED_VERSION, signUblJsonDocument } from "../_shared/xades.ts";
+import { submissionManifest } from "./manifest.ts";
+import { MAX_ATTEMPTS, nextAttempt } from "./retry.ts";
 
 // MyInvois caps a submission at 100 documents / 5 MB.
 const BATCH_LIMIT = 100;
@@ -98,6 +100,19 @@ export async function submit(ctx: Ctx) {
     query = query
       .eq("source_table", "purchase_documents")
       .eq("source_id", purchaseDocumentId);
+  } else {
+    // The BULK path only: everything queued, and nothing the sweep has
+    // already tried its limit of times. See `retry.ts` -- `invalid` is
+    // in the status list above and `invalid` is what MyInvois says when
+    // it has REJECTED a document, which is almost never transient, so
+    // without this a poison document is re-rendered, re-signed and
+    // re-submitted every sweep for ever.
+    //
+    // The three branches above are a person pressing Submit on a
+    // document and are deliberately not capped: whatever made it fail
+    // five times is usually what somebody has just fixed, and a
+    // document nobody can send is an e-Invoice LHDN never receives.
+    query = query.lt("retry_count", MAX_ATTEMPTS);
   }
 
   const { data: docs, error: docsError } = await query;
@@ -188,6 +203,16 @@ export async function submit(ctx: Ctx) {
       environment: creds.environment,
       document_count: payloads.length,
       status: "in_progress",
+      // What went in this batch, written BEFORE the call rather than
+      // after it. A request recorded only on the way back is a request
+      // that vanishes exactly when the submitter throws, which is the
+      // case it exists for.
+      //
+      // A manifest and not the documents: see `manifest.ts`. The
+      // documents are already stored one per row, and 5 MB of base64
+      // per submission would make this the largest table here inside a
+      // year holding a second copy of them.
+      request_payload: submissionManifest(payloads),
       submitted_at: new Date().toISOString(),
       submitted_by: ctx.userId,
     })
@@ -230,7 +255,14 @@ export async function submit(ctx: Ctx) {
 
   // MyInvois echoes our document number, which is how we match rows back.
   const byCode = new Map<string, string>();
-  for (const doc of docs as EinvoiceRow[]) byCode.set(doc.internal_doc_no, doc.id);
+  const byCount = new Map<string, number>();
+  for (const doc of docs as EinvoiceRow[]) {
+    byCode.set(doc.internal_doc_no, doc.id);
+    // Read from the row this run already selected rather than fetched
+    // again: `retry_count` is a `smallint` we hold, and a second read
+    // would be a second round trip for a number we have.
+    byCount.set(doc.id, (doc as { retry_count?: number }).retry_count ?? 0);
+  }
 
   for (const acc of accepted) {
     const id = byCode.get(acc.invoiceCodeNumber);
@@ -244,6 +276,10 @@ export async function submit(ctx: Ctx) {
         myinvois_uuid: acc.uuid,
         submitted_at: new Date().toISOString(),
         last_attempt_at: new Date().toISOString(),
+        // Back to zero on the one that worked. A document cancelled
+        // and re-queued later starts its own count, rather than
+        // inheriting a tally that ended in success.
+        retry_count: 0,
         ubl_payload: r?.ubl ?? null,
         payload_hash: r?.hash ?? null,
         validation_errors: [],
@@ -262,6 +298,21 @@ export async function submit(ctx: Ctx) {
         status: "invalid",
         submission_id: submission!.id,
         last_attempt_at: new Date().toISOString(),
+        retry_count: nextAttempt(byCount.get(id)),
+        // The document LHDN objected to, kept.
+        //
+        // Until this line the accepted path stored `ubl_payload` and
+        // the rejected path stored nothing, so the ONE document
+        // anybody needs to read -- the one that was refused -- was the
+        // one thrown away. The error said which field was wrong about a
+        // document nobody could look at.
+        //
+        // The hash goes with it, because it is what
+        // `request_payload`'s manifest can be checked against: the
+        // same hash on both sides is the only way to say that the copy
+        // kept is the copy submitted.
+        ubl_payload: rendered.get(id)?.ubl ?? null,
+        payload_hash: rendered.get(id)?.hash ?? null,
         error_code: rej.error?.code ?? null,
         error_message: rej.error?.message ?? "Rejected by MyInvois",
         validation_errors: rej.error?.details ?? [],
@@ -271,15 +322,40 @@ export async function submit(ctx: Ctx) {
 
   // A transport-level failure returns neither list; mark the batch failed
   // so it can be retried rather than silently stranded as "queued".
+  //
+  // GROUPED BY THE COUNT THEY ARE ON, which needs a word. Every
+  // document in the batch is one attempt further along, and PostgREST
+  // cannot write `retry_count = retry_count + 1` -- an update sends a
+  // value, not an expression. Per document that would be up to a
+  // hundred round trips on an error path; grouped it is at most
+  // MAX_ATTEMPTS + 1 statements however large the batch, because the
+  // count is a small integer and most of a batch shares one.
+  //
+  // The alternative was an RPC to do the arithmetic in SQL. Not taken
+  // for one statement of it: a service-role write needs to say which
+  // caller it is acting for, and this path already holds every value
+  // it needs.
   if (!ok && accepted.length === 0 && rejected.length === 0) {
-    await ctx.admin
-      .from("einvoice_documents")
-      .update({
-        status: "failed",
-        last_attempt_at: new Date().toISOString(),
-        error_message: `Submission failed with HTTP ${status}`,
-      })
-      .in("id", Array.from(rendered.keys()));
+    // The rendered document is deliberately NOT stored on this path.
+    // Nothing was validated, so there is nothing to explain, and the
+    // next attempt renders it again from the same rows. Only a
+    // document LHDN formed an opinion about is worth keeping bytes of.
+    const byBucket = new Map<number, string[]>();
+    for (const id of rendered.keys()) {
+      const at = byCount.get(id) ?? 0;
+      byBucket.set(at, [...(byBucket.get(at) ?? []), id]);
+    }
+    for (const [at, ids] of byBucket) {
+      await ctx.admin
+        .from("einvoice_documents")
+        .update({
+          status: "failed",
+          last_attempt_at: new Date().toISOString(),
+          retry_count: nextAttempt(at),
+          error_message: `Submission failed with HTTP ${status}`,
+        })
+        .in("id", ids);
+    }
   }
 
   await persistLogs(ctx, client.calls, { submissionId: submission!.id });

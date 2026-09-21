@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show TapGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
@@ -15,12 +17,15 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import '../onboarding/onboarding_copy.dart';
+import '../../core/surface.dart';
 import 'captcha.dart';
 import 'passkey.dart';
 import 'confirmation_resend.dart';
 import 'password_rules.dart';
 import 'phone_number.dart';
 import 'reset_cooldown.dart';
+import 'signup_consent.dart';
+import 'signin_links.dart';
 import 'demo_accounts.dart';
 
 /// The password, asked in a box of its own.
@@ -264,6 +269,7 @@ class SignInScreen extends ConsumerStatefulWidget {
     super.key,
     this.startOnRegister = false,
     this.scope = SignInScope.platform,
+    this.demoOnly = false,
   });
 
   /// Whether to open on the sign-up form rather than the sign-in one.
@@ -274,6 +280,22 @@ class SignInScreen extends ConsumerStatefulWidget {
 
   /// Which page of copy to draw. See [SignInScope].
   final SignInScope scope;
+
+  /// Whether this is the demo page rather than the sign-in form.
+  ///
+  /// `0653`. The apps link to a page of demo logins instead of putting
+  /// twelve rows of them under the form, and that page is THIS screen
+  /// with the form left out -- not a screen of its own.
+  ///
+  /// Which is not tidiness. Signing in as a demo account goes through
+  /// `vettedSignIn`, `_refuseIfNotTheirDoor` and
+  /// `_refuseIfModuleNotActive`, and it holds the router while it does:
+  /// a demo account is an ordinary account with its password written on
+  /// the screen, so it reaches a company's door exactly as anybody
+  /// else's does, and before `0592` it was the one way into the app
+  /// that asked nothing. A second screen would be a second copy of that
+  /// vetting, and the copy is the one that eventually stops matching.
+  final bool demoOnly;
 
   @override
   ConsumerState<SignInScreen> createState() => SignInScreenState();
@@ -609,6 +631,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           ? (result.message ?? 'That passkey was not accepted.')
           : null;
     });
+    // Once, and then not again. A site with no association file refuses
+    // EVERY press, and each one spent a captcha token and reset the
+    // widget -- so the screen answered a press on a fingerprint button
+    // by greying out the password form as well, and it did that as
+    // often as somebody pressed. Reported from both an iPhone and an
+    // Android. The button goes away instead; `passkeyNotSetUpHere` has
+    // the rest of it.
+    if (passkeyNotSetUpHere(result.message)) {
+      setState(() => _passkeyUsable = false);
+      return;
+    }
+
     // Anything but a success has spent the token, a dismissed prompt
     // included: the call reached GoTrue either way. The button above
     // is disabled until the check passes again, so without this the
@@ -1385,6 +1419,43 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// same way of filling somebody's inbox using nothing but their
   /// address. What differs is the clock — asking for a sign-in link is
   /// not asking for a reset — and what arrives.
+  /// Hands the browser to Google and comes back to the sign-in page.
+  ///
+  /// `redirectTo` is the app's own origin, the way `_sendMagicLink` and
+  /// the password reset already build theirs. It is not optional on the
+  /// web: without it GoTrue returns to whatever `SITE_URL` the project
+  /// holds, which on a platform serving several hostnames is somebody
+  /// else's front door.
+  ///
+  /// There is no `await` on a session here and nothing to do after the
+  /// call. `signInWithOAuth` navigates the page away; the session
+  /// arrives on the way back, and `onAuthStateChange` — which this
+  /// screen already listens to — is what notices.
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await Supabase.instance.client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: kIsWeb ? '${Uri.base.origin}/#/signin' : null,
+      );
+    } on AuthException catch (e) {
+      // The one everybody will hit first: the provider is not enabled
+      // in the Supabase dashboard. GoTrue's own sentence for it names
+      // no dashboard and no provider, so it is said here.
+      if (mounted) setState(() => _error = googleProblem(e.message));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = googleProblem(null));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _sendMagicLink() async {
     final email = _email.text.trim();
     if (email.isEmpty) {
@@ -1584,6 +1655,101 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
+  /// The demo page: this screen's state and vetting, without the form.
+  ///
+  /// `0653`. Reached from the link at the foot of the sign-in screen in
+  /// the apps, and by anybody who types `/demo` — which is why the
+  /// gates are asked again here rather than trusted from the link that
+  /// led here. A link is a suggestion; this is the page.
+  Widget _demoPage(BuildContext context) {
+    final theme = Theme.of(context);
+    // The same four conditions the link is drawn under, asked again.
+    // `demoModeEnabled` first and outermost: a build made without it
+    // does not carry the demo password at all.
+    final offered = showDemoAccounts(
+      buildAllows: demoModeEnabled,
+      platformOffers: _demoOffered,
+      isSignUp: false,
+      atCompanyDoor: _workspace != null,
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Look around a demo'),
+        // `canPop` through `maybeOf`, not `context.canPop()`, which
+        // THROWS where there is no GoRouter and is called while
+        // building — the fault `0652` had to undo on the site pages.
+        leading: (GoRouter.maybeOf(context)?.canPop() ?? false)
+            ? IconButton(
+                key: const ValueKey('demo-page-back'),
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.pop(),
+              )
+            : IconButton(
+                key: const ValueKey('demo-page-back'),
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.go('/signin'),
+              ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(Space.xl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!offered)
+                    Text(
+                      // Said plainly rather than left as an empty page.
+                      // Most of the ways to get here are switched off
+                      // deliberately, and a blank screen reads as a
+                      // fault in the app.
+                      _workspace != null
+                          ? 'The demo logins belong to the platform rather '
+                                'than to $_workspace, so they are not '
+                                'offered here.'
+                          : 'The demo logins are not available on this '
+                                'deployment.',
+                      key: const ValueKey('demo-page-unavailable'),
+                      style: theme.textTheme.bodyMedium,
+                    )
+                  else ...[
+                    // The security check, when one is configured. The
+                    // same widget the form carries, because a demo
+                    // account is an ordinary account and GoTrue asks it
+                    // for a token like anybody else — without this the
+                    // press was refused with a 400 and reported as "the
+                    // demo accounts are not available", which is a
+                    // wrong cause confidently stated.
+                    CaptchaField(
+                      key: const ValueKey('demo-captcha'),
+                      siteKey: _brand?.turnstileSiteKey,
+                      controller: _captcha,
+                      onToken: (t) => setState(() => _captchaToken = t),
+                      onFailed: () => setState(() => _captchaBroken = true),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      _Banner(message: _error!, color: context.colors.danger),
+                      const SizedBox(height: 12),
+                    ],
+                    DemoAccountPicker(
+                      onPick: _signInAsDemo,
+                      busyEmail: _demoBusy,
+                      enabled: !_busy,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Opens the socket for somebody who is not signed in, so a change
@@ -1628,6 +1794,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     // different product appearing and then leaving.
     if (!_settled) return const PageWaiting();
 
+    // `0653`. The demo page: this screen, its state, its captcha and
+    // its vetting, with the form left out. See [SignInScreen.demoOnly].
+    if (widget.demoOnly) return _demoPage(context);
+
     final form = Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(Space.xl),
@@ -1638,12 +1808,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // On a phone there is no panel, so this is the only
-                // place the mark can appear. Same switch either way.
-                if (!wide && (_showLogo || _showName)) ...[
-                  _Brand(logo: _showLogo, name: _showName),
-                  const SizedBox(height: 32),
-                ],
+                // The mark used to be here, inside the scroller. It is
+                // now a fixed header above it -- see `_brandHeader`.
                 if (_showHeading) ...[
                   Text(
                     _copy?.title ??
@@ -1774,7 +1940,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                           // a striped bar but a line of text running
                           // off the card. It ellipsises instead.
                           isExpanded: true,
-                          value: offered.containsKey(_entityType)
+                          initialValue: offered.containsKey(_entityType)
                               ? _entityType
                               : offered.keys.first,
                           decoration: const InputDecoration(
@@ -2113,6 +2279,20 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                               : (_signInLabel ?? 'Sign in'),
                         ),
                 ),
+                // What pressing that button means. Only on the sign-up
+                // half -- "By clicking Create account" under a Sign in
+                // button would be a sentence about something else.
+                //
+                // Under the button rather than over it, which is where
+                // it was asked for and also where it reads: the act
+                // comes first and the consequence follows it.
+                if (_isSignUp) ...[
+                  const SizedBox(height: 12),
+                  _SignupConsent(
+                    buttonLabel: _brand?.registerLabel ?? 'Create account',
+                    brand: _brand?.wordmark ?? Env.appName,
+                  ),
+                ],
                 // `0579`. A passkey instead of a password, and only
                 // when all three are true: the console switch is on,
                 // the build can reach an authenticator, and the person
@@ -2124,9 +2304,22 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 // disabled control invites somebody to work out why,
                 // and there is nothing they can do about a dashboard
                 // setting or a laptop with no fingerprint reader.
+                //
+                // `0638`: which console switch that is depends on the
+                // surface. Three switches and not one, because the
+                // three need different things done to them first — a
+                // dashboard setting for all of them, an
+                // `assetlinks.json` for Android, an entitlement and an
+                // `apple-app-site-association` for iOS — and they are
+                // finished on different days by different people.
                 if (!_isSignUp &&
                     _passkeyUsable &&
-                    (_brand?.signinShowPasskey ?? false)) ...[
+                    passkeyOffered(
+                      currentSurface,
+                      onWeb: _brand?.signinShowPasskey ?? false,
+                      onAndroid: _brand?.signinShowPasskeyAndroid ?? false,
+                      onIos: _brand?.signinShowPasskeyIos ?? false,
+                    )) ...[
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     key: const ValueKey('passkey-sign-in'),
@@ -2161,6 +2354,38 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     label: const Text('Email me a link instead'),
                   ),
                 ],
+                // 0645. Continue with Google.
+                //
+                // `googleButtonShown` rather than the switch alone, and
+                // the `kIsWeb` inside it is the whole of it:
+                // `signInWithOAuth` comes back through a `redirectTo`,
+                // and neither platform registers a URL scheme, so on a
+                // phone the provider would have nowhere to send
+                // somebody back to. Drawing the button there would be
+                // a way out of the app with no way back in.
+                //
+                // Not on the sign-up half either, for the reason the
+                // magic link is not: signing in with a provider
+                // CREATES an account for any address the provider
+                // vouches for, which would be a registration form on a
+                // platform whose operator may have registration
+                // switched off. `0563`'s door is the one that decides
+                // that, and it is not this button.
+                if (!_isSignUp &&
+                    googleButtonShown(
+                      offered: _brand?.signinShowGoogle ?? false,
+                      onWeb: kIsWeb,
+                    )) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const ValueKey('google-signin'),
+                    onPressed: _busy || _captchaPending
+                        ? null
+                        : _signInWithGoogle,
+                    icon: const Icon(Icons.account_circle_outlined, size: 18),
+                    label: const Text('Continue with Google'),
+                  ),
+                ],
                 // Everything below the Sign in button is about joining
                 // the platform, and none of it belongs at a company's
                 // own address.
@@ -2187,7 +2412,19 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       signupsOpen: _signupsOpen,
                       alreadyThere: _isSignUp,
                     ) &&
-                    (_isSignUp || (_brand?.signinShowRegister ?? false))) ...[
+                    // `0638`. The console can close this door in the
+                    // apps and leave the website's open — an app store
+                    // can have rules about what an account costs and
+                    // who may open one. `_isSignUp` still wins, for
+                    // the reason above: it is the way BACK from a form
+                    // somebody is already looking at.
+                    (_isSignUp ||
+                        registrationOffered(
+                          currentSurface,
+                          console: _brand?.signinShowRegister ?? false,
+                          inTheApps:
+                              _brand?.signinShowRegisterMobile ?? true,
+                        ))) ...[
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _busy
@@ -2225,7 +2462,15 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 // all — and this is the inner one, off by default, so
                 // that a build which does carry it still shows nothing
                 // until somebody decides it should.
-                if (showDemoAccounts(
+                //
+                // `0653` narrowed this to the browser and nothing
+                // else. Twelve rows of demo logins are a fine thing to
+                // scroll past on a wide window and a long way down a
+                // phone, so the apps get the link below instead --
+                // through the same four gates, because the password
+                // these open is compiled into the bundle either way.
+                if (demoPanelOffered(
+                  surface: currentSurface,
                   buildAllows: demoModeEnabled,
                   platformOffers: _demoOffered,
                   isSignUp: _isSignUp,
@@ -2238,6 +2483,40 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     enabled: !_busy,
                   ),
                 ],
+                // `0653`. The apps' way to the same thing: a link to a
+                // page, and the fourth and last gate is the console's
+                // switch for THIS platform.
+                if (demoPageOffered(
+                  surface: currentSurface,
+                  buildAllows: demoModeEnabled,
+                  platformOffers: _demoOffered,
+                  onIos: _brand?.signinShowDemoPageIos ?? false,
+                  onAndroid: _brand?.signinShowDemoPageAndroid ?? false,
+                  isSignUp: _isSignUp,
+                  atCompanyDoor: _workspace != null,
+                )) ...[
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    key: const ValueKey('demo-page-link'),
+                    // PUSH, not go, for the reason the consent links
+                    // are pushed: somebody who looks at the demo and
+                    // changes their mind should come back to the form
+                    // rather than out of the app.
+                    onPressed: _busy ? null : () => context.push('/demo'),
+                    icon: const Icon(Icons.play_circle_outline, size: 18),
+                    label: const Text('Look around a demo'),
+                  ),
+                ],
+                // `0653`. The small print, at the bottom of the form in
+                // the apps and nowhere else -- the website carries all
+                // three in the landing page's footer already.
+                //
+                // An app has no footer and no landing page, so before
+                // this these three documents were reachable only from
+                // the consent line under the REGISTER button. Somebody
+                // signing in could not read the privacy policy at all,
+                // which is a question both stores ask at review.
+                _SigninFooterLinks(brand: _brand),
               ],
             ),
           ),
@@ -2265,7 +2544,56 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       points: _points,
     );
 
-    if (!wide || hero.isEmpty) return Scaffold(body: form);
+    // On one column the mark sits ABOVE the scroller rather than
+    // inside it, for two reasons that are both visible on a phone.
+    //
+    // THE NOTCH. `Scaffold(body:)` with no app bar lays its child out
+    // under the status bar, so the mark was drawn behind the clock and
+    // through the camera cut-out -- reported from an iPhone, and the
+    // same on any Android with a punch-hole. The header is wrapped in
+    // a `SafeArea`, which is the only thing that knows how tall that
+    // furniture is on the device in somebody's hand. `bottom: false`
+    // because the scroller below owns the other end, and a second
+    // inset there would lift the last field off the keyboard.
+    //
+    // AND IT STAYS. Inside the scroller the mark went up and off the
+    // screen as soon as anybody reached the password -- and on the
+    // sign-up form, which is eleven fields long, it was gone for all
+    // but the first of them. A mark that scrolls away is a page that
+    // stops saying whose it is exactly when somebody is typing a
+    // password into it.
+    final brandHeader = !wide && (_showLogo || _showName)
+        ? SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Space.xl,
+                Space.lg,
+                Space.xl,
+                Space.sm,
+              ),
+              // Centred, and left-aligned on the panel, which is not an
+              // inconsistency: there the mark heads a column of copy and
+              // belongs on the same left edge as the rest of it. Here it
+              // is alone above a form on an otherwise symmetrical page,
+              // and pinned left it reads as a mark that has slipped.
+              child: Center(
+                key: const ValueKey('signin-brand'),
+                child: _Brand(logo: _showLogo, name: _showName),
+              ),
+            ),
+          )
+        : null;
+
+    if (!wide || hero.isEmpty) {
+      return Scaffold(
+        body: brandHeader == null
+            ? form
+            : Column(
+                children: [brandHeader, Expanded(child: form)],
+              ),
+      );
+    }
 
     return Scaffold(
       body: Row(
@@ -2609,6 +2937,168 @@ class _SecondFactorDialogState extends State<_SecondFactorDialog> {
         ),
         FilledButton(onPressed: _submit, child: const Text('Continue')),
       ],
+    );
+  }
+}
+
+
+/// The consent line under the register button.
+///
+/// `signup_consent.dart` decides what it says; this only draws it. The
+/// split is what lets the wording be asserted without a widget, and
+/// there is a lot to assert: the button's name, the platform's name,
+/// and which of the two pages are published enough to link to.
+class _SignupConsent extends ConsumerWidget {
+  const _SignupConsent({required this.buttonLabel, required this.brand});
+
+  final String buttonLabel;
+  final String brand;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final pages = ref.watch(sitePagesProvider).valueOrNull ?? const {};
+    // `site_pages()` already withholds an unpublished Terms or Privacy,
+    // so anything that came back is readable -- but the flag is checked
+    // too, because the two auth pages come back regardless and a future
+    // ungating would otherwise quietly turn this into a link to a draft.
+    final published = {
+      for (final e in pages.entries)
+        if (e.value.isPublished) e.key,
+    };
+
+    final spans = signupConsent(
+      buttonLabel: buttonLabel,
+      brand: brand,
+      published: published,
+    );
+
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final linkStyle = style?.copyWith(
+      color: theme.colorScheme.primary,
+      decoration: TextDecoration.underline,
+      decorationColor: theme.colorScheme.primary,
+    );
+
+    return Semantics(
+      // The whole sentence as one label. A screen reader walking five
+      // separate spans reads a legal notice as fragments.
+      label: signupConsentText(
+        buttonLabel: buttonLabel,
+        brand: brand,
+        published: published,
+      ),
+      excludeSemantics: true,
+      child: Text.rich(
+        TextSpan(
+          children: [
+            for (final span in spans)
+              if (span.slug == null)
+                TextSpan(text: span.text, style: style)
+              else
+                TextSpan(
+                  text: span.text,
+                  style: linkStyle,
+                  // PUSH, not go. `go` REPLACES the location, so the
+                  // reader who tapped "terms of service" arrived at a
+                  // page with nothing behind it: the system back button
+                  // and the gesture left the app instead of returning
+                  // to the form they were halfway through filling in.
+                  //
+                  // That matters more here than anywhere else on the
+                  // platform. This link sits under a consent sentence,
+                  // so reading it before pressing the button is the
+                  // behaviour being asked for -- and losing the form
+                  // for doing it is a punishment for reading the terms.
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => context.push('/${span.slug}'),
+                ),
+          ],
+        ),
+        key: const ValueKey('signup-consent'),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}
+
+
+/// Terms of Use, Terms of Service and the Privacy Policy, at the foot
+/// of the form in the apps.
+///
+/// `signin_links.dart` decides which of the three are drawn; this only
+/// draws them. Empty in a browser whatever the switches say — the
+/// website's own footer carries all three on every page, and a second
+/// row of them under the form would be the same links twice.
+///
+/// Returns a zero-height box rather than nothing when there is nothing
+/// to draw, so the column above it does not have to know.
+class _SigninFooterLinks extends ConsumerWidget {
+  const _SigninFooterLinks({required this.brand});
+
+  final LandingContent? brand;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pages = ref.watch(sitePagesProvider).valueOrNull ?? const {};
+    // Published, and checked rather than assumed. `site_pages()`
+    // already withholds an unpublished page, but the two auth pages
+    // come back regardless, and a future ungating would otherwise turn
+    // this into a row of links to drafts.
+    final published = {
+      for (final e in pages.entries)
+        if (e.value.isPublished) e.key,
+    };
+
+    final links = signinFooterLinks(
+      surface: currentSurface,
+      published: published,
+      termsIos: brand?.signinShowTermsIos ?? true,
+      termsAndroid: brand?.signinShowTermsAndroid ?? true,
+      termsOfServiceIos: brand?.signinShowTermsOfServiceIos ?? true,
+      termsOfServiceAndroid: brand?.signinShowTermsOfServiceAndroid ?? true,
+      privacyIos: brand?.signinShowPrivacyIos ?? true,
+      privacyAndroid: brand?.signinShowPrivacyAndroid ?? true,
+    );
+    if (links.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    return Padding(
+      key: const ValueKey('signin-footer-links'),
+      padding: const EdgeInsets.only(top: 24),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          for (var i = 0; i < links.length; i++) ...[
+            if (i > 0) Text('·', style: style),
+            TextButton(
+              key: ValueKey('signin-link-${links[i].slug}'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: style,
+              ),
+              // PUSH, not go, and for the reason written up in
+              // `consent_link_navigation_test.dart`: `go` REPLACES the
+              // location, so reading the terms would leave nothing
+              // behind them and the system back gesture would close
+              // the app instead of returning to the form.
+              onPressed: () => context.push('/${links[i].slug}'),
+              child: Text(links[i].label),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

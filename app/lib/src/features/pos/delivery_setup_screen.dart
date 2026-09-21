@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 
@@ -117,6 +118,7 @@ class _Zones extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: zones,
         onRetry: () => ref.invalidate(posDeliveryZonesProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -457,6 +459,7 @@ class _Drivers extends ConsumerWidget {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: drivers,
         onRetry: () => ref.invalidate(posDriversProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(

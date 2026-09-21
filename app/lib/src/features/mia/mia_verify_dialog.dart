@@ -307,7 +307,7 @@ class MiaVerifyDialogState extends ConsumerState<MiaVerifyDialog> {
               if (_kind == MiaKind.member)
                 DropdownButtonFormField<bool?>(
                   key: const ValueKey('mia-pc-holder'),
-                  value: _pcHolder,
+                  initialValue: _pcHolder,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Practising certificate',
@@ -323,7 +323,7 @@ class MiaVerifyDialogState extends ConsumerState<MiaVerifyDialog> {
               else
                 DropdownButtonFormField<String?>(
                   key: const ValueKey('mia-firm-type'),
-                  value: _firmType,
+                  initialValue: _firmType,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Type of firm'),
                   items: const [

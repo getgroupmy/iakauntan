@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../mia/mia_credential.dart';
@@ -35,6 +36,7 @@ class PracticeScreen extends ConsumerWidget {
       body: AsyncView(
         value: firms,
         onRetry: () => ref.invalidate(myFirmsProvider),
+        skeleton: const ListSkeleton(rows: 4),
         builder: (rows) {
           if (rows.isEmpty) return const _NoPractice();
 
@@ -208,6 +210,7 @@ class _ClientsCard extends ConsumerWidget {
         AsyncView(
           value: portfolio,
           onRetry: () => ref.invalidate(firmPortfolioProvider(firmId)),
+          skeleton: const ListSkeleton(rows: 5),
           builder: (rows) {
             if (rows.isEmpty) {
               return const Card(
@@ -315,6 +318,7 @@ class _PeopleCard extends ConsumerWidget {
         AsyncView(
           value: team,
           onRetry: () => ref.invalidate(firmTeamProvider(firmId)),
+          skeleton: const CardRowsSkeleton(rows: 4),
           builder: (rows) => Card(
             child: Column(
               children: [
@@ -591,7 +595,7 @@ class _InviteStaffDialogState extends ConsumerState<_InviteStaffDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: _role,
+              initialValue: _role,
               decoration: const InputDecoration(labelText: 'Role here'),
               items: const [
                 DropdownMenuItem(
@@ -672,10 +676,10 @@ class _AppointDialogState extends ConsumerState<_AppointDialog> {
       content: SizedBox(
         width: 460,
         child: orgs.when(
-          loading: () => const SizedBox(
-            height: 80,
-            child: Center(child: CircularProgressIndicator()),
-          ),
+          // Two boxes and a picker, outlined. The dialog's shape is
+          // decided before the list of companies arrives -- only the
+          // options in the first box are missing.
+          loading: () => const FormSkeleton(fields: 2),
           error: (e, _) => Text('$e'),
           data: (list) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -695,7 +699,7 @@ class _AppointDialogState extends ConsumerState<_AppointDialog> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: _role,
+                initialValue: _role,
                 decoration: const InputDecoration(
                   labelText: 'What the practice may do here',
                 ),

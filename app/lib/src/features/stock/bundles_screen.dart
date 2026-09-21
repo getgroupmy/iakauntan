@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -95,6 +96,7 @@ class _BundlesScreenState extends ConsumerState<BundlesScreen> {
       body: AsyncView<List<Map<String, dynamic>>>(
         value: bundles,
         onRetry: () => ref.invalidate(itemBundlesProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -168,6 +170,7 @@ class _BundlesScreenState extends ConsumerState<BundlesScreen> {
           AsyncView<List<Map<String, dynamic>>>(
             value: parts,
             onRetry: () => ref.invalidate(bundlePartsProvider(id)),
+            skeleton: const ListSkeleton(rows: 3, leading: false),
             builder: (rows) => Column(
               children: [
                 for (final p in rows)

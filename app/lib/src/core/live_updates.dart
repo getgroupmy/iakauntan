@@ -33,10 +33,12 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'providers.dart';
+import 'socket_resume.dart';
 
 /// Which providers go stale when a named table changes.
 ///
@@ -69,8 +71,14 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     einvoiceStatusProvider,
     recurringDocumentsProvider,
   ],
+  // 0650's table. A supplier's document lands while nobody is looking,
+  // which is the case the feed exists for.
+  'received_einvoices': [receivedEinvoicesProvider],
   'purchase_documents': [
     documentsProvider,
+    // Drafting a bill from a received document sets `bill_id` on the
+    // row, so the received list is stale the moment a bill appears.
+    receivedEinvoicesProvider,
     documentProvider,
     outstandingProvider,
     dashboardProvider,
@@ -206,7 +214,7 @@ final liveUpdatesProvider = Provider<LiveUpdates>((ref) {
   return live;
 });
 
-class LiveUpdates {
+class LiveUpdates with WidgetsBindingObserver {
   LiveUpdates(this._ref);
 
   final Ref _ref;
@@ -214,6 +222,41 @@ class LiveUpdates {
   SupabaseClient? _client;
   Timer? _timer;
   final _pending = <String>{};
+
+  /// Whether the lifecycle observer was ever registered.
+  ///
+  /// `WidgetsBinding.instance` THROWS where no binding has been
+  /// initialised, which is every plain `test()` in this repository --
+  /// and this provider is deliberately readable on a signed-out app
+  /// with no Supabase. An object that never connected must not reach
+  /// for the binding on the way out either.
+  bool _observing = false;
+
+  /// The last lifecycle state seen, so a resume knows what it resumed
+  /// FROM. `WidgetsBinding.instance.lifecycleState` is the CURRENT one
+  /// by the time the callback runs, so it cannot answer this.
+  AppLifecycleState? _was;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final was = _was;
+    _was = state;
+    if (missedWhileAway(was, state)) refreshEverything();
+  }
+
+  /// Refetch what is on screen, because what changed is not knowable.
+  ///
+  /// Nothing tells a client what it missed while its socket was down --
+  /// there is no cursor and no replay -- so the only honest answer on
+  /// coming back is to ask again.
+  ///
+  /// This feed had NO lifecycle handling at all until now, while
+  /// `platform_live.dart` had it and argued for it. That asymmetry is
+  /// the whole of the report it fixes: a company's own data -- its
+  /// documents, its contacts, and which features it has switched on --
+  /// went stale on a phone the moment the process was suspended, and
+  /// nothing brought it back short of relaunching the app.
+  void refreshEverything() => _refreshEverythingFetched();
 
   /// Whether the socket is carrying changes at this moment.
   ///
@@ -224,6 +267,12 @@ class LiveUpdates {
 
   void _connect(SupabaseClient client, String orgId) {
     _client = client;
+    // Registered here rather than in the constructor, so the object a
+    // signed-out app or a plain test gets observes nothing and reaches
+    // for no binding.
+    WidgetsBinding.instance.addObserver(this);
+    _observing = true;
+    _was = WidgetsBinding.instance.lifecycleState;
     final channel = client.channel('org:$orgId');
 
     // One subscription, to the feed. Inserts only: `live_changes` is
@@ -310,6 +359,10 @@ class LiveUpdates {
   }
 
   void dispose() {
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observing = false;
+    }
     _timer?.cancel();
     final channel = _channel;
     if (channel != null) {

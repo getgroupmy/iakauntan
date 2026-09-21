@@ -297,9 +297,20 @@ declare v_caught boolean;
 begin
   create function public.zz_reach_probe(p integer)
   returns boolean language sql immutable as 'select $1 >= 0';
-  -- 0165's event trigger has just stripped PUBLIC and anon from it, and
-  -- nothing granted it to anybody, which is the state every one of the
-  -- nine in 0620 arrived in.
+  -- And then CLOSED by hand, which is the whole point of the probe.
+  --
+  -- It used to rely on a new function arriving callable by nobody, and
+  -- that premise was wrong: Supabase's default privilege grants
+  -- `authenticated` EXECUTE on everything created in `public`, and
+  -- `0165`'s trigger takes away only PUBLIC and `anon`. So the probe
+  -- was not the hole it claimed to be, and would have passed whatever
+  -- the walk did. See `supabase/tests/_local_stack.sql`.
+  --
+  -- `from public, anon, authenticated` in full, for the reason `0657`
+  -- discovered: revoking from the PUBLIC pseudo-role does not touch a
+  -- grant held directly by a role.
+  revoke execute on function public.zz_reach_probe(integer)
+    from public, anon, authenticated;
   create table public.zz_reach_probe_t (
     id integer primary key,
     constraint zz_reach_probe_ck check (public.zz_reach_probe(id))

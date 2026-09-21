@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/address_field.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/business_types_repository.dart';
@@ -643,7 +644,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                         // narrow column rather than ellipsising, and a
                         // phone is narrow.
                         isExpanded: true,
-                        value: _entityType,
+                        initialValue: _entityType,
                         decoration: const InputDecoration(
                           labelText: 'Entity type',
                         ),
@@ -789,7 +790,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 if (_malaysian)
                   statesAsync.when(
                     data: (states) => DropdownButtonFormField<String>(
-                      value: _stateCode,
+                      initialValue: _stateCode,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'State'),
                       items: [
@@ -855,7 +856,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
                   isExpanded: true,
-                  value: _fiscalYearEndMonth,
+                  initialValue: _fiscalYearEndMonth,
                   decoration: const InputDecoration(
                     labelText: 'Financial year end',
                     helperText: 'Most Malaysian SMEs use December',
@@ -1169,6 +1170,8 @@ class _BusinessTypeStep extends ConsumerWidget {
               AsyncView<List<Map<String, dynamic>>>(
                 value: types,
                 onRetry: () => ref.invalidate(businessTypesProvider),
+                skeleton: const CardRowsSkeleton(
+                    rows: 4, leadingSize: 24, lines: 1),
                 builder: (rows) {
                   final groups = bySector(rows);
                   return Column(
@@ -1268,6 +1271,7 @@ class _ModulesStep extends ConsumerWidget {
               AsyncView<List<Map<String, dynamic>>>(
                 value: modules,
                 onRetry: () => ref.invalidate(onboardingModulesProvider),
+                skeleton: const CardRowsSkeleton(rows: 6, leadingSize: 24),
                 builder: (rows) {
                   // What the ticks come to, before anything is agreed
                   // to rather than on the first bill.
@@ -1397,6 +1401,8 @@ class _CountryStepState extends ConsumerState<_CountryStep> {
               AsyncView<List<Map<String, dynamic>>>(
                 value: countries,
                 onRetry: () => ref.invalidate(countriesProvider),
+                skeleton: const CardRowsSkeleton(
+                    rows: 5, leadingSize: 24, lines: 1),
                 builder: (rows) {
                   final wanted = _query.toLowerCase();
                   // Filter first, then pin: a search that excludes

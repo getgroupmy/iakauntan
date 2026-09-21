@@ -263,6 +263,9 @@ class LandingAdmin {
       // only a platform admin may write, and one file per role means
       // the bucket does not accumulate a copy per upload.
       'app_icon_url' => 'landing/app-icon',
+      // `0653`. The apps' splash picture, named like the rest: one
+      // file per role, so the bucket does not grow a copy per upload.
+      'splash_image_url' => 'landing/splash',
       _ => 'landing/logo',
     };
     await client.storage

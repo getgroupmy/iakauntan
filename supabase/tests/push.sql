@@ -569,4 +569,248 @@ begin
     exists (select 1 from public.device_tokens where token = 'token-fresh'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0657: which service a token belongs to
+-- ---------------------------------------------------------------------
+--
+-- An iOS row is now either a Firebase registration token or a raw APNs
+-- device token, and they are NOT interchangeable: sent to the wrong
+-- service each is refused forever, and both refusals are silent --
+-- `send-push` reports the notification, nobody's phone makes a sound.
+--
+-- So what is asserted is the three ways that can go wrong at the write,
+-- because at the read there is nothing to see.
+do $$
+declare
+  v_ali  uuid := pg_temp.another_user('ali-apns@push.test');
+  v_org  uuid;
+  v_apns text := repeat('a1b2c3d4', 8);   -- 64 hex characters
+  v_fcm  text := 'fMEP0vJqSHG:APA91bF-not-hex-at-all_0123';
+  v_said text;
+begin
+  v_org := pg_temp.push_org('APNs Test Sdn Bhd', v_ali);
+  perform pg_temp.sign_in_as(v_ali);
+
+  -- Absent means what the platform has always meant, so every caller
+  -- written before 0657 keeps working. This is the assertion that says
+  -- the migration changed nobody's registration.
+  perform public.register_device(v_fcm, 'android');
+  perform pg_temp.check_eq('an Android handset is still Firebase',
+    (select transport from public.device_tokens where token = v_fcm), 'fcm');
+
+  perform public.register_device('https://push.example.test/x', 'web',
+    null, 'a-p256dh-key', 'an-auth-key');
+  perform pg_temp.check_eq('and a browser is still web push',
+    (select transport from public.device_tokens
+      where token = 'https://push.example.test/x'), 'web');
+
+  -- The new one, asked for by name.
+  perform public.register_device(v_apns, 'ios', 'An iPhone', null, null,
+                                 'apns');
+  perform pg_temp.check_eq('an iPhone can be registered straight to Apple',
+    (select transport from public.device_tokens where token = v_apns), 'apns');
+
+  -- And the same phone through Firebase, which is still allowed: the
+  -- two are a choice about how the build was made, not about the model.
+  perform public.register_device('fMEP0vJq:APA91bF-ios', 'ios', null, null,
+                                 null, 'fcm');
+  perform pg_temp.check_eq('or through Firebase, as before',
+    (select transport from public.device_tokens
+      where token = 'fMEP0vJq:APA91bF-ios'), 'fcm');
+
+  -- A Firebase token registered as APNs is `BadDeviceToken` on every
+  -- notification, forever, with nothing anywhere reporting it. Refused
+  -- at the write, where it can still be said out loud.
+  begin
+    perform public.register_device(v_fcm || 'x', 'ios', null, null, null,
+                                   'apns');
+    perform pg_temp.check_true(
+      'a Firebase token cannot be registered as an APNs one', false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true(
+      'a Firebase token cannot be registered as an APNs one',
+      v_said like '%not an APNs device token%');
+  end;
+
+  -- Android has no direct transport. Saying so beats a check constraint
+  -- name, because somebody asking for it has a wrong belief rather than
+  -- a typo.
+  begin
+    perform public.register_device(v_apns || 'ff', 'android', null, null,
+                                   null, 'apns');
+    perform pg_temp.check_true('Android cannot be reached through APNs',
+                               false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('Android cannot be reached through APNs',
+      v_said like '%no direct transport%');
+  end;
+
+  begin
+    perform public.register_device('https://push.example.test/y', 'web',
+      null, 'k', 'a', 'apns');
+    perform pg_temp.check_true('nor is a browser an iPhone', false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('nor is a browser an iPhone',
+      v_said like '%web push and nothing else%');
+  end;
+
+  -- A transport nobody has written a sender for would be a row that is
+  -- skipped on every notification with no explanation.
+  begin
+    perform public.register_device(v_apns || 'ee', 'ios', null, null, null,
+                                   'telepathy');
+    perform pg_temp.check_true('and a transport nobody sends on is refused',
+                               false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('and a transport nobody sends on is refused',
+      v_said like '%Unknown transport%');
+  end;
+
+  -- The sender routes on this, so it has to arrive. Read through
+  -- `push_targets` rather than off the table, because the function is
+  -- what `send-push` actually calls and restating it is where the
+  -- column would have been dropped.
+  perform pg_temp.check_true(
+    'and the sender is told which service each token is for',
+    exists (
+      select 1 from pg_proc p
+      cross join lateral unnest(p.proargnames, p.proargmodes) as a(name, mode)
+      where p.oid = 'public.push_targets(uuid, uuid)'::regprocedure
+        and a.mode = 't' and a.name = 'transport'));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A handset that changes transport keeps one row
+-- ---------------------------------------------------------------------
+--
+-- 0141's rule is one token, one handset. A build that moves from
+-- Firebase to a direct APNs registration hands back a DIFFERENT token,
+-- so that case is two rows and correctly so -- but re-registering the
+-- same token with a new transport must replace it rather than keep the
+-- old one, or the phone is addressed to the wrong Apple forever.
+do $$
+declare
+  v_ali uuid := pg_temp.another_user('ali-move@push.test');
+  v_org uuid;
+  v_tok text := repeat('deadbeef', 8);
+begin
+  v_org := pg_temp.push_org('Transport Move Sdn Bhd', v_ali);
+  perform pg_temp.sign_in_as(v_ali);
+
+  perform public.register_device(v_tok, 'ios', null, null, null, 'fcm');
+  perform pg_temp.check_eq('registered through Firebase',
+    (select transport from public.device_tokens where token = v_tok), 'fcm');
+
+  perform public.register_device(v_tok, 'ios', null, null, null, 'apns');
+  perform pg_temp.check_eq('and re-registering moves it to Apple',
+    (select transport from public.device_tokens where token = v_tok), 'apns');
+  perform pg_temp.check_eq('without leaving a second row behind',
+    (select count(*) from public.device_tokens where token = v_tok), 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0658: the OTHER token the same iPhone has
+-- ---------------------------------------------------------------------
+--
+-- One handset, two Apple tokens, and every way of confusing them fails
+-- silently on the handset rather than loudly here -- so it is refused
+-- here. The pairing is the point: `device_id` is what lets the sender
+-- ring a phone through CallKit without also sending it a banner about
+-- the same call.
+do $$
+declare
+  v_ali   uuid := pg_temp.another_user('ali-voip@push.test');
+  v_org   uuid;
+  v_alert text := repeat('a1b2c3d4', 8);
+  v_voip  text := repeat('f0e1d2c3', 8);
+  v_fcm   text := 'fMEP0vJq:APA91bF-voip-shaped';
+  v_said  text;
+  v_phone text := 'E621E1F8-C36C-495A-93FC-0C247A3E6E5F';
+begin
+  v_org := pg_temp.push_org('PushKit Sdn Bhd', v_ali);
+  perform pg_temp.sign_in_as(v_ali);
+
+  perform public.register_device(v_alert, 'ios', 'An iPhone', null, null,
+                                 'apns', v_phone);
+  perform public.register_device(v_voip, 'ios', 'An iPhone', null, null,
+                                 'apns_voip', v_phone);
+
+  perform pg_temp.check_eq('an iPhone can hold a PushKit token',
+    (select transport from public.device_tokens where token = v_voip),
+    'apns_voip');
+  perform pg_temp.check_eq('beside its alert token',
+    (select transport from public.device_tokens where token = v_alert),
+    'apns');
+  perform pg_temp.check_eq('as two rows, because they are two tokens',
+    (select count(*) from public.device_tokens
+      where token in (v_alert, v_voip)), 2);
+  -- The whole reason `device_id` exists. Without this the sender cannot
+  -- tell one iPhone holding two tokens from two iPhones holding one
+  -- each, and the difference decides whether a ringing phone also
+  -- buzzes about the same call.
+  perform pg_temp.check_eq('paired, so the sender knows it is one phone',
+    (select count(distinct device_id) from public.device_tokens
+      where token in (v_alert, v_voip)), 1);
+
+  -- `0657` wrote `transport <> 'apns'` on the shape check. Written that
+  -- way a Firebase token registered as `apns_voip` would have gone
+  -- straight in, and a PushKit push to it is refused by Apple forever
+  -- with nothing anywhere saying so.
+  begin
+    perform public.register_device(v_fcm, 'ios', null, null, null,
+                                   'apns_voip', v_phone);
+    perform pg_temp.check_true(
+      'a Firebase token cannot be registered as a PushKit one', false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true(
+      'a Firebase token cannot be registered as a PushKit one',
+      v_said like '%not an APNs device token%');
+  end;
+
+  -- PushKit is Apple's alone, and somebody registering an Android call
+  -- token has a wrong belief rather than a typo.
+  begin
+    perform public.register_device(v_voip || 'aa', 'android', null, null,
+                                   null, 'apns_voip', v_phone);
+    perform pg_temp.check_true('only an iPhone has a VoIP token', false);
+  exception when others then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('only an iPhone has a VoIP token',
+      v_said like '%Only an iPhone has a VoIP token%');
+  end;
+
+  -- An older build re-presents a token it has always had and says
+  -- nothing about the handset. Forgetting the pairing already recorded
+  -- would unpair a phone that is still perfectly paired -- and the
+  -- symptom would be one duplicate banner, months later, on a call.
+  perform public.register_device(v_alert, 'ios', null, null, null, 'apns');
+  perform pg_temp.check_eq('a caller that says nothing keeps the pairing',
+    (select device_id from public.device_tokens where token = v_alert),
+    v_phone);
+
+  -- And the control: a caller that DOES name a handset moves it, which
+  -- is what happens when a phone is restored from a backup onto another
+  -- and identifierForVendor changes.
+  perform public.register_device(v_alert, 'ios', null, null, null, 'apns',
+    '11111111-2222-3333-4444-555555555555');
+  perform pg_temp.check_eq('but a caller that names one is believed',
+    (select device_id from public.device_tokens where token = v_alert),
+    '11111111-2222-3333-4444-555555555555');
+
+  -- The sender pairs on this column, so it has to survive `push_targets`
+  -- being restated -- which is exactly where it would be lost.
+  perform pg_temp.check_true(
+    'and the sender is told which tokens share a handset',
+    exists (
+      select 1 from pg_proc p
+      cross join lateral unnest(p.proargnames, p.proargmodes) as a(name, mode)
+      where p.oid = 'public.push_targets(uuid, uuid)'::regprocedure
+        and a.mode = 't' and a.name = 'device_id'));
+end $$;
+
 rollback;

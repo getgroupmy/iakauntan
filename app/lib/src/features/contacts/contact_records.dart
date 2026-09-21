@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -100,6 +101,7 @@ class _RecordsSheet extends ConsumerWidget {
       child: AsyncView(
         value: records,
         onRetry: () => ref.invalidate(contactRecordsProvider(contactId)),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (data) {
           final others = (data['records'] as List? ?? [])
               .map((r) => Map<String, dynamic>.from(r as Map))

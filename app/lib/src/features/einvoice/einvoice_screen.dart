@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/safe_link.dart';
@@ -100,6 +104,12 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
             child: AsyncView(
               value: docs,
               onRetry: () => ref.invalidate(einvoicesProvider),
+              // Rows in a list, and the shape is decided by the screen
+              // rather than by the payload -- a name and a value, on
+              // every one of them. No avatar: these rows do not carry
+              // one, and a bone where nothing goes reflows the moment
+              // the data lands, which is the flicker a skeleton is for.
+              skeleton: const ListSkeleton(leading: false),
               builder: (list) {
                 if (list.isEmpty) {
                   return const EmptyState(
@@ -589,6 +599,55 @@ class _ErrorDetails extends StatelessWidget {
                 ),
               ),
           ],
+          // That the submitter has given up, said out loud.
+          //
+          // `retry.ts` stops the bulk sweep after
+          // `einvoiceMaxAttempts`, and until this line a document it
+          // had stopped sending looked exactly like one it was about to
+          // send again. Nothing on the screen changed and nothing ever
+          // would; an e-Invoice LHDN never received would sit here
+          // looking like it was in a queue.
+          //
+          // It names the way out, because there is one: Submit on the
+          // document itself is never refused.
+          // What was actually sent, for the person who has to answer
+          // "LHDN says the buyer TIN is wrong and the contact looks
+          // right to me".
+          //
+          // The submitter keeps the rejected document now — it used to
+          // store the UBL only on the accepted path, so the one
+          // document anybody needed to read was the one thrown away —
+          // and a payload stored where nothing can show it would be
+          // the same fault one step along.
+          if (doc.ublPayload != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const ValueKey('einvoice-sent-document'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => _SentDocument(doc: doc),
+                ),
+                icon: const Icon(Icons.description_outlined, size: 18),
+                label: const Text('What we sent'),
+              ),
+            ),
+          ],
+          if (doc.retriesExhausted) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Not sent again automatically after '
+              '$einvoiceMaxAttempts attempts. Fix what LHDN objected to '
+              'above, then submit it from the document.',
+              key: const ValueKey('einvoice-retries-exhausted'),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.colors.danger,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -638,6 +697,58 @@ class _KeyValue extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The UBL document as MyInvois received it.
+///
+/// Read-only and deliberately raw. This is not a document anybody is
+/// meant to read for pleasure — it is the thing an accountant sends to
+/// LHDN's support desk, or reads a field out of when a rejection names
+/// one. So it is the real payload, indented, with a copy button, and
+/// no attempt to render it as a friendly summary that would leave out
+/// the field being argued about.
+class _SentDocument extends StatelessWidget {
+  const _SentDocument({required this.doc});
+
+  final EinvoiceDocument doc;
+
+  String get _pretty =>
+      const JsonEncoder.withIndent('  ').convert(doc.ublPayload);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('${doc.internalDocNo} as submitted'),
+      content: SizedBox(
+        width: 640,
+        height: 420,
+        child: SingleChildScrollView(
+          child: SelectableText(
+            _pretty,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: _pretty));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Copied')),
+              );
+            }
+          },
+          icon: const Icon(Icons.copy_outlined, size: 18),
+          label: const Text('Copy'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

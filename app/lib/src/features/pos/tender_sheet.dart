@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
@@ -302,6 +303,7 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
       ),
       child: AsyncView<List<Map<String, dynamic>>>(
         value: types,
+        skeleton: const FormSkeleton(fields: 3),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(

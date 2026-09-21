@@ -4,10 +4,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'einvoice_certificate_card.dart';
+import 'fiscal_close.dart';
 import 'module_offer.dart';
 import 'subscription_card.dart';
 import '../../data/ocr_repository.dart';
@@ -478,7 +480,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
             DropdownButtonFormField<String>(
               key: const ValueKey('einvoice-version'),
               isExpanded: true,
-              value: _version ?? storedVersion,
+              initialValue: _version ?? storedVersion,
               decoration: const InputDecoration(
                 labelText: 'e-Invoice version',
                 helperText:
@@ -638,7 +640,7 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
         child: AsyncView(
           value: status,
           onRetry: () => ref.invalidate(ocrStatusProvider),
-          loading: const LinearProgressIndicator(),
+          skeleton: const CardRowsSkeleton(rows: 3, leading: false),
           builder: (ocr) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -681,7 +683,7 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                 // table the platform can add to, so it has no fixed
                 // width and cannot be laid out as buttons.
                 DropdownButtonFormField<String>(
-                  value: ocr.providers.any((p) => p.code == ocr.provider)
+                  initialValue: ocr.providers.any((p) => p.code == ocr.provider)
                       ? ocr.provider
                       : null,
                   isExpanded: true,
@@ -1210,7 +1212,8 @@ class _ModulesCard extends ConsumerWidget {
             AsyncView(
               value: surface,
               onRetry: () => ref.invalidate(moduleSurfaceProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 6, leadingSize: 24, lines: 1, trailing: 2),
               builder: (modules) {
                 final held = [
                   for (final m in modules)
@@ -1839,7 +1842,8 @@ class _FiscalYearsCard extends ConsumerWidget {
             AsyncView(
               value: years,
               onRetry: () => ref.invalidate(fiscalYearsProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 3, leading: false, trailing: 2),
               builder: (list) => list.isEmpty
                   ? const Text('No fiscal year yet — nothing can be posted.')
                   : Column(
@@ -1847,7 +1851,7 @@ class _FiscalYearsCard extends ConsumerWidget {
                       children: [
                         _RunwayNotice(years: list),
                         for (final y in list)
-                          _YearTile(year: y, canAdmin: canAdmin),
+                          _YearTile(year: y, all: list, canAdmin: canAdmin),
                       ],
                     ),
             ),
@@ -1920,10 +1924,73 @@ class _RunwayNotice extends StatelessWidget {
   }
 }
 
-class _YearTile extends ConsumerWidget {
-  const _YearTile({required this.year, required this.canAdmin});
+/// Close the year, or reopen it, or say why neither is offered yet.
+///
+/// The reason is carried onto the label rather than left to the
+/// database's refusal, which is what `voidBlockedBecause` and
+/// `transferBlockedBecause` do and for the same argument: being told
+/// after pressing is a worse way to learn than being told on the
+/// control. Both rules are about ORDER and both are enforced in
+/// `0648` as well -- this is the sentence, not the guard.
+class _CloseYearButton extends ConsumerWidget {
+  const _CloseYearButton({required this.year, required this.all});
 
   final FiscalYear year;
+  final List<FiscalYear> all;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final closed = year.status == 'closed';
+    final blocked = closed
+        ? reopenBlockedBecause(year, all)
+        : closeBlockedBecause(year, all);
+
+    return TextButton(
+      key: ValueKey('close-year-${year.id}'),
+      onPressed: blocked != null ? null : () => _act(context, ref, closed),
+      child: Text(blocked ?? (closed ? 'Reopen year' : 'Close the year')),
+    );
+  }
+
+  Future<void> _act(BuildContext context, WidgetRef ref, bool closed) async {
+    if (!closed) {
+      final ok = await confirm(
+        context,
+        title: 'Close ${year.name}?',
+        message: closeYearMessage,
+        confirmLabel: 'Close the year',
+      );
+      if (!ok || !context.mounted) return;
+    }
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    await runWithFeedback(
+      context,
+      action: () => closed
+          ? repo.reopenFiscalYear(year.id)
+          : repo.closeFiscalYear(year.id),
+      successMessage: closed
+          ? 'Reopened, and the closing journal reversed'
+          : 'Closed, and the result moved into equity',
+    );
+    ref.invalidate(fiscalYearsProvider);
+    refreshLedgerData(ref);
+  }
+}
+
+class _YearTile extends ConsumerWidget {
+  const _YearTile({
+    required this.year,
+    required this.all,
+    required this.canAdmin,
+  });
+
+  final FiscalYear year;
+
+  /// The other years, because both rules about closing are about ORDER
+  /// and neither can be answered from one year alone.
+  final List<FiscalYear> all;
   final bool canAdmin;
 
   @override
@@ -1940,6 +2007,16 @@ class _YearTile extends ConsumerWidget {
           const SizedBox(width: Space.sm),
           if (year.covers(DateTime.now()))
             const StatusChip('current', compact: true),
+          if (year.status == 'closed') ...[
+            const SizedBox(width: Space.xs),
+            const StatusChip('closed', compact: true),
+          ],
+          const Spacer(),
+          // The year-end close. `0648` -- and the reason it is here
+          // rather than on a screen of its own is that the periods have
+          // to be open for the closing journal to post, so the decision
+          // belongs beside the buttons that lock them.
+          if (canAdmin) _CloseYearButton(year: year, all: all),
         ],
       ),
       subtitle: Text(
@@ -2049,7 +2126,8 @@ class _TaxCodesCard extends ConsumerWidget {
             AsyncView(
               value: taxCodes,
               onRetry: () => ref.invalidate(taxCodesProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 4, leading: false, trailing: 1),
               builder: (list) => Column(
                 children: [
                   for (final t in list)
@@ -2074,6 +2152,16 @@ class _TaxCodesCard extends ConsumerWidget {
                               const Padding(
                                 padding: EdgeInsets.only(right: 8),
                                 child: StatusChip('default', compact: true),
+                              ),
+                            // Which of two codes at the same rate
+                            // quotes tax-inclusive prices. Only where
+                            // there is a rate for it to be inclusive
+                            // of: the trigger's inclusive branch is
+                            // guarded on `tax_rate > 0`.
+                            if (t.isInclusive && t.rate != 0)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: StatusChip('incl.', compact: true),
                               ),
                             Text(
                               Fmt.percent(t.rate),
@@ -2394,22 +2482,42 @@ class CloseAccountDialogState extends State<CloseAccountDialog> {
                         style: TextStyle(fontSize: 13),
                       ),
                       const SizedBox(height: Space.xs),
-                      CheckboxListTile(
-                        key: const ValueKey('close-sole-owned'),
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        dense: true,
-                        value: _closeCompanies,
-                        onChanged: (v) =>
-                            setState(() => _closeCompanies = v ?? false),
-                        title: Text(
-                          'Close ${sole.length == 1 ? 'it' : 'them'} too',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        subtitle: const Text(
-                          'The books stay; nobody but the operator can '
-                          'reach them.',
-                          style: TextStyle(fontSize: 12),
+                      // `Material`, transparent, around the tile. A
+                      // `ListTile` paints its ink on the nearest
+                      // `Material` ANCESTOR, and the nearest one here
+                      // is behind the tinted `Container` above -- so
+                      // the ripple was being drawn underneath the
+                      // warning colour and could not be seen. Ticking
+                      // this box gave no feedback at all.
+                      //
+                      // Flutter 3.47 asserts on the arrangement in as
+                      // many words ("ListTile background color or ink
+                      // splashes may be invisible") and that assertion
+                      // is what found it; on 3.32 it was silent and the
+                      // box had simply always felt dead.
+                      //
+                      // `MaterialType.transparency` adds a surface to
+                      // paint on and no colour of its own, so the
+                      // warning tint is unchanged.
+                      Material(
+                        type: MaterialType.transparency,
+                        child: CheckboxListTile(
+                          key: const ValueKey('close-sole-owned'),
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          dense: true,
+                          value: _closeCompanies,
+                          onChanged: (v) =>
+                              setState(() => _closeCompanies = v ?? false),
+                          title: Text(
+                            'Close ${sole.length == 1 ? 'it' : 'them'} too',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: const Text(
+                            'The books stay; nobody but the operator can '
+                            'reach them.',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ),
                       ),
                     ],

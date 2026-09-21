@@ -1,3 +1,26 @@
+// ignore_for_file: experimental_member_use
+//
+// `auth.passkey` is marked `@experimental` in `gotrue`, and the
+// analyzer started enforcing that across package boundaries on the SDK
+// this repository now pins -- eight warnings, which
+// `--fatal-warnings` makes eight errors.
+//
+// Silenced rather than worked around, because the annotation is
+// telling the truth and the truth is already written down:
+// `docs/passkeys.md` says passkeys are a BETA feature of the project,
+// names the dashboard menu they live under, and warns that the
+// relying party ID cannot be changed later without invalidating every
+// key already enrolled. There is no stable alternative to move to --
+// GoTrue is the only thing that can verify a WebAuthn assertion for
+// this project -- so the choice is this API or no passkeys at all.
+//
+// FILE-level and not line-level on purpose: everything in this file is
+// about passkeys, so a per-line ignore would be the same decision
+// repeated with more places to forget it. If a call to something else
+// experimental ever lands here, it belongs in its own file anyway.
+//
+// What to do when `gotrue` stabilises it: delete this, and the
+// analyzer will say so by having nothing to report.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -223,7 +246,12 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
                 ),
               ),
             const SizedBox(height: 12),
-            if (_usable)
+            // Not offered once the system has said it is not set up for
+            // this. The button cannot succeed until two files are
+            // served from `/.well-known/` -- see `passkeyNotSetUpHere`
+            // -- so leaving it there is a button that fails on every
+            // press, and each press puts another red box under it.
+            if (_usable && !passkeyNotSetUpHere(_error))
               OutlinedButton.icon(
                 key: const ValueKey('add-passkey'),
                 onPressed: _busy ? null : _add,
@@ -247,7 +275,18 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 12),
-              _Banner(message: _error!, color: context.colors.danger),
+              // A CONFIGURATION state is not a fault, and red says it
+              // is. Nothing is wrong with this phone, this account or
+              // the person reading it: the site has not deployed its
+              // association file. `onSurfaceVariant` is the register
+              // for "this is not switched on here".
+              _Banner(
+                key: const ValueKey('passkey-not-configured'),
+                message: _error!,
+                color: passkeyNotSetUpHere(_error)
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : context.colors.danger,
+              ),
             ],
           ],
         ),
@@ -257,7 +296,7 @@ class _PasskeysCardState extends ConsumerState<PasskeysCard> {
 }
 
 class _Banner extends StatelessWidget {
-  const _Banner({required this.message, required this.color});
+  const _Banner({super.key, required this.message, required this.color});
 
   final String message;
   final Color color;

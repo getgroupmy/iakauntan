@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -41,7 +42,14 @@ class AuditTrailCard extends ConsumerWidget {
             AsyncView(
               value: entries,
               onRetry: () => ref.invalidate(auditTrailProvider),
-              loading: const LinearProgressIndicator(),
+              // `_EntryTile` is a Padding round a Row, not a ListTile —
+              // the same shape the platform console's trail turned out
+              // to have, and outlined the same way.
+              skeleton: const CardRowsSkeleton(
+                rows: 4,
+                leading: false,
+                rowGap: Space.md,
+              ),
               builder: (list) => list.isEmpty
                   ? Text(
                       auditTrailEmptyLine(ref.watch(auditFilterProvider)),

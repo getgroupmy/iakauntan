@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
@@ -88,7 +89,8 @@ class _DeadlinesCard extends ConsumerWidget {
             AsyncView(
               value: filings,
               onRetry: () => ref.invalidate(corpFilingsProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(
+                  rows: 4, leadingSize: 24, trailing: 2),
               builder: (list) {
                 if (list.isEmpty) {
                   return const EmptyState(
@@ -275,7 +277,7 @@ class _EntitiesCard extends ConsumerWidget {
             AsyncView(
               value: entities,
               onRetry: () => ref.invalidate(corpEntitiesProvider),
-              loading: const LinearProgressIndicator(),
+              skeleton: const CardRowsSkeleton(rows: 4, trailing: 1),
               builder: (list) => list.isEmpty
                   ? const EmptyState(
                       icon: Icons.domain_outlined,

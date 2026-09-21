@@ -120,7 +120,17 @@ class _Dest {
     this.platformOnly = false,
     this.adminOnly = false,
     this.firmOnly = false,
+    this.anySignedIn = false,
+    this.short,
   });
+
+  /// What the overflow slot is called. Here rather than inline so that
+  /// [barLabel] is the only thing that decides what a bar slot says.
+  static const moreLabel = 'More';
+
+  /// What this destination is called in the bottom bar: the short form
+  /// where one is given, and the full label otherwise.
+  String get barLabel => short ?? label;
 
   final String label;
   final IconData icon;
@@ -151,6 +161,57 @@ class _Dest {
   /// as strata and non-strata, and either one is a reason to show the
   /// portfolio — a company managing only shoplots still has a portfolio.
   final String? altModule;
+
+  /// What the BOTTOM BAR calls this, when the full label is too long
+  /// for a sixth of a phone.
+  ///
+  /// Null where the label already fits, which is most of them.
+  ///
+  /// This exists because the obvious fix does not work. Material builds
+  /// a destination's label as `Text(label, style: textStyle)` with no
+  /// `textAlign` -- `flutter/src/material/navigation_bar.dart` -- so a
+  /// label that wraps falls back to `TextAlign.start` and sits left in
+  /// a slot whose icon is centred. Reported from a phone: "All
+  /// Contacts" and "Ask about your books" looked out of line with the
+  /// four beside them, and they were.
+  ///
+  /// Setting the alignment ambiently is the one-line answer and it is
+  /// INERT: `NavigationBar` builds a `Material`, `Material` inserts its
+  /// own `AnimatedDefaultTextStyle` whose `textAlign` is null, and that
+  /// is the `DefaultTextStyle` the label resolves against -- so a merge
+  /// outside the bar never reaches it. Measured, not assumed; there is
+  /// an assertion for it in `shell_always_reachable_test.dart` so that
+  /// nobody spends the afternoon on it again.
+  ///
+  /// So the label is made to FIT instead, which is the better answer
+  /// anyway: a bar slot is about sixty pixels and no amount of
+  /// alignment makes four words read well in it. The long name stays
+  /// on the rail and in the More sheet, where there is room for it and
+  /// where it is the name somebody is looking for.
+  final String? short;
+
+  /// Visible to anybody signed in, company or no company.
+  ///
+  /// Every other destination reads from an organization, so with none
+  /// selected they are doors onto an empty room -- which is what
+  /// `!hasOrg` below is for. These two are not:
+  ///
+  ///   * **Settings** carries the "Your account" card: change password,
+  ///     change email, change mobile, JOIN ANOTHER COMPANY, close this
+  ///     login, sign out. Somebody with no company is precisely the
+  ///     person who needs "join another company", and until now the
+  ///     door to it was hidden from them -- on every surface. There is
+  ///     already a widget test asserting that card is reachable with no
+  ///     organization; nothing asserted that the RAIL offered a way to
+  ///     reach it.
+  ///   * **Your details** is the person rather than the company and has
+  ///     nothing to do with a set of books at all.
+  ///
+  /// It also fixes a transient: `organizationsProvider` is read with
+  /// `valueOrNull ?? const []`, so `hasOrg` is false for the frame
+  /// before the answer lands, and Settings blinked out of the rail on
+  /// every cold start.
+  final bool anySignedIn;
 
   /// Only visible to platform staff.
   final bool platformOnly;
@@ -222,6 +283,19 @@ final _destinations = <_Dest>[
     '/dashboard',
     primary: true,
   ),
+  // `0656`. The route has existed since `0526` and nothing in the menu
+  // opened it -- the only ways in were the dashboard card's "see all"
+  // and typing the address. Reported as "why is to do not listed".
+  //
+  // No module: a to-do list is the workspace rather than the product,
+  // like Dashboard and Settings. A company that has put every module
+  // away still has people with things to remember.
+  _Dest(
+    'To do',
+    Icons.checklist_outlined,
+    Icons.checklist,
+    '/todos',
+  ),
   _Dest(
     'Sales',
     Icons.receipt_long_outlined,
@@ -280,6 +354,7 @@ final _destinations = <_Dest>[
     '/contacts',
     primary: true,
     module: 'contacts',
+    short: 'Contacts',
   ),
   _Dest(
     'Customer',
@@ -330,6 +405,18 @@ final _destinations = <_Dest>[
     Icons.verified,
     '/einvoice',
     module: 'einvoice',
+  ),
+  // The inbound half, and a separate destination rather than a tab on
+  // the one above: they are opposite jobs. That screen is "what have we
+  // filed"; this one is "what has arrived", and the person doing the
+  // second is usually not the person doing the first.
+  _Dest(
+    'Received',
+    Icons.mark_email_read_outlined,
+    Icons.mark_email_read,
+    '/einvoice/received',
+    module: 'einvoice',
+    short: 'Received',
   ),
   _Dest('My HR', Icons.badge_outlined, Icons.badge, '/hr/me', module: 'hr'),
   _Dest(
@@ -821,7 +908,24 @@ final _destinations = <_Dest>[
     '/inbox',
     module: 'mailbox',
   ),
-  _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
+  _Dest(
+    'Settings',
+    Icons.settings_outlined,
+    Icons.settings,
+    '/settings',
+    anySignedIn: true,
+  ),
+  // The person rather than the company. `0649` and `features/profile/`:
+  // there was no such screen on any surface, and on a phone not even a
+  // doorway -- the avatar that carries it on a laptop is in three rail
+  // layouts and none of them is the narrow one.
+  _Dest(
+    'Your details',
+    Icons.person_outline,
+    Icons.person,
+    '/profile',
+    anySignedIn: true,
+  ),
   // The assistant. One entry, because it is one screen — the module's
   // whole surface is a question box.
   _Dest(
@@ -831,6 +935,7 @@ final _destinations = <_Dest>[
     '/ask',
     primary: true,
     module: 'ai',
+    short: 'Ask',
   ),
   // No module, and last: reporting a fault is not a feature a company
   // buys, and a company that has stopped paying for one is exactly the
@@ -916,6 +1021,8 @@ class AppShell extends ConsumerWidget {
 
     return _destinations.where((d) {
       if (d.platformOnly) return isPlatformAdmin;
+      // Before the company gate, and deliberately: see `anySignedIn`.
+      if (d.anySignedIn) return true;
       if (!hasOrg) return false;
       if (d.adminOnly && !isAdmin) return false;
       if (d.firmOnly && !atAPractice) return false;
@@ -1214,6 +1321,32 @@ class AppShell extends ConsumerWidget {
       unread: unread,
     );
 
+    // WATCHED HERE, not read at the moment the sheet opens, and that is
+    // the whole of a reported bug: the More sheet had no group headings
+    // the first time it was opened and had them from the second time
+    // onwards.
+    //
+    // Nothing else on the narrow layout touches these two, so at the
+    // moment of the first press they had never been read -- and a
+    // FutureProvider that has never been read is unresolved, so
+    // `valueOrNull` was null and the `??` fallbacks took over: no group
+    // names and `grouped: false`. The read itself started the fetch, so
+    // by the second press they had arrived. The sheet was not showing
+    // stale data; it was showing the defaults, once, to everybody, on
+    // every cold start of the app.
+    //
+    // It changed the ORDER as well as the headings, which is why the
+    // first sheet looked like a different menu rather than the same one
+    // missing its titles: ungrouped is declaration order, grouped is by
+    // module.
+    //
+    // Watching resolves them while the bar is being drawn and rebuilds
+    // the layout when they land, so the first press finds them there.
+    // The rail has never had this problem because `_GroupedRail` reads
+    // them in `build`.
+    final moduleGroups = ref.watch(moduleLabelsProvider).valueOrNull;
+    final grouped = ref.watch(navGroupingProvider).valueOrNull ?? false;
+
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
@@ -1227,12 +1360,9 @@ class AppShell extends ConsumerWidget {
               dests,
               unread: unread,
               groupNames:
-                  ref
-                      .read(moduleLabelsProvider)
-                      .valueOrNull
-                      ?.map((code, m) => MapEntry(code, m.group)) ??
+                  moduleGroups?.map((code, m) => MapEntry(code, m.group)) ??
                   const {},
-              grouped: ref.read(navGroupingProvider).valueOrNull ?? false,
+              grouped: grouped,
             );
           }
         },
@@ -1247,11 +1377,14 @@ class AppShell extends ConsumerWidget {
                 Icon(d.selectedIcon),
                 destCarriesUnread(d.path) ? unread : 0,
               ),
-              label: d.label,
+              // The SHORT one where there is one. A bar slot is
+              // about sixty pixels; see `_Dest.short` for why
+              // aligning the wrapped text instead cannot work.
+              label: d.barLabel,
             ),
           NavigationDestination(
             icon: _badged(const Icon(Icons.more_horiz), onMore),
-            label: 'More',
+            label: _Dest.moreLabel,
           ),
         ],
       ),
@@ -1323,6 +1456,23 @@ class AppShell extends ConsumerWidget {
                   ),
               ],
               const Divider(),
+              // The phone's only doorway to the person rather than the
+              // company. `_AccountButton` -- the avatar that carries
+              // this on a laptop -- appears three times in this file and
+              // all three are RAIL layouts, so until now the More sheet
+              // offered Sign out and nothing else: no name, no
+              // telephone number, nothing that reads as you. That is
+              // what "why is there no profile settings page on the
+              // mobile app" was about.
+              ListTile(
+                key: const ValueKey('more-your-details'),
+                leading: const Icon(Icons.person_outline),
+                title: const Text('Your details'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.go('/profile');
+                },
+              ),
               Consumer(
                 builder: (context, ref, _) => ListTile(
                   leading: const Icon(Icons.logout),
@@ -1606,8 +1756,10 @@ class _OrgSwitcher extends ConsumerWidget {
                         key: const ValueKey('add-company'),
                         leading: const Icon(Icons.add_business_outlined),
                         title: const Text('Add a company'),
-                        subtitle: const Text('Another set of books on '
-                            'this sign-in'),
+                        subtitle: const Text(
+                          'Another set of books on '
+                          'this sign-in',
+                        ),
                         onTap: () {
                           Navigator.pop(ctx);
                           context.go('/companies/new');
@@ -1690,6 +1842,8 @@ class _AccountButton extends ConsumerWidget {
           ref.read(currentOrgIdProvider.notifier).clear();
         } else if (value == 'settings' && context.mounted) {
           context.go('/settings');
+        } else if (value == 'profile' && context.mounted) {
+          context.go('/profile');
         }
       },
       itemBuilder: (ctx) => [
@@ -1708,6 +1862,9 @@ class _AccountButton extends ConsumerWidget {
           ),
         ),
         const PopupMenuDivider(),
+        // The person before the company, because that is the order this
+        // menu reads in: it opens with an email address and a role.
+        const PopupMenuItem(value: 'profile', child: Text('Your details')),
         const PopupMenuItem(value: 'settings', child: Text('Settings')),
         const PopupMenuItem(value: 'signout', child: Text('Sign out')),
       ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
@@ -14,6 +15,7 @@ import '../../data/ocr_repository.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 import '../settings/new_account_dialog.dart';
+import '../settings/sub_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import '../shared/scan_runner.dart';
 import 'expense_split.dart';
@@ -85,6 +87,12 @@ class ExpensesScreen extends ConsumerWidget {
       body: AsyncView(
         value: expenses,
         onRetry: () => ref.invalidate(expensesProvider),
+        // Rows in a list, and the shape is decided by the screen
+        // rather than by the payload -- a name and a value, on
+        // every one of them. No avatar: these rows do not carry
+        // one, and a bone where nothing goes reflows the moment
+        // the data lands, which is the flicker a skeleton is for.
+        skeleton: const ListSkeleton(leading: false),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(
@@ -218,6 +226,21 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   /// null: an expense with no payee is still an expense.
   String? _contactId;
   String? _taxCodeId;
+
+  /// Which job and which department this cost belongs to, or null for
+  /// both, which is the ordinary case.
+  ///
+  /// `expenses.project_code` has existed since the dimensions did and
+  /// nothing in this app ever set it; `department_code` did not exist
+  /// at all until `0639`. So a cost claimed here reached the ledger
+  /// with both dimensions null however carefully it was coded, and the
+  /// P&L's filters answered confidently while omitting every one of
+  /// them — a department whose spending arrived this way read as a
+  /// department that had UNDERSPENT, which is the one shape of
+  /// reporting error nobody reports.
+  String? _projectCode;
+  String? _departmentCode;
+
   String _paymentMode = '03';
   DateTime _date = DateTime.now();
   bool _saving = false;
@@ -404,6 +427,8 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
           paymentModeCode: _paymentMode,
           taxCodeId: _taxCodeId,
           taxAmount: _tax,
+          projectCode: _projectCode,
+          departmentCode: _departmentCode,
           reference: _reference.text.trim().isEmpty
               ? null
               : _reference.text.trim(),
@@ -433,6 +458,26 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     }
   }
 
+  /// `0655`. Break the chosen expense account down, and select the
+  /// child that comes back.
+  ///
+  /// Selecting it is the point: somebody who has just made "Flights"
+  /// under 6100 Travel meant to post THIS receipt to it, and leaving
+  /// the parent chosen would be a step done and then undone.
+  ///
+  /// The parent may also have stopped being choosable -- filing
+  /// something under it turns it into a heading -- so leaving it
+  /// selected would leave the form holding an account the server will
+  /// refuse.
+  Future<void> _addSubAccount(List<Account> accounts) async {
+    final parent = accounts.where((a) => a.id == _accountId).firstOrNull;
+    if (parent == null) return;
+    final added = await showSubAccountDialog(context, parent: parent);
+    if (added == null || !mounted) return;
+    ref.invalidate(accountsProvider);
+    setState(() => _accountId = added);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Only expense accounts are sensible here.
@@ -441,6 +486,9 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
         .toList();
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
+    final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    final departments =
+        ref.watch(departmentsProvider).valueOrNull ?? const [];
     // Suppliers, because that is what a payee is: the same list the
     // purchase side picks from, so a bill and the cash paid for it end
     // up against one contact rather than two spellings of one.
@@ -517,10 +565,36 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _startSplit,
-                      icon: const Icon(Icons.call_split, size: 18),
-                      label: const Text('Split across accounts'),
+                    child: Wrap(
+                      spacing: 4,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _startSplit,
+                          icon: const Icon(Icons.call_split, size: 18),
+                          label: const Text('Split across accounts'),
+                        ),
+                        // `0655`. "Add account" in the picker above
+                        // makes a new heading at the top of the chart;
+                        // this breaks the one already chosen down --
+                        // 6100 Travel, and Flights under it. Both are
+                        // reached from the same receipt, and which one
+                        // somebody wants depends on whether the chart
+                        // already has a home for it.
+                        //
+                        // Disabled with nothing chosen, because "under
+                        // what?" has no answer then. The server refuses
+                        // a parent that has been posted to, and the
+                        // dialog asks it before drawing a form.
+                        TextButton.icon(
+                          key: const ValueKey('expense-sub-account'),
+                          onPressed: _accountId == null
+                              ? null
+                              : () => _addSubAccount(accounts),
+                          icon: const Icon(
+                              Icons.subdirectory_arrow_right, size: 18),
+                          label: const Text('Add a sub-account'),
+                        ),
+                      ],
                     ),
                   ),
                 ] else
@@ -608,7 +682,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _paymentMode,
+                      initialValue: _paymentMode,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Paid by'),
                       items: [
@@ -674,6 +748,57 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                       createBankAccountFromPicker(context, typed: typed),
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
+                // Only once there is something to choose. A company
+                // that has created neither gets neither control rather
+                // than two empty ones, which is the rule the journal
+                // editor's project picker already follows: a dropdown
+                // with nothing in it teaches people to ignore
+                // dropdowns.
+                if (projects.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SearchablePicker<String>(
+                    key: const ValueKey('expense-project'),
+                    options: [
+                      for (final p in projects)
+                        PickerOption<String>(
+                          value: p['code'] as String,
+                          label: '${p['name']}',
+                          sublabel: '${p['code']}',
+                          keywords: ['${p['code']}'],
+                        ),
+                    ],
+                    value: _projectCode,
+                    allowEmpty: true,
+                    emptyLabel: 'No job',
+                    label: 'Job',
+                    helperText: 'Which job this cost is against',
+                    onChanged: (v) => setState(() => _projectCode = v),
+                  ),
+                ],
+                if (departments.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SearchablePicker<String>(
+                    key: const ValueKey('expense-department'),
+                    options: [
+                      for (final d in departments)
+                        PickerOption<String>(
+                          value: d['code'] as String,
+                          label: '${d['name']}',
+                          sublabel: '${d['code']}',
+                          keywords: ['${d['code']}'],
+                        ),
+                    ],
+                    value: _departmentCode,
+                    allowEmpty: true,
+                    emptyLabel: 'No department',
+                    label: 'Department',
+                    helperText:
+                        'Whose budget this comes out of. Leave blank and '
+                        'the cost is in the company total and in no '
+                        'department.',
+                    onChanged: (v) => setState(() => _departmentCode = v),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _reference,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'surface.dart';
+
 import '../features/ai/ask_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/firms/practice_screen.dart';
@@ -40,6 +42,7 @@ import '../features/documents/receipts_screen.dart';
 import '../features/documents/salespeople_screen.dart';
 import '../features/documents/document_list_screen.dart';
 import '../features/einvoice/einvoice_screen.dart';
+import '../features/einvoice/received_einvoices_screen.dart';
 import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
@@ -86,6 +89,7 @@ import '../features/documents/withholding_screen.dart';
 import '../features/imports/import_screen.dart';
 import '../features/ledger/recurring_screen.dart';
 import '../features/reports/group_reports_screen.dart';
+import '../features/reports/layout_builder_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
 import '../features/documents/customer_portal_page.dart';
@@ -97,6 +101,7 @@ import '../features/secretarial/entity_screen.dart';
 import '../features/secretarial/people_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
 import '../features/settings/chart_of_accounts_card.dart';
+import '../features/profile/profile_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
 import '../features/hr/ea_forms_screen.dart';
@@ -222,6 +227,32 @@ bool? moduleHeldFor(Confinement? door, AsyncValue<Set<String>> enabled) {
   );
 }
 
+/// Whether this is the iOS or Android app rather than a browser.
+///
+/// One line, and the whole of it is in `core/surface.dart` — the same
+/// fact decides whether a passkey button can be drawn and whether a
+/// stranger is offered an account, and three copies of `!kIsWeb &&
+/// (android || iOS)` is three places for the subtle half to be dropped
+/// from. [currentSurface] says which half that is.
+bool get runningInTheApp => currentSurface.isApp;
+
+/// Whether [path] is one of the pages a stranger may read.
+///
+/// The four the footer links to: the terms somebody is being asked to
+/// agree to, the terms of service, the privacy policy that describes
+/// what happens to them, and the address to write to about all three.
+/// A policy you have to sign in to read is not a policy.
+///
+/// Its own function so it can be asserted without standing a router up.
+/// The bug it exists to stop was invisible from inside [routeFor]: the
+/// clause simply named three slugs where four were linked, and the
+/// fourth bounced to the sign-in form with nothing logged anywhere.
+///
+/// EXACT paths, not prefixes. `/terms-of-services` is not a page and
+/// must not be waved through for starting the same way.
+bool publicPathNeedsNoSession(String path) =>
+    publicSitePageSlugs.any((slug) => path == '/$slug');
+
 /// signed-in visitor is not bounced anywhere.
 String? routeFor({
   required String path,
@@ -231,6 +262,21 @@ String? routeFor({
   required bool? isPlatformAdmin,
   bool atCompanyDoor = false,
   bool doorKnown = true,
+
+  /// Whether this is the iOS or Android app rather than a browser.
+  ///
+  /// The website has a shopfront and the app does not. Somebody who
+  /// typed `iakauntan.com` has not come to sign in -- they have come to
+  /// find out what this is -- so `/` is the landing page and the form
+  /// is one button away. Nobody installs an accounting system from an
+  /// app store to read about accounting systems: they installed it
+  /// because they already have books here, or because somebody at work
+  /// told them to. Every question the landing page answers for a
+  /// stranger was answered before the download finished.
+  ///
+  /// Defaults false, so the web is unchanged and every existing caller
+  /// and test means what it meant.
+  bool nativeApp = false,
   bool vetting = false,
   String? confinedTo,
   Set<String> confinedAllows = const {},
@@ -279,9 +325,27 @@ String? routeFor({
   // the footer links to all three from the front page — including the
   // front page of a company's own address, where `/` is the sign-in
   // form and these three still are not.
-  if (path == '/terms' || path == '/privacy' || path == '/contact') {
+  //
+  // Read from `publicSitePageSlugs` rather than listed again. This
+  // clause named three of the four after `0651` added the fourth, so
+  // Terms of Service was routed, linked from the footer and from the
+  // consent line under the register button, and then bounced to the
+  // sign-in form by this very function.
+  if (publicPathNeedsNoSession(path)) {
     return null;
   }
+
+  // `0653`. And the demo page, which is not a document but a way IN --
+  // twelve one-tap logins into a demonstration company, linked from the
+  // foot of the sign-in screen in the apps.
+  //
+  // Signed out is the whole of who it is for, so it is let past here
+  // rather than by the clause below, which would send a native build to
+  // `/signin` and a browser to the front page. What happens to somebody
+  // who already has a session is decided with the two doors further
+  // down: pressing this with an account is asking to become somebody
+  // else, and the picker would do exactly that.
+  if (path == '/demo' && !signedIn) return null;
 
   // And the fifth, which is not about a token at all: the corporate
   // landing page, which is now the address itself. Somebody who typed
@@ -300,6 +364,47 @@ String? routeFor({
   // not a shopfront — a stranger who typed it was looking for Sinar,
   // not for what iAkauntan is — so its `/` is the sign-in form. Only
   // `/`: a signed-in visitor on any other route is left alone.
+  //
+  // Unless this is the app, where there is no shopfront to stand in
+  // front of. Checked BEFORE the company-door rule and before the
+  // signed-out rule below, because it is the stronger fact: a build in
+  // an app store has no hostname for `atCompanyDoor` to be about, and
+  // an app that opened on a marketing page would be an app whose first
+  // screen is an advertisement for the thing already installed.
+  //
+  // `/signin` and not `/login`: `/login` is a company's own door,
+  // reached by typing that company's address, and there is no address
+  // to type here.
+  //
+  // Answered in ONE hop, by asking what `/signin` itself answers, and
+  // that is not tidiness. Returning `/signin` flat put a signed-in
+  // platform operator through `/` to `/signin` to `/dashboard` to
+  // `/admin` -- four -- and the sweep at the bottom of
+  // `router_redirect_test.dart` refused it for taking more than three.
+  // It was right to: every hop in that chain is a `GoRouter` rebuild,
+  // and the bound is what keeps a rule like this one from quietly
+  // becoming a chain nobody can follow.
+  //
+  // The recursion is one deep and cannot be more: `/signin` is neither
+  // `/` nor `/welcome`, so the branch it re-enters is not this one.
+  if (nativeApp && (path == '/' || path == '/welcome')) {
+    return routeFor(
+          path: '/signin',
+          signedIn: signedIn,
+          recovering: recovering,
+          hasOrg: hasOrg,
+          isPlatformAdmin: isPlatformAdmin,
+          atCompanyDoor: atCompanyDoor,
+          doorKnown: doorKnown,
+          nativeApp: nativeApp,
+          vetting: vetting,
+          confinedTo: confinedTo,
+          confinedAllows: confinedAllows,
+          moduleHeld: moduleHeld,
+          landingRoute: landingRoute,
+        ) ??
+        '/signin';
+  }
   if (path == '/') return atCompanyDoor ? '/login' : null;
   // Kept because it was the address for a while and links to it exist.
   // One redirect, not a second copy of the page.
@@ -335,6 +440,12 @@ String? routeFor({
       final door = atCompanyDoor ? '/login' : '/signin';
       return path == door ? null : door;
     }
+    // `/` is the front page on the web and a redirect to `/signin` in
+    // the app, and saying so in one hop rather than two is the same
+    // choice the block above this one makes and for the same reason:
+    // the chain resolves either way, and the answer to "where does
+    // signing out go" should not depend on a second rule further up.
+    if (nativeApp) return '/signin';
     return atCompanyDoor ? '/login' : '/';
   }
 
@@ -362,7 +473,7 @@ String? routeFor({
   // them off it, which they watch happen. Once the answer is in, the
   // hop to the dashboard and the hop from there to the till resolve as
   // one chain and nothing in between is ever drawn.
-  if (path == '/signin' || path == '/login') {
+  if (path == '/signin' || path == '/login' || path == '/demo') {
     if (!doorKnown) return null;
     // The dashboard while the preference is still being read, and NOT a
     // hold. Holding would be tidier -- it would avoid the hop from the
@@ -471,6 +582,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         atCompanyDoor: ref.read(workspaceLookupProvider).valueOrNull?.host ==
             WorkspaceHost.found,
         doorKnown: ref.read(workspaceLookupProvider).hasValue,
+        nativeApp: runningInTheApp,
         vetting: ref.read(vettingProvider),
         // 0342. An address the operator pointed at one module opens
         // that and nothing else. All three are null or empty at every
@@ -543,13 +655,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       // The three pages the footer links to. Outside the shell and
       // outside auth for the reason given in `routeFor`: they are read
       // before anybody has an account, and often instead of getting one.
-      for (final slug in const ['terms', 'privacy', 'contact'])
+      for (final slug in publicSitePageSlugs)
         GoRoute(
           path: '/$slug',
           builder: (_, __) => SitePageScreen(slug: slug),
         ),
       // 0342. Outside the shell, because the shell is a menu of places
       // this address does not open.
+      // `0653`. The demo logins, on a page rather than under the form.
+      //
+      // `SignInScreen` with the form left out, deliberately: signing in
+      // as a demo account runs the same vetting as any other sign-in
+      // and holds the router while it does, and a screen of its own
+      // would have been a second copy of that.
+      GoRoute(
+        path: '/demo',
+        builder: (_, __) => const SignInScreen(demoOnly: true),
+      ),
       GoRoute(path: '/no-access', builder: (_, __) => const NoAccessScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // The same form, at an address the redirect does not send anybody
@@ -793,6 +915,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const EinvoiceScreen(),
           ),
           GoRoute(
+            path: '/einvoice/received',
+            builder: (_, __) => const ReceivedEinvoicesScreen(),
+          ),
+          GoRoute(
             path: '/journals',
             builder: (_, __) => const JournalsScreen(),
           ),
@@ -866,6 +992,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/knock-off',
             builder: (_, __) => const KnockOffScreen(),
+          ),
+          // 0637. The report kind is in the path because the two
+          // layouts are separate things a company edits separately.
+          GoRoute(
+            path: '/reports/layout/:kind',
+            builder: (_, state) => LayoutBuilderScreen(
+              kind: state.pathParameters['kind'] ?? 'profit_loss',
+            ),
           ),
           GoRoute(
             path: '/deposits',
@@ -1053,6 +1187,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             builder: (_, __) => const SettingsScreen(),
+          ),
+          // The person, as opposed to the company. `0649` and
+          // `features/profile/` -- there was no such screen on any
+          // surface until then, and `profiles` has held these columns
+          // since `0001`.
+          GoRoute(
+            path: '/profile',
+            builder: (_, __) => const ProfileScreen(),
           ),
         ],
       ),

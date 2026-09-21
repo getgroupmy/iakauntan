@@ -286,7 +286,7 @@ class _ChargeSheetState extends ConsumerState<_ChargeSheet> {
                 Row(children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      value: chargeTypes.contains(_type) ? _type : null,
+                      initialValue: chargeTypes.contains(_type) ? _type : null,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Kind'),
                       items: [

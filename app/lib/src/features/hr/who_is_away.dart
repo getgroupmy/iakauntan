@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -223,6 +224,7 @@ class _WhoIsAwayDialogState extends ConsumerState<_WhoIsAwayDialog> {
               child: AsyncView(
                 value: rows,
                 onRetry: () => ref.invalidate(whoIsAwayProvider(_days)),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (list) {
                   if (list.isEmpty) {
                     return const EmptyState(

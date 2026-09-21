@@ -99,6 +99,33 @@ def block(src: str, name: str) -> str:
     return found.group(0)
 
 
+def grants(src: str, name: str) -> str:
+    """The migration's own `grant ... on function <name>` statements.
+
+    Replacing a function does not always keep its privileges here. On
+    `open_shared_document`, `proacl` reads
+    `{postgres=X/postgres,authenticated=X/postgres}` the moment the
+    function is restated -- `anon` is gone -- which is why `0413` and
+    `0642` both re-grant on the line after the restatement.
+
+    A harness that applies the BLOCK ALONE therefore takes that
+    privilege away for the whole sweep. `document_share.sql` asserts it,
+    so every mutant was reported killed and so was the control: a sweep
+    whose output says nothing, and it only says so because there was a
+    control. Then `restored:` failed too, because putting the original
+    block back does not put the grant back either -- so the harness left
+    the database with a share link that no longer opens for the
+    customer it was emailed to.
+
+    So the grants ride along with the block, both ways.
+    """
+    found = re.findall(
+        r"^grant\s+execute\s+on\s+function\s+[a-z_]*\.?"
+        + re.escape(name) + r"\s*\([^)]*\)\s+to\s+[^;]+;",
+        src, re.M | re.I)
+    return "\n".join(found)
+
+
 def psql(sql: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["psql", DB, "-q", "-v", "ON_ERROR_STOP=1", "-c", sql],
@@ -139,6 +166,13 @@ def main() -> int:
     if not mutants[-1][0].startswith("CONTROL"):
         sys.exit("HARNESS ERROR: the last mutant must be the CONTROL")
 
+    carried = {name: grants(original, name)
+               for _, name, *_ in mutants}
+    for name, keep in carried.items():
+        if keep:
+            print(f"carrying {len(keep.splitlines())} grant(s) on {name}, "
+                  f"which a replace does not keep")
+
     before = run(test)
     print(f"baseline: {'passed' if before is None else 'FAILED ' + before}")
     if before is not None:
@@ -147,6 +181,9 @@ def main() -> int:
     survivors, control_died = [], False
     for label, name, old, new, marker in mutants:
         source = block(original, name)
+        keep = grants(original, name)
+        if keep:
+            source += "\n" + keep
         if old not in source:
             sys.exit(f"HARNESS ERROR: {label} -- the anchor is not in {name}")
         applied = psql(source.replace(old, new, 1))
@@ -167,7 +204,10 @@ def main() -> int:
                 survivors.append(label)
         elif label.startswith("CONTROL"):
             control_died = True
-        psql(block(original, name))
+        restore = block(original, name)
+        if keep:
+            restore += "\n" + keep
+        psql(restore)
 
     after = run(test)
     print(f"restored: {'passed' if after is None else 'FAILED ' + after}")

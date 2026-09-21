@@ -9,9 +9,11 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/repository.dart';
 import 'report_csv.dart';
 import 'report_pdf.dart';
 import 'report_spec.dart';
+import 'report_xlsx.dart';
 
 class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
@@ -19,6 +21,12 @@ class ReportsScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
 }
+
+/// The caveat the balance sheet has always carried. Named because two
+/// call sites now pass it, and two copies of a sentence drift.
+const _balanceSheetNote =
+    'This should be zero once the year-end profit is transferred to '
+    'retained earnings.';
 
 class _ReportsScreenState extends ConsumerState<ReportsScreen>
     with SingleTickerProviderStateMixin {
@@ -161,10 +169,25 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               )),
             )
             .valueOrNull;
-        return rows == null ? null : profitLossSpec(rows, _range);
+        return rows == null
+            ? null
+            : layoutSpec(
+                rows,
+                title: 'Profit & Loss',
+                subtitle:
+                    '${Fmt.longDate(_range.start)} to '
+                    '${Fmt.longDate(_range.end)}',
+              );
       case 1:
         final rows = ref.watch(_balanceSheetProvider(_range.end)).valueOrNull;
-        return rows == null ? null : balanceSheetSpec(rows, _range.end);
+        return rows == null
+            ? null
+            : layoutSpec(
+                rows,
+                title: 'Balance Sheet',
+                subtitle: 'As at ${Fmt.longDate(_range.end)}',
+                note: _balanceSheetNote,
+              );
       case 2:
         final rows = ref.watch(trialBalanceProvider).valueOrNull;
         return rows == null ? null : trialBalanceSpec(rows);
@@ -258,6 +281,41 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     );
   }
 
+  /// The same report, as a workbook.
+  ///
+  /// Beside the CSV rather than instead of it. A CSV is what an
+  /// importer wants -- no types, no formats, nothing to parse around --
+  /// and this is what a person wants: figures that are numbers, with
+  /// number formats and column widths on them. `report_xlsx.dart` has
+  /// the argument.
+  ///
+  /// No clipboard fallback, unlike the CSV. A workbook is bytes, and
+  /// there is nothing useful to paste; on a phone, where nothing
+  /// downloads, the honest answer is to say so.
+  Future<void> _downloadXlsx(ReportSpec spec) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await exportBytesFile(
+      ref,
+      '${_stem(spec)}.xlsx',
+      // The full OOXML type. A workbook served as
+      // `application/octet-stream` downloads as a file the browser will
+      // not name properly and Excel opens with a warning.
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      reportXlsx([spec]),
+      what: 'Report',
+      detail: '${spec.title} to ${Fmt.iso(_range.end)}, as a workbook',
+    );
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          saved
+              ? 'Downloaded'
+              : 'Workbook download is only available in the browser',
+        ),
+      ),
+    );
+  }
+
   /// Named for the report and the date it covers, because a folder of
   /// files called "profit-loss.pdf" is a folder of one usable file.
   String _stem(ReportSpec spec) =>
@@ -344,10 +402,28 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         onTap: spec == null ? null : () => _download(spec),
       ),
       (
+        label: 'Download Excel',
+        icon: Icons.grid_on_outlined,
+        onTap: spec == null ? null : () => _downloadXlsx(spec),
+      ),
+      (
         label: 'Download CSV',
         icon: Icons.table_chart_outlined,
         onTap: spec == null ? null : () => _downloadCsv(spec),
       ),
+      // 0637. Only on the two reports that HAVE a layout. Offering it
+      // on the trial balance would promise something that does not
+      // exist, which is worse than not offering it.
+      if (_tabs.index == 0 || _tabs.index == 1)
+        (
+          label: 'Edit layout',
+          icon: Icons.tune,
+          onTap: () async {
+            final kind = _tabs.index == 0 ? 'profit_loss' : 'balance_sheet';
+            final saved = await context.push<bool>('/reports/layout/$kind');
+            if (saved == true && mounted) setState(() {});
+          },
+        ),
     ];
 
     return Scaffold(
@@ -398,6 +474,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               tooltip: 'Download PDF',
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
               onPressed: spec == null ? null : () => _download(spec),
+            ),
+          if (!narrow)
+            IconButton(
+              key: const ValueKey('report-xlsx'),
+              tooltip: 'Download Excel',
+              icon: const Icon(Icons.grid_on_outlined, size: 20),
+              onPressed: spec == null ? null : () => _downloadXlsx(spec),
             ),
           if (!narrow)
             IconButton(
@@ -462,7 +545,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               project: _project,
               department: _department,
             )),
-            spec: (rows) => profitLossSpec(rows, _range),
+            spec: (rows) => layoutSpec(
+              rows,
+              title: 'Profit & Loss',
+              subtitle:
+                  '${Fmt.longDate(_range.start)} to '
+                  '${Fmt.longDate(_range.end)}',
+            ),
             empty: const EmptyState(
               icon: Icons.summarize_outlined,
               title: 'Nothing posted in this period',
@@ -471,7 +560,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           ),
           _Report(
             provider: _balanceSheetProvider(_range.end),
-            spec: (rows) => balanceSheetSpec(rows, _range.end),
+            spec: (rows) => layoutSpec(
+              rows,
+              title: 'Balance Sheet',
+              subtitle: 'As at ${Fmt.longDate(_range.end)}',
+              note: _balanceSheetNote,
+            ),
             empty: const EmptyState(
               icon: Icons.balance,
               title: 'Nothing on the balance sheet yet',
@@ -859,7 +953,12 @@ final _profitLossProvider = FutureProvider.autoDispose
       List<Map<String, dynamic>>,
       ({DateTimeRange range, String? project, String? department})
     >((ref, args) {
-      return requireRepo(ref).profitLossByDimension(
+      // `0637`. The rows come back already composed from this
+      // company's layout -- section, formula and account, in order --
+      // rather than as a flat list this side then groups. A company
+      // that has customised nothing gets exactly what it got before.
+      return requireRepo(ref).reportWithLayout(
+        kind: 'profit_loss',
         from: args.range.start,
         to: args.range.end,
         projectCode: args.project,
@@ -874,7 +973,9 @@ final _dimensionsProvider =
 
 final _balanceSheetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
-      return requireRepo(ref).balanceSheet(asAt: asAt);
+      // `0637`, as with the P&L above: composed from this company's
+      // layout rather than grouped on this side.
+      return requireRepo(ref).reportWithLayout(kind: 'balance_sheet', to: asAt);
     });
 
 /// The ledger, for the chosen range and optionally one account.

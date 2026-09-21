@@ -8,8 +8,11 @@ import '../core/format.dart';
 // For `writeCustomFields`, which both `openMatter` and `createTicket`
 // need and which each of them used to write out again inline.
 import 'custom_fields_repository.dart';
+import '../features/contacts/brought_forward.dart';
 import '../features/documents/transfer.dart';
+import '../features/einvoice/received_einvoice.dart';
 // `RepoMia` at the foot of this file returns these.
+import '../features/admin/ios_release.dart';
 import '../features/mia/mia_credential.dart';
 import 'models.dart';
 
@@ -420,6 +423,52 @@ class Repo {
     return data as String;
   }
 
+  /// Files a new account under an existing one.
+  ///
+  /// `0655`. Not [upsertAccount] with a parent: that one requires the
+  /// parent to be a heading ALREADY, which every account somebody
+  /// actually wants to break up is not. This promotes the parent, and
+  /// refuses where promoting it would cost something — see
+  /// [subAccountRefusal].
+  ///
+  /// Returns the row the server built: `id`, `code`, `parent_code` and
+  /// `parent_promoted`, the last of which is what lets the screen say
+  /// that the account somebody was posting to has become a heading.
+  Future<Map<String, dynamic>> addSubAccount({
+    required String parentId,
+    required String name,
+    String? code,
+    String? subtype,
+    String? description,
+    String? currency,
+  }) async {
+    final data = await callRpc(
+      'add_sub_account',
+      params: {
+        'p_parent_id': parentId,
+        'p_name': name,
+        'p_code': code,
+        'p_subtype': subtype,
+        'p_description': description,
+        'p_currency': currency,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Why this account cannot take a sub-account, or null if it can.
+  ///
+  /// Asked BEFORE the button is offered, so somebody does not find out
+  /// by filling in a dialog and having it refused. The write asks the
+  /// same question again — this is a courtesy, not the rule.
+  Future<String?> subAccountRefusal(String accountId) async {
+    final data = await callRpc(
+      'sub_account_refusal',
+      params: {'p_parent_id': accountId},
+    );
+    return data as String?;
+  }
+
   /// The ledger by account: balance brought forward, every posted line,
   /// balance carried down. What the trial balance is made of.
   ///
@@ -696,6 +745,21 @@ class Repo {
     return _rows(data).map(Contact.fromJson).toList();
   }
 
+  /// Deletes a contact, or throws saying what still points at it.
+  ///
+  /// `0654`. An RPC rather than `.from('contacts').delete()`, and the
+  /// difference is not tidiness: nineteen of the foreign keys on
+  /// `contacts.id` are ON DELETE SET NULL, `gl_lines.contact_id` among
+  /// them. A plain delete against a customer whose only history is in
+  /// the ledger succeeds without a word and detaches every posted line
+  /// from the party it was posted against.
+  ///
+  /// The refusal comes back as `23503` with the counts in its message.
+  /// See `contact_delete.dart` for what is made of it.
+  Future<void> deleteContact(String id) async {
+    await callRpc('delete_contact', params: {'p_id': id});
+  }
+
   Future<Contact> contact(String id) async {
     final data = await client.from('contacts').select().eq('id', id).single();
     return Contact.fromJson(data);
@@ -952,6 +1016,7 @@ class Repo {
     required double rate,
     String taxTypeCode = '06',
     bool isExempt = false,
+    bool isInclusive = false,
     String? exemptionReason,
   }) async {
     final row = await client
@@ -963,6 +1028,7 @@ class Repo {
           'rate': rate,
           'tax_type_code': taxTypeCode,
           'is_exempt': isExempt,
+          'is_inclusive': isInclusive,
           'exemption_reason': exemptionReason,
         })
         .select('id')
@@ -970,6 +1036,10 @@ class Repo {
     return row['id'] as String;
   }
 
+  /// [isInclusive] changes what FUTURE lines do, not what past ones
+  /// did. `app.calc_document_line` resolves it onto a line when the code
+  /// is chosen and leaves it there, so turning it on does not restate
+  /// any document already raised — the same promise the rate makes.
   Future<void> updateTaxCode(
     String id, {
     required String code,
@@ -977,6 +1047,7 @@ class Repo {
     required double rate,
     required String taxTypeCode,
     required bool isExempt,
+    required bool isInclusive,
     String? exemptionReason,
   }) => client
       .from('tax_codes')
@@ -986,6 +1057,7 @@ class Repo {
         'rate': rate,
         'tax_type_code': taxTypeCode,
         'is_exempt': isExempt,
+        'is_inclusive': isInclusive,
         'exemption_reason': exemptionReason,
       })
       .eq('id', id)
@@ -1044,6 +1116,20 @@ class Repo {
     params: {'p_period_id': periodId, 'p_status': status},
   );
 
+  /// Brings the year's revenue and expenses to nil and puts the result
+  /// in equity. `0648`. Returns nothing: what came back is the journal
+  /// id, and the screen reads the year again rather than the entry.
+  Future<void> closeFiscalYear(String fiscalYearId) => callRpc(
+    'close_fiscal_year',
+    params: {'p_fiscal_year_id': fiscalYearId},
+  );
+
+  /// And reverses it.
+  Future<void> reopenFiscalYear(String fiscalYearId) => callRpc(
+    'reopen_fiscal_year',
+    params: {'p_fiscal_year_id': fiscalYearId},
+  );
+
   /// The ledger itself. Everything in the system posts through
   /// create_gl_entry, so this is the one place an invoice, a payroll run
   /// and a hand-written correction can be compared side by side.
@@ -1058,7 +1144,7 @@ class Repo {
         // Named because 0515 added a same-org composite key alongside
         // the plain one, so 'gl_lines' can now be joined to a journal
         // two ways and PostgREST refuses the embed with PGRST201.
-        .select('*, gl_lines!gl_lines_entry_id_fkey(*, accounts(code, name))')
+        .select('*, gl_lines!gl_lines_entry_id_fkey(*, accounts!gl_lines_account_id_fkey(code, name))')
         .eq('org_id', orgId);
     if (from != null) q = q.gte('entry_date', Fmt.iso(from));
     if (to != null) q = q.lte('entry_date', Fmt.iso(to));
@@ -2982,7 +3068,8 @@ class Repo {
             .select(
               '*, items!bills_of_materials_item_id_fkey(code, name), '
               'bom_lines!bom_lines_bom_id_fkey(*, items!bom_lines_item_id_fkey(code, name)), '
-              'bom_operations!bom_operations_bom_id_fkey(*, work_centres(code, name, cost_per_hour))',
+              'bom_operations!bom_operations_bom_id_fkey'
+              '(*, work_centres!bom_operations_work_centre_id_fkey(code, name, cost_per_hour))',
             )
             .eq('id', id)
             .eq('org_id', orgId)
@@ -3141,7 +3228,8 @@ class Repo {
               '(code, name), '
               'warehouses!manufacturing_orders_warehouse_id_fkey(code, name), '
               'mo_components!mo_components_mo_id_fkey(*, items!mo_components_item_id_fkey(code, name)), '
-              'mo_operations!mo_operations_mo_id_fkey(*, work_centres(code, name, cost_per_hour))',
+              'mo_operations!mo_operations_mo_id_fkey'
+              '(*, work_centres!mo_operations_work_centre_id_fkey(code, name, cost_per_hour))',
             )
             .eq('id', id)
             .eq('org_id', orgId)
@@ -3518,12 +3606,21 @@ class Repo {
   /// `p256dh` and `auth` are a browser's encryption keys and belong only
   /// to a web registration; 0143 refuses a web row without them and a
   /// Firebase token with them.
+  ///
+  /// `transport` says which service the token belongs to — 0657 — and
+  /// `deviceId` says which handset it came from, so that an iPhone's
+  /// alert token and its PushKit token can be recognised as one phone
+  /// rather than two. Both are omitted where the platform has nothing
+  /// to say, and the function then behaves exactly as it did before
+  /// they existed. See 0658.
   Future<void> registerDevice({
     required String token,
     required String platform,
     String? label,
     String? p256dh,
     String? auth,
+    String? transport,
+    String? deviceId,
   }) => callRpc(
     'register_device',
     params: {
@@ -3532,6 +3629,8 @@ class Repo {
       if (label != null) 'p_label': label,
       if (p256dh != null) 'p_p256dh': p256dh,
       if (auth != null) 'p_auth': auth,
+      if (transport != null) 'p_transport': transport,
+      if (deviceId != null) 'p_device_id': deviceId,
     },
   );
 
@@ -3934,6 +4033,11 @@ class Repo {
   /// receipt is not a document and has no row in this table. They are
   /// on the brought-forward statement (`report_statement_of_account`,
   /// 0624), which is where they belong.
+  ///
+  /// This is the OPEN-ITEM statement: what is still outstanding, one
+  /// line per document. The brought-forward one is a different report
+  /// and both are legitimate; what neither of them is, is a list of
+  /// documents that were never issued.
   Future<List<BusinessDocument>> outstandingFor({
     required DocKind kind,
     required String contactId,
@@ -3955,9 +4059,65 @@ class Repo {
                 ],
         )
         .gt('balance_amount', 0)
+        // POSTED, and not voided. Both were missing, and both reached
+        // the PDF that goes to the customer.
+        //
+        // A DRAFT invoice carries its full `balance_amount` from the
+        // moment its lines are typed -- measured, not assumed -- so a
+        // quote somebody was still working on was sent out as money
+        // due. A VOIDED one keeps its balance too: `void_sales_document`
+        // sets the status and reverses the ledger entry and never
+        // touches the column, because nothing else had ever read it
+        // without also asking whether the document was real.
+        //
+        // These two conditions are `report_ar_aging`'s and
+        // `report_ap_aging`'s, word for word -- `d.gl_entry_id is not
+        // null and d.status <> 'void'`. The ageing report and the
+        // statement are the same open-item question asked twice, and
+        // the day they disagree the customer's ledger disagrees with
+        // ours. `statement_of_account.sql` asserts they do not.
+        //
+        // `purchase_return` needs no separate exclusion: it cannot
+        // post -- `post_purchase_document_internal` refuses it by name
+        // -- so it can never carry a `gl_entry_id` and falls out here.
+        .not('gl_entry_id', 'is', null)
+        .neq('status', 'void')
         .isFilter('deleted_at', null)
         .order('doc_date', ascending: true);
     return _rows(data).map(BusinessDocument.fromJson).toList();
+  }
+
+  /// The brought-forward statement: what happened, in date order.
+  ///
+  /// The other half of the question [outstandingFor] answers. That one
+  /// lists documents with a balance left on them, which is what somebody
+  /// chasing money wants. This one opens with what was owed before the
+  /// period, lists every posted document and every receipt that moved
+  /// it, and carries a running balance down the page -- which is what a
+  /// customer reconciling against their own ledger wants.
+  ///
+  /// `report_statement_of_account` (0624) does the arithmetic, including
+  /// the running balance, and this returns it unchanged. Recomputing the
+  /// balance here would be a second arithmetic to disagree with the
+  /// first, which is the failure `statement_of_account.sql` exists to
+  /// prevent between the ageing report and the open-item statement.
+  ///
+  /// Customer side only, because the function is: it reads
+  /// `sales_documents` and `receipts`.
+  Future<List<StatementLine>> statementOfAccount({
+    required String contactId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final data = await callRpc(
+      'report_statement_of_account',
+      params: {
+        'p_contact_id': contactId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      },
+    );
+    return _rows(data).map(StatementLine.fromJson).toList();
   }
 
   // ------------------------------------------------------------------
@@ -4198,6 +4358,8 @@ class Repo {
     String? taxCodeId,
     double taxAmount = 0,
     String? reference,
+    String? projectCode,
+    String? departmentCode,
     List<Map<String, dynamic>>? split,
   }) async {
     final row = await client
@@ -4216,6 +4378,12 @@ class Repo {
           'tax_code_id': taxCodeId,
           'tax_amount': taxAmount,
           'total_amount': amount + taxAmount,
+          // The two analysis dimensions. `project_code` has been on
+          // this table since the dimensions went in and nothing ever
+          // sent it; `department_code` arrived with 0639. Both null is
+          // the ordinary case and posts exactly as it always has.
+          'project_code': projectCode,
+          'department_code': departmentCode,
         })
         .select()
         .single();
@@ -4365,6 +4533,124 @@ class Repo {
 
   Future<Map<String, dynamic>> cancelEinvoice(String id, String reason) =>
       callMyInvois('cancel', {'einvoice_id': id, 'reason': reason});
+
+  // ------------------------------------------------------------------
+  // e-Invoice, inbound
+  // ------------------------------------------------------------------
+
+  /// The MyInvois documents suppliers have sent us.
+  ///
+  /// The supplier is embedded by constraint name. `contacts` and
+  /// `received_einvoices` are joinable two ways -- `contact_id` and the
+  /// `*_same_org` composite `0650` carries for the tenant boundary --
+  /// and an unqualified embed across a pair like that is a PGRST201
+  /// that takes out the whole screen. `scripts/check_embeds.py` is what
+  /// refuses one now; it did not always, and this is one of the pairs
+  /// it counts.
+  Future<List<ReceivedEinvoice>> receivedEinvoices({String? status}) async {
+    var query = client
+        .from('received_einvoices')
+        .select(
+          '*, contacts!received_einvoices_contact_same_org(name), '
+          'received_einvoice_lines(count)',
+        )
+        .eq('org_id', orgId);
+    if (status != null && status != 'all') {
+      query = query.eq('status', status);
+    }
+    final data = await query
+        .order('issue_date', ascending: false, nullsFirst: false)
+        .order('created_at', ascending: false)
+        .limit(200);
+    return _rows(data).map(ReceivedEinvoice.fromJson).toList();
+  }
+
+  /// The lines of one received document, in the order they arrived.
+  ///
+  /// `ascending: true` is not decoration. postgrest-dart declares
+  /// `order(String column, {bool ascending = false})`, so a bare
+  /// `.order('line_no')` is line 9 first -- which is what this said, and
+  /// which the comment above it flatly contradicted. `line_no` is named
+  /// in `scripts/check_order_direction.py` as one of the columns that
+  /// went reversed for five hundred migrations without anybody noticing,
+  /// because a list in the wrong order reads as a list in an odd order.
+  Future<List<Map<String, dynamic>>> receivedEinvoiceLines(String id) async =>
+      _rows(
+        await client
+            .from('received_einvoice_lines')
+            .select()
+            .eq('received_id', id)
+            .order('line_no', ascending: true),
+      );
+
+  /// Hand a MyInvois document to the parser and keep what it makes of it.
+  ///
+  /// [document] is the file's contents: a decoded object, or the text.
+  /// Both are accepted because both arrive.
+  ///
+  /// The parse happens in `supabase/functions/_shared/ubl_parse.ts` and
+  /// not here. It is asserted against the builder that writes the same
+  /// binding, by round trip, and a second implementation in Dart would
+  /// be a contract that drifts -- silently, because both halves would
+  /// go on passing their own tests.
+  Future<Map<String, dynamic>> receiveEinvoice(Object document) =>
+      callMyInvois('receive', {'document': document});
+
+  /// Say which supplier a received document is from.
+  ///
+  /// Null clears it. `0650` refuses a contact in another company and
+  /// refuses any change once a bill has been drafted.
+  Future<void> linkReceivedEinvoiceContact(String id, String? contactId) =>
+      callRpc(
+        'link_received_einvoice_contact',
+        params: {'p_id': id, 'p_contact_id': contactId},
+      );
+
+  /// Move a received document between `received` and `ignored`.
+  ///
+  /// Not to `billed`: that means a bill exists, and only
+  /// [draftBillFromReceivedEinvoice] can make it true.
+  Future<void> setReceivedEinvoiceStatus(String id, String status) => callRpc(
+    'set_received_einvoice_status',
+    params: {'p_id': id, 'p_status': status},
+  );
+
+  /// Create the supplier a received document names, and link it.
+  ///
+  /// Returns the contact id. If a contact already holds that TIN this
+  /// links THAT one instead of making a second row, which is the trap
+  /// this function exists next to.
+  Future<String> createSupplierFromReceivedEinvoice(String id) async {
+    final out = await callRpc(
+      'create_supplier_from_received_einvoice',
+      params: {'p_id': id},
+    );
+    return '$out';
+  }
+
+  /// Draft a purchase document from a received e-Invoice, and return it.
+  ///
+  /// The totals are recomputed from the lines by the same triggers every
+  /// other bill goes through, so they may differ from what the supplier
+  /// stated by a sen of rounding. Where they do, `0650` writes both
+  /// figures into the bill's internal notes rather than losing the
+  /// difference.
+  Future<String> draftBillFromReceivedEinvoice(String id) async {
+    final out = await callRpc(
+      'draft_bill_from_received_einvoice',
+      params: {'p_id': id},
+    );
+    return '$out';
+  }
+
+  /// Throw a received document away.
+  ///
+  /// Allowed, unlike editing one: "this was not for us" is a different
+  /// act from changing what a supplier sent, and the alternative is a
+  /// list that fills with other people's invoices forever.
+  Future<void> deleteReceivedEinvoice(String id) async {
+    await client.from('received_einvoices').delete().eq('id', id);
+  }
 
   Future<Map<String, dynamic>> validateTin({
     required String tin,
@@ -4573,7 +4859,41 @@ class Repo {
         .order('due_date', ascending: true, nullsFirst: false)
         .order('created_at', ascending: true)
         .limit(limit);
-    return _rows(data).map(Todo.fromJson).toList();
+    final items = _rows(data).map(Todo.fromJson).toList();
+
+    // `0656`. The party's name, read separately rather than embedded.
+    //
+    // A PostgREST embed would be one round trip, and `todos_contact_id`
+    // is a COMPOSITE key -- `(org_id, contact_id)` per `0511` -- which
+    // is exactly the shape that makes an embed's hint ambiguous and
+    // fails at run time on a screen rather than here. One extra select
+    // over at most a hundred rows is the cheaper certainty.
+    //
+    // A name that cannot be read is left null, not an error: a to-do is
+    // a private note and it still says what it says.
+    final ids = {
+      for (final t in items)
+        if (t.contactId != null) t.contactId!,
+    };
+    if (ids.isEmpty) return items;
+    try {
+      final rows = _rows(
+        await client
+            .from('contacts')
+            .select('id, name')
+            .eq('org_id', orgId)
+            .inFilter('id', ids.toList()),
+      );
+      final names = {
+        for (final r in rows) r['id'] as String: r['name']?.toString(),
+      };
+      return [
+        for (final t in items)
+          t.contactId == null ? t : t.withContactName(names[t.contactId]),
+      ];
+    } catch (_) {
+      return items;
+    }
   }
 
   Future<void> addTodo({
@@ -4582,6 +4902,7 @@ class Repo {
     DateTime? dueDate,
     String priority = 'normal',
     String? link,
+    String? contactId,
   }) async {
     final uid = client.auth.currentUser?.id;
     if (uid == null) return;
@@ -4593,6 +4914,7 @@ class Repo {
       if (dueDate != null) 'due_date': Fmt.iso(dueDate),
       'priority': priority,
       if (link != null && link.isNotEmpty) 'link': link,
+      if (contactId != null) 'contact_id': contactId,
     });
   }
 
@@ -4603,6 +4925,12 @@ class Repo {
     DateTime? dueDate,
     bool clearDueDate = false,
     String? priority,
+    String? contactId,
+
+    /// `0656`. Taking the party off is a thing somebody does, and
+    /// `contactId: null` cannot say it -- absent and "clear this" are
+    /// the same value. The same split `clearDueDate` already makes.
+    bool clearContact = false,
   }) async {
     await client
         .from('todos')
@@ -4614,6 +4942,10 @@ class Repo {
           else if (dueDate != null)
             'due_date': Fmt.iso(dueDate),
           if (priority != null) 'priority': priority,
+          if (clearContact)
+            'contact_id': null
+          else if (contactId != null)
+            'contact_id': contactId,
         })
         .eq('id', id);
   }
@@ -4758,6 +5090,7 @@ extension RepoOrgLogo on Repo {
     required String roundingMethod,
     String? registrationNo,
     String? tin,
+    String? tourismTaxRegNo,
     String? msicCode,
     String? addressLine1,
     String? addressLine2,
@@ -4781,6 +5114,11 @@ extension RepoOrgLogo on Repo {
         'rounding_method': roundingMethod,
         'registration_no': _orNull(registrationNo),
         'tin': _orNull(tin),
+        // Not beside the SST number, which lives on its own card
+        // because registering for SST is four facts and a default tax
+        // code. This one is only a number: a company either has a
+        // Tourism Tax registration or it has not.
+        'tourism_tax_reg_no': _orNull(tourismTaxRegNo),
         'msic_code': _orNull(msicCode),
         // The business address, which is what goes on the invoice and
         // what `app.prepare_einvoice` sends LHDN as the supplier.
@@ -4910,6 +5248,64 @@ class PlatformRepo {
   Future<bool> amIPlatformAdmin() async {
     final data = await client.rpc('am_i_platform_admin');
     return data == true;
+  }
+
+  /// The last few iOS releases, newest first.
+  ///
+  /// Read from GitHub through the `ios-release` function rather than
+  /// from a table here, and deliberately: the build is what happened,
+  /// and a row this app wrote when it pressed the button would be this
+  /// app's opinion of what happened. A workflow that failed to start,
+  /// or one somebody ran by hand from the Actions tab, both show up in
+  /// the same list.
+  Future<IosReleases> iosReleases() async {
+    final FunctionResponse res;
+    try {
+      res = await client.functions.invoke('ios-release');
+    } on FunctionException catch (e) {
+      // `invoke` THROWS on a non-2xx. It does not hand back a response
+      // with a status to inspect, which is what the first version of
+      // this method checked for -- so the careful sentence below was
+      // written and never reached, and the console drew
+      // `FunctionException(status: 503, details: {...})` at somebody.
+      // The same idiom is in `ssm_search_service.dart`.
+      final said = releaseRefusalLine(
+        e.details,
+        orElse: 'The build list could not be read',
+      );
+      if (releaseNotConfigured(e.status)) return IosReleases.unavailable(said);
+      throw Exception(said);
+    }
+    final runs = (res.data as Map)['runs'] as List? ?? const [];
+    return IosReleases.runs([
+      for (final r in runs) Map<String, dynamic>.from(r as Map),
+    ]);
+  }
+
+  /// Start one.
+  ///
+  /// `lane` is `testflight` or `appstore`. Neither releases anything to
+  /// the public: the first reaches your own testers, the second reaches
+  /// App Review, and what happens after that is Apple's and takes as
+  /// long as it takes.
+  Future<void> releaseIosApp({required String lane, String? notes}) async {
+    try {
+      await client.functions.invoke(
+        'ios-release',
+        body: {
+          'action': 'release',
+          'lane': lane,
+          if (notes != null) 'notes': notes,
+        },
+      );
+    } on FunctionException catch (e) {
+      // Thrown, not returned -- see `iosReleases` above. Every refusal
+      // is an error here, including 503: the card disables this button
+      // when releasing is not set up, so somebody reaching this with a
+      // 503 has pressed a button that should not have been pressable,
+      // and that is worth saying rather than swallowing.
+      throw Exception(releaseRefusalLine(e.details));
+    }
   }
 
   Future<Map<String, dynamic>> stats() async {
@@ -12573,4 +12969,79 @@ extension RepoPaymentMethods on Repo {
         'p_payment_method_id': methodId,
         'p_amount': amount,
       }));
+}
+
+/// A company's own report layouts. 0637.
+extension RepoReportLayouts on Repo {
+  // -------------------------------------------------------------------
+  // Report layouts (0637)
+  // -------------------------------------------------------------------
+
+  /// A P&L or Balance Sheet, composed by the database from this
+  /// company's layout.
+  ///
+  /// The rows come back already totalled — one per section, formula and
+  /// account. Nothing on this side adds anything up, because the
+  /// arithmetic on a document somebody signs belongs in one place.
+  Future<List<Map<String, dynamic>>> reportWithLayout({
+    required String kind,
+    DateTime? from,
+    DateTime? to,
+    String? layoutId,
+    String? projectCode,
+    String? departmentCode,
+  }) async {
+    final data = await callRpc('report_with_layout', params: {
+      'p_org_id': orgId,
+      'p_kind': kind,
+      'p_from': from == null ? null : Fmt.iso(from),
+      'p_to': to == null ? null : Fmt.iso(to),
+      'p_layout_id': layoutId,
+      'p_project_code': projectCode,
+      'p_department_code': departmentCode,
+    });
+    return Repo._rows(data);
+  }
+
+  /// This company's layouts for one report, the active one first.
+  Future<List<ReportLayout>> reportLayouts(String kind) async {
+    final data = await callRpc('report_layouts_for', params: {
+      'p_org_id': orgId,
+      'p_kind': kind,
+    });
+    return Repo._rows(data).map(ReportLayout.fromJson).toList();
+  }
+
+  /// One layout's rows, in order, for the builder.
+  Future<List<LayoutRow>> layoutRows(String layoutId) async {
+    final data = await callRpc('layout_rows', params: {
+      'p_layout_id': layoutId,
+    });
+    return Repo._rows(data).map(LayoutRow.fromJson).toList();
+  }
+
+  /// Copy the standard layout into an editable one and make it active.
+  Future<String> createLayoutFromBuiltin(String kind, {String? name}) async =>
+      (await callRpc('create_layout_from_builtin', params: {
+        'p_org_id': orgId,
+        'p_kind': kind,
+        'p_name': name,
+      })).toString();
+
+  /// Replace a layout's rows in one go.
+  ///
+  /// All of them, because rows refer to each other by key and applying
+  /// a builder's changes one at a time would pass through states where
+  /// a formula points at a row that has not arrived.
+  Future<void> saveLayoutRows(String layoutId, List<LayoutRow> rows) async =>
+      await callRpc('save_layout_rows', params: {
+        'p_layout_id': layoutId,
+        'p_rows': [for (final r in rows) r.toJson()],
+      });
+
+  Future<void> activateReportLayout(String id) async =>
+      await callRpc('activate_report_layout', params: {'p_layout_id': id});
+
+  Future<void> archiveReportLayout(String id) async =>
+      await callRpc('archive_report_layout', params: {'p_layout_id': id});
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -150,6 +151,7 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: gateways,
           onRetry: () => ref.invalidate(orgPaymentGatewaysProvider),
+          skeleton: const FormSkeleton(fields: 3),
           builder: (rows) {
             final row = rows
                 .where(

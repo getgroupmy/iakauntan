@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -138,7 +139,14 @@ class _CustomerPortalCardState extends ConsumerState<CustomerPortalCard> {
               value: links,
               onRetry: () => ref
                   .invalidate(customerPortalLinksProvider(widget.contactId)),
-              loading: const LinearProgressIndicator(),
+              // Two, because a contact usually has one live link and
+              // perhaps one revoked.
+              skeleton: const CardRowsSkeleton(
+                rows: 2,
+                leading: false,
+                trailing: 1,
+                rowGap: Space.xs,
+              ),
               builder: (rows) {
                 final state = PortalLinkState.fromRows(rows);
                 return Column(

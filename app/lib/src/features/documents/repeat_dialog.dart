@@ -117,7 +117,7 @@ class _RepeatDialogState extends ConsumerState<_RepeatDialog> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _frequency,
+                    initialValue: _frequency,
                     decoration: const InputDecoration(labelText: 'Period'),
                     items: const [
                       DropdownMenuItem(value: 'daily', child: Text('Day')),

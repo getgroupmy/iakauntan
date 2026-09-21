@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -431,6 +432,7 @@ class _Conversation extends ConsumerWidget {
     return AsyncView(
       value: comments,
       onRetry: () => ref.invalidate(ticketCommentsProvider(id)),
+      skeleton: const CardRowsSkeleton(rows: 3, lines: 3),
       builder: (list) {
         if (list.isEmpty) {
           return Text(
@@ -580,6 +582,8 @@ class _History extends ConsumerWidget {
     return AsyncView(
       value: events,
       onRetry: () => ref.invalidate(ticketEventsProvider(id)),
+      skeleton: const CardRowsSkeleton(
+          rows: 4, leadingSize: 24, lines: 1),
       builder: (list) => Column(
         children: [
           for (final e in list)

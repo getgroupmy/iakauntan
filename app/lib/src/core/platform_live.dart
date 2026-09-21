@@ -37,6 +37,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -48,6 +49,7 @@ import '../data/site_pages_repository.dart';
 import '../data/platform_catalog_repository.dart';
 import '../features/landing/landing_content.dart';
 import 'providers.dart';
+import 'socket_resume.dart';
 
 /// Which providers go stale when a platform table changes.
 ///
@@ -156,6 +158,16 @@ void invalidatePlatformTable(WidgetRef ref, String table) {
   }
 }
 
+/// Whether coming back to [now] from [was] means a change may have been
+/// missed.
+///
+/// Kept as a name here because this file's callers and its tests use
+/// it, and delegating rather than holding the rule: `socket_resume.dart`
+/// has the one copy, because `live_updates.dart` needs exactly the same
+/// judgement and a second copy of it is a second thing to refine.
+bool platformMissedWhileAway(AppLifecycleState? was, AppLifecycleState now) =>
+    missedWhileAway(was, now);
+
 /// Long enough to collect a burst, short enough to feel immediate.
 ///
 /// Saving a landing page writes the page and its sections separately,
@@ -196,7 +208,7 @@ final platformLiveProvider = Provider<PlatformLive>((ref) {
   return live;
 });
 
-class PlatformLive {
+class PlatformLive with WidgetsBindingObserver {
   PlatformLive(this._ref);
 
   final Ref _ref;
@@ -208,8 +220,52 @@ class PlatformLive {
   /// Whether the socket is carrying platform changes at this moment.
   var connected = false;
 
+  /// Whether the lifecycle observer was ever registered.
+  ///
+  /// Mirrors `_connect`, and has to: `WidgetsBinding.instance` THROWS
+  /// where no binding has been initialised, which is every plain
+  /// `test()` in this repository. An object that never connected must
+  /// not reach for the binding on the way out either — and the test
+  /// that caught this is the one asserting the channel is inert where
+  /// there is no Supabase, which is precisely that object.
+  bool _observing = false;
+
+  /// The last lifecycle state seen, so a resume knows what it resumed
+  /// from. `WidgetsBinding.instance.lifecycleState` is the CURRENT one
+  /// by the time the callback runs, so it cannot answer this.
+  AppLifecycleState? _was;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final was = _was;
+    _was = state;
+    if (platformMissedWhileAway(was, state)) refreshEverything();
+  }
+
+  /// Refetch every platform table, because what changed is not knowable.
+  ///
+  /// Nothing tells a client what it missed while its socket was down —
+  /// there is no cursor and no replay — so the only honest answer on
+  /// coming back is to ask again. These are small, cached, platform-wide
+  /// tables and this happens once per return from the background.
+  void refreshEverything() {
+    final stale = <ProviderOrFamily>{};
+    for (final table in _watchers.keys) {
+      stale.addAll(platformLiveProviders(table));
+    }
+    for (final provider in stale) {
+      _ref.invalidate(provider);
+    }
+  }
+
   void _connect(SupabaseClient client, {required bool signedIn}) {
     _client = client;
+    // Registered here rather than in the constructor, so the object a
+    // widget test gets — built and returned before `supabaseReadyProvider`
+    // is true — observes nothing and refetches nothing.
+    WidgetsBinding.instance.addObserver(this);
+    _observing = true;
+    _was = WidgetsBinding.instance.lifecycleState;
     // One topic for everybody. There is nothing to filter on — these
     // tables have no `org_id` and the rows are the platform's — so what
     // decides who receives a row is the policy on the table, which is
@@ -278,6 +334,10 @@ class PlatformLive {
   }
 
   void dispose() {
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observing = false;
+    }
     _timer?.cancel();
     final channel = _channel;
     if (channel != null) {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -144,6 +145,11 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
       body: AsyncView(
         value: existing,
         onRetry: () => ref.invalidate(employeeProvider),
+        // Safe on a NEW employee, which `FormSkeleton`'s own comment
+        // warns about: `existing` above is a settled
+        // `AsyncValue.data(null)` when `isNew`, so there is no loading
+        // state to draw and this never shows where nothing is coming.
+        skeleton: const FormSkeleton(fields: 6),
         builder: (employee) {
           if (employee != null) _hydrate(employee);
 
@@ -464,7 +470,7 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
     required ValueChanged<T?> onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: items.containsKey(value) ? value : null,
+      initialValue: items.containsKey(value) ? value : null,
       isExpanded: true,
       decoration: InputDecoration(labelText: label),
       items: [

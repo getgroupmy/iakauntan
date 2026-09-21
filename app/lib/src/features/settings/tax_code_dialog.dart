@@ -46,6 +46,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
   final _rate = TextEditingController();
   late String _taxType;
   late bool _exempt;
+  late bool _inclusive;
   String? _exemptionReason;
   bool _saving = false;
 
@@ -60,6 +61,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
     _rate.text = t == null ? '' : t.rate.toStringAsFixed(2);
     _taxType = t?.taxTypeCode ?? '06';
     _exempt = t?.isExempt ?? false;
+    _inclusive = t?.isInclusive ?? false;
     _exemptionReason = t?.exemptionReason;
   }
 
@@ -72,6 +74,16 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
   }
 
   double? get _parsedRate => double.tryParse(_rate.text.trim());
+
+  /// What RM 100 quoted against this rate is worth net, rounded the way
+  /// `app.calc_document_line` rounds it. Shown so that somebody turning
+  /// the switch on sees which of the two numbers moves before they save
+  /// a code every future invoice is priced against.
+  double _netOf(double gross) {
+    final rate = _parsedRate ?? 0;
+    if (rate <= 0) return gross;
+    return (gross / (1 + rate / 100) * 100).roundToDouble() / 100;
+  }
 
   String? get _blocked =>
       exemptionBlockedBecause(isExempt: _exempt, reason: _exemptionReason);
@@ -102,6 +114,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
             rate: _parsedRate!,
             taxTypeCode: _taxType,
             isExempt: _exempt,
+            isInclusive: _inclusive,
             exemptionReason: reason,
           );
         } else {
@@ -112,6 +125,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
             rate: _parsedRate!,
             taxTypeCode: _taxType,
             isExempt: _exempt,
+            isInclusive: _inclusive,
             exemptionReason: reason,
           );
         }
@@ -182,7 +196,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _taxType,
+                    initialValue: _taxType,
                     decoration: const InputDecoration(
                       labelText: 'LHDN tax type',
                     ),
@@ -206,6 +220,29 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
               ],
             ),
             const SizedBox(height: 8),
+            // Whether a price quoted against this code already contains
+            // the tax. It is asked here, once per code, rather than per
+            // line: see 0641 -- a document that is half inclusive is a
+            // document nobody can check, and the POS side has always
+            // asked the same question once per outlet.
+            CheckboxListTile(
+              key: const ValueKey('tax-code-inclusive'),
+              contentPadding: EdgeInsets.zero,
+              value: _inclusive,
+              onChanged: _saving
+                  ? null
+                  : (v) => setState(() => _inclusive = v!),
+              title: const Text('Prices include this tax'),
+              subtitle: Text(
+                _parsedRate == null || _parsedRate == 0
+                    ? 'A price typed on a line already contains the tax, '
+                          'and the line shows what is left as net.'
+                    : 'A price typed on a line already contains the '
+                          '${Fmt.percent(_parsedRate!)} — so RM 100 is '
+                          '${Fmt.money(_netOf(100))} plus '
+                          '${Fmt.money(100 - _netOf(100))} tax.',
+              ),
+            ),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: _exempt,
@@ -224,7 +261,7 @@ class _TaxCodeDialogState extends ConsumerState<TaxCodeDialog> {
                       const <Map<String, dynamic>>[];
                   return DropdownButtonFormField<String?>(
                     key: const ValueKey('tax-exemption-reason'),
-                    value: all.any((r) => r['code'] == _exemptionReason)
+                    initialValue: all.any((r) => r['code'] == _exemptionReason)
                         ? _exemptionReason
                         : null,
                     isExpanded: true,
@@ -383,7 +420,7 @@ class TaxCodePicker extends ConsumerWidget {
         for (final t in codes)
           PickerOption<String>(
             value: t.id,
-            label: t.rate == 0 ? t.code : '${t.code} (${Fmt.percent(t.rate)})',
+            label: t.pickerLabel,
             sublabel: t.name,
           ),
       ],

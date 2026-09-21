@@ -102,4 +102,66 @@ void main() {
       expect(transferProblem([line('a', 10, 10)], {'a': 1}), isNotNull);
     });
   });
+
+  /// Nothing goes forward while a signature is outstanding.
+  ///
+  /// `0646` is the migration; this is the sentence on the menu item.
+  /// The reason it is worth a test of its own rather than being left to
+  /// the database: until `0646` the approval decision was read in
+  /// exactly ONE place, a trigger on the transition into `posted`, and
+  /// seven of the fifteen document types never post. A rule on a
+  /// purchase requisition -- the document whose only purpose is to be
+  /// approved -- could be written, saved, submitted, signed and
+  /// ignored.
+  group('what an outstanding approval stops', () {
+    Map<String, dynamic> state({
+      bool required = true,
+      bool approved = false,
+      String? requestId,
+    }) => {
+      'is_required': required,
+      'is_approved': approved,
+      'request_id': requestId,
+    };
+
+    test('a document no rule covers goes forward', () {
+      expect(transferBlockedBecause(state(required: false)), isNull);
+    });
+
+    test('and so does one that has been signed', () {
+      expect(
+        transferBlockedBecause(state(approved: true, requestId: 'r1')),
+        isNull,
+      );
+    });
+
+    test('one that needs a signature and has not been sent says so', () {
+      final why = transferBlockedBecause(state());
+      expect(why, isNotNull);
+      expect(why, contains('approval'));
+    });
+
+    test('and one already on somebody\'s desk says something different', () {
+      // Two different answers because they have two different next
+      // steps: one is "press Send for approval", the other is "wait".
+      // A single sentence would tell half the people the wrong thing.
+      final sent = transferBlockedBecause(state(requestId: 'r1'));
+      expect(sent, isNotNull);
+      expect(sent, isNot(equals(transferBlockedBecause(state()))));
+    });
+
+    test('a read that has not landed does not block anything', () {
+      // Null is "we do not know yet", not "no". The database refuses
+      // anyway, and greying the button on a missing read would hide a
+      // transfer that is perfectly allowed.
+      expect(transferBlockedBecause(null), isNull);
+    });
+
+    test('and a missing key is not a requirement', () {
+      // `approval_state` returns no row where the caller may not read
+      // the document. A map without `is_required` must not read as
+      // true.
+      expect(transferBlockedBecause(const {}), isNull);
+    });
+  });
 }

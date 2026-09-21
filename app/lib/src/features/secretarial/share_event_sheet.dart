@@ -307,7 +307,7 @@ class _ShareEventSheetState extends ConsumerState<_ShareEventSheet> {
                   ),
                 DropdownButtonFormField<String>(
                   key: const ValueKey('share-event-type'),
-                  value: _type,
+                  initialValue: _type,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'What happened'),
                   items: [

@@ -10,6 +10,7 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -27,7 +28,10 @@ import '../../data/ssm_repository.dart';
 import '../../data/entity_types_repository.dart';
 import '../shared/entity_search.dart';
 import '../shared/ssm_query_hints.dart';
+import 'brought_forward.dart';
+import 'brought_forward_pdf.dart';
 import 'statement_pdf.dart';
+import 'contact_delete.dart';
 import 'contact_extras.dart';
 import 'customer_portal_card.dart';
 import 'tax_details_card.dart';
@@ -418,6 +422,105 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     }
   }
 
+  /// The other statement: everything that happened in a period.
+  ///
+  /// Offered beside the open-item one rather than instead of it, because
+  /// the two answer different questions and a customer holding the wrong
+  /// one cannot tell. `report_statement_of_account` (0624) built this
+  /// and nothing called it until now.
+  ///
+  /// Customer side only, because the function is — it reads
+  /// `sales_documents` and `receipts`. The menu does not offer it to a
+  /// supplier.
+  Future<void> _downloadBroughtForward() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(repoProvider);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    if (repo == null || org == null || widget.contactId == null) return;
+
+    final today = DateTime.now();
+    final suggested = statementDefaultPeriod(today);
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDateRange: DateTimeRange(
+        start: suggested.from,
+        end: suggested.to,
+      ),
+      helpText: 'Statement period',
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _statementBusy = true);
+    try {
+      final contact = await repo.contact(widget.contactId!);
+      final lines = await repo.statementOfAccount(
+        contactId: widget.contactId!,
+        from: picked.start,
+        to: picked.end,
+      );
+
+      // Checked before the document is written, not after it is sent.
+      // The running balance comes down from the database and the page
+      // prints it; if it disagrees with the movements printed beside
+      // it, the customer is being asked for a figure nothing on the
+      // page explains, and the right response is to say so rather than
+      // to produce the document anyway.
+      if (!statementAddsUp(lines)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The running balance does not agree with the transactions '
+              'under it, so the statement was not produced. Please report '
+              'this.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final bytes = await buildBroughtForwardPdf(
+        org: org,
+        contact: contact,
+        lines: lines,
+        from: picked.start,
+        to: picked.end,
+        logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed,
+      );
+
+      final stem = contact.code
+          .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+          .toLowerCase();
+      final saved = await exportBytesFile(
+        ref,
+        'statement-$stem-${Fmt.iso(picked.start)}-to-'
+            '${Fmt.iso(picked.end)}.pdf',
+        'application/pdf',
+        bytes,
+        what: 'Statement of account',
+        detail: '${contact.name}, '
+            '${statementPeriodLabel(picked.start, picked.end)}',
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            saved
+                ? 'Downloaded'
+                : 'PDF download is only available in the browser',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _statementBusy = false);
+    }
+  }
+
   Contact _build() => Contact(
     id: widget.contactId ?? '',
     code: _c('code').text.trim(),
@@ -496,6 +599,25 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       ref.invalidate(contactsProvider);
       Navigator.of(context).maybePop();
     }
+  }
+
+  /// `0654`. Delete this contact, having asked.
+  ///
+  /// Leaves the screen only when it actually went. A refusal keeps the
+  /// form open with everything on it: the likeliest next thing somebody
+  /// does after "3 sales documents point at this" is go and look at
+  /// them, and dropping them back on a list first would be a step
+  /// taken away rather than one saved.
+  Future<void> _delete() async {
+    final gone = await confirmAndDeleteContact(
+      context,
+      ref,
+      id: widget.contactId!,
+      name: _c('name').text,
+    );
+    if (!gone || !mounted) return;
+    ref.invalidate(contactsProvider);
+    Navigator.of(context).maybePop();
   }
 
   /// Asks SSM's register who this company is.
@@ -629,13 +751,67 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
           // Suppliers get one too — theirs lists what we owe them, for
           // checking against the statement they send us, which is the
           // half of the reconciliation that used to have no document.
+          //
+          // A customer gets a CHOICE of the two, because there are two
+          // and they are not substitutes: the open-item one lists what
+          // is still unpaid, the brought-forward one lists everything
+          // that happened in a period with a balance carried down. A
+          // supplier gets the one button, because
+          // `report_statement_of_account` reads the sales side only and
+          // there is no supplier form of the second document to offer.
           if (widget.contactId != null)
+            if (_contactType == 'supplier')
+              IconButton(
+                key: const ValueKey('contact-statement'),
+                tooltip: 'Statement of what we owe',
+                icon: const Icon(Icons.request_quote_outlined, size: 20),
+                onPressed: _statementBusy ? null : _downloadStatement,
+              )
+            else
+              PopupMenuButton<String>(
+                key: const ValueKey('contact-statement-menu'),
+                tooltip: 'Statement of account',
+                icon: const Icon(Icons.request_quote_outlined, size: 20),
+                enabled: !_statementBusy,
+                onSelected: (v) => v == 'open'
+                    ? _downloadStatement()
+                    : _downloadBroughtForward(),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    key: ValueKey('statement-open-item'),
+                    value: 'open',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('What is still unpaid'),
+                      subtitle: Text('Open-item statement, as at today'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    key: ValueKey('statement-brought-forward'),
+                    value: 'brought',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Everything in a period'),
+                      subtitle: Text(
+                        'Brought-forward statement, with a running balance',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          // `0654`. The same delete as the one on the row in the list,
+          // through the same warning and the same refusal, and only on
+          // a contact that has been saved -- there is nothing to
+          // delete before that, and the button would be a second
+          // Cancel.
+          if (widget.contactId != null && ref.watch(canWriteProvider))
             IconButton(
-              tooltip: _contactType == 'supplier'
-                  ? 'Statement of what we owe'
-                  : 'Statement of account',
-              icon: const Icon(Icons.request_quote_outlined, size: 20),
-              onPressed: _statementBusy ? null : _downloadStatement,
+              key: const ValueKey('contact-delete'),
+              tooltip: 'Delete this contact',
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: _saving ? null : _delete,
             ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -653,7 +829,24 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          // An existing contact's boxes are drawn and empty until the
+          // record arrives, which is exactly what a form skeleton is
+          // for. A NEW one is not: the form opens at the entity-type
+          // question and nothing is coming but a suggested code, so
+          // outlining six fields would claim a shape the screen is
+          // about to decide not to draw. That one keeps its circle,
+          // for the reason `core/page_waiting.dart` gives.
+          ? (widget.contactId == null
+                ? const Center(child: CircularProgressIndicator())
+                : const SingleChildScrollView(
+                    child: PageBody(
+                      maxWidth: 760,
+                      child: Padding(
+                        padding: EdgeInsets.only(top: Space.lg),
+                        child: FormSkeleton(fields: 6),
+                      ),
+                    ),
+                  ))
           : SingleChildScrollView(
               child: PageBody(
                 maxWidth: 760,
@@ -674,7 +867,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         ),
                         right: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: _contactType,
+                          initialValue: _contactType,
                           decoration: const InputDecoration(labelText: 'Type'),
                           items: const [
                             DropdownMenuItem(
@@ -849,7 +1042,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       _Pair(
                         left: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: _idType,
+                          initialValue: _idType,
                           decoration: const InputDecoration(
                             labelText: 'ID type',
                           ),
@@ -971,7 +1164,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       const SizedBox(height: 14),
                       statesAsync.when(
                         data: (states) => DropdownButtonFormField<String>(
-                          value: _stateCode,
+                          initialValue: _stateCode,
                           isExpanded: true,
                           decoration: const InputDecoration(labelText: 'State'),
                           items: [
@@ -1315,7 +1508,7 @@ class _EntityTypeField extends ConsumerWidget {
     return DropdownButtonFormField<String>(
       key: const ValueKey('contact-entity-type'),
       isExpanded: true,
-      value: value,
+      initialValue: value,
       decoration: const InputDecoration(
         labelText: 'Kind of business *',
         helperText: 'Asked first: it decides what the rest of the form '

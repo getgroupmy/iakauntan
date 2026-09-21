@@ -13,6 +13,7 @@ class Organization {
     this.registrationNo,
     this.tin,
     this.sstRegistrationNo,
+    this.tourismTaxRegNo,
     this.msicCode,
     this.businessActivity,
     this.addressLine1,
@@ -52,6 +53,15 @@ class Organization {
   final String? registrationNo;
   final String? tin;
   final String? sstRegistrationNo;
+
+  /// The Tourism Tax registration RMCD issued, for an operator within
+  /// the Tourism Tax Act 2017 — accommodation, and the platforms that
+  /// sell it. A separate register from SST with a separate number, and
+  /// a registered operator prints it on the invoice beside the SST one.
+  ///
+  /// Held here and nowhere else: the column has existed since `0001`
+  /// beside `sst_registration_no` and nothing had ever written to it.
+  final String? tourismTaxRegNo;
   final String? msicCode;
   final String? businessActivity;
   final String? addressLine1;
@@ -117,6 +127,7 @@ class Organization {
     registrationNo: j['registration_no'] as String?,
     tin: j['tin'] as String?,
     sstRegistrationNo: j['sst_registration_no'] as String?,
+    tourismTaxRegNo: j['tourism_tax_reg_no'] as String?,
     msicCode: j['msic_code'] as String?,
     businessActivity: j['business_activity'] as String?,
     addressLine1: j['address_line1'] as String?,
@@ -864,6 +875,7 @@ class TaxCode {
     required this.taxTypeCode,
     this.isDefault = false,
     this.isExempt = false,
+    this.isInclusive = false,
     this.exemptionReason,
   });
 
@@ -875,10 +887,36 @@ class TaxCode {
   final bool isDefault;
   final bool isExempt;
 
+  /// Whether a price quoted against this code already contains the tax.
+  ///
+  /// A property of the code rather than of the line, for the reason
+  /// `0641` gives: "prices include SST" is how a business quotes, not a
+  /// choice to re-make on every line, and a document that is half
+  /// inclusive is a document nobody can check. `app.calc_document_line`
+  /// reads it the moment the code is chosen and writes the answer onto
+  /// `is_tax_inclusive`, which is then the line's own for good — like
+  /// the rate beside it.
+  final bool isInclusive;
+
   /// Why it is exempt, as a `ref_exemption_reasons` code. LHDN puts it
   /// on the exempt line; `0015_einvoice_prepare` carries it through as
   /// `tax_exemption_reason`.
   final String? exemptionReason;
+
+  /// How this code reads in a picker: the code, its rate, and — when it
+  /// matters — that a price quoted against it already contains the tax.
+  ///
+  /// One place rather than three, because two codes at the same rate
+  /// that differ only in [isInclusive] are the ordinary shape of this
+  /// (a company quoting retail inclusive and trade exclusive), and
+  /// without the marker they are the same row twice in every list.
+  /// Nothing is said at a zero rate, inclusive or not: the trigger's
+  /// inclusive branch is guarded on `tax_rate > 0`, so a zero-rated code
+  /// computes identically either way and the marker would name a
+  /// difference that does not exist.
+  String get pickerLabel => rate == 0
+      ? code
+      : '$code (${Fmt.percent(rate)}${isInclusive ? ' incl.' : ''})';
 
   factory TaxCode.fromJson(Map<String, dynamic> j) => TaxCode(
     id: j['id'] as String,
@@ -888,6 +926,7 @@ class TaxCode {
     taxTypeCode: j['tax_type_code']?.toString() ?? '06',
     isDefault: j['is_default'] == true,
     isExempt: j['is_exempt'] == true,
+    isInclusive: j['is_inclusive'] == true,
     exemptionReason: j['exemption_reason'] as String?,
   );
 }
@@ -1274,6 +1313,8 @@ class EinvoiceDocument {
     this.validatedAt,
     this.cancelDeadline,
     this.currency = 'MYR',
+    this.retryCount = 0,
+    this.ublPayload,
   });
 
   final String id;
@@ -1290,6 +1331,29 @@ class EinvoiceDocument {
   final DateTime? validatedAt;
   final DateTime? cancelDeadline;
   final String currency;
+
+  /// How many times the submitter has tried and been refused.
+  ///
+  /// `supabase/functions/myinvois/retry.ts` counts it and stops the
+  /// BULK sweep at [einvoiceMaxAttempts]; pressing Submit on the
+  /// document itself is never refused, because whatever made it fail
+  /// is usually what somebody has just fixed.
+  final int retryCount;
+
+  /// The document as LHDN received it.
+  ///
+  /// Kept on the accepted path since `0007` and, since the submitter
+  /// learned to, on the REJECTED path too — which is the one that
+  /// matters. A rejection names a field on a document, and until the
+  /// submitter kept it the document named was the one thrown away.
+  final Map<String, dynamic>? ublPayload;
+
+  /// Whether the sweep has stopped sending this one.
+  ///
+  /// Shown rather than implied. A document that quietly stops being
+  /// retried looks exactly like a document that is fine, and the whole
+  /// point of stopping is that somebody has to go and look at it.
+  bool get retriesExhausted => retryCount >= einvoiceMaxAttempts;
 
   /// LHDN allows the supplier to cancel only inside a 72-hour window.
   bool get canCancel =>
@@ -1314,8 +1378,22 @@ class EinvoiceDocument {
     validatedAt: Fmt.parseDate(j['validated_at']),
     cancelDeadline: Fmt.parseDate(j['cancel_deadline']),
     currency: j['currency']?.toString() ?? 'MYR',
+    retryCount: (j['retry_count'] as num?)?.toInt() ?? 0,
+    ublPayload: j['ubl_payload'] is Map
+        ? Map<String, dynamic>.from(j['ubl_payload'] as Map)
+        : null,
   );
 }
+
+/// The ceiling `supabase/functions/myinvois/retry.ts` stops the bulk
+/// sweep at, repeated here because Dart cannot import TypeScript.
+///
+/// Two copies of one number, which is a thing this repository
+/// otherwise refuses -- so `einvoice_retry_test.dart` reads the real
+/// figure out of `retry.ts` and asserts they agree. A screen saying
+/// "stopped after 5 attempts" while the submitter stops at 3 is worse
+/// than a screen saying nothing.
+const int einvoiceMaxAttempts = 5;
 
 class Opportunity {
   Opportunity({
@@ -1447,6 +1525,8 @@ class Todo {
     this.priority = 'normal',
     this.doneAt,
     this.link,
+    this.contactId,
+    this.contactName,
   });
 
   factory Todo.fromJson(Map<String, dynamic> json) => Todo(
@@ -1461,6 +1541,24 @@ class Todo {
         ? null
         : DateTime.parse(json['done_at'] as String),
     link: json['link'] as String?,
+    contactId: json['contact_id'] as String?,
+    contactName: json['contact_name'] as String?,
+  );
+
+  /// The same item with its party's name filled in.
+  ///
+  /// The name is not on `todos` -- it is on `contacts`, where a rename
+  /// belongs -- so the repository reads it separately and puts it here.
+  Todo withContactName(String? name) => Todo(
+    id: id,
+    title: title,
+    notes: notes,
+    dueDate: dueDate,
+    priority: priority,
+    doneAt: doneAt,
+    link: link,
+    contactId: contactId,
+    contactName: name,
   );
 
   final String id;
@@ -1477,6 +1575,19 @@ class Todo {
 
   /// Where in the app this is about, if anywhere.
   final String? link;
+
+  /// The customer or supplier this is about, if any. `0656`.
+  ///
+  /// Separate from [link], which is a route to a SCREEN: this is a
+  /// party. "Chase Ramli" is about a party, and a route could not say
+  /// which one without being parsed.
+  final String? contactId;
+
+  /// That party's name, read alongside rather than stored.
+  ///
+  /// Null while it has not been looked up, which is not the same as
+  /// having no party -- [contactId] is what says that.
+  final String? contactName;
 
   bool get isDone => doneAt != null;
 
@@ -3645,5 +3756,152 @@ class PaymentMethod {
     isActive: j['is_active'] != false,
     sortOrder: (j['sort_order'] as num?)?.toInt() ?? 0,
     notes: j['notes'] as String?,
+  );
+}
+
+/// A company's own layout for a P&L or a Balance Sheet.
+///
+/// `0637`. Which sections a report has, in what order, and what each
+/// one selects — data rather than a hardcoded opinion, because
+/// "Revenue / Cost of Sales / Gross profit / Expenses / Net profit" is
+/// one reasonable view of a P&L and wrong for plenty of real sets of
+/// accounts.
+class ReportLayout {
+  ReportLayout({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.isActive = false,
+    this.isBuiltin = false,
+  });
+
+  final String id;
+
+  /// `profit_loss` or `balance_sheet`.
+  final String kind;
+  final String name;
+
+  /// The one this company's report uses. At most one per kind, which
+  /// the database enforces with a partial unique index rather than
+  /// trusting whoever wrote last.
+  final bool isActive;
+
+  /// Seeded from the standard layout. Editable like any other — the
+  /// flag is so a screen can offer to start again from it.
+  final bool isBuiltin;
+
+  factory ReportLayout.fromJson(Map<String, dynamic> j) => ReportLayout(
+    id: j['id'] as String,
+    kind: j['kind']?.toString() ?? 'profit_loss',
+    name: j['name']?.toString() ?? '',
+    isActive: j['is_active'] == true,
+    isBuiltin: j['is_builtin'] == true,
+  );
+}
+
+/// One row of a layout: a section, a computed figure, or a heading.
+class LayoutRow {
+  LayoutRow({
+    required this.rowKey,
+    required this.kind,
+    required this.label,
+    this.depth = 0,
+    this.emphasise = false,
+    this.showAccounts = true,
+    this.accountTypes = const [],
+    this.accountSubtypes = const [],
+    this.accountIds = const [],
+    this.formula = const [],
+  });
+
+  /// What a formula refers to. Stable across a rename of the label,
+  /// which is the whole reason it is separate from one.
+  final String rowKey;
+
+  /// `section`, `formula` or `heading`.
+  final String kind;
+  final String label;
+  final int depth;
+  final bool emphasise;
+
+  /// False for an accountant's one-line block with the detail in a
+  /// note. The section still has a total; it just does not list what
+  /// is under it.
+  final bool showAccounts;
+
+  final List<String> accountTypes;
+  final List<String> accountSubtypes;
+  final List<String> accountIds;
+
+  /// Signed references to rows ABOVE this one, as
+  /// `[{'row': key, 'sign': 1 or -1}]`.
+  ///
+  /// Not an expression. There is no parser and no precedence, because
+  /// a precedence bug in a figure somebody signs is the worst kind to
+  /// find late — and addition and subtraction of rows already computed
+  /// is what every real layout actually needs.
+  final List<Map<String, dynamic>> formula;
+
+  static List<String> _strings(dynamic v) => [
+    for (final x in (v as List? ?? const [])) x.toString(),
+  ];
+
+  factory LayoutRow.fromJson(Map<String, dynamic> j) => LayoutRow(
+    rowKey: j['row_key']?.toString() ?? '',
+    kind: j['kind']?.toString() ?? 'section',
+    label: j['label']?.toString() ?? '',
+    depth: (j['depth'] as num?)?.toInt() ?? 0,
+    emphasise: j['emphasise'] == true,
+    showAccounts: j['show_accounts'] != false,
+    accountTypes: _strings(j['account_types']),
+    accountSubtypes: _strings(j['account_subtypes']),
+    accountIds: _strings(j['account_ids']),
+    formula: [
+      for (final f in (j['formula'] as List? ?? const []))
+        Map<String, dynamic>.from(f as Map),
+    ],
+  );
+
+  /// What `save_layout_rows` expects.
+  ///
+  /// Empty selectors are omitted rather than sent as `[]`: the
+  /// database's shape constraint reads an empty array as "a section
+  /// that selects nothing", which it refuses, and a builder that sent
+  /// one would be refused for a reason nobody typed.
+  Map<String, dynamic> toJson() => {
+    'row_key': rowKey,
+    'kind': kind,
+    'label': label,
+    'depth': depth,
+    'emphasise': emphasise,
+    'show_accounts': showAccounts,
+    if (accountTypes.isNotEmpty) 'account_types': accountTypes,
+    if (accountSubtypes.isNotEmpty) 'account_subtypes': accountSubtypes,
+    if (accountIds.isNotEmpty) 'account_ids': accountIds,
+    if (kind == 'formula') 'formula': formula,
+  };
+
+  LayoutRow copyWith({
+    String? rowKey,
+    String? kind,
+    String? label,
+    int? depth,
+    bool? emphasise,
+    bool? showAccounts,
+    List<String>? accountTypes,
+    List<String>? accountSubtypes,
+    List<String>? accountIds,
+    List<Map<String, dynamic>>? formula,
+  }) => LayoutRow(
+    rowKey: rowKey ?? this.rowKey,
+    kind: kind ?? this.kind,
+    label: label ?? this.label,
+    depth: depth ?? this.depth,
+    emphasise: emphasise ?? this.emphasise,
+    showAccounts: showAccounts ?? this.showAccounts,
+    accountTypes: accountTypes ?? this.accountTypes,
+    accountSubtypes: accountSubtypes ?? this.accountSubtypes,
+    accountIds: accountIds ?? this.accountIds,
+    formula: formula ?? this.formula,
   );
 }

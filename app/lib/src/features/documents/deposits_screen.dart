@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -101,6 +102,7 @@ class DepositsScreen extends ConsumerWidget {
         value: notes,
         onRetry: () =>
             ref.invalidate(depositNotesProvider((kind: null, status: null))),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(
@@ -393,6 +395,7 @@ class _DepositSheet extends ConsumerWidget {
               child: AsyncView<List<Map<String, dynamic>>>(
                 value: history,
                 onRetry: () => ref.invalidate(depositHistoryProvider(id)),
+                skeleton: const ListSkeleton(rows: 6, leading: false),
                 builder: (rows) {
                   if (rows.isEmpty) {
                     return const Padding(

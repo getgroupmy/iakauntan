@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -59,10 +60,18 @@ void main() {
     });
 
     testWidgets('says so on a platform that cannot draw one', (t) async {
-      // The test runner is not a browser, so `captchaAvailable` is
-      // false — the same answer Android and iOS give. A form that
-      // silently drew nothing here would be a form demanding a token
-      // no platform could produce.
+      // DESKTOP, named rather than inherited. This case used to rely on
+      // the runner reporting something `captchaAvailable` said no to,
+      // and its comment claimed that was "the same answer Android and
+      // iOS give" — which stopped being true when those two learned to
+      // draw the challenge in a webview. It was asserting desktop
+      // behaviour under a mobile name.
+      //
+      // The point it makes is unchanged: a form that silently drew
+      // nothing would be a form demanding a token no platform could
+      // produce.
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+
       await t.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -71,12 +80,52 @@ void main() {
         ),
       );
       expect(find.text(captchaUnavailable), findsOneWidget);
+      // Inline, not addTearDown: the binding verifies the foundation
+      // debug variables at the end of the test BODY, which runs before
+      // any tearDown, and a left-set override fails the test it was
+      // helping.
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('and on a phone, says the check broke rather than nothing',
+        (t) async {
+      // Android CAN draw one now, so it tries — and in a unit test the
+      // webview has no platform implementation and the construction
+      // throws. What matters is that the form ends up SAYING something:
+      // the sentence for a check that could not load, not the one that
+      // asks somebody to complete a check which is not on the screen.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      await t.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CaptchaField(siteKey: 'a-site-key', onToken: (_) {}),
+          ),
+        ),
+      );
+      await t.pump();
+
+      expect(t.takeException(), isNull);
+      // The sentence, plus which failure it was. It used to be exactly
+      // `captchaBroken` for every cause, which is how two fixes went
+      // out on a guess: a report of "the security check will not load"
+      // could not be told from any other.
+      expect(find.text(captchaBrokenBecause('no webview')), findsOneWidget);
+      expect(find.text(captchaUnavailable), findsNothing);
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('and does not report a failure it has not had', (t) async {
       // `onFailed` is what turns the form's message from an instruction
       // into a report, so it firing when nothing went wrong would be
       // its own bug.
+      //
+      // Desktop, because that is where nothing goes wrong: there is no
+      // webview to try, so there is no failure to report. On a phone a
+      // failure genuinely HAS happened when the plugin is missing, and
+      // the case above asserts that one.
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+
       var failed = false;
       await t.pumpWidget(
         MaterialApp(
@@ -91,6 +140,7 @@ void main() {
       );
       await t.pump(const Duration(seconds: 1));
       expect(failed, isFalse);
+      debugDefaultTargetPlatformOverride = null;
     });
   });
 }

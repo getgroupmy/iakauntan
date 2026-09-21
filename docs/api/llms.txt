@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0636` (the highest applied migration).
-720 functions and 344 readable tables, of which
-271 functions only read.
+Schema version `0658` (the highest applied migration).
+738 functions and 348 readable tables, of which
+275 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**580 of 720 functions carry a `comment on
+**597 of 738 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -101,6 +101,12 @@ Refused unless the company has the `accounting` module switched on and the calle
 - `set_budget_lines(p_budget uuid, p_lines jsonb)` *(writes)* — Replaces a budget's lines wholesale and returns how many were written.
 - `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)* — Creates or renames a budget for a financial year.
 - `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)* — Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or bill has yet recorded -- so the thirteen-week forecast can include it.
+
+### contacts (1)
+
+Refused unless the company has the `contacts` module switched on and the caller may use it.
+
+- `delete_contact(p_id uuid)` *(writes)* — Deletes a contact, or refuses with errcode 23503 naming what still points at it.
 
 ### crm (1)
 
@@ -366,13 +372,15 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (509)
+### general (526)
 
 Not gated on any module.
 
 - `accept_intercompany_bill(p_sales_document_id uuid, p_org_id uuid)` *(writes)* — Raises, in this company, the bill matching an invoice another company in the group has issued to it.
 - `accept_invitation(p_token text)` *(writes)* — Takes up an invitation.
+- `activate_report_layout(p_layout_id uuid)` *(writes)* — Makes one layout the one this company's report uses.
 - `add_fixed_public_holidays(p_org_id uuid, p_year integer)` *(writes)* — Adds the four fixed-date national holidays — Labour Day, National Day, Malaysia Day, Christmas — to a year's calendar, and returns how many were actually added.
+- `add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` *(writes)* — Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while the parent has nothing posted to it, no opening balance, and is not a code the ledger posts to by number.
 - `adjust_attendance(p_record uuid, p_clock_in timestamp with time zone, p_clock_out timestamp with time zone, p_reason text)` *(writes)* — Corrects a day's clock times, recording who changed it and why.
 - `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)* — Records that a company has adopted a constitution, on the date it did.
 - `ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` *(writes)* — Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies.
@@ -393,6 +401,7 @@ Not gated on any module.
 - `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
 - `approve_budget(p_id uuid)` *(writes)* — Agrees a draft budget, which is the act that makes it the thing variances are measured against.
 - `archive_payment_method(p_id uuid)` *(writes)* — Retires a payment method without breaking the documents that name it.
+- `archive_report_layout(p_layout_id uuid)` *(writes)* — Retires a layout.
 - `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
 - `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)* — Appoints a practice to keep this company's books, and returns how many access rows that came to.
 - `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
@@ -456,6 +465,7 @@ Not gated on any module.
 - `clear_platform_ai_key(p_provider text)` *(writes)* — Removes the PLATFORM's key for one AI provider -- ours, not a tenant's.
 - `clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Starts somebody's working day and returns the attendance record.
 - `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Closes the day and returns what it came to — worked, scheduled, overtime split into normal, rest day and holiday, and the lateness from the morning.
+- `close_fiscal_year(p_fiscal_year_id uuid)` *(writes)* — Brings every revenue and expense account to nil at the year end and puts the result in 3300 Current Year Earnings.
 - `close_lead(p_lead uuid, p_reason text)` *(writes)* — Marks a lead lost.
 - `close_matter(p_matter uuid, p_closed_date date, p_note text)` *(writes)* — Closes a file.
 - `close_my_account(p_reason text, p_close_sole_owned boolean)` *(writes)* — Closes the signed-in login.
@@ -501,9 +511,11 @@ Not gated on any module.
 - `create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` *(writes)* — Starts an accounting practice and makes the caller a partner in it -- without that, nobody could do anything with it afterwards.
 - `create_fiscal_year(p_org_id uuid, p_start_date date)` *(writes)* — Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the company's own year-end day.
 - `create_item_variants(p_parent uuid, p_axes jsonb)` *(writes)* — Expands a style into its variants across the axes given -- size and colour and the like -- returning a row per combination saying whether it was created or already existed, so re-running after adding one axis value is safe.
+- `create_layout_from_builtin(p_org_id uuid, p_kind app.report_kind, p_name text)` *(writes)* — Copies the standard layout into a company's own, editable one, and makes it active.
 - `create_organization(p_name text, p_slug text, p_entity_type text, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text, p_old_registration_no text)` *(writes)* — Creates a company and everything it cannot open without: the chart of accounts, the tax codes, a fiscal calendar, a sales pipeline, and the caller as its owner.
 - `create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` *(writes)* — Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed.
 - `create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` *(writes)* — Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended.
+- `create_supplier_from_received_einvoice(p_id uuid)` *(writes)* — Creates the supplier named by a received document, or links the one already holding that TIN.
 - `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` *(writes)* — Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this.
 - `credit_purchase_bill(p_bill uuid, p_lines jsonb, p_reason text)` *(writes)* — Raises and posts a credit note against a supplier bill, capped at what is left uncredited on each line, and records which bill it credits — which nothing has ever done.
 - `credit_sales_invoice(p_invoice uuid, p_lines jsonb, p_reason text)` *(writes)* — Raises and posts a credit note against an invoice, capped at what is left uncredited on each line, and records which invoice it credits -- which nothing has ever done before.
@@ -532,6 +544,7 @@ Not gated on any module.
 - `document_activity(p_document_id uuid)` — One document's whole timeline: what was sent, what changed, what was paid, and what LHDN said.
 - `document_lot_problems(p_document_id uuid, p_kind text)`
 - `document_numbering(p_org_id uuid)` — Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it.
+- `draft_bill_from_received_einvoice(p_id uuid)` *(writes)* — Drafts a purchase document from a received e-Invoice.
 - `duplicate_purchase_documents(p_contact_id uuid, p_doc_type text, p_supplier_doc_no text, p_doc_date date, p_total_amount numeric, p_exclude_id uuid)` — Purchase documents already on the books that look like the one being entered -- by the supplier's own number, or by amount and date where there is no number.
 - `einvoice_credential_status(p_org_id uuid)` — What is configured per environment, and never what it is.
 - `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a sales document and returns the outbox row.
@@ -581,11 +594,13 @@ Not gated on any module.
 - `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)* — Moves a company into a group, or out of one when `p_group_id` is null.
 - `knock_off(p_contact_id uuid, p_lines jsonb)` *(writes)* — Sets several credit notes and on-account receipts against several invoices, all or none.
 - `landing_page()` — The marketing site's own contents, for the signed-out landing page.
+- `layout_rows(p_layout_id uuid)` — One layout's rows, in order, for the builder.
 - `ledger_dimensions(p_org_id uuid)`
 - `line_lots(p_line_table text, p_line_id uuid)`
 - `link_contact_records(p_org_id uuid, p_ids uuid[])` *(writes)* — Makes the given contact records one company, bringing along every record already linked to any of them.
 - `link_group_contact(p_contact_id uuid, p_org_id uuid)` *(writes)* — Says that a contact on this company's books IS another company in the same group -- what makes an intercompany balance something that can be eliminated on consolidation rather than a coincidence of names.
 - `link_opportunity_quotation(p_opportunity uuid, p_document uuid)` *(writes)* — Ties a deal to the quotation it will be won on, and OVERWRITES THE DEAL'S AMOUNT with the quotation's total.
+- `link_received_einvoice_contact(p_id uuid, p_contact_id uuid)` *(writes)* — Says which supplier a received document is from.
 - `log_document_download(p_document_id uuid, p_format text)` *(writes)* — Writes that somebody downloaded a document, and returns the row.
 - `mail_domain()` — The domain reserved addresses live on, for screens that have to print one.
 - `mailbox_thread(p_mailbox_id uuid)` — Everything in one mailbox, received and sent, newest first.
@@ -673,7 +688,7 @@ Not gated on any module.
 - `platform_save_promotion(p_id uuid, p_name text, p_module_code text, p_org_id uuid, p_kind text, p_trial_days integer, p_percent_off numeric, p_fixed_price numeric, p_starts_on date, p_ends_on date, p_is_active boolean, p_notes text)` *(writes)* — Create or change a promotion.
 - `platform_save_scan_kind(p_code text, p_label text, p_label_my text, p_destination text, p_hint text, p_sort_order integer, p_is_active boolean)` *(writes)* — Adds or amends a kind of document a scan can be recognised as.
 - `platform_save_search_register(p_code text, p_name text, p_registers text, p_can_search boolean, p_url text, p_sort_order integer, p_is_active boolean)` *(writes)* — Adds or amends a register Entity Search offers.
-- `platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` *(writes)* — Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about.
+- `platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` *(writes)* — Writes one of the seven pages around the product.
 - `platform_security_log(p_since timestamp with time zone, p_limit integer)` *(writes)* — The reads and refusals recorded against no organization, which is where `platform_audit_trail` files the record of its own use.
 - `platform_set_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)* — Grants or withdraws one module for one company.
 - `platform_set_ocr_provider(p_code text, p_name text, p_kind text, p_endpoint text, p_model text, p_price numeric, p_is_active boolean, p_blurb text)` *(writes)* — Creates or edits a document-scanning provider in the platform's catalogue.
@@ -715,8 +730,9 @@ Not gated on any module.
 - `record_group_payment(p_paid_on date, p_reference text, p_lines jsonb, p_note text)` *(writes)* — One payment covering documents in several companies: one receipt (or supplier payment) per company and contact, linked by a batch that holds no money.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text)` *(writes)* — Puts a post-dated cheque in the register and takes the document it settles off the aged listing, without touching the bank balance.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)* — The same as the eleven-argument `record_pdc`, and THE ONE TO CALL: the extra `p_idempotency_key` makes a retry return the cheque the first attempt recorded rather than recording a second one.
+- `record_received_einvoice(p_org_id uuid, p_parsed jsonb, p_raw jsonb)` *(writes)* — Keeps a parsed MyInvois document.
 - `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)* — Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period.
-- `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` *(writes)* — Records a device to send push notifications to, and returns its row.
+- `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text, p_device_id text)` *(writes)* — Puts the calling user's device on the push register, or moves an existing token to them.
 - `register_time_terminal(p_org_id uuid, p_name text, p_branch_id uuid, p_device_ref text)` *(writes)* — Adds a clock and returns its secret, once.
 - `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
 - `reissue_terminal_secret(p_terminal_id uuid)` *(writes)* — Replaces a terminal's secret and returns the new one, once.
@@ -725,6 +741,7 @@ Not gated on any module.
 - `rent_preview(p_site_id uuid, p_period_from date, p_period_to date)`
 - `reopen_appraisal(p_appraisal uuid, p_side text)` *(writes)* — Reopens one half of an appraisal -- `self`, `manager` or `final` -- by clearing that half's submission stamp, which is what the guard reads when it refuses a change.
 - `reopen_bank_reconciliation(p_id uuid)` *(writes)* — Reopens a completed bank reconciliation.
+- `reopen_fiscal_year(p_fiscal_year_id uuid)` *(writes)* — Reverses the closing journal and opens the year again.
 - `reopen_lead(p_lead uuid)` *(writes)* — Puts a lost lead back in play.
 - `reopen_matter(p_matter uuid)` *(writes)* — Reopens a closed file.
 - `reopen_opportunity(p_opportunity uuid, p_stage uuid)` *(writes)* — Puts a closed deal back in play, at the stage given or the one it was working in.
@@ -753,6 +770,7 @@ Not gated on any module.
 - `report_group_intercompany(p_org_id uuid, p_from date, p_to date)`
 - `report_group_trial_balance(p_org_id uuid, p_from date, p_to date)`
 - `report_late_orders(p_org_id uuid, p_as_at date)` — Sales orders past the delivery date they were given, with what is still unshipped.
+- `report_layouts_for(p_org_id uuid, p_kind app.report_kind)` — A company's layouts for one report, the active one first.
 - `report_lot_balances(p_org_id uuid, p_item_id uuid, p_warehouse_id uuid)`
 - `report_matter_summary(p_org_id uuid)`
 - `report_migration_progress(p_org_id uuid)` — The six imports that make up moving onto this system, in the order they have to be done, with what is there for each — and the balance of 3900, which is the only one of the seven that can say the migration is finished.
@@ -775,6 +793,7 @@ Not gated on any module.
 - `report_trial_balance(p_org_id uuid, p_from date, p_to date)`
 - `report_who_is_away(p_org_id uuid, p_from date, p_to date)` — Approved leave overlapping the window, with the contact `0027` has had a column for since the beginning and nothing wrote until `0395`.
 - `report_win_loss(p_org_id uuid, p_from date, p_to date)` — Why deals closed, by outcome and reason, with the money and the competitors named.
+- `report_with_layout(p_org_id uuid, p_kind app.report_kind, p_from date, p_to date, p_layout_id uuid, p_project_code text, p_department_code text)` — A P&L or Balance Sheet composed from the company's layout: one row per section, formula and account, already totalled.
 - `report_withholding(p_org_id uuid, p_from date, p_to date)`
 - `request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` *(writes)* — Asks the platform for an address on our mail domain, personal to somebody when `p_owner_id` is given.
 - `request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` *(writes)* — Asks a company admin for temporary sight of payslips, and returns the request.
@@ -793,6 +812,7 @@ Not gated on any module.
 - `run_depreciation(p_org_id uuid, p_as_at date)` *(writes)* — Charges depreciation on every active asset up to a date, posts one journal grouped by expense and accumulated account, and returns the run.
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)* — Raises every recurring document due on or before a date for ONE company, and returns how many.
 - `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)* — The same for recurring journals, one company, returning how many were advanced.
+- `save_layout_rows(p_layout_id uuid, p_rows jsonb)` *(writes)* — Replaces a layout's rows in one go, validating the whole set before deleting anything -- so a refused layout is the one that was there rather than an empty one.
 - `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
 - `security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` *(writes)* — Returns who signed in, from what address, who exported, who read something sensitive and who was refused.
@@ -822,6 +842,7 @@ Not gated on any module.
 - `set_own_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)* — A company switches one of the paid add-ons on or off for itself.
 - `set_platform_ai_default(p_provider text, p_model text)` *(writes)* — Chooses which provider and model the assistant uses by default.
 - `set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` *(writes)* — Stores the PLATFORM's key for one AI provider -- ours, used by every company that has not set its own.
+- `set_received_einvoice_status(p_id uuid, p_status text)` *(writes)* — Moves a received document between received and ignored.
 - `set_requires_self_billed(p_document_id uuid, p_required boolean)` *(writes)* — Says whether a bill owes LHDN a self-billed e-Invoice.
 - `set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text)` *(writes)* — Files the most recent scan of an attachment as a kind of document.
 - `set_sst_registration(p_org_id uuid, p_registered boolean, p_from date, p_registration_no text, p_tax_code text)` *(writes)* — The only way to change a company's SST registration.
@@ -842,6 +863,7 @@ Not gated on any module.
 - `stock_on_hand(p_org_id uuid, p_warehouse_id uuid)`
 - `strata_arrears(p_scheme_id uuid, p_as_at date)`
 - `strata_charge_preview(p_scheme_id uuid, p_period_from date, p_period_to date)`
+- `sub_account_refusal(p_parent_id uuid)`
 - `submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` *(writes)* — Opens an approval request over a sales document, a purchase document or a journal, and builds one step per matching rule in the rules' own step order.
 - `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)* — Files a leave request and HOLDS THE DAYS against the balance while it waits — which is what stops two requests each passing a check the pair of them would fail.
 - `submit_manager_appraisal(p_appraisal uuid, p_rating numeric, p_comments text, p_increment numeric, p_bonus numeric, p_promotion boolean, p_development_plan text)` *(writes)* — The reviewer's half.
@@ -864,6 +886,7 @@ Not gated on any module.
 - `unverify_person_identity(p_person uuid)` *(writes)* — Withdraws the identity verification on a director, shareholder or officer — for a document found to be false, or a check done against the wrong person.
 - `update_leave_contact(p_request_id uuid, p_contact text)` *(writes)* — The one field on a live leave request the employee may still change after submitting it.
 - `update_my_phone(p_dial text, p_national text)` *(writes)* — Changes the caller's own mobile number, through the same E.164 rule registration uses.
+- `update_my_profile(p_full_name text, p_salutation text, p_phone text, p_avatar_url text)` *(writes)* — The columns of your own profile row that you may change: name, salutation, telephone and avatar.
 - `update_recurring_template(p_id uuid, p_document_id uuid)` *(writes)* — Re-photographs a recurring schedule's template from an existing document, which must be an invoice for a sales schedule or a bill for a purchase one, not deleted, AND BELONGING TO THE SAME COMPANY -- copying across organizations would put one company's prices into another's billing.
 - `upsert_account(p_code text, p_name text, p_type app.account_type, p_subtype app.account_subtype, p_id uuid, p_parent_id uuid, p_is_group boolean, p_description text, p_org_id uuid)` *(writes)* — Add or change an account.
 - `upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` *(writes)* — Creates or edits one model under a provider, with its context window and whether it is free.
@@ -1159,6 +1182,8 @@ inconsistent.
 - `purchase_documents`
 - `purchase_payments`
 - `receipts`
+- `received_einvoice_lines`
+- `received_einvoices`
 - `recurring_documents`
 - `recurring_journals`
 - `ref_classification_codes`
@@ -1176,6 +1201,8 @@ inconsistent.
 - `ref_withholding_types`
 - `rent_run_lines`
 - `rent_runs`
+- `report_layout_rows`
+- `report_layouts`
 - `reserved_names`
 - `revenue_schedule_periods`
 - `salary_components`

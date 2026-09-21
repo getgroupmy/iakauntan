@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // `RepoMemberships` is an extension, and a Dart extension is only in
@@ -110,6 +111,11 @@ class _MembershipsScreenState extends ConsumerState<MembershipsScreen> {
               value: ref.watch(membershipSubscriptionsProvider(_status)),
               onRetry: () =>
                   ref.invalidate(membershipSubscriptionsProvider(_status)),
+              skeleton: const ListSkeleton(
+                rows: 6,
+                leading: false,
+                subtitle: false,
+              ),
               builder: (subs) {
                 if (subs.isEmpty) {
                   return EmptyState(

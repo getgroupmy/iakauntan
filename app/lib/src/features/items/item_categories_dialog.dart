@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -30,6 +31,7 @@ class _CategoriesDialog extends ConsumerWidget {
         child: AsyncView<List<Map<String, dynamic>>>(
           value: categories,
           onRetry: reload,
+          skeleton: const ListSkeleton(rows: 4, leading: false),
           builder: (all) {
             if (all.isEmpty) {
               return const EmptyState(

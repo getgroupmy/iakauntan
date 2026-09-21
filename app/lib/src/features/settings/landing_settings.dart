@@ -76,7 +76,8 @@ class _LandingSettingsCardState extends ConsumerState<LandingSettingsCard> {
                 ),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: choices.any((c) => c.route == current.landingRoute)
+                  initialValue:
+                      choices.any((c) => c.route == current.landingRoute)
                       ? current.landingRoute
                       : '/dashboard',
                   decoration: const InputDecoration(

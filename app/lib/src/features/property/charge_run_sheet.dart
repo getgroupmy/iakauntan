@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../data/repository.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -181,9 +182,18 @@ class _ChargeRunSheetState extends ConsumerState<_ChargeRunSheet> {
           ),
           const Divider(),
           if (_loading)
+            // A row per unit, each a name and an amount. The sheet is
+            // opened from a period already chosen, so the list is the
+            // only thing on the way.
             const Padding(
-              padding: EdgeInsets.all(Space.xxl),
-              child: Center(child: CircularProgressIndicator()),
+              padding: EdgeInsets.symmetric(vertical: Space.md),
+              child: CardRowsSkeleton(
+                rows: 5,
+                leading: false,
+                lines: 2,
+                trailing: 1,
+                trailingWidth: 80,
+              ),
             )
           else if (_error != null)
             Padding(

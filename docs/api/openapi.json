@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0636",
+    "version": "0658",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -35,6 +35,10 @@
     {
       "name": "accounting",
       "description": "Refused unless the company has the `accounting` module switched on."
+    },
+    {
+      "name": "contacts",
+      "description": "Refused unless the company has the `contacts` module switched on."
     },
     {
       "name": "crm",
@@ -10978,7 +10982,7 @@
       "get": {
         "operationId": "select_notes",
         "summary": "Read notes",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "Free-form notes filed against any row, on the entity_table/entity_id shape attachments uses. 0644: a note is exactly as private as the row it is about -- reading asks app.can_read_attachment and writing asks app.can_attach_to, so a note on a payslip is not company reading. created_by is set by a trigger from auth.uid() and never moves.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -17374,6 +17378,134 @@
         }
       }
     },
+    "/received_einvoice_lines": {
+      "get": {
+        "operationId": "select_received_einvoice_lines",
+        "summary": "Read received_einvoice_lines",
+        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/received_einvoice_lines"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/received_einvoices": {
+      "get": {
+        "operationId": "select_received_einvoices",
+        "summary": "Read received_einvoices",
+        "description": "A MyInvois document somebody sent US, parsed by _shared/ubl_parse.ts and kept whole. The inbound half of e-Invoice. 0650.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/received_einvoices"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/recurring_documents": {
       "get": {
         "operationId": "select_recurring_documents",
@@ -18462,6 +18594,134 @@
         }
       }
     },
+    "/report_layout_rows": {
+      "get": {
+        "operationId": "select_report_layout_rows",
+        "summary": "Read report_layout_rows",
+        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/report_layout_rows"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/report_layouts": {
+      "get": {
+        "operationId": "select_report_layouts",
+        "summary": "Read report_layouts",
+        "description": "A company's own P&L or Balance Sheet layout. The built-in one is seeded in the same shape as a custom one so there is one code path rather than a default that drifts. 0637.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/report_layouts"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/reserved_names": {
       "get": {
         "operationId": "select_reserved_names",
@@ -18688,6 +18948,60 @@
                 "schema": {
                   "type": "string",
                   "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/activate_report_layout": {
+      "post": {
+        "operationId": "activate_report_layout",
+        "summary": "Makes one layout the one this company's report uses",
+        "description": "Makes one layout the one this company's report uses. Writes report_layouts. 0637.\n\n`public.activate_report_layout(p_layout_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_layout_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_layout_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
                 }
               }
             }
@@ -18956,6 +19270,102 @@
                   "type": "string",
                   "format": "uuid"
                 }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/add_sub_account": {
+      "post": {
+        "operationId": "add_sub_account",
+        "summary": "Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while\u2026",
+        "description": "Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while the parent has nothing posted to it, no opening balance, and is not a code the ledger posts to by number. See 0655.\n\n`public.add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_parent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_name": {
+                    "type": "string"
+                  },
+                  "p_code": {
+                    "type": "string"
+                  },
+                  "p_subtype": {
+                    "type": "string",
+                    "enum": [
+                      "current_asset",
+                      "bank",
+                      "cash",
+                      "accounts_receivable",
+                      "inventory",
+                      "fixed_asset",
+                      "accumulated_depreciation",
+                      "other_asset",
+                      "current_liability",
+                      "accounts_payable",
+                      "tax_payable",
+                      "long_term_liability",
+                      "other_liability",
+                      "share_capital",
+                      "retained_earnings",
+                      "reserves",
+                      "drawings",
+                      "sales",
+                      "other_income",
+                      "cost_of_sales",
+                      "operating_expense",
+                      "payroll_expense",
+                      "depreciation_expense",
+                      "finance_cost",
+                      "tax_expense",
+                      "other_expense"
+                    ]
+                  },
+                  "p_description": {
+                    "type": "string"
+                  },
+                  "p_currency": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_parent_id",
+                  "p_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -20452,6 +20862,60 @@
                 },
                 "required": [
                   "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/archive_report_layout": {
+      "post": {
+        "operationId": "archive_report_layout",
+        "summary": "Retires a layout",
+        "description": "Retires a layout. The company falls back to the standard rows, so the report still draws. Writes report_layouts. 0637.\n\n`public.archive_report_layout(p_layout_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_layout_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_layout_id"
                 ]
               }
             }
@@ -25912,6 +26376,61 @@
         }
       }
     },
+    "/rpc/close_fiscal_year": {
+      "post": {
+        "operationId": "close_fiscal_year",
+        "summary": "Brings every revenue and expense account to nil at the year end and puts the result in 3300 Current Year\u2026",
+        "description": "Brings every revenue and expense account to nil at the year end and puts the result in 3300 Current Year Earnings. Refuses while an earlier year is open. Returns the journal, or null where the year had nothing to close. See 0648.\n\n`public.close_fiscal_year(p_fiscal_year_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_fiscal_year_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_fiscal_year_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/close_lead": {
       "post": {
         "operationId": "close_lead",
@@ -29639,6 +30158,72 @@
         }
       }
     },
+    "/rpc/create_layout_from_builtin": {
+      "post": {
+        "operationId": "create_layout_from_builtin",
+        "summary": "Copies the standard layout into a company's own, editable one, and makes it active",
+        "description": "Copies the standard layout into a company's own, editable one, and makes it active. Writes report_layouts and report_layout_rows. 0637.\n\n`public.create_layout_from_builtin(p_org_id uuid, p_kind app.report_kind, p_name text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_kind": {
+                    "type": "string",
+                    "enum": [
+                      "profit_loss",
+                      "balance_sheet"
+                    ]
+                  },
+                  "p_name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_kind"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/create_organization": {
       "post": {
         "operationId": "create_organization",
@@ -29957,6 +30542,61 @@
                   "p_name",
                   "p_frequency",
                   "p_start_date"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/create_supplier_from_received_einvoice": {
+      "post": {
+        "operationId": "create_supplier_from_received_einvoice",
+        "summary": "Creates the supplier named by a received document, or links the one already holding that TIN",
+        "description": "Creates the supplier named by a received document, or links the one already holding that TIN. Never creates a second row for a known TIN.\n\n`public.create_supplier_from_received_einvoice(p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
                 ]
               }
             }
@@ -31037,6 +31677,58 @@
                     }
                   }
                 }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/delete_contact": {
+      "post": {
+        "operationId": "delete_contact",
+        "summary": "Deletes a contact, or refuses with errcode 23503 naming what still points at it",
+        "description": "Deletes a contact, or refuses with errcode 23503 naming what still points at it. Needed because nineteen of the foreign keys on contacts.id are ON DELETE SET NULL, so a plain delete would detach posted ledger lines and succeed. See 0654.\n\n`public.delete_contact(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `contacts` module and the caller may use it.",
+        "tags": [
+          "contacts"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -32474,6 +33166,61 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/draft_bill_from_received_einvoice": {
+      "post": {
+        "operationId": "draft_bill_from_received_einvoice",
+        "summary": "Drafts a purchase document from a received e-Invoice",
+        "description": "Drafts a purchase document from a received e-Invoice. The totals are recomputed by our own triggers; any difference from the stated payable amount is written into the bill internal notes.\n\n`public.draft_bill_from_received_einvoice(p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -37797,6 +38544,63 @@
         }
       }
     },
+    "/rpc/layout_rows": {
+      "post": {
+        "operationId": "layout_rows",
+        "summary": "One layout's rows, in order, for the builder",
+        "description": "One layout's rows, in order, for the builder. 0637.\n\n`public.layout_rows(p_layout_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_layout_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_layout_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/report_layout_rows"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/ledger_dimensions": {
       "post": {
         "operationId": "ledger_dimensions",
@@ -38108,6 +38912,65 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/link_received_einvoice_contact": {
+      "post": {
+        "operationId": "link_received_einvoice_contact",
+        "summary": "Says which supplier a received document is from",
+        "description": "Says which supplier a received document is from. Refuses a contact in another company, and refuses to change one once a bill has been drafted from the document. Null clears the link.\n\n`public.link_received_einvoice_contact(p_id uuid, p_contact_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id",
+                  "p_contact_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/received_einvoices"
                 }
               }
             }
@@ -45301,8 +46164,8 @@
     "/rpc/platform_save_site_page": {
       "post": {
         "operationId": "platform_save_site_page",
-        "summary": "Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about",
-        "description": "Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about. A slug outside those six is refused BY NAME -- the check constraint would catch it too, with a message about a constraint, and an operator who mistyped a slug wants to be told which six there are. An emptied box stores null, so clearing a field restores what the screen ships with rather than showing a blank. Note `site_pages()` serves signin, signup and login whether or not they are published, because they carry the terms somebody is asked to agree to while registering.\n\n`public.platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` Writes. Requires a signed-in user.",
+        "summary": "Writes one of the seven pages around the product",
+        "description": "Writes one of the seven pages around the product. Platform administrators only; an empty title or body clears it back to the copy the screen ships with.\n\n`public.platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -52521,6 +53384,62 @@
         ]
       }
     },
+    "/rpc/record_received_einvoice": {
+      "post": {
+        "operationId": "record_received_einvoice",
+        "summary": "Keeps a parsed MyInvois document",
+        "description": "Keeps a parsed MyInvois document. Idempotent on the hash of the raw document: a second import returns the first row and says so.\n\n`public.record_received_einvoice(p_org_id uuid, p_parsed jsonb, p_raw jsonb)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_parsed": {},
+                  "p_raw": {}
+                },
+                "required": [
+                  "p_org_id",
+                  "p_parsed",
+                  "p_raw"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/record_statutory_remittance": {
       "post": {
         "operationId": "record_statutory_remittance",
@@ -52731,8 +53650,8 @@
     "/rpc/register_device": {
       "post": {
         "operationId": "register_device",
-        "summary": "Records a device to send push notifications to, and returns its row",
-        "description": "Records a device to send push notifications to, and returns its row. Keyed ON THE TOKEN, not on the pair of user and token: one handset is one row, belonging to whoever is signed in on it now, so a colleague signing in on a shared tablet takes the row over rather than adding a second and getting the first person's notifications (0141). A browser subscription must bring its `p256dh` and `auth` keys or there is nothing to encrypt the notification to, and a phone must not bring them; on a re-subscribe the keys are REPLACED rather than merged, because a browser that re-subscribes has thrown the old keypair away. Platform is android, ios or web.\n\n`public.register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` Writes. Requires a signed-in user.",
+        "summary": "Puts the calling user's device on the push register, or moves an existing token to them",
+        "description": "Puts the calling user's device on the push register, or moves an existing token to them. Refuses: anybody not signed in; a blank token; a platform that is not android, ios or web; a browser without both encryption keys, and a non-browser with either; a transport that does not belong to the platform (web push is only for browsers, Firebase is the only way to Android, PushKit is only on iOS); and a token whose shape says it belongs to the other Apple service. Absent transport means web for a browser and Firebase for anything else, which is what every caller written before 0657 meant. One row per token, so one directly-reached iPhone holds two \u2014 apns for alerts, apns_voip for calls \u2014 and p_device_id is what pairs them so the sender does not banner a phone about a call it is already ringing.\n\n`public.register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text, p_device_id text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -52760,6 +53679,12 @@
                     "type": "string"
                   },
                   "p_auth": {
+                    "type": "string"
+                  },
+                  "p_transport": {
+                    "type": "string"
+                  },
+                  "p_device_id": {
                     "type": "string"
                   }
                 },
@@ -53475,6 +54400,61 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/reopen_fiscal_year": {
+      "post": {
+        "operationId": "reopen_fiscal_year",
+        "summary": "Reverses the closing journal and opens the year again",
+        "description": "Reverses the closing journal and opens the year again. Refuses while a later year is closed. See 0648.\n\n`public.reopen_fiscal_year(p_fiscal_year_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_fiscal_year_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_fiscal_year_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -56256,6 +57236,71 @@
         }
       }
     },
+    "/rpc/report_layouts_for": {
+      "post": {
+        "operationId": "report_layouts_for",
+        "summary": "A company's layouts for one report, the active one first",
+        "description": "A company's layouts for one report, the active one first. 0637.\n\n`public.report_layouts_for(p_org_id uuid, p_kind app.report_kind)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_kind": {
+                    "type": "string",
+                    "enum": [
+                      "profit_loss",
+                      "balance_sheet"
+                    ]
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_kind"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/report_layouts"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/report_lot_balances": {
       "post": {
         "operationId": "report_lot_balances",
@@ -58703,6 +59748,129 @@
         }
       }
     },
+    "/rpc/report_with_layout": {
+      "post": {
+        "operationId": "report_with_layout",
+        "summary": "A P&L or Balance Sheet composed from the company's layout: one row per section, formula and account, already\u2026",
+        "description": "A P&L or Balance Sheet composed from the company's layout: one row per section, formula and account, already totalled. Both the screen and the PDF draw what this returns, so the arithmetic on a document somebody signs lives in one place. Reads only. 0637.\n\n`public.report_with_layout(p_org_id uuid, p_kind app.report_kind, p_from date, p_to date, p_layout_id uuid, p_project_code text, p_department_code text)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_kind": {
+                    "type": "string",
+                    "enum": [
+                      "profit_loss",
+                      "balance_sheet"
+                    ]
+                  },
+                  "p_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_layout_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_project_code": {
+                    "type": "string"
+                  },
+                  "p_department_code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_kind"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "row_key": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "section",
+                          "formula",
+                          "heading"
+                        ]
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "depth": {
+                        "type": "integer",
+                        "format": "int16"
+                      },
+                      "emphasise": {
+                        "type": "boolean"
+                      },
+                      "amount": {
+                        "type": "number"
+                      },
+                      "account_code": {
+                        "type": "string"
+                      },
+                      "account_name": {
+                        "type": "string"
+                      },
+                      "sort_order": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "line_no": {
+                        "type": "integer",
+                        "format": "int32"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/report_withholding": {
       "post": {
         "operationId": "report_withholding",
@@ -60917,6 +62085,63 @@
                 },
                 "required": [
                   "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/save_layout_rows": {
+      "post": {
+        "operationId": "save_layout_rows",
+        "summary": "Replaces a layout's rows in one go, validating the whole set before deleting anything -- so a refused layout\u2026",
+        "description": "Replaces a layout's rows in one go, validating the whole set before deleting anything -- so a refused layout is the one that was there rather than an empty one. Writes report_layout_rows. 0637.\n\n`public.save_layout_rows(p_layout_id uuid, p_rows jsonb)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_layout_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_rows": {}
+                },
+                "required": [
+                  "p_layout_id",
+                  "p_rows"
                 ]
               }
             }
@@ -64080,6 +65305,64 @@
         }
       }
     },
+    "/rpc/set_received_einvoice_status": {
+      "post": {
+        "operationId": "set_received_einvoice_status",
+        "summary": "Moves a received document between received and ignored",
+        "description": "Moves a received document between received and ignored. Refuses any other value, and refuses billed in particular: that means a bill exists, which only draft_bill_from_received_einvoice can make true.\n\n`public.set_received_einvoice_status(p_id uuid, p_status text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_id",
+                  "p_status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/received_einvoices"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/set_requires_self_billed": {
       "post": {
         "operationId": "set_requires_self_billed",
@@ -66132,6 +67415,60 @@
         }
       }
     },
+    "/rpc/sub_account_refusal": {
+      "post": {
+        "operationId": "sub_account_refusal",
+        "summary": "Sub account refusal",
+        "description": "`public.sub_account_refusal(p_parent_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_parent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_parent_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/submit_for_approval": {
       "post": {
         "operationId": "submit_for_approval",
@@ -67097,7 +68434,7 @@
       "post": {
         "operationId": "transfer_document",
         "summary": "The next document in the cycle, drawn from this one: what is left of each line, the header amounts in\u2026",
-        "description": "The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion. A quotation or proforma held by a prospect is taken forward onto the company's customer record, and refused where there is none. See 0081, 0374, 0420 and 0478.\n\n`public.transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` Writes. Requires a signed-in user.",
+        "description": "The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion. A quotation or proforma held by a prospect is taken forward onto the company's customer record, and refused where there is none. Refused too where an approval rule covers the source and nobody has signed it, which is the only gate the seven document types that never post have. See 0081, 0374, 0420, 0478 and 0646.\n\n`public.transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -67670,6 +69007,65 @@
               "application/json": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/update_my_profile": {
+      "post": {
+        "operationId": "update_my_profile",
+        "summary": "The columns of your own profile row that you may change: name, salutation, telephone and avatar",
+        "description": "The columns of your own profile row that you may change: name, salutation, telephone and avatar. Not email -- that is a copy of the auth address and belongs to GoTrue -- and not deleted_at, which four membership guards read. A null argument leaves the column alone; an empty string clears it. 0649.\n\n`public.update_my_profile(p_full_name text, p_salutation text, p_phone text, p_avatar_url text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_full_name": {
+                    "type": "string"
+                  },
+                  "p_salutation": {
+                    "type": "string"
+                  },
+                  "p_phone": {
+                    "type": "string"
+                  },
+                  "p_avatar_url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profiles"
                 }
               }
             }
@@ -71504,7 +72900,7 @@
       "get": {
         "operationId": "select_site_pages",
         "summary": "Read site_pages",
-        "description": "The five pages around the product: the two auth screens' wording, and Terms, Privacy and Contact. Null title or body means the screen uses the copy it ships with.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "The seven pages around the product: the three auth screens' wording, and Terms of Use, Terms of Service, Privacy and Contact. Null title or body means the screen uses the copy it ships with.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -79529,6 +80925,12 @@
           },
           "auth": {
             "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
           }
         },
         "required": [
@@ -81317,6 +82719,9 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "department_code": {
+            "type": "string"
           }
         },
         "required": [
@@ -81439,6 +82844,9 @@
           "branch_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "department_code": {
+            "type": "string"
           }
         },
         "required": [
@@ -81733,6 +83141,10 @@
           "imported_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "closing_entry_id": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [
@@ -84001,6 +85413,45 @@
           },
           "signin_show_magic_link": {
             "type": "boolean"
+          },
+          "signin_show_passkey_ios": {
+            "type": "boolean"
+          },
+          "signin_show_passkey_android": {
+            "type": "boolean"
+          },
+          "signin_show_register_mobile": {
+            "type": "boolean"
+          },
+          "signin_show_google": {
+            "type": "boolean"
+          },
+          "signin_show_terms_ios": {
+            "type": "boolean"
+          },
+          "signin_show_terms_android": {
+            "type": "boolean"
+          },
+          "signin_show_terms_of_service_ios": {
+            "type": "boolean"
+          },
+          "signin_show_terms_of_service_android": {
+            "type": "boolean"
+          },
+          "signin_show_privacy_ios": {
+            "type": "boolean"
+          },
+          "signin_show_privacy_android": {
+            "type": "boolean"
+          },
+          "signin_show_demo_page_ios": {
+            "type": "boolean"
+          },
+          "signin_show_demo_page_android": {
+            "type": "boolean"
+          },
+          "splash_image_url": {
+            "type": "string"
           }
         }
       },
@@ -91554,6 +93005,229 @@
           "amount"
         ]
       },
+      "received_einvoice_lines": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "received_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "line_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "source_line_no": {
+            "type": "string"
+          },
+          "classification_code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "uom_code": {
+            "type": "string"
+          },
+          "unit_price": {
+            "type": "number"
+          },
+          "discount_amount": {
+            "type": "number"
+          },
+          "tax_type_code": {
+            "type": "string"
+          },
+          "tax_rate": {
+            "type": "number"
+          },
+          "tax_amount": {
+            "type": "number"
+          },
+          "tax_exemption_reason": {
+            "type": "string"
+          },
+          "total_excl_tax": {
+            "type": "number"
+          },
+          "total_incl_tax": {
+            "type": "number"
+          },
+          "product_tariff_code": {
+            "type": "string"
+          },
+          "country_of_origin": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "received_id",
+          "line_no"
+        ]
+      },
+      "received_einvoices": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source": {
+            "type": "string"
+          },
+          "myinvois_uuid": {
+            "type": "string"
+          },
+          "myinvois_long_id": {
+            "type": "string"
+          },
+          "doc_no": {
+            "type": "string"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "issue_time": {
+            "type": "string"
+          },
+          "type_code": {
+            "type": "string"
+          },
+          "einvoice_version": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "exchange_rate": {
+            "type": "number"
+          },
+          "supplier_name": {
+            "type": "string"
+          },
+          "supplier_tin": {
+            "type": "string"
+          },
+          "supplier_id_type": {
+            "type": "string"
+          },
+          "supplier_id_value": {
+            "type": "string"
+          },
+          "supplier_sst_no": {
+            "type": "string"
+          },
+          "supplier_email": {
+            "type": "string"
+          },
+          "supplier_phone": {
+            "type": "string"
+          },
+          "supplier_address": {},
+          "buyer_name": {
+            "type": "string"
+          },
+          "buyer_tin": {
+            "type": "string"
+          },
+          "buyer_id_type": {
+            "type": "string"
+          },
+          "buyer_id_value": {
+            "type": "string"
+          },
+          "buyer_sst_no": {
+            "type": "string"
+          },
+          "buyer_email": {
+            "type": "string"
+          },
+          "buyer_phone": {
+            "type": "string"
+          },
+          "buyer_address": {},
+          "total_excl_tax": {
+            "type": "number"
+          },
+          "total_incl_tax": {
+            "type": "number"
+          },
+          "total_discount": {
+            "type": "number"
+          },
+          "total_charges": {
+            "type": "number"
+          },
+          "total_tax": {
+            "type": "number"
+          },
+          "rounding_amount": {
+            "type": "number"
+          },
+          "payable_amount": {
+            "type": "number"
+          },
+          "original_doc_no": {
+            "type": "string"
+          },
+          "original_uuid": {
+            "type": "string"
+          },
+          "raw": {},
+          "payload_hash": {
+            "type": "string"
+          },
+          "problems": {},
+          "status": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bill_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "raw",
+          "payload_hash"
+        ]
+      },
       "recurring_documents": {
         "type": "object",
         "properties": {
@@ -92129,6 +93803,168 @@
           "run_no",
           "period_from",
           "period_to"
+        ]
+      },
+      "report_layout_rows": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "layout_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "row_key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "section",
+              "formula",
+              "heading"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "depth": {
+            "type": "integer",
+            "format": "int16"
+          },
+          "emphasise": {
+            "type": "boolean"
+          },
+          "show_accounts": {
+            "type": "boolean"
+          },
+          "account_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "asset",
+                "liability",
+                "equity",
+                "revenue",
+                "expense"
+              ]
+            }
+          },
+          "account_subtypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "current_asset",
+                "bank",
+                "cash",
+                "accounts_receivable",
+                "inventory",
+                "fixed_asset",
+                "accumulated_depreciation",
+                "other_asset",
+                "current_liability",
+                "accounts_payable",
+                "tax_payable",
+                "long_term_liability",
+                "other_liability",
+                "share_capital",
+                "retained_earnings",
+                "reserves",
+                "drawings",
+                "sales",
+                "other_income",
+                "cost_of_sales",
+                "operating_expense",
+                "payroll_expense",
+                "depreciation_expense",
+                "finance_cost",
+                "tax_expense",
+                "other_expense"
+              ]
+            }
+          },
+          "account_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "formula": {},
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "layout_id",
+          "row_key",
+          "kind",
+          "label",
+          "sort_order"
+        ]
+      },
+      "report_layouts": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "profit_loss",
+              "balance_sheet"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "is_builtin": {
+            "type": "boolean"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "kind",
+          "name"
         ]
       },
       "reserved_names": {
@@ -95257,6 +97093,10 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [

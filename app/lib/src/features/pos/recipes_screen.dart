@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../data/models.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -128,6 +129,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       body: AsyncView(
         value: recipes,
         onRetry: _reload,
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (rows) {
           if (rows.isEmpty) {
             return const EmptyState(

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Associated Domains, which is what lets iOS run a passkey ceremony
+	  for this app.
+
+	  A passkey is bound to a DOMAIN, not to an app. iOS runs the
+	  ceremony only once it has verified that this app may act for
+	  iakauntan.com, and it verifies that in two halves:
+
+	    * this entitlement, the app's half, naming the domain it claims;
+	    * and /.well-known/apple-app-site-association on that domain,
+	      the domain's half, naming the apps it admits by team id and
+	      bundle id.
+
+	  Both are required. With only this one, iOS refuses and the app
+	  says "not set up for passkeys on this system yet". The sentence is
+	  passkeyNotSetUpHere, in
+	  lib/src/features/auth/passkey_failure.dart.
+
+	  webcredentials: and not applinks:. They are different services on
+	  the same mechanism. applinks decides which URLs open the app;
+	  webcredentials decides which passwords and passkeys are shared
+	  with it. Only the second is wanted, and asking for the first would
+	  make this app open every link on the site.
+
+	  ## A prerequisite outside this repository
+
+	  Signing with this entitlement requires the App ID
+	  my.iakauntan.iakauntan to have the Associated Domains capability
+	  enabled in the Apple Developer portal, under Certificates,
+	  Identifiers and Profiles. Without it the provisioning profile does
+	  not carry the entitlement and the SIGNED build fails at signing.
+
+	  CI is unaffected. ci.yml builds iOS with codesigning off, because
+	  that job answers "does it compile" and holds no signing identity.
+	  The first place this can fail is a real release build.
+
+	  ## During development
+
+	  Appending ?mode=developer to the domain bypasses Apple's CDN,
+	  which caches the association file for about a day and will
+	  otherwise keep serving a 404 long after the file is deployed. It
+	  must not ship: a build carrying it does not validate against the
+	  real service.
+
+	  (No double hyphen appears in this comment, and that is deliberate:
+	  XML forbids one inside a comment, and the same mistake in
+	  core/xlsx.dart produced a stylesheet no reader would parse.)
+	-->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:iakauntan.com</string>
+	</array>
+	<!--
+	  Push notifications. Without this entitlement
+	  registerForRemoteNotifications() fails, quietly, on the delegate
+	  callback nobody watches, and the settings screen simply never
+	  moves off "not on".
+
+	  The value is the APNs HOST the token will be valid at, and it is
+	  half of a pair with APNS_PRODUCTION in the function secrets. They
+	  have to agree: a token registered against one host is refused by
+	  the other with BadDeviceToken, which reads as a dead handset and
+	  is not one. _shared/apns.ts deliberately does NOT unregister on
+	  that reason for exactly this reason.
+
+	  development, not production, and that is the normal contents of a
+	  checked-in entitlements file: Xcode substitutes production when
+	  the app is archived for distribution. A file that said production
+	  would break every development build instead.
+
+	  ## A prerequisite outside this repository
+
+	  The App ID my.iakauntan.iakauntan needs the Push Notifications
+	  capability enabled under Certificates, Identifiers and Profiles,
+	  exactly as it needs Associated Domains above. Without it the
+	  provisioning profile does not carry this entitlement and a signed
+	  build fails at signing. CI is unaffected: it builds iOS with
+	  codesigning off.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

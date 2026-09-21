@@ -20,15 +20,20 @@ import 'package:iakauntan/src/features/settings/company_card.dart';
 /// helper text says which of the two situations you are in, because
 /// otherwise a locked field looks like a bug.
 void main() {
-  Organization org() => Organization(
+  Organization org({String? tourismTax}) => Organization(
     id: 'o',
     name: 'Sinar Teknologi Sdn Bhd',
     slug: 'sinar',
     entityType: 'sdn_bhd',
     baseCurrency: 'MYR',
+    tourismTaxRegNo: tourismTax,
   );
 
-  Widget harness({required bool posted, bool canAdmin = true}) => ProviderScope(
+  Widget harness({
+    required bool posted,
+    bool canAdmin = true,
+    String? tourismTax,
+  }) => ProviderScope(
     overrides: [
       // Anyone who is not an owner or administrator: the database
       // refuses their update, so the screen should not offer it.
@@ -37,7 +42,7 @@ void main() {
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
-      home: Scaffold(body: CompanyCard(org: org())),
+      home: Scaffold(body: CompanyCard(org: org(tourismTax: tourismTax))),
     ),
   );
 
@@ -108,6 +113,71 @@ void main() {
           .enabled,
       isTrue,
     );
+  });
+
+  // 0642. The column has existed since 0001 beside the SST number and
+  // this form is the first thing that ever asked for it.
+  group('the Tourism Tax registration', () {
+    Finder field() => find.byKey(const ValueKey('company-tourism-tax'));
+
+    testWidgets('is on the form, and starts from what is held', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(posted: false, tourismTax: 'TTX-0001234'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(editButton());
+      await tester.pumpAndSettle();
+
+      expect(field(), findsOneWidget);
+      expect(tester.widget<TextField>(field()).controller!.text,
+          'TTX-0001234');
+    });
+
+    testWidgets('and says who it is for, because almost nobody is', (
+      tester,
+    ) async {
+      // A field on the company form that most companies must leave
+      // blank needs to say so, or it reads as something missing.
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(harness(posted: false));
+      await tester.pumpAndSettle();
+      await tester.tap(editButton());
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextField>(field()).controller!.text, isEmpty);
+      expect(
+        find.textContaining('Only for accommodation registered with'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and is shown on the card only where there is one', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(harness(posted: false));
+      await tester.pumpAndSettle();
+      expect(find.text('Tourism Tax'), findsNothing);
+
+      await tester.pumpWidget(
+        harness(posted: false, tourismTax: 'TTX-0001234'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Tourism Tax'), findsOneWidget);
+      expect(find.text('TTX-0001234'), findsOneWidget);
+    });
   });
 
   testWidgets('a company with no name cannot be saved', (tester) async {

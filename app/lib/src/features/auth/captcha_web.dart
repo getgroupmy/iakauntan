@@ -87,7 +87,7 @@ class TurnstileWidget extends StatefulWidget {
   final ValueChanged<String?> onToken;
 
   /// Called once when the widget will not be drawn at all.
-  final VoidCallback onFailed;
+  final ValueChanged<String?> onFailed;
 
   /// Asks for a fresh challenge when a form's attempt has spent the
   /// token it was holding.
@@ -150,7 +150,7 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
     if (_scriptFailed || _tries >= _maxTries) {
       if (!_gaveUp) {
         _gaveUp = true;
-        widget.onFailed();
+        widget.onFailed(null);
       }
       return;
     }

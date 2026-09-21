@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'assistant_settings_sheet.dart';
@@ -278,6 +279,7 @@ class _Opening extends ConsumerWidget {
     return AsyncView(
       value: tools,
       onRetry: () => ref.invalidate(aiToolsProvider),
+      skeleton: const ListSkeleton(rows: 6),
       builder: (rows) => ListView(
         padding: const EdgeInsets.all(Space.lg),
         children: [
@@ -336,6 +338,7 @@ class _Earlier extends ConsumerWidget {
       child: AsyncView(
         value: convos,
         onRetry: () => ref.invalidate(aiConversationsProvider),
+        skeleton: const ListSkeleton(rows: 6),
         builder: (rows) => rows.isEmpty
             ? const EmptyState(
                 icon: Icons.history,

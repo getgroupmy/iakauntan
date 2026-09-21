@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -98,7 +99,10 @@ class DocumentNumberingCard extends ConsumerWidget {
             AsyncView(
               value: series,
               onRetry: () => ref.invalidate(documentNumberingProvider),
-              loading: const LinearProgressIndicator(),
+              // Collapsed module headers, each with a count underneath.
+              // The sales group opens on its own once the rows land,
+              // which the outline does not try to predict.
+              skeleton: const ListSkeleton(rows: 5, leading: false),
               builder: (rows) {
                 // Grouped by module in the order the server lists them,
                 // which is the order the navigation shows them: sales
@@ -310,7 +314,8 @@ class _SeriesDialogState extends ConsumerState<_SeriesDialog> {
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       key: const ValueKey('series-reset'),
-                      value: _resets.containsKey(_reset) ? _reset : 'yearly',
+                      initialValue:
+                          _resets.containsKey(_reset) ? _reset : 'yearly',
                       decoration: const InputDecoration(
                         labelText: 'Count starts again',
                       ),

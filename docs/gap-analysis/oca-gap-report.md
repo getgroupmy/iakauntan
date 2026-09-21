@@ -20,12 +20,16 @@ deployment.
 
 | Tier | Have | Partial | Missing | N/A | Total |
 |---|---:|---:|---:|---:|---:|
-| 1 — Accounting depth | 8 | 7 | 4 | 0 | 19 |
+| 1 — Accounting depth | 9 | 6 | 4 | 0 | 19 |
 | 2 — Control and management | 9 | 6 | 4 | 0 | 19 |
 | 3 — HR and payroll | 5 | 3 | 1 | 0 | 9 |
 | 4 — Platform | 2 | 5 | 7 | 0 | 14 |
 | 5 — Operations | 4 | 0 | 3 | 0 | 7 |
-| **Total** | **28** | **21** | **19** | **0** | **68** |
+| **Total** | **29** | **21** | **18** | **0** | **68** |
+
+*Moved since first published: **A1** Partial → Have (`0648` writes the
+close the schema had been built for), **B5** Missing → Partial and
+**E4** Missing → Partial, both in §4.*
 
 The shape of it: the **accounting and operations** halves are largely
 built, **HR** is built with the edges unfinished, and **platform**
@@ -42,7 +46,7 @@ impersonation).
 
 | ID | Capability | Status | Evidence | What's missing |
 |---|---|---|---|---|
-| A1 | Year-end closing entries | **Partial** | `fiscal_years`, `fiscal_periods`, `set_fiscal_period_status` (0053); chart seeds `3200 Retained Earnings` and `3300 Current Year Earnings` (0071); `report_changes_in_equity` (0100) is written around "until the closing journal moves it" | Nothing posts the closing journal. The chart and the equity report both anticipate one; it is a manual journal today |
+| A1 | Year-end closing entries | **Have** | `close_fiscal_year` and `reopen_fiscal_year` (0648): every revenue and expense account brought to nil at the year end, the result into `3300 Current Year Earnings`, refused out of order and reversed rather than deleted. `fiscal_years.closing_entry_id` records which journal did it; the button is on the Fiscal years card in Settings | Moving 3300 into 3200 Retained Earnings stays a manual journal, on purpose — an appropriation is a decision, not arithmetic |
 | A2 | Accrual / prepayment cut-off | **Missing** | No table, function or route matching `cutoff`, `accrual`, `prepay` | — |
 | A3 | Lock dates | **Partial** | `fiscal_periods.status` with `open`/`closed`/`locked`, guarded by `set_fiscal_period_status` (0053: "Only an owner or admin may open or close a period") | Per-journal lock dates. The lock is per period for the whole company |
 | A4 | Unrealised forex revaluation | **Have** | `fx_revaluation_preview`, `revalue_foreign_balances`, `realised_fx_on_settlement`, `app.fx_account`; UI in `settings_screen.dart` (`_ForeignBalancesCard`) | — |
@@ -126,7 +130,7 @@ impersonation).
 | E1 | Helpdesk with SLA timers | **Have** | `tickets`, `ticket_events`, `ticket_teams`, `sla_policies`, `sla_targets`, `sla_deadlines`, `app.sla_advance`, `ticket_sla_sweep` on pg_cron (0356); routes `/tickets`, `/ticket/:token` | — |
 | E2 | Field service jobs | **Missing** | No match for `fieldservice` or `field_service` | — |
 | E3 | RMA / warranty returns | **Missing** | No match for `rma` or `warranty`. Credit notes exist; a returns workflow does not | — |
-| E4 | Purchase requests and blanket orders | **Missing** | `job_requisitions` is recruitment. No purchase requisition and no blanket order | — |
+| E4 | Purchase requests and blanket orders | **Partial** | `app.purchase_doc_type.purchase_request` with a `DocTypeMeta` in `doc_types.dart` ("Purchase Requisition"), a `PR-` numbering series, a screen and the `purchase_request → purchase_order` transfer; `0646` gates the transfer on an approval rule | No blanket order. The requisition half is built, and `job_requisitions` really is recruitment — the name is what the search matched |
 | E5 | Reorder rules / min-max stock | **Have** | `reorder_point` column (0197) and `app.reorder_point` (0199); route `/forecasting` | — |
 | E6 | Landed costs | **Have** | `landed_cost_runs`, `landed_cost_charges`, `landed_cost_allocations`, `landed_cost_targets`, `app.landed_cost_account`, `cancel_landed_cost_run`; route `/landed-cost` | — |
 | E7 | Lot / expiry tracking | **Have** | `stock_lots` with `expiry_date`, `manufactured_on`, `supplier_lot_ref`; `stock_movement_lots`, `document_line_lots`, `check_movement_lots`, `lot_available`; route `/lots` | — |
@@ -141,7 +145,7 @@ first as instructed. Size is rough: **S** days, **M** a week or two,
 
 | # | ID | Build | Size | Why it ranks here |
 |---|---|---|---|---|
-| 1 | A1 | Year-end closing entry | **S** | Every set of books needs one every year and it is done by hand today. `3300 Current Year Earnings` is already seeded and `report_changes_in_equity` is already written around the closing journal existing |
+| 1 | A1 | ~~Year-end closing entry~~ | **S** | ~~Every set of books needs one every year and it is done by hand today. `3300 Current Year Earnings` is already seeded and `report_changes_in_equity` is already written around the closing journal existing~~ **Built at `0648`.** The S was right and for the reason given: four parts of the schema were already waiting for it — `app.journal_source.year_end_close`, `fiscal_years.closed_at`/`closed_by`, the seeded `3300`, and `report_cash_flow` already excluding that journal source. What took the time was not the arithmetic but proving it does not double-count against `app.fs_cumulative_profit`, which exists precisely because there was no close |
 | 2 | D12 | XLSX export | **S** | Accountants live in Excel. CSV loses number formats, column widths and multiple sheets, and a firm exporting a trial balance re-formats it every time |
 | 3 | B5 | Finish the statement of account | **S** | Not the new build this list first called it — see the correction below. The open-item statement exists; what is missing is the brought-forward form, a period, and emailing it. `0624` has done the database half |
 | 4 | A17 | Inbound e-invoice (UBL 2.1) to draft bill | **M** | MyInvois makes every supplier send one. Receiving is the half this product does not do, and it is the half that removes the most typing |
@@ -177,17 +181,60 @@ client is exactly the shape it was narrow about. Any other **Missing**
 verdict in Tier 2 or Tier 4 resting on a schema search alone deserves
 the same second look before anything is built on it.
 
+**E4 was first published as Missing and it is Partial**, found the same
+way and worth the same admission. `app.purchase_doc_type` carries
+`purchase_request`; `doc_types.dart` calls it a Purchase Requisition
+and gives it a screen; it has a `PR-` series and the
+`purchase_request → purchase_order` step of the transfer chain. What
+the search found was `job_requisitions`, which is recruitment, and
+the report read the absence of the WORD "requisition" anywhere else as
+the absence of the thing — while the thing was filed under
+"purchase request", which is the name in the report's own row heading.
+
+The blanket-order half of E4 is genuinely missing, so the row is
+Partial rather than Have.
+
+**And the other seventeen were re-checked**, by name against the
+applied schema rather than against this document: A2, A7, A9, A17, B7,
+B14, B15, B17, C7, D1, D2, D3, D5, D6, D13, D14, E2 and E3 have no
+table, view, function or enum label matching what they describe. Some
+of the words appear in prose — `accrual` in ten migrations, `webhook`
+in one, `impersonat` in three — and none of them is an object. Those
+verdicts stand.
+
 The ranking above is corrected with it. B5 was #1 and is #3, and what
 it names is now finishing a feature rather than starting one.
 
-**A defect found while correcting it.** `Repo.outstandingFor`, which
+**A defect found while correcting it.** ~~`Repo.outstandingFor`, which
 feeds the existing statement, filters `doc_type = 'invoice'`. A credit
 note, a debit note, a refund note and an unapplied receipt are
 therefore absent from a document that goes to the customer — so a
 customer holding a credit note is sent a statement that overstates what
 they owe, and it will not agree with `report_ar_aging`, which signs all
-four correctly. Not fixed here; this audit is read-only, and it is
-written up so the fix is a decision rather than a drive-by.
+four correctly.~~ Fixed: all four types are queried and `statementSign`
+in `features/contacts/statement.dart` signs them, deliberately matching
+`report_ar_aging`'s own `case`.
+
+**And a worse one underneath it, found by going back to check.** The
+same query filtered `balance_amount > 0` and `deleted_at is null` and
+nothing else, while `report_ar_aging` — the same open-item question
+asked in SQL — also requires `d.gl_entry_id is not null` and
+`d.status <> 'void'`.
+
+A DRAFT invoice carries its full `balance_amount` from the moment its
+lines are typed. A VOIDED one keeps its balance as well, because
+`void_sales_document` sets the status and reverses the ledger entry and
+never touches the column. So both went onto the statement PDF as money
+due.
+
+Measured against one customer holding a 5,000 draft, a 3,000 voided
+invoice and a 1,200 real one: **the statement said 9,200 and the
+ageing report said 1,200**. A demand for payment for an invoice that
+was never issued and one that was cancelled.
+
+Fixed, and asserted: `statement_of_account.sql` now builds exactly that
+company and requires the open-item list and the ageing report to agree.
+That file already existed to make two answers agree; this is the third.
 
 ## 5. Incidental findings
 

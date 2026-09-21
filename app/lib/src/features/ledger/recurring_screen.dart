@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -47,6 +48,7 @@ class RecurringScreen extends ConsumerWidget {
       body: AsyncView(
         value: templates,
         onRetry: () => ref.invalidate(recurringJournalsProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? const EmptyState(
                 icon: Icons.repeat,
@@ -260,7 +262,7 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _frequency,
+                    initialValue: _frequency,
                     decoration: const InputDecoration(labelText: 'Every'),
                     items: const [
                       DropdownMenuItem(value: 'daily', child: Text('Day')),

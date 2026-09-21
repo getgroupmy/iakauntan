@@ -7,6 +7,7 @@ import 'package:iakauntan/src/features/ledger/journal_editor.dart';
 /// button that stays disabled until the entry is one the ledger will
 /// take.
 void main() {
+  _whatALineSends();
   JournalDraft line(String account, {double debit = 0, double credit = 0}) =>
       JournalDraft(accountId: account, debit: debit, credit: credit);
 
@@ -146,6 +147,84 @@ void main() {
       final json = JournalDraft(accountId: 'acct', credit: 50).toJson();
       expect(json['description'], isNull);
       expect(json.containsKey('project_code'), isFalse);
+    });
+  });
+}
+
+/// What a line sends, and the dimension it did not send for years.
+///
+/// `gl_lines.department_code` has existed as long as the analysis
+/// dimensions have, and `app.create_gl_entry_internal` has always read
+/// `department_code` off each line's JSON. Nothing sent it: this editor
+/// offered a project per line and no department, so every cost a
+/// bookkeeper moved by hand arrived with a null.
+///
+/// That is the worst shape a reporting gap can take. The P&L's
+/// department filter answered confidently, summing only what came in
+/// through documents, so a department whose spending was journalled read
+/// as a department that had underspent — and a missing figure that looks
+/// like a small figure is one nobody reports.
+///
+/// The fix was a picker and a key in a map, with no schema change at
+/// all. Which is exactly why this is asserted here AND in
+/// `supabase/tests/pricing_and_dimensions.sql`: nothing in the database
+/// changed, so nothing in the database would notice if the app quietly
+/// stopped sending it again.
+void _whatALineSends() {
+  group('what a journal line sends', () {
+    test('omits both dimensions when neither was chosen', () {
+      // Absent rather than null. Most journals have no departmental or
+      // project meaning, and a key present with a null value is a
+      // different thing from a key that was never set — the first
+      // overwrites, which matters on the day this map is used to patch
+      // rather than to insert.
+      final json = JournalDraft(accountId: 'a', debit: 10).toJson();
+      expect(json.containsKey('project_code'), isFalse);
+      expect(json.containsKey('department_code'), isFalse);
+    });
+
+    test('and carries a department when one was', () {
+      final json = JournalDraft(
+        accountId: 'a',
+        debit: 10,
+        departmentCode: 'OPS',
+      ).toJson();
+      expect(json['department_code'], 'OPS');
+    });
+
+    test('and both, because they are independent', () {
+      // A job run by one department is an ordinary thing to post. The
+      // two dimensions are not alternatives and the editor must not
+      // make them behave like a choice.
+      final json = JournalDraft(
+        accountId: 'a',
+        debit: 10,
+        projectCode: 'JOB-9',
+        departmentCode: 'OPS',
+      ).toJson();
+      expect(json['project_code'], 'JOB-9');
+      expect(json['department_code'], 'OPS');
+    });
+
+    test('per line, so one journal can name two departments', () {
+      // The reason it is on the line and not the header: the entry that
+      // moves a cost from Sales to Marketing touches both, and a header
+      // field could not express it.
+      final lines = [
+        JournalDraft(accountId: 'a', debit: 300, departmentCode: 'OPS'),
+        JournalDraft(accountId: 'b', credit: 300, departmentCode: 'MKT'),
+      ];
+      expect(
+        lines.map((l) => l.toJson()['department_code']).toList(),
+        ['OPS', 'MKT'],
+      );
+    });
+
+    test('and an empty line still says nothing', () {
+      // `journalProblem` drops empty lines before anything is sent, and
+      // this is the belt: an untouched row must not arrive as a
+      // department posting of nothing.
+      expect(JournalDraft().isEmpty, isTrue);
     });
   });
 }

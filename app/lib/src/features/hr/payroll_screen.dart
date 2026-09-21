@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -70,6 +71,7 @@ class PayrollScreen extends ConsumerWidget {
       body: AsyncView(
         value: runs,
         onRetry: () => ref.invalidate(payrollRunsProvider),
+        skeleton: const ListSkeleton(rows: 6, leading: false),
         builder: (list) => list.isEmpty
             ? EmptyState(
                 icon: Icons.payments_outlined,
@@ -685,7 +687,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           Expanded(
             child: DropdownButtonFormField<int>(
               isExpanded: true,
-              value: _month,
+              initialValue: _month,
               decoration: const InputDecoration(labelText: 'Month'),
               items: [
                 for (var m = 1; m <= 12; m++)
@@ -698,7 +700,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           Expanded(
             child: DropdownButtonFormField<int>(
               isExpanded: true,
-              value: _year,
+              initialValue: _year,
               decoration: const InputDecoration(labelText: 'Year'),
               items: [
                 for (var y = DateTime.now().year - 1;

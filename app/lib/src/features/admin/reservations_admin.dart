@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -33,6 +34,7 @@ class ReservationsAdminTab extends ConsumerWidget {
     return AsyncView(
       value: pending,
       onRetry: () => ref.invalidate(pendingReservationsProvider),
+      skeleton: const CardRowsSkeleton(rows: 3, trailing: 2),
       builder: (waiting) => SingleChildScrollView(
         child: PageBody(
           child: Column(
@@ -249,7 +251,7 @@ class _Decided extends ConsumerWidget {
     return AsyncView(
       value: decided,
       onRetry: () => ref.invalidate(decidedReservationsProvider),
-      loading: const LinearProgressIndicator(),
+      skeleton: const CardRowsSkeleton(rows: 4, trailing: 2),
       builder: (rows) {
         if (rows.isEmpty) {
           return const EmptyState(
@@ -742,7 +744,7 @@ class ConfinementFields extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String?>(
-          value: modules.contains(module) ? module : null,
+          initialValue: modules.contains(module) ? module : null,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Module',
@@ -767,7 +769,7 @@ class ConfinementFields extends ConsumerWidget {
         if (module != null && features.isNotEmpty) ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(
-            value: features.any((d) => d.path == path) ? path : null,
+            initialValue: features.any((d) => d.path == path) ? path : null,
             isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Feature',

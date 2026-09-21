@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/address_field.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/places_repository.dart';
@@ -55,7 +56,17 @@ class WarehousesCard extends ConsumerWidget {
             AsyncView(
               value: warehouses,
               onRetry: () => ref.invalidate(warehousesProvider),
-              loading: const LinearProgressIndicator(),
+              // One line rather than two: a warehouse row is a code and
+              // a name, where a branch row carries its own
+              // registration number underneath.
+              skeleton: const CardRowsSkeleton(
+                rows: 3,
+                leadingSize: 56,
+                leadingHeight: 14,
+                lines: 1,
+                trailing: 2,
+                rowGap: 12,
+              ),
               builder: (list) => list.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
