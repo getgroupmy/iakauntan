@@ -9,12 +9,16 @@ import 'package:iakauntan/src/core/widgets.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/crm/leads_screen.dart';
 import 'package:iakauntan/src/features/crm/pipeline_screen.dart';
+import 'package:iakauntan/src/features/documents/cheques_screen.dart';
+import 'package:iakauntan/src/features/documents/contra_screen.dart';
+import 'package:iakauntan/src/features/documents/deposits_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
 import 'package:iakauntan/src/features/legal/matters_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
+import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
 import 'package:iakauntan/src/features/ticketing/teams_screen.dart';
 import 'package:iakauntan/src/features/ticketing/tickets_screen.dart';
@@ -674,6 +678,235 @@ void main() {
         ]),
       );
       expect(find.text('No budget yet'), findsOneWidget);
+    });
+  });
+
+  group('the contra screen', () {
+    testWidgets('builds and says what was offset against what',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ContraScreen(), [
+          contraNotesProvider(null).overrideWith(
+            (ref) async => [
+              {
+                'id': 'c1',
+                'contra_no': 'CTR-001',
+                'status': 'posted',
+                'party': 'Syarikat Maju Jaya',
+                'amount': 4200,
+                'invoices': 2,
+                'bills': 1,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('CTR-001'), findsOneWidget);
+      // Both counts pluralised independently, which is the one thing a
+      // summary like this gets wrong.
+      expect(
+        find.text(
+          'Syarikat Maju Jaya · RM 4,200.00 · 2 invoices against 1 bill',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and an empty list explains what a contra is for',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ContraScreen(), [
+          contraNotesProvider(null).overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Nothing offset'), findsOneWidget);
+    });
+  });
+
+  group('the bundles screen', () {
+    testWidgets('builds and prices a bundle against its parts',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const BundlesScreen(), [
+          itemBundlesProvider.overrideWith(
+            (ref) async => [
+              {
+                'item_id': 'i1',
+                'code': 'GIFT-01',
+                'name': 'Raya hamper',
+                'parts': 6,
+                'price': 120,
+                'cost': 74.5,
+              },
+              {
+                'item_id': 'i2',
+                'code': 'GIFT-02',
+                'name': 'Single tin',
+                'parts': 1,
+                'price': 25,
+                'cost': 18,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('GIFT-01 Raya hamper'), findsOneWidget);
+      expect(
+        find.text('6 parts · RM 120.00 for RM 74.50 of stock'),
+        findsOneWidget,
+      );
+      // One part, singular -- the off-by-one every pluraliser has.
+      expect(
+        find.text('1 part · RM 25.00 for RM 18.00 of stock'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and an empty list says what a bundle is', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const BundlesScreen(), [
+          itemBundlesProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('No bundles'), findsOneWidget);
+    });
+  });
+
+  group('the post-dated cheque register', () {
+    testWidgets('builds, and the strip above it warns about a late one',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ChequesScreen(), [
+          postDatedChequesProvider((direction: null, status: null))
+              .overrideWith(
+            (ref) async => [
+              {
+                'id': 'p1',
+                'pdc_no': 'PDC-001',
+                'direction': 'incoming',
+                'status': 'held',
+                'party': 'Kedai Kek Ros',
+                'cheque_no': '445512',
+                'bank_name': 'Maybank',
+                'cheque_date': '2026-09-01',
+                'days_to_go': -20,
+                'amount': 1800,
+              },
+            ],
+          ),
+          pdcMaturingProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'p1',
+                'direction': 'incoming',
+                'amount': 1800,
+                'overdue': true,
+                'cheque_date': '2026-09-01',
+              },
+            ],
+          ),
+        ]),
+      );
+      // The banner: counted, pluralised with its verb, and totalled by
+      // direction, all by the screen.
+      expect(
+        find.text(
+          'One cheque is past its date and not cleared. '
+          'RM 1,800.00 to bank.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('PDC-001 · We were given it'),
+        findsOneWidget,
+      );
+      // Negative days become words, not "in -20 days".
+      expect(
+        find.textContaining('Was due 20 days ago — not banked'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and the strip stays away when nothing is maturing',
+        (tester) async {
+      // Silent while it loads and silent when there is nothing: the
+      // register below carries its own message.
+      await onAPhone(
+        tester,
+        wrap(const ChequesScreen(), [
+          postDatedChequesProvider((direction: null, status: null))
+              .overrideWith((ref) async => []),
+          pdcMaturingProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.byKey(const ValueKey('pdc-to-bank')), findsNothing);
+      expect(find.text('No cheques on hand'), findsOneWidget);
+    });
+  });
+
+  group('the deposits screen', () {
+    testWidgets('builds, and a part-used deposit says what is left',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const DepositsScreen(), [
+          depositNotesProvider((kind: null, status: null)).overrideWith(
+            (ref) async => [
+              {
+                'id': 'd1',
+                'deposit_no': 'DEP-001',
+                'kind': 'customer',
+                'status': 'open',
+                'party': 'Puan Aminah',
+                'amount': 5000,
+                'balance': 2000,
+                'applied': 3000,
+                'refunded': 0,
+                'forfeited': 0,
+              },
+              {
+                'id': 'd2',
+                'deposit_no': 'DEP-002',
+                'kind': 'supplier',
+                'status': 'open',
+                'party': 'Pembekal Bahan',
+                'amount': 800,
+                'balance': 800,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('DEP-001 · Held for a customer'), findsOneWidget);
+      expect(find.text('DEP-002 · Paid to a supplier'), findsOneWidget);
+      expect(
+        find.text('Puan Aminah · RM 5,000.00 · RM 2,000.00 left'),
+        findsOneWidget,
+      );
+      // The sentence somebody looks for a year later.
+      expect(find.text('RM 3,000.00 against documents'), findsOneWidget);
+      // An untouched one says so instead of "RM 800.00 left".
+      expect(
+        find.text('Pembekal Bahan · RM 800.00 · untouched'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and an empty list argues for the balance sheet',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const DepositsScreen(), [
+          depositNotesProvider((kind: null, status: null))
+              .overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Nothing on deposit'), findsOneWidget);
     });
   });
 }

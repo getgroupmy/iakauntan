@@ -59,13 +59,9 @@ APP = ROOT / 'app'
 # decision -- see the docstring. The value is the file, so a reader can
 # go straight to it.
 EXEMPT: dict[str, str] = {
-    'BundlesScreen': 'lib/src/features/stock/bundles_screen.dart',
     'CashFlowScreen': 'lib/src/features/reports/cash_forecast_screen.dart',
-    'ChequesScreen': 'lib/src/features/documents/cheques_screen.dart',
-    'ContraScreen': 'lib/src/features/documents/contra_screen.dart',
     'CorpPeopleScreen': 'lib/src/features/secretarial/people_screen.dart',
     'DeliverySetupScreen': 'lib/src/features/pos/delivery_setup_screen.dart',
-    'DepositsScreen': 'lib/src/features/documents/deposits_screen.dart',
     'EmailScreen': 'lib/src/features/settings/email_screen.dart',
     'FilingScreen': 'lib/src/features/financials/filing_screen.dart',
     'HrSetupScreen': 'lib/src/features/hr/hr_setup_screen.dart',
