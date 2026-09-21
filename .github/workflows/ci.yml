@@ -331,10 +331,40 @@ jobs:
       # repository to match the runner: that file came from a developer
       # machine running `updateDaemonJvm`, and changing it here would
       # move the disagreement rather than remove it.
+      # Tried twice, because this step has now failed twice on things
+      # that have nothing to do with this repository: once with `read
+      # ECONNRESET`, and once with
+      #
+      #     Error: API rate limit exceeded for 20.55.222.80.
+      #
+      # `jetbrains` is not one of the JDKs baked into the runner image,
+      # so unlike `temurin` it is RESOLVED OVER THE NETWORK every run —
+      # from the GitHub API, from a shared runner IP whose rate limit
+      # is spent by whoever else is on it. Nothing in the repository
+      # can make that quota bigger; the only cheap defence is to not
+      # lose a whole run to one 403.
+      #
+      # `continue-on-error` on the first attempt and a conditional
+      # second, rather than a retry action: one fewer third party in
+      # the supply chain, for a step whose whole job is to fetch a JDK.
+      # `scripts/ci/retry.sh` cannot help here — it wraps a shell
+      # command, and this is an action.
+      #
+      # The distribution itself is not negotiable; see above.
       - uses: actions/setup-java@v4
+        id: java
+        continue-on-error: true
         with:
           distribution: jetbrains
           java-version: '21'
+          token: ${{ github.token }}
+
+      - uses: actions/setup-java@v4
+        if: steps.java.outcome == 'failure'
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
 
       # The Gradle wrapper's PROPERTIES are committed and the `gradlew`
       # script is not, which is deliberate and worth stating because it

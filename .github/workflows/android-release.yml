@@ -109,13 +109,28 @@ jobs:
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      # Twice, for the reason spelled out in `ci.yml`: `jetbrains` is
+      # not baked into the runner image, so it is fetched from the
+      # GitHub API every run, from a shared IP whose rate limit is
+      # spent by whoever else is on it. It has cost two runs already.
+      # Losing a RELEASE to that is worse than losing a CI run.
       - uses: actions/setup-java@v4
+        id: java
         if: steps.creds.outputs.ready == 'true'
+        continue-on-error: true
         with:
           # The pair `ci.yml` uses. Two jobs building the same app on
           # two JDKs would make a green tick mean less than it appears.
           distribution: jetbrains
           java-version: '21'
+          token: ${{ github.token }}
+
+      - uses: actions/setup-java@v4
+        if: steps.creds.outputs.ready == 'true' && steps.java.outcome == 'failure'
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
 
       - uses: subosito/flutter-action@v2
         if: steps.creds.outputs.ready == 'true'
