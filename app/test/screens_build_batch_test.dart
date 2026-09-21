@@ -12,15 +12,19 @@ import 'package:iakauntan/src/features/crm/pipeline_screen.dart';
 import 'package:iakauntan/src/features/documents/cheques_screen.dart';
 import 'package:iakauntan/src/features/documents/contra_screen.dart';
 import 'package:iakauntan/src/features/documents/deposits_screen.dart';
+import 'package:iakauntan/src/features/documents/knock_off_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
 import 'package:iakauntan/src/features/legal/matters_screen.dart';
+import 'package:iakauntan/src/features/property/property_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
 import 'package:iakauntan/src/features/pos/menu_links_screen.dart';
+import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
+import 'package:iakauntan/src/features/stock/landed_cost_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
 import 'package:iakauntan/src/features/ticketing/teams_screen.dart';
 import 'package:iakauntan/src/features/ticketing/tickets_screen.dart';
@@ -56,6 +60,10 @@ void main() {
         GoRoute(
           path: '/legal/:id',
           builder: (_, __) => const Scaffold(body: Text('one matter')),
+        ),
+        GoRoute(
+          path: '/property/:id',
+          builder: (_, __) => const Scaffold(body: Text('one site')),
         ),
       ],
     );
@@ -1050,6 +1058,236 @@ void main() {
         ]),
       );
       expect(find.text('Nothing published'), findsOneWidget);
+    });
+  });
+
+  group('the menu times screen', () {
+    testWidgets('builds, and says which schedule is on right now',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const MenuTimesScreen(), [
+          enabledModulesProvider.overrideWith((ref) async => {'pos'}),
+          myModuleAccessProvider.overrideWith((ref) async => {'pos': 'write'}),
+          posMenuSchedulesProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 's1',
+                'name': 'Breakfast',
+                'is_active': true,
+                'open_now': true,
+                'dishes': 9,
+                'weekdays': [1, 2, 3, 4, 5],
+                'starts_at': '07:00:00',
+                'ends_at': '11:00:00',
+              },
+              {
+                'id': 's2',
+                'name': 'Weekend special',
+                'is_active': true,
+                'open_now': false,
+                // A schedule governing nothing: saved without its
+                // dishes, quietly doing nothing. The row is meant to
+                // show that rather than look normal.
+                'dishes': 0,
+              },
+            ],
+          ),
+        ]),
+      );
+      // The question somebody opens this screen to answer, said on the
+      // row rather than worked out from two times and a clock.
+      expect(find.text('on now'), findsOneWidget);
+      expect(
+        find.text('Mon Tue Wed Thu Fri · 07:00–11:00 · 9 dishes'),
+        findsOneWidget,
+      );
+      // No days and no times means always, said in words, and one dish
+      // would be singular.
+      expect(find.text('all day, every day · 0 dishes'), findsOneWidget);
+    });
+
+    testWidgets('and says so plainly when the company has no till',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const MenuTimesScreen(), [
+          enabledModulesProvider.overrideWith((ref) async => {'accounting'}),
+          myModuleAccessProvider.overrideWith((ref) async => const {}),
+        ]),
+      );
+      expect(find.text('The till is not switched on'), findsOneWidget);
+    });
+  });
+
+  group('the property screen', () {
+    testWidgets('builds, and counts the quit rent across the portfolio',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PropertyScreen(), [
+          enabledModulesProvider
+              .overrideWith((ref) async => {'property_strata'}),
+          myModuleAccessProvider
+              .overrideWith((ref) async => {'property_strata': 'write'}),
+          // Holding the strata module alone narrows the list to strata
+          // WITHOUT the filter being shown, so the family key is
+          // 'strata' rather than null. Override the wrong one and the
+          // real provider is left in place.
+          propertySitesProvider('strata').overrideWith(
+            (ref) async => [
+              {
+                'id': 'p1',
+                'code': 'SRI-01',
+                'name': 'Sri Puteri Condominium',
+                'tenure': 'strata',
+                'city': 'Kajang',
+                'property_units': [
+                  {'count': 240},
+                ],
+              },
+            ],
+          ),
+          propertyStatutoryDueProvider.overrideWith(
+            (ref) async => [
+              {'id': 'b1', 'amount': 1200, 'is_overdue': true},
+              {'id': 'b2', 'amount': 800, 'is_overdue': false},
+            ],
+          ),
+        ]),
+      );
+      // A bill is missed by not opening the site it belongs to, so the
+      // banner counts across every site and never asks anyone to.
+      expect(
+        find.textContaining(
+          '1 quit rent or assessment bill(s) overdue, 2 outstanding, '
+          'RM 2,000.00 in all.',
+        ),
+        findsOneWidget,
+      );
+      // PostgREST returns an aggregate embed as a ONE-ELEMENT LIST,
+      // which is the shape this tile has to unwrap.
+      expect(
+        find.text('SRI-01 · Strata · 240 units · Kajang'),
+        findsOneWidget,
+      );
+      // One module held, so nothing to choose between and no filter.
+      expect(find.text('Non-strata'), findsNothing);
+    });
+
+    testWidgets('and the filter appears only when both are held',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PropertyScreen(), [
+          enabledModulesProvider.overrideWith(
+            (ref) async => {'property_strata', 'property_nonstrata'},
+          ),
+          myModuleAccessProvider.overrideWith(
+            (ref) async => {
+              'property_strata': 'write',
+              'property_nonstrata': 'write',
+            },
+          ),
+          propertySitesProvider(null).overrideWith((ref) async => []),
+          propertyStatutoryDueProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Non-strata'), findsOneWidget);
+      expect(find.text('No properties yet'), findsOneWidget);
+      // Nothing outstanding, so no banner rather than a banner saying
+      // zero.
+      expect(find.textContaining('quit rent'), findsNothing);
+    });
+  });
+
+  group('the landed cost screen', () {
+    testWidgets('builds, and a posted run says how much reached the stock',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const LandedCostScreen(), [
+          landedCostRunsProvider(null).overrideWith(
+            (ref) async => [
+              {
+                'id': 'r1',
+                'run_no': 'LC-001',
+                'status': 'posted',
+                'bills': 3,
+                'total': 4500,
+                'capitalised': 4500,
+              },
+              {
+                'id': 'r2',
+                'run_no': 'LC-002',
+                'status': 'posted',
+                'bills': 1,
+                'total': 900,
+                // Some of it could not reach the stock -- the goods
+                // were already sold -- so the figure is named rather
+                // than implied.
+                'capitalised': 640,
+              },
+              {
+                'id': 'r3',
+                'run_no': 'LC-003',
+                'status': 'draft',
+                'bills': 2,
+                'total': 1500,
+                'capitalised': 0,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('3 bills · RM 4,500.00 · all of it onto stock'),
+          findsOneWidget);
+      expect(find.text('1 bill · RM 900.00 · RM 640.00 onto stock'),
+          findsOneWidget);
+      // A draft has capitalised nothing yet, so the sentence stops --
+      // saying "RM 0.00 onto stock" about a run nobody has posted
+      // would read as a failure.
+      expect(find.text('2 bills · RM 1,500.00'), findsOneWidget);
+    });
+
+    testWidgets('and an empty list says what landed cost is for',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const LandedCostScreen(), [
+          landedCostRunsProvider(null).overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Nothing landed yet'), findsOneWidget);
+    });
+  });
+
+  group('the knock-off screen', () {
+    testWidgets('builds, and asks for a customer before anything else',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const KnockOffScreen(), [
+          contactsProvider((type: 'customer', search: '')).overrideWith(
+            (ref) async => [
+              Contact(
+                id: 'c1',
+                code: 'CUST-001',
+                name: 'Kedai Runcit Aman',
+                contactType: 'customer',
+              ),
+            ],
+          ),
+          canPostProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.byKey(const ValueKey('knock-off-contact')), findsOneWidget);
+      // Nothing is read until somebody is chosen, and the screen says
+      // that rather than showing an empty account.
+      expect(
+        find.text('Pick a customer to see their account.'),
+        findsOneWidget,
+      );
     });
   });
 }
