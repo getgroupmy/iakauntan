@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `eb1f8d99` |
-| CI | APPLIED through run 2017 (`423e3f5f`, migration `0673`) |
+| Head at time of writing | `b635b4b0` |
+| CI | green and APPLIED through run 2018 (`a4e92535`) — **every migration to `0674` is live** |
 | Migrations | `0674` is the highest (the tax tile on the home screen) |
-| Live database | **level with the branch through `0673`.** `0674` is in this push |
+| Live database | **level with the branch.** Nothing is waiting |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 347 SQL assertion files, 48 Python gates, 5,322 Flutter tests, 32 deno tests |
+| Gates | 348 SQL assertion files, 42 Python gates (+8 gate self-tests), 5,331 Flutter tests, 32 deno tests |
 | API description | 766 functions, 364 tables, version `0674` |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
@@ -110,11 +110,11 @@ has not been asked. It is unusual, and if the default branch is ever
 moved to `main`, the deploy jobs move with it — at which point this
 branch stops deploying and `main` starts.
 
-Counts to expect from a clean run: **48** gates, **347** SQL assertion
-files, **32** deno tests, **5,322** widget tests with 1 skipped,
-analyser clean.
+Counts to expect from a clean run: **42** gates and **8** gate
+self-tests, **348** SQL assertion files, **32** deno tests, **5,331**
+widget tests with 1 skipped, analyser clean.
 
-Counting the SQL files: 349 sit in `supabase/tests/`, less `_helpers.sql`
+Counting the SQL files: 350 sit in `supabase/tests/`, less `_helpers.sql`
 and `_local_stack.sql`, which are included by the others rather than run.
 
 The branch carries `main`'s history — PR #3 merged `main` INTO it — so
@@ -144,6 +144,9 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `b635b4b` | The tax stack, walked as one year — cross-layer assertions |
+| `4c441a7` | The five tax screens, actually built |
+| `a4e9253` | The handoff, through the tax tile |
 | `eb1f8d9` | **The taxman's queue, beside the Registrar's (`0674`)** |
 | `423e3f5` | **What was payable, and what was paid (`0673`)** |
 | `d76211b` | **A revision does not undo the year (`0672`)** |
@@ -379,6 +382,22 @@ overdue, returns due within a month with the FORM named, and
 instalments unpaid — every figure read from the same functions the
 screens use, so there is no second definition of "overdue" to drift.
 
+### Two test files that are not about one migration
+
+**`supabase/tests/tax_stack_end_to_end.sql`** walks a company through
+one year — open the computation, open the estimate, pay instalments,
+revise, file, roll into next year — and after each step asks the OTHER
+surfaces whether they agree. Every mutant it kills breaks ONE
+migration and is caught by a question asked of a DIFFERENT one. It
+exists because a per-migration test cannot catch a later migration
+quietly changing what an earlier one measured, which happened twice in
+this stretch.
+
+**`app/test/tax_screens_build_test.dart`** constructs all five tax
+screens. Nothing did before, so nothing knew they built. Two faults
+were found by breaking them afterwards: the e-filing date could
+replace the statutory one, and every instalment could read as paid.
+
 ### The five rules that are easy to get wrong and are each asserted
 
 1. **Capital allowances are NOT apportioned** for part-year ownership.
@@ -583,10 +602,27 @@ deal with, and the estimate screen is honest about not knowing.
    * ~~A company's first basis period~~ — done at `0671`.
    * ~~Marking an obligation as met~~ — done at `0669`.
    * ~~Tracking an instalment as PAID~~ — done at `0673`. What
-     remains of it: **nothing posts to the ledger**. Recording a
-     payment is a note that money moved; the bank side is a bank
-     transaction like any other, and nothing links the two. Joining
-     them would be real work and a real improvement.
+     remains of it: **nothing posts to the ledger**, and having now
+     looked at what that would take, it is blocked on a decision
+     rather than on effort.
+
+     The obvious cheap version — linking a tax payment to the bank
+     line that paid it — **cannot be done**. `match_bank_transaction`
+     resolves a `gl_entry_id` for whatever it matches and refuses
+     anything without one, because completing a reconciliation needs
+     to know which ledger entries the bank has already seen. A link
+     that bypassed that would mark a statement line as matched with
+     nothing behind it and leave the reconciliation out by the
+     amount. So it has to be a real journal.
+
+     And a real journal needs an accounting policy nobody here can
+     choose: a CP204 instalment is either an asset (tax paid in
+     advance, recoverable at assessment) or a draw-down of a tax
+     liability already provided for, and which one depends on the
+     company. Guessing puts wrong journals in somebody's books. **Ask
+     the user which account, then build it**: a mapping, a posting
+     function, reversal on `clear_tax_instalment`, and a closed-period
+     refusal. The existing matcher then works unchanged.
    * **Form BE**, the return for a person with no business income —
      due 30 April, two months before Form B. Low value: a person with
      no business is not using an accounting product. `0668` names it
@@ -639,7 +675,13 @@ cd app && flutter test --concurrency=2 --reporter failures-only
 flutter analyze --fatal-infos --fatal-warnings
 ```
 
-### All forty-eight Python gates — run every one, every time
+### All fifty `check_*.py` files — run every one, every time
+
+**Forty-two are gates; eight are gates' own assertions.** The loop
+below runs all fifty, which is what you want: a gate that is wrong is
+worse than no gate, because it is believed. The figure was previously
+written here as "forty-eight", which was the total then and read like
+a count of gates — it was not.
 
 ```bash
 for f in scripts/check_*.py; do
@@ -688,6 +730,15 @@ After any migration: `python3 scripts/generate_api_description.py "$DB"`.
 ## Traps found this session
 
 Each of these was paid for once. None is obvious from the code.
+
+**A screen nothing constructs cannot be known to build.** Five were
+written in one stretch with a full set of tests underneath them, every
+one of those tests on the MODELS, and nothing anywhere called any of
+the five constructors. They did build; that is luck rather than
+evidence. `scripts/check_screens_built.py` now refuses a new screen
+that no test puts on screen, and its thirty-eight exemptions are a
+BACKLOG that should shrink — unlike `check_async_skeletons.py`'s
+seven, which are a decision.
 
 **Do not run the DB gates while `run_locally.sh` is rebuilding the same
 database.** It drops and rebuilds the local cluster's schema, so
