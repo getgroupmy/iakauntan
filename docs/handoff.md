@@ -37,30 +37,47 @@ it has to be committed.
 | Head at time of writing | `0e69d4d`, plus the two commits below it |
 | CI | green through run 1968 (`7078fc6`); 1969 was still in the queue |
 | Migrations | `0658` is the highest. **Nothing since has touched SQL** — the recent work is all Dart |
-| Live database | **`0637`–`0658` are NOT applied.** See below — this was wrong in the previous version of this file |
+| Live database | **level with the branch.** `0637`–`0658` are applied. See below for why, which is not what it looks like |
 
-### The hosted schema is behind this branch, and the old note said otherwise
+### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
-The previous version of this file said CI's "Apply the migrations" job
-pushes to the linked project on any green run. **It does not.** Its
-condition is
+```
+"default_branch": "claude/iakauntan-accounting-crm-8snun0"
+```
 
-    github.event_name != 'pull_request' &&
-    github.ref_name == github.event.repository.default_branch
+Everything downstream follows from that one line, and none of it is
+obvious:
 
-— the default branch only, added in `aefac8e` and already on `main`.
-So nothing this branch has ever pushed reached the live database, and
-`0637`–`0658` are still pending there.
+* **`main` deploys nothing.** The migrate, edge-function and
+  workspace-proxy jobs are all gated on
+  `github.ref_name == github.event.repository.default_branch`, so on a
+  push to `main` they are SKIPPED. PR #4 merged this branch into `main`
+  on 2026-09-21 and its run skipped all three.
+* **This branch deploys everything.** Those same jobs run here, and
+  `MIGRATIONS_AUTOPUSH` is `true`, so a green run on this branch has
+  already applied its migrations to the live project and redeployed the
+  edge functions. The hosted schema IS level; the database job's
+  "Compare them" step asserts it every run.
+* So the live product tracks THIS BRANCH. Merging to `main` is
+  bookkeeping, plus the one thing in the next bullet.
+* **`workflow_dispatch` needs the file on the ref being dispatched.**
+  `supabase/functions/ios-release` sends `ref: GITHUB_RELEASE_REF`,
+  default `main`, so `ios-release.yml` had to reach `main` before the
+  console's button could start anything — not because `main` is the
+  default branch, which it is not.
 
-Even on `main` it applies nothing unless the repository variable
-`MIGRATIONS_AUTOPUSH` is `true`; otherwise the job reports what is
-pending and changes nothing. So the consequence of merging depends on
-a variable, and the run summary on `main` is what says which happened.
+**A previous version of this file got this exactly backwards** and
+said the migrations were unapplied, reasoning from "the job runs on
+the default branch only" plus an assumption that the default branch
+was `main`. The rule was right and the assumption was wrong, which is
+the combination that produces a confident wrong answer. Read
+`default_branch` from the API rather than assuming; nothing in a
+checkout tells you.
 
-This matters because it is the difference between "the schema is
-already there" and "twenty-two migrations reach production the moment
-this merges". Check the merge run's summary rather than assuming
-either.
+Whether this arrangement is INTENDED is a question for the user and
+has not been asked. It is unusual, and if the default branch is ever
+moved to `main`, the deploy jobs move with it — at which point this
+branch stops deploying and `main` starts.
 
 Counts to expect from a clean run: **41** gates, **335** SQL files,
 **31** deno tests, **5,147** widget tests with 1 skipped, analyser clean.

@@ -114,27 +114,33 @@ Nothing here is reversible in the sense of being wasted: every secret
 below is re-creatable, and every one of them can be replaced later
 without touching this repository.
 
-### Part 0 — the workflow has to be on the default branch
+### Part 0 — the workflow has to be on the branch being built
 
-**`.github/workflows/ios-release.yml` must exist on `main`.** Not on
-the branch it was written on — on the repository's default branch.
+**`.github/workflows/ios-release.yml` must exist on the ref the
+dispatch names.** That ref is `GITHUB_RELEASE_REF`, which defaults to
+`main` — so unless that variable says otherwise, the file has to be on
+`main`, whatever branch it was written on.
 
-GitHub registers a workflow's triggers from the default branch and
-nowhere else, so a `workflow_dispatch` on a file that lives only on a
-feature branch cannot be started by anybody: not by this function, not
-from the Actions tab, not by `gh`. The API answers
+Without it, the API answers
 
     422 {"message":"Workflow does not have 'workflow_dispatch' trigger"}
 
-which is misleading — the trigger is right there in the file. What is
-missing is the file, where GitHub looks for it.
-
-Note that this is about the workflow's LOCATION, not what it builds.
-`GITHUB_RELEASE_REF` still chooses the commit to build, and defaults to
-`main`; set it if releases should be cut from elsewhere.
+which is misleading twice over. The trigger is in the file. And the
+usual folklore — "a workflow_dispatch is only registered from the
+default branch" — sent the first diagnosis of this to the wrong place:
+**this repository's default branch is not `main`**, the workflow was
+on the default branch the whole time, and the dispatch still failed
+because the REF it named did not have the file.
 
 Reading the run list works before this is done, which is why the card
 can say "Nothing yet" and the button can still refuse.
+
+> **Worth knowing while you are here.** Because the default branch is
+> not `main`, the deploy jobs in `ci.yml` — migrations, edge
+> functions, the workspace proxy — run on the default branch and are
+> SKIPPED on `main`. So merging to `main` deploys nothing; it only
+> puts the file where a dispatch can find it. `docs/handoff.md` has
+> the full consequence.
 
 ### Part 1 — two secrets, and the card works (10 minutes)
 
@@ -382,7 +388,7 @@ submit it. **Neither lane submits for review**, and nothing here could.
 | Card: "Not set up yet" | Part 1 is not done, or the token expired |
 | Card: "GitHub answered 403" | the token lacks **Actions: read and write**, or an org owner has not approved it |
 | Card: "GitHub answered 404" | `GITHUB_REPOSITORY` is wrong, or the token cannot see that repository |
-| `422 Workflow does not have 'workflow_dispatch' trigger` | Part 0: `ios-release.yml` is not on the default branch. The trigger is fine; the file is in the wrong place |
+| `422 Workflow does not have 'workflow_dispatch' trigger` | Part 0: `ios-release.yml` is not on the ref being dispatched (`GITHUB_RELEASE_REF`, default `main`). The trigger is fine; the file is on another branch |
 | Run summary: "Not set up yet" with a list | those Actions secrets are missing. The run is green because nothing failed |
 | `The profile is for X, not my.iakauntan.iakauntan` | the profile in 2.5 was made against the wrong App ID |
 | `security import` fails | the `.p12` base64 wrapped (Linux needs `-w0`; macOS `base64 -i` does not wrap), or the password is wrong, or OpenSSL 3 on Linux needs `-legacy` — LibreSSL on macOS does not and rejects the flag |

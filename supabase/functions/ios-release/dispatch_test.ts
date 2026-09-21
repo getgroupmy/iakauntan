@@ -128,15 +128,24 @@ Deno.test("and a payload that is not a run list is simply nothing", () => {
 Deno.test("a 422 about workflow_dispatch names the real cause", () => {
   // The one refusal worth translating. GitHub says the workflow has no
   // `workflow_dispatch` trigger; the file plainly does have one. What
-  // it lacks is a copy on the DEFAULT BRANCH, which is the only place
-  // GitHub reads triggers from — so the message sends somebody to edit
-  // a trigger that was never wrong.
+  // it lacks is a copy on the REF BEING DISPATCHED — this function
+  // sends GITHUB_RELEASE_REF, default `main` — so the message sends
+  // somebody to edit a trigger that was never wrong.
+  //
+  // The first version of this said "default branch", repeating the
+  // usual folklore. It is wrong here: this repository's default branch
+  // is not `main`, the workflow was on the default branch the whole
+  // time, and the dispatch still failed because `main` did not have
+  // it. The ref is what matters.
   const said = dispatchRefusal(
     422,
     '{"message":"Workflow does not have \'workflow_dispatch\' trigger"}',
   );
-  assertStringIncludes(said, "default branch");
+  assertStringIncludes(said, "GITHUB_RELEASE_REF");
   assertStringIncludes(said, WORKFLOW);
+  // And it must NOT blame the default branch, which is the diagnosis
+  // that cost an evening.
+  assertEquals(said.includes("default branch"), false);
   // And it must not simply repeat GitHub's wording, which is the
   // behaviour being replaced.
   assertEquals(said.includes("does not have"), false);
@@ -148,7 +157,7 @@ Deno.test("but another 422 is not given that explanation", () => {
   // saying nothing.
   const said = dispatchRefusal(422, '{"message":"Unexpected inputs"}');
   assertStringIncludes(said, "422");
-  assertEquals(said.includes("default branch"), false);
+  assertEquals(said.includes("GITHUB_RELEASE_REF"), false);
 });
 
 Deno.test("a 404 points at the repository and the token", () => {

@@ -105,11 +105,17 @@ export function runsFrom(payload: unknown): RunSummary[] {
  *     422 {"message":"Workflow does not have 'workflow_dispatch' trigger"}
  *
  * The workflow DOES have one. What it does not have is a copy on the
- * repository's DEFAULT BRANCH, and that is where GitHub reads a
- * workflow's triggers from — a `workflow_dispatch` on a file that
- * exists only on a feature branch cannot be started by anybody,
- * through this function or from the Actions tab. Reading that message
- * at face value leads to editing a trigger that is already correct.
+ * REF BEING DISPATCHED. A dispatch names a ref, this function sends
+ * `GITHUB_RELEASE_REF` (default `main`), and GitHub looks for the
+ * workflow file on that ref — so a file living on some other branch
+ * produces this, however correct its trigger is.
+ *
+ * Said carefully because the obvious reading is wrong twice over.
+ * "It must be on the default branch" is the usual folklore and was
+ * written here first; it is not what bit this repository, whose
+ * default branch is not `main` at all. Reading either the message or
+ * the folklore at face value leads to editing a trigger that was
+ * always correct.
  *
  * Everything else is passed through with its status, because the
  * status is the useful part and guessing at the rest would be this
@@ -118,10 +124,12 @@ export function runsFrom(payload: unknown): RunSummary[] {
 export function dispatchRefusal(status: number, said: string): string {
   if (status === 422 && said.includes("workflow_dispatch")) {
     return "GitHub will not start this build because " +
-      `${WORKFLOW} is not on the repository's default branch. ` +
-      "A workflow_dispatch trigger is only registered from there, so " +
-      "the file has to be merged to the default branch before the " +
-      "button can work — see docs/ios-release.md.";
+      `${WORKFLOW} is not on the branch it was asked to build. ` +
+      "A dispatch names a ref — GITHUB_RELEASE_REF, which defaults to " +
+      "`main` — and the workflow file has to exist THERE, whatever " +
+      "branch it was written on. Merge it to that branch, or point " +
+      "GITHUB_RELEASE_REF at the branch that has it. See " +
+      "docs/ios-release.md.";
   }
   if (status === 404) {
     return `GitHub cannot find ${WORKFLOW} in this repository. Check ` +
