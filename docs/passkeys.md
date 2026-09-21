@@ -206,6 +206,19 @@ this repository. A placeholder is worse than nothing — it is a file that says
 the association is configured while failing every ceremony, which is
 precisely the silent failure the rest of this document is about.
 
+**Half of it is now obtainable without asking anybody.**
+`.github/workflows/android-release.yml` prints the upload key's SHA-256 into
+its job summary, deliberately rather than incidentally — this paragraph is
+why. A certificate fingerprint is public by design, so a summary is a safe
+place for it, and reading it back out of a keystore afterwards is otherwise
+an awkward `keytool` invocation nobody remembers.
+
+The other half, the **Play App Signing** certificate, still comes from *Play
+Console → Setup → App signing*, and cannot be derived here: it is a key
+Google holds. Both are needed. The upload key alone is the failure mode named
+below — it works on the developer's own handset, which installed the bundle
+directly, and on nothing that installed from Play.
+
 `scripts/check_passkey_association.py` enforces that rather than leaving it
 advisory. Absent is allowed; present and wrong is refused, including a
 placeholder, a team ID of the wrong shape, a bundle or package this

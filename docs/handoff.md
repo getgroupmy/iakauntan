@@ -215,9 +215,29 @@ message. Read those rather than the diffs.
    setting given on the command line is applied to every pod and Swift
    package too.
 
-   Still iOS only. **Android has no equivalent**, because it has no
-   Firebase project — that is the next mobile-delivery gap, not this
-   one.
+   **Android now has the same pipeline**, written and gated and never
+   yet run: `.github/workflows/android-release.yml`,
+   `scripts/play_upload.ts` and a real signing config in
+   `app/android/app/build.gradle.kts`, which until now signed release
+   builds with the DEBUG key — the Flutter template's TODO, still in
+   place, and a bundle Play refuses outright.
+
+   It is blocked on the user in the same way iOS was, and
+   `docs/android-release.md` walks it through. Two things there have no
+   equivalent on the Apple side and will catch whoever does it:
+
+   * **Play will not take the first bundle from the API.** It cannot
+     create an app and refuses the first upload for one that has never
+     had a release. That upload is done by hand, once.
+   * **The version code must clear whatever went up by hand.** Run
+     numbers start at 1, so a manual first upload at code 1 collides
+     with run 1. `ANDROID_VERSION_CODE_OFFSET` is added to the run
+     number for exactly that.
+
+   Firebase is still absent, but that is PUSH, not delivery — the two
+   were conflated in an earlier version of this file. An Android build
+   reaches Play without a Firebase project; it just cannot receive a
+   notification when it gets there.
 
    One thing left, and it is item 0 of this list rather than this one:
    `GITHUB_RELEASE_REF` is unset, so the console's button dispatches

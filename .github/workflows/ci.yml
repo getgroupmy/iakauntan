@@ -1222,6 +1222,13 @@ jobs:
       - name: Check every permission the plugins need is explained
         run: python3 scripts/check_ios_purpose_strings.py
 
+      # A secret used but not gated is a release that reports itself
+      # ready, builds, and fails at the step that needed it — which is
+      # the failure the readiness gate exists to prevent, and on the
+      # iOS side costs ten times an Ubuntu build to discover.
+      - name: Check the release workflows check for what they use
+        run: python3 scripts/check_release_secrets.py
+
       # Offered and not permitted is a save that fails; permitted and
       # not offered is a feature nobody can reach. Both were true of
       # `bank_accounts.account_type` at once.
@@ -1423,7 +1430,7 @@ jobs:
           missing=()
           while IFS= read -r f; do
             grep -qF "$f" .github/workflows/ci.yml || missing+=("$f")
-          done < <(find supabase/functions cloudflare -name '*_test.ts' -o -name '*_test.js' | sort)
+          done < <(find supabase/functions cloudflare scripts -name '*_test.ts' -o -name '*_test.js' | sort)
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::%s is not run by CI. Add it to the list in the edge job.\n' "${missing[@]}"
             exit 1
@@ -1865,6 +1872,16 @@ jobs:
       # round trip and nothing else.
       - run: deno check cloudflare/workspace-proxy/route_test.ts
       - run: deno test cloudflare/workspace-proxy/route_test.ts
+
+      # The Play upload. Everything it decides before it touches the
+      # network: the track allow-list that ends up in a URL path, the
+      # release going out `completed` rather than `draft`, and the
+      # refusals — each of which names the thing to go and do, because
+      # Google's own messages name the wrong end of the problem.
+      # --allow-read because the test imports the shared Google
+      # service-account helper.
+      - run: deno check scripts/play_upload_test.ts
+      - run: deno test --allow-read scripts/play_upload_test.ts
 
       # The functions themselves, type-checked but not run. They cannot
       # be unit tested here — every one of them exists to call somebody

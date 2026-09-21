@@ -1,0 +1,266 @@
+# Build the Android app and hand it to Google Play.
+#
+# The counterpart of `ios-release.yml`, and deliberately the same shape:
+# the same "is this set up yet" gate that STOPS rather than fails, the
+# same run-number version code, the same summary that reads the upload
+# step's outcome instead of assuming it worked.
+#
+# ## Three ways it is not the same
+#
+# **It runs on Ubuntu.** Nothing in an Android build needs Apple
+# hardware, so this bills at a tenth of what the iOS release costs and
+# takes about a third as long. The iOS workflow's warning about pressing
+# the button carelessly does not really apply here.
+#
+# **Play's first upload cannot come from here.** The Publishing API
+# cannot create an app, and will not accept the first bundle for one
+# that has never had a release. That upload is done by hand in the
+# console, once. `scripts/play_upload.ts` recognises the refusal and
+# says so in those words, because the raw message talks about draft
+# releases and gives no hint that the answer is in a browser.
+#
+# **The version code has to clear whatever went up by hand.** Play
+# refuses a version code it has seen, and this workflow's run numbers
+# start at 1 like everything else -- so a manual first upload at code 1
+# collides with run 1. `ANDROID_VERSION_CODE_OFFSET` is added to the run
+# number for exactly that: set it to the highest code already uploaded.
+#
+# ## What has to exist first
+#
+# Five Actions secrets, listed in `docs/android-release.md`. Until they
+# are there this workflow stops with a list of which are missing, the
+# same as the iOS one -- crying wolf at somebody who has not started a
+# setup is worse than saying what is needed.
+name: Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: Where the build goes
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
+      notes:
+        description: What changed (one line, shown to testers)
+        type: string
+        required: false
+
+# One release at a time, for the version-code reason in the header: two
+# at once would race and the loser would be refused after building.
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is this set up yet
+        id: creds
+        working-directory: .
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT }}
+        run: |
+          missing=""
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD \
+                      ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD \
+                      PLAY_SERVICE_ACCOUNT; do
+            eval "value=\${$name}"
+            [ -z "$value" ] && missing="$missing $name"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Not set up yet"
+              echo
+              echo "These Actions secrets are missing:"
+              echo
+              for name in $missing; do echo "* \`$name\`"; done
+              echo
+              echo "See \`docs/android-release.md\` for where each comes from."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          # The pair `ci.yml` uses. Two jobs building the same app on
+          # two JDKs would make a green tick mean less than it appears.
+          distribution: jetbrains
+          java-version: '21'
+
+      - uses: subosito/flutter-action@v2
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - uses: denoland/setup-deno@v2
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          deno-version: v2.x
+
+      - name: Dependencies
+        if: steps.creds.outputs.ready == 'true'
+        run: flutter pub get
+
+      - name: Signing key
+        id: signing
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Outside the checkout. A keystore written into the working
+          # tree is one `git add -A` away from being committed, and a
+          # leaked upload key cannot be rotated by anybody but Google.
+          store="$RUNNER_TEMP/upload.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$store"
+
+          # `key.properties` is read by android/app/build.gradle.kts and
+          # is gitignored twice over. storeFile is resolved against
+          # `app/android`, so it is given absolute.
+          cat > android/key.properties <<PROPS
+          storeFile=$store
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          PROPS
+
+          # Printed because it is needed elsewhere and is otherwise
+          # awkward to get: `assetlinks.json` wants the SHA-256 of this
+          # key, and docs/passkeys.md has been waiting on it. Not a
+          # secret -- a certificate fingerprint is public by design.
+          keytool -list -v -keystore "$store" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            | grep -i "SHA256:" | head -1 | tee "$RUNNER_TEMP/sha256.txt"
+
+      - name: Build the bundle
+        id: build
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          WEB_PUSH_PUBLIC_KEY: ${{ secrets.WEB_PUSH_PUBLIC_KEY }}
+          OFFSET: ${{ vars.ANDROID_VERSION_CODE_OFFSET || 0 }}
+        run: |
+          set -euo pipefail
+          # The run number, plus whatever already went up by hand. See
+          # the header: Play refuses a code it has seen, and a manual
+          # first upload at code 1 collides with run 1.
+          code=$(( ${{ github.run_number }} + OFFSET ))
+          echo "version code $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+          # appbundle, not apk: Play has required an AAB for new apps
+          # since 2021, and an APK would be refused at the upload after
+          # the build rather than before it.
+          flutter build appbundle \
+            --release \
+            --build-number="$code" \
+            --dart-define=WEB_PUSH_PUBLIC_KEY="${WEB_PUSH_PUBLIC_KEY:-}"
+
+      - name: The bundle is not signed with the debug key
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          aab=build/app/outputs/bundle/release/app-release.aab
+          # The failure this catches: build.gradle.kts falls back to the
+          # debug key when key.properties is missing or unreadable, and
+          # that fallback is the right behaviour for a developer's
+          # machine. Here it would be a bundle that builds, uploads and
+          # is refused by Play with a message about a certificate --
+          # after the upload, not before it.
+          #
+          # The debug key's subject is fixed and documented, so this is
+          # an exact test rather than a guess.
+          if keytool -printcert -jarfile "$aab" | grep -q "CN=Android Debug"; then
+            echo "::error::The bundle is signed with the DEBUG key." \
+                 "key.properties did not take effect, so Play would" \
+                 "refuse this after the upload. Nothing was sent."
+            exit 1
+          fi
+          echo "signed with the upload key"
+
+      - name: Upload to Google Play
+        id: upload
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          PLAY_SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT }}
+          PLAY_PACKAGE_NAME: my.iakauntan.iakauntan
+          PLAY_TRACK: ${{ inputs.track }}
+          PLAY_RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          # Retried for the reason `scripts/ci/retry.sh` exists: this is
+          # one long upload to somebody else's service at the end of the
+          # build, and losing it to a dropped packet would mean paying
+          # for the build twice.
+          ../scripts/ci/retry.sh \
+            deno run --allow-read --allow-env --allow-net \
+              ../scripts/play_upload.ts \
+              build/app/outputs/bundle/release/app-release.aab
+
+      - name: What happened
+        if: always() && steps.creds.outputs.ready == 'true'
+        working-directory: .
+        run: |
+          {
+            echo "### Android ${{ inputs.track }}"
+            echo
+            echo "* version code: \`${{ steps.build.outputs.code }}\`"
+            echo "* commit: \`${{ github.sha }}\`"
+            if [ -n "${{ inputs.notes }}" ]; then
+              echo "* notes: ${{ inputs.notes }}"
+            fi
+            if [ -f "$RUNNER_TEMP/sha256.txt" ]; then
+              echo "* upload key: \`$(cat "$RUNNER_TEMP/sha256.txt" | tr -d ' ')\`"
+            fi
+            echo
+            # Reads the outcome rather than assuming one. The iOS
+            # workflow's run 1 printed "Uploaded" under a red cross
+            # because this block assumed success, and that is the
+            # single most misleading thing a release job can do.
+            if [ "${{ steps.upload.outcome }}" != "success" ]; then
+              echo "**Nothing was uploaded.** This run did not get that"
+              echo "far — the failing step above says why, and the"
+              echo "version code is free to be used again."
+            elif [ "${{ inputs.track }}" = "production" ]; then
+              echo "Uploaded and rolled out to production. Play's own"
+              echo "review still applies and is hours to days, whatever"
+              echo "this workflow does."
+            else
+              echo "Uploaded. It reaches the ${{ inputs.track }} testers"
+              echo "once Play has finished processing it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Whatever happened above. An upload key left behind on a shared
+      # runner image is what this is guarding against, and it is worse
+      # than the iOS equivalent: a distribution certificate can be
+      # revoked and reissued in an afternoon, and an Android upload key
+      # can only be reset by Google.
+      - name: Take the key away
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/upload.jks" || true
+          rm -f android/key.properties || true
