@@ -74,7 +74,14 @@ class _BetaTestersAdminTabState extends ConsumerState<BetaTestersAdminTab> {
     await runWithFeedback(
       context,
       doing: 'add ${user.label} to the beta',
-      successMessage: '${user.label} has the report button now',
+      // "next time they reload", and not a flourish. `0663`'s
+      // `am_i_a_beta_tester` is asked once per session and the answer
+      // is held for the whole of it, so somebody already signed in
+      // does NOT get the button until their app starts again. Saying
+      // "has it now" would send an administrator to tell them to look
+      // for a button that is not there yet.
+      successMessage:
+          '${user.label} gets the report button next time they reload',
       action: () => ref
           .read(platformRepoProvider)
           .assignBetaTester(user.userId, note: note.isEmpty ? null : note),
@@ -99,7 +106,13 @@ class _BetaTestersAdminTabState extends ConsumerState<BetaTestersAdminTab> {
     await runWithFeedback(
       context,
       doing: 'take ${tester.label} off the beta',
-      successMessage: 'Done',
+      // The same lag in the other direction, and worth saying for the
+      // same reason: a tester signed in now keeps the button until
+      // their session ends. It opens nothing they could not already
+      // open -- a report is a report -- so the lag is untidy rather
+      // than a way in.
+      successMessage:
+          '${tester.label} keeps the button until their app restarts',
       action: () =>
           ref.read(platformRepoProvider).removeBetaTester(tester.userId),
     );
