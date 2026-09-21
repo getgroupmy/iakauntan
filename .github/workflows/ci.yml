@@ -397,8 +397,28 @@ jobs:
       # Kit, `flutter_webrtc` brings its own native libraries -- any of
       # them can demand a higher minSdk than this app declares, and the
       # manifest merger is the only thing that says so.
+      # RELEASE, not debug, and the two minutes it costs bought
+      # themselves the first time it ran.
+      #
+      # A debug build does not run R8. So everything R8 decides —
+      # shrinking, and in particular whether every class the code
+      # REFERENCES actually exists — was unchecked here, and the first
+      # thing that ever exercised it was the first attempt to publish
+      # to Play. It failed at `:app:minifyReleaseWithR8` on four ML Kit
+      # script recognizers the text-recognition plugin names and this
+      # app does not depend on.
+      #
+      # That is a whole class of failure that a debug build cannot
+      # reach by construction, on the job whose entire purpose is to
+      # answer "does the Android app build". It answers that properly
+      # now.
+      #
+      # No signing config is needed: with no key.properties the release
+      # build falls back to the debug key, loudly, and this job only
+      # asks whether it BUILDS. `android-release.yml` is what checks
+      # the signer, and it refuses a debug-signed bundle.
       - name: Build
-        run: flutter build apk --debug
+        run: flutter build apk --release
 
   database:
     name: Statutory engine and ledger rules
@@ -1228,6 +1248,13 @@ jobs:
       # iOS side costs ten times an Ubuntu build to discover.
       - name: Check the release workflows check for what they use
         run: python3 scripts/check_release_secrets.py
+
+      # `-dontwarn` does not make a class exist. A script the Dart asks
+      # for AND the R8 rules suppress builds cleanly and throws
+      # NoClassDefFoundError on a device, in the one code path that
+      # reaches it — and never in debug, which does not run R8.
+      - name: Check no ML Kit script is asked for and suppressed
+        run: python3 scripts/check_mlkit_scripts.py
 
       # Offered and not permitted is a save that fails; permitted and
       # not offered is a feature nobody can reach. Both were true of

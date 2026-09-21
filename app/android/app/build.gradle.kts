@@ -85,6 +85,23 @@ android {
                 )
                 signingConfig = signingConfigs.getByName("debug")
             }
+
+            // R8 needs telling about four ML Kit script recognizers
+            // that are referenced by the text-recognition plugin and
+            // are not dependencies here. Without this the release
+            // build fails at `:app:minifyReleaseWithR8` — which no
+            // debug build reaches, so it first appeared on the very
+            // first attempt to publish. `proguard-rules.pro` carries
+            // the reasoning and the gate that keeps it honest.
+            //
+            // Both files, not just ours: `proguardFiles` REPLACES the
+            // list rather than adding to it, and dropping the default
+            // would turn off the optimisations every Android release
+            // is built with.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

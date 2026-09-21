@@ -9,15 +9,24 @@ genuinely different are the parts worth your attention.
 
 ## Where this stands
 
-**Nothing is set up yet.** The workflow, the signing configuration and
-the upload script are written and gated; the five secrets are not
-there, and until they are the workflow stops with a list of which are
-missing rather than failing.
+**The keystore secrets exist and the first run has happened.** It got
+as far as `Build the bundle` and failed there, which means the
+readiness gate passed and the signing key was read — parts 1 and 4 are
+done.
 
-Unlike the iOS side, **none of this has ever run**. The iOS pipeline
-took four failed runs to find two real traps. Expect the same here and
-budget for it — though at a tenth the cost per attempt, because this
-runs on Ubuntu.
+It failed at `:app:minifyReleaseWithR8`, on four ML Kit script
+recognizers the text-recognition plugin references and this app does
+not depend on. Fixed in `app/android/app/proguard-rules.pro`, and the
+reason it was not caught earlier is worth more than the fix: **CI built
+the Android app in debug, and a debug build does not run R8 at all.**
+So the entire class of "a referenced class is missing" was unchecked
+until the first attempt to publish. `ci.yml` builds release now.
+
+Nothing has yet reached Play. Parts 2, 3 and 5 are still to do.
+
+The iOS pipeline took four failed runs to find two real traps. Budget
+for the same here — at a tenth the cost per attempt, because this runs
+on Ubuntu.
 
 ## Three ways this is not the iOS release
 
@@ -172,6 +181,7 @@ not.
 
 | It says | What it means |
 | --- | --- |
+| `Missing classes detected while running R8` | a class the code references is not on the classpath. The first run hit this on four ML Kit script recognizers; `app/android/app/proguard-rules.pro` explains it. CI builds the Android app in **release** now, so this is caught there rather than here |
 | "Not set up yet" with a list | exactly that; the secrets in part 4 are missing and nothing was built |
 | "Google Play has no released version of this app yet" | part 3 has not been done |
 | "The service account cannot see this app" | part 2 step 2 — the Play Console invitation, not the Cloud IAM role |
