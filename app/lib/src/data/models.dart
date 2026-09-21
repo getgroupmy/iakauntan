@@ -2244,6 +2244,10 @@ class TaxInstalment {
     required this.dueOn,
     required this.amount,
     this.setByRevision = false,
+    this.paidOn,
+    this.paidAmount,
+    this.paidLate = false,
+    this.outstanding = 0,
   });
 
   final int number;
@@ -2257,18 +2261,110 @@ class TaxInstalment {
   /// after you started paying" is what somebody needs to see.
   final bool setByRevision;
 
+  /// When it was paid, and what was actually sent — which LHDN
+  /// accepts whether or not it is the scheduled figure. Null means
+  /// nothing has been recorded, never that nothing was paid.
+  final DateTime? paidOn;
+  final double? paidAmount;
+
+  /// Paid AFTER the due date. Computed on the server, because it is
+  /// what s.107C(9) charges 10% on and a second opinion here could
+  /// disagree with the one the penalty is assessed on.
+  final bool paidLate;
+
+  /// Scheduled less paid, floored at nothing. An overpayment is not a
+  /// negative outstanding: LHDN keeps it against the assessment.
+  final double outstanding;
+
   /// A remaining instalment a downward revision has reduced to
   /// nothing. Not the same as an estimate of zero: the year owes less
   /// than has already been billed, and the excess comes back at
   /// assessment rather than through the schedule.
   bool get isWaived => setByRevision && amount == 0;
 
+  /// Somebody has recorded a payment against it.
+  bool get isPaid => paidOn != null;
+
+  /// Paid, but not all of it. LHDN accepts a short payment and adds
+  /// the shortfall to what is owed, so this is a state worth showing
+  /// rather than rounding into "paid".
+  bool get isPartlyPaid => isPaid && outstanding > 0;
+
   factory TaxInstalment.fromMap(Map<String, dynamic> j) => TaxInstalment(
     number: Fmt.toInt(j['instalment_no']),
     dueOn: Fmt.parseDate(j['due_on']),
     amount: Fmt.toDouble(j['amount']),
     setByRevision: j['set_by_revision'] == true,
+    paidOn: Fmt.parseDate(j['paid_on']),
+    paidAmount:
+        j['paid_amount'] == null ? null : Fmt.toDouble(j['paid_amount']),
+    paidLate: j['paid_late'] == true,
+    outstanding: Fmt.toDouble(j['outstanding']),
   );
+}
+
+/// Where the instalment year stands.
+///
+/// [latePenalty] is what s.107C(9) comes to on the instalments already
+/// paid late — a charge separate from under-estimating, and one a
+/// taxpayer can incur in a year they estimated perfectly. It says what
+/// the charge amounts to, never that LHDN raised it.
+class TaxInstalmentSummary {
+  TaxInstalmentSummary({
+    required this.scheduledTotal,
+    required this.paidTotal,
+    required this.outstandingTotal,
+    required this.instalments,
+    required this.instalmentsPaid,
+    required this.overdueCount,
+    required this.overdueTotal,
+    required this.lateCount,
+    required this.latePenalty,
+    this.nextDueOn,
+    this.nextDueAmount,
+  });
+
+  final double scheduledTotal;
+  final double paidTotal;
+  final double outstandingTotal;
+
+  final int instalments;
+  final int instalmentsPaid;
+
+  /// Due, unpaid, and the date has gone. An instalment of nothing —
+  /// which a downward revision leaves behind — is never overdue,
+  /// because there was nothing to pay.
+  final int overdueCount;
+  final double overdueTotal;
+
+  final int lateCount;
+  final double latePenalty;
+
+  /// The next instalment with something to pay. Null once there is
+  /// nothing left worth sending, which is not the same as the year
+  /// being over.
+  final DateTime? nextDueOn;
+  final double? nextDueAmount;
+
+  bool get isBehind => overdueCount > 0;
+  bool get allPaid => instalments > 0 && instalmentsPaid >= instalments;
+
+  factory TaxInstalmentSummary.fromMap(Map<String, dynamic> j) =>
+      TaxInstalmentSummary(
+        scheduledTotal: Fmt.toDouble(j['scheduled_total']),
+        paidTotal: Fmt.toDouble(j['paid_total']),
+        outstandingTotal: Fmt.toDouble(j['outstanding_total']),
+        instalments: Fmt.toInt(j['instalments']),
+        instalmentsPaid: Fmt.toInt(j['instalments_paid']),
+        overdueCount: Fmt.toInt(j['overdue_count']),
+        overdueTotal: Fmt.toDouble(j['overdue_total']),
+        lateCount: Fmt.toInt(j['late_count']),
+        latePenalty: Fmt.toDouble(j['late_penalty']),
+        nextDueOn: Fmt.parseDate(j['next_due_on']),
+        nextDueAmount: j['next_due_amount'] == null
+            ? null
+            : Fmt.toDouble(j['next_due_amount']),
+      );
 }
 
 /// One income tax obligation, against one period, with its date.

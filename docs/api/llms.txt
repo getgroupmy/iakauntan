@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0672` (the highest applied migration).
-763 functions and 363 readable tables, of which
-291 functions only read.
+Schema version `0673` (the highest applied migration).
+766 functions and 364 readable tables, of which
+292 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**621 of 763 functions carry a `comment on
+**624 of 766 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (551)
+### general (554)
 
 Not gated on any module.
 
@@ -469,6 +469,7 @@ Not gated on any module.
 - `clear_pdc(p_id uuid, p_on date, p_bank uuid)` *(writes)* — Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged.
 - `clear_platform_ai_key(p_provider text)` *(writes)* — Removes the PLATFORM's key for one AI provider -- ours, not a tenant's.
 - `clear_tax_filing(p_org_id uuid, p_filing_type text, p_period_to date)` *(writes)* — Undoes a recording, putting the obligation back on the computed list.
+- `clear_tax_instalment(p_estimate_id uuid, p_instalment_no integer)` *(writes)* — Unrecords a payment, putting the instalment back to unpaid.
 - `clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Starts somebody's working day and returns the attendance record.
 - `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)* — Closes the day and returns what it came to — worked, scheduled, overtime split into normal, rest day and holiday, and the lateness from the morning.
 - `close_fiscal_year(p_fiscal_year_id uuid)` *(writes)* — Brings every revenue and expense account to nil at the year end and puts the result in 3300 Current Year Earnings.
@@ -743,6 +744,7 @@ Not gated on any module.
 - `record_received_einvoice(p_org_id uuid, p_parsed jsonb, p_raw jsonb)` *(writes)* — Keeps a parsed MyInvois document.
 - `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)* — Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period.
 - `record_tax_filing(p_org_id uuid, p_filing_type text, p_period_to date, p_status text, p_filed_on date, p_reference text, p_notes text)` *(writes)* — Records what somebody has done about one obligation, keyed on the type and the period it covers.
+- `record_tax_instalment(p_estimate_id uuid, p_instalment_no integer, p_paid_on date, p_amount numeric, p_reference text, p_notes text)` *(writes)* — Records that one instalment was paid.
 - `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text, p_transport text, p_device_id text)` *(writes)* — Puts the calling user's device on the push register, or moves an existing token to them.
 - `register_time_terminal(p_org_id uuid, p_name text, p_branch_id uuid, p_device_ref text)` *(writes)* — Adds a clock and returns its secret, once.
 - `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
@@ -893,7 +895,8 @@ Not gated on any module.
 - `tax_computation_misfiled(p_org_id uuid)` — Accounts whose tax treatment is for the other side of the ledger -- an expense rule on a revenue account.
 - `tax_estimate_exposure(p_estimate_id uuid, p_computation_id uuid)` — Whether an estimate clears the floor against last year -- where its form HAS a floor, which CP500 does not -- and, where a computation exists to measure against, how far under the real liability it fell and what that costs.
 - `tax_estimate_first_period(p_estimate_id uuid)` — The two ways a first basis period differs: when the estimate is due, and whether a qualifying new SME owes instalments at all.
-- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in, on the rhythm its FORM names, EMPTY where a qualifying new SME owes none, and -- where the estimate has been revised -- with the instalments already due left at what was payable on their dates and the balance spread over those that remain.
+- `tax_estimate_payment_summary(p_estimate_id uuid)` — Where the instalment year stands: scheduled, paid, outstanding, what is overdue now, and what the s.107C(9) charge on the ones already paid late comes to.
+- `tax_estimate_schedule(p_estimate_id uuid)` — The instalments an estimate is paid in -- what was payable on each date, and what was paid against it.
 - `tax_filing_history(p_org_id uuid, p_limit integer)` — Everything recorded against an obligation, including what was dismissed as not applicable and why.
 - `tax_partnership_allocation(p_computation_id uuid)`
 - `tax_partnership_summary(p_computation_id uuid)` — The head of a Form P, and the two figures that catch a half-entered one: the shares must come to 100, and the total allocated must come to the adjusted income plus the appropriations.
@@ -1271,6 +1274,7 @@ inconsistent.
 - `tax_computations`
 - `tax_detail_requests`
 - `tax_detail_submissions`
+- `tax_estimate_payments`
 - `tax_estimate_rules`
 - `tax_estimates`
 - `tax_filing_types`

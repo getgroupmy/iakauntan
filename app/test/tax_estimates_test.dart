@@ -294,6 +294,221 @@ void main() {
     });
   });
 
+  group('what was paid against an instalment', () {
+    TaxInstalment inst({
+      double amount = 10000,
+      double? paid,
+      bool late = false,
+      double? outstanding,
+      bool revised = false,
+    }) => TaxInstalment(
+      number: 1,
+      dueOn: DateTime(2026, 2, 15),
+      amount: amount,
+      setByRevision: revised,
+      paidOn: paid == null ? null : DateTime(2026, 2, 14),
+      paidAmount: paid,
+      paidLate: late,
+      outstanding: outstanding ?? (amount - (paid ?? 0)).clamp(0, amount),
+    );
+
+    test('nothing recorded is not paid', () {
+      expect(inst().isPaid, isFalse);
+      expect(inst().isPartlyPaid, isFalse);
+    });
+
+    test('paid in full is paid and not partly', () {
+      expect(inst(paid: 10000).isPaid, isTrue);
+      expect(inst(paid: 10000).isPartlyPaid, isFalse);
+    });
+
+    test('paid short is both', () {
+      // LHDN accepts a short payment and the shortfall stays owed, so
+      // this is a state worth showing rather than rounding into
+      // "paid".
+      final i = inst(paid: 9500);
+      expect(i.isPaid, isTrue);
+      expect(i.isPartlyPaid, isTrue);
+      expect(i.outstanding, 500);
+    });
+
+    test('and an overpayment is paid, not partly', () {
+      // Outstanding floors at nothing on the server; LHDN keeps the
+      // excess against the assessment rather than crediting it here.
+      final i = inst(paid: 15000, outstanding: 0);
+      expect(i.isPaid, isTrue);
+      expect(i.isPartlyPaid, isFalse);
+    });
+
+    test('an unpaid instalment with nothing owed is not partly paid', () {
+      // A nil instalment a downward revision left behind. Nothing to
+      // pay and nothing paid — calling that "partly paid" would put a
+      // red mark on a row nobody owes anything on.
+      final i = inst(amount: 0, revised: true);
+      expect(i.isPaid, isFalse);
+      expect(i.isPartlyPaid, isFalse);
+      expect(i.isWaived, isTrue);
+    });
+
+    test('a recorded payment of nothing is still recorded', () {
+      // A nil instalment left by a downward revision: somebody marks
+      // it dealt with and the server stores a payment of zero with a
+      // date. What makes it "paid" is that a payment EXISTS, not that
+      // money moved — reading the amount instead would show a row
+      // somebody has settled as still outstanding.
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 9,
+        'due_on': '2026-10-15',
+        'amount': 0,
+        'set_by_revision': true,
+        'paid_on': '2026-10-15',
+        'paid_amount': 0,
+        'paid_late': false,
+        'outstanding': 0,
+      });
+      expect(i.isPaid, isTrue);
+      expect(i.paidAmount, 0);
+      expect(i.isPartlyPaid, isFalse);
+    });
+
+    test('every payment figure lands in its own field', () {
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 3,
+        'due_on': '2026-04-15',
+        'amount': 10000,
+        'set_by_revision': false,
+        'paid_on': '2026-04-20',
+        'paid_amount': 9500,
+        'paid_late': true,
+        'outstanding': 500,
+      });
+      expect(i.number, 3);
+      expect(i.dueOn, DateTime(2026, 4, 15));
+      expect(i.amount, 10000);
+      expect(i.paidOn, DateTime(2026, 4, 20));
+      expect(i.paidAmount, 9500);
+      expect(i.paidLate, isTrue);
+      expect(i.outstanding, 500);
+      expect(i.isPaid, isTrue);
+      expect(i.isPartlyPaid, isTrue);
+    });
+
+    test('an unrecorded one comes back with nulls, not zeroes', () {
+      // `Fmt.toDouble(null)` is 0, and a paid amount of zero reads as
+      // "somebody sent nothing" rather than "nobody has said".
+      final i = TaxInstalment.fromMap(const {
+        'instalment_no': 5,
+        'due_on': '2026-06-15',
+        'amount': 10000,
+        'outstanding': 10000,
+      });
+      expect(i.paidOn, isNull);
+      expect(i.paidAmount, isNull);
+      expect(i.paidLate, isFalse);
+      expect(i.isPaid, isFalse);
+      expect(i.outstanding, 10000);
+    });
+  });
+
+  group('where the instalment year stands', () {
+    TaxInstalmentSummary summary({
+      int paid = 0,
+      int overdue = 0,
+      int lateCount = 0,
+      double latePenalty = 0,
+      DateTime? next,
+      int instalments = 12,
+    }) => TaxInstalmentSummary(
+      scheduledTotal: 120000,
+      paidTotal: paid * 10000,
+      outstandingTotal: (instalments - paid) * 10000,
+      instalments: instalments,
+      instalmentsPaid: paid,
+      overdueCount: overdue,
+      overdueTotal: overdue * 10000,
+      lateCount: lateCount,
+      latePenalty: latePenalty,
+      nextDueOn: next,
+      nextDueAmount: next == null ? null : 10000,
+    );
+
+    test('something overdue means behind', () {
+      expect(summary(overdue: 2).isBehind, isTrue);
+    });
+
+    test('nothing overdue does not', () {
+      expect(summary(paid: 3).isBehind, isFalse);
+    });
+
+    test('paying late is not the same as being behind', () {
+      // A company entirely up to date still owes the s.107C(9) charge
+      // on whatever it sent after the date. Two different questions,
+      // and the screen states both.
+      final s = summary(paid: 12, lateCount: 3, latePenalty: 3000);
+      expect(s.isBehind, isFalse);
+      expect(s.lateCount, 3);
+      expect(s.latePenalty, 3000);
+    });
+
+    test('every instalment paid is all paid', () {
+      expect(summary(paid: 12).allPaid, isTrue);
+      expect(summary(paid: 11).allPaid, isFalse);
+    });
+
+    test('and an estimate with no instalments is not "all paid"', () {
+      // A qualifying new SME owes none, so the schedule is empty.
+      // Calling that "every instalment paid" would put a tick beside
+      // a year nobody has paid anything for.
+      expect(summary(instalments: 0, paid: 0).allPaid, isFalse);
+    });
+
+    test('every summary figure lands in its own field', () {
+      final s = TaxInstalmentSummary.fromMap(const {
+        'scheduled_total': 120000,
+        'paid_total': 34000,
+        'outstanding_total': 86000,
+        'instalments': 12,
+        'instalments_paid': 4,
+        'overdue_count': 2,
+        'overdue_total': 20000,
+        'late_count': 1,
+        'late_penalty': 1000,
+        'next_due_on': '2026-07-15',
+        'next_due_amount': 10000,
+      });
+      expect(s.scheduledTotal, 120000);
+      expect(s.paidTotal, 34000);
+      expect(s.outstandingTotal, 86000);
+      expect(s.instalments, 12);
+      expect(s.instalmentsPaid, 4);
+      expect(s.overdueCount, 2);
+      expect(s.overdueTotal, 20000);
+      expect(s.lateCount, 1);
+      expect(s.latePenalty, 1000);
+      expect(s.nextDueOn, DateTime(2026, 7, 15));
+      expect(s.nextDueAmount, 10000);
+      expect(s.isBehind, isTrue);
+      expect(s.allPaid, isFalse);
+    });
+
+    test('nothing left to pay reads as no next instalment', () {
+      final s = TaxInstalmentSummary.fromMap(const {
+        'scheduled_total': 10000,
+        'paid_total': 10000,
+        'outstanding_total': 0,
+        'instalments': 12,
+        'instalments_paid': 1,
+        'overdue_count': 0,
+        'overdue_total': 0,
+        'late_count': 0,
+        'late_penalty': 0,
+      });
+      expect(s.nextDueOn, isNull);
+      expect(s.nextDueAmount, isNull);
+      expect(s.isBehind, isFalse);
+    });
+  });
+
   group('reading the server back', () {
     test('every exposure figure lands in its own field', () {
       // Different numbers in every position, so a transposition

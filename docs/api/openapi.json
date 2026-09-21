@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0672",
+    "version": "0673",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -26922,6 +26922,65 @@
                   "p_org_id",
                   "p_filing_type",
                   "p_period_to"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/clear_tax_instalment": {
+      "post": {
+        "operationId": "clear_tax_instalment",
+        "summary": "Unrecords a payment, putting the instalment back to unpaid",
+        "description": "Unrecords a payment, putting the instalment back to unpaid.\n\n`public.clear_tax_instalment(p_estimate_id uuid, p_instalment_no integer)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_instalment_no": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_estimate_id",
+                  "p_instalment_no"
                 ]
               }
             }
@@ -54592,6 +54651,79 @@
         }
       }
     },
+    "/rpc/record_tax_instalment": {
+      "post": {
+        "operationId": "record_tax_instalment",
+        "summary": "Records that one instalment was paid",
+        "description": "Records that one instalment was paid. Defaults to today and to the scheduled amount, because paying what was asked for on the day is the ordinary case. Keyed to the chain root so it survives a revision, and refuses an instalment number the schedule does not have.\n\n`public.record_tax_instalment(p_estimate_id uuid, p_instalment_no integer, p_paid_on date, p_amount numeric, p_reference text, p_notes text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_instalment_no": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_paid_on": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_amount": {
+                    "type": "number"
+                  },
+                  "p_reference": {
+                    "type": "string"
+                  },
+                  "p_notes": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_estimate_id",
+                  "p_instalment_no"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/redeem_loyalty_points": {
       "post": {
         "operationId": "redeem_loyalty_points",
@@ -70040,11 +70172,108 @@
         }
       }
     },
+    "/rpc/tax_estimate_payment_summary": {
+      "post": {
+        "operationId": "tax_estimate_payment_summary",
+        "summary": "Where the instalment year stands: scheduled, paid, outstanding, what is overdue now, and what the s.107C(9)\u2026",
+        "description": "Where the instalment year stands: scheduled, paid, outstanding, what is overdue now, and what the s.107C(9) charge on the ones already paid late comes to. An instalment of nothing -- which a downward revision leaves behind -- is never overdue.\n\n`public.tax_estimate_payment_summary(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_estimate_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_estimate_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "scheduled_total": {
+                        "type": "number"
+                      },
+                      "paid_total": {
+                        "type": "number"
+                      },
+                      "outstanding_total": {
+                        "type": "number"
+                      },
+                      "instalments": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "instalments_paid": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "overdue_count": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "overdue_total": {
+                        "type": "number"
+                      },
+                      "late_count": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "late_penalty": {
+                        "type": "number"
+                      },
+                      "next_due_on": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "next_due_amount": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/tax_estimate_schedule": {
       "post": {
         "operationId": "tax_estimate_schedule",
-        "summary": "The instalments an estimate is paid in, on the rhythm its FORM names, EMPTY where a qualifying new SME owes\u2026",
-        "description": "The instalments an estimate is paid in, on the rhythm its FORM names, EMPTY where a qualifying new SME owes none, and -- where the estimate has been revised -- with the instalments already due left at what was payable on their dates and the balance spread over those that remain. Says what was payable, never what was paid.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
+        "summary": "The instalments an estimate is paid in -- what was payable on each date, and what was paid against it",
+        "description": "The instalments an estimate is paid in -- what was payable on each date, and what was paid against it. Payments are found through the chain root, so they survive a revision. Nothing here posts to the ledger.\n\n`public.tax_estimate_schedule(p_estimate_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -70094,6 +70323,19 @@
                       },
                       "set_by_revision": {
                         "type": "boolean"
+                      },
+                      "paid_on": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "paid_amount": {
+                        "type": "number"
+                      },
+                      "paid_late": {
+                        "type": "boolean"
+                      },
+                      "outstanding": {
+                        "type": "number"
                       }
                     }
                   }
@@ -76936,6 +77178,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_detail_submissions"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_estimate_payments": {
+      "get": {
+        "operationId": "select_tax_estimate_payments",
+        "summary": "Read tax_estimate_payments",
+        "description": "What was actually paid against each instalment. Keyed to the chain ROOT so a payment outlives the revision that supersedes the estimate it was made against. A note that money moved -- nothing here posts to the ledger.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_estimate_payments"
                   }
                 }
               }
@@ -99566,6 +99872,63 @@
           "request_id"
         ]
       },
+      "tax_estimate_payments": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "root_estimate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recorded_against_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instalment_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paid_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "recorded_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "root_estimate_id",
+          "instalment_no",
+          "paid_on",
+          "amount"
+        ]
+      },
       "tax_estimate_rules": {
         "type": "object",
         "properties": {
@@ -99631,6 +99994,9 @@
           "first_period_exempt_years": {
             "type": "integer",
             "format": "int32"
+          },
+          "late_instalment_penalty_percent": {
+            "type": "number"
           }
         },
         "required": [

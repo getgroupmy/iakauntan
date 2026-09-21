@@ -2764,6 +2764,61 @@ class Repo {
     return [for (final r in rows) TaxFilingRecord.fromMap(r)];
   }
 
+  /// Records that one instalment was paid.
+  ///
+  /// Defaults to today and to the scheduled amount: paying what was
+  /// asked for on the day is the ordinary case, and retyping the
+  /// figure is a chance to mistype it. `0673` keys it to the chain
+  /// ROOT, so it survives a revision.
+  Future<String> recordTaxInstalment({
+    required String estimateId,
+    required int instalmentNo,
+    DateTime? paidOn,
+    double? amount,
+    String? reference,
+    String? notes,
+  }) async {
+    final id = await callRpc(
+      'record_tax_instalment',
+      params: {
+        'p_estimate_id': estimateId,
+        'p_instalment_no': instalmentNo,
+        'p_paid_on': paidOn == null ? null : Fmt.iso(paidOn),
+        'p_amount': amount,
+        'p_reference': reference,
+        'p_notes': notes,
+      },
+    );
+    return id as String;
+  }
+
+  Future<void> clearTaxInstalment({
+    required String estimateId,
+    required int instalmentNo,
+  }) async {
+    await callRpc(
+      'clear_tax_instalment',
+      params: {
+        'p_estimate_id': estimateId,
+        'p_instalment_no': instalmentNo,
+      },
+    );
+  }
+
+  /// Where the instalment year stands.
+  Future<TaxInstalmentSummary> taxInstalmentSummary(String id) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_payment_summary',
+        params: {'p_estimate_id': id},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That estimate no longer exists.');
+    }
+    return TaxInstalmentSummary.fromMap(rows.first);
+  }
+
   /// How a first basis period differs, where it is one.
   Future<TaxFirstPeriod> taxEstimateFirstPeriod(String id) async {
     final rows = _rows(

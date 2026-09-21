@@ -717,6 +717,7 @@ jobs:
                    supabase/tests/tax_estimate_cp500.sql \
                    supabase/tests/tax_estimate_first_period.sql \
                    supabase/tests/tax_estimate_revision_spread.sql \
+                   supabase/tests/tax_estimate_payments.sql \
                    supabase/tests/tax_filing_calendar.sql \
                    supabase/tests/tax_filings_recorded.sql \
                    supabase/tests/mbrs.sql \

@@ -49,6 +49,7 @@ class _TaxEstimateScreenState extends ConsumerState<TaxEstimateScreen> {
     ref.invalidate(taxEstimateScheduleProvider(widget.estimateId));
     ref.invalidate(taxEstimateExposureProvider(_key));
     ref.invalidate(taxFirstPeriodProvider(widget.estimateId));
+    ref.invalidate(taxInstalmentSummaryProvider(widget.estimateId));
   }
 
   Future<void> _edit() async {
@@ -275,6 +276,7 @@ class _Estimate extends ConsumerWidget {
 
               const SizedBox(height: Space.lg),
               const TaxSection(title: 'Instalments'),
+              _PaidSoFar(id: id),
               _Schedule(id: id),
 
               const SizedBox(height: Space.lg),
@@ -310,6 +312,67 @@ class _Schedule extends ConsumerWidget {
 
   final String id;
 
+  Future<void> _pay(
+    BuildContext context,
+    WidgetRef ref,
+    TaxInstalment r,
+  ) async {
+    // An instalment a downward revision reduced to nothing has
+    // nothing to pay, and offering to record a payment against it
+    // would be offering to record nothing.
+    if (r.amount == 0 && !r.isPaid) return;
+
+    if (r.isPaid) {
+      final undo = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Instalment ${r.number}'),
+          content: Text(
+            'Recorded as paid'
+            '${r.paidOn == null ? '' : ' on ${Fmt.date(r.paidOn!)}'}'
+            '${r.paidAmount == null ? '' : ', ${Fmt.money(r.paidAmount!)}'}'
+            '. Unrecord it?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Keep it'),
+            ),
+            FilledButton(
+              key: const ValueKey('instalment-unpay'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Unrecord'),
+            ),
+          ],
+        ),
+      );
+      if (undo != true || !context.mounted) return;
+      final done = await runWithFeedback(
+        context,
+        doing: 'unrecord the payment',
+        successMessage: 'Unrecorded',
+        action: () => ref.read(repoProvider)!.clearTaxInstalment(
+          estimateId: id,
+          instalmentNo: r.number,
+        ),
+      );
+      if (done) {
+        ref.invalidate(taxEstimateScheduleProvider(id));
+        ref.invalidate(taxInstalmentSummaryProvider(id));
+      }
+      return;
+    }
+
+    final paid = await showDialog<bool>(
+      context: context,
+      builder: (_) => _PayDialog(id: id, instalment: r),
+    );
+    if (paid == true) {
+      ref.invalidate(taxEstimateScheduleProvider(id));
+      ref.invalidate(taxInstalmentSummaryProvider(id));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
@@ -337,7 +400,10 @@ class _Schedule extends ConsumerWidget {
         return Column(
           children: [
             for (final r in rows)
-              Padding(
+              InkWell(
+                key: ValueKey('instalment-tap-${r.number}'),
+                onTap: () => _pay(context, ref, r),
+                child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   key: ValueKey('instalment-${r.number}'),
@@ -390,8 +456,53 @@ class _Schedule extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    Text(Fmt.money(r.amount)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          Fmt.money(r.amount),
+                          style: TextStyle(
+                            decoration: r.isPaid && !r.isPartlyPaid
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: r.isPaid && !r.isPartlyPaid
+                                ? scheme.onSurfaceVariant
+                                : null,
+                          ),
+                        ),
+                        if (r.isPartlyPaid)
+                          Text(
+                            '${Fmt.money(r.outstanding)} short',
+                            key: ValueKey('instalment-short-${r.number}'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.error,
+                            ),
+                          )
+                        else if (r.paidLate)
+                          Text(
+                            'paid late',
+                            key: ValueKey('instalment-late-${r.number}'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.error,
+                            ),
+                          )
+                        else if (r.isPaid)
+                          Text(
+                            r.paidOn == null
+                                ? 'paid'
+                                : 'paid ${Fmt.date(r.paidOn!)}',
+                            key: ValueKey('instalment-paid-${r.number}'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
+                ),
                 ),
               ),
             const Divider(),
@@ -889,6 +1000,273 @@ class _FirstPeriod extends ConsumerWidget {
                         '(${Fmt.money(fp.capitalLimit!)} of capital, '
                         '${Fmt.money(fp.turnoverLimit ?? 0)} of gross '
                         'income)'}.',
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Recording one instalment as paid.
+///
+/// Both fields come pre-filled with the ordinary answer — today, and
+/// the scheduled figure — because paying what was asked for on the day
+/// is what almost always happened, and retyping a figure is a chance
+/// to mistype it. Both are editable, because LHDN accepts what it is
+/// sent and a short payment is a real thing that needs recording as
+/// what it was.
+class _PayDialog extends ConsumerStatefulWidget {
+  const _PayDialog({required this.id, required this.instalment});
+
+  final String id;
+  final TaxInstalment instalment;
+
+  @override
+  ConsumerState<_PayDialog> createState() => _PayDialogState();
+}
+
+class _PayDialogState extends ConsumerState<_PayDialog> {
+  late final TextEditingController _amount = TextEditingController(
+    text: widget.instalment.amount.toStringAsFixed(2),
+  );
+  final _reference = TextEditingController();
+  late DateTime _paidOn = DateTime.now();
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _reference.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final amount = double.tryParse(_amount.text.trim().replaceAll(',', ''));
+    if (amount == null || amount < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter what was paid.')),
+      );
+      return;
+    }
+    final done = await runWithFeedback(
+      context,
+      doing: 'record the payment',
+      successMessage: 'Recorded',
+      action: () => ref.read(repoProvider)!.recordTaxInstalment(
+        estimateId: widget.id,
+        instalmentNo: widget.instalment.number,
+        paidOn: _paidOn,
+        amount: amount,
+        reference: _reference.text.trim().isEmpty
+            ? null
+            : _reference.text.trim(),
+      ),
+    );
+    if (done && mounted) Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.instalment;
+    final late = r.dueOn != null && _paidOn.isAfter(r.dueOn!);
+    return AlertDialog(
+      title: Text('Instalment ${r.number}'),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (r.dueOn != null)
+              Text(
+                'Due ${Fmt.date(r.dueOn!)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            const SizedBox(height: Space.md),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Paid ${Fmt.date(_paidOn)}',
+                    key: const ValueKey('pay-date'),
+                  ),
+                ),
+                TextButton(
+                  key: const ValueKey('pay-pick-date'),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _paidOn,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setState(() => _paidOn = picked);
+                  },
+                  child: const Text('Change'),
+                ),
+              ],
+            ),
+            // Said before it is recorded rather than after. A tenth of
+            // the instalment is a real charge and somebody choosing
+            // the date should see it as they choose.
+            if (late)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.xs),
+                child: Text(
+                  'After the due date — s.107C(9) adds 10% of the '
+                  'instalment.',
+                  key: const ValueKey('pay-late-warning'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            const SizedBox(height: Space.md),
+            TextField(
+              key: const ValueKey('pay-amount'),
+              controller: _amount,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount paid',
+                prefixText: 'RM ',
+                helperText: 'LHDN accepts what it is sent. A short '
+                    'payment is recorded as what it was and the '
+                    'shortfall stays outstanding.',
+                helperMaxLines: 3,
+              ),
+            ),
+            const SizedBox(height: Space.md),
+            TextField(
+              key: const ValueKey('pay-reference'),
+              controller: _reference,
+              decoration: const InputDecoration(
+                labelText: 'Receipt or reference',
+              ),
+            ),
+            const SizedBox(height: Space.md),
+            Text(
+              'A note that money moved. Nothing here posts to the '
+              'ledger — the bank side is a bank transaction like any '
+              'other.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('pay-save'),
+          onPressed: _save,
+          child: const Text('Record'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Where the instalment year stands, above the rows it summarises.
+///
+/// Two things here are separate on purpose. **Overdue** is money that
+/// should already have been sent — the thing to act on today.
+/// **Late** is money that was sent, but after its date, and it carries
+/// its own charge under s.107C(9) whether or not anything is overdue
+/// now. A company can be completely up to date and still owe a penalty
+/// on the three it paid a week behind.
+class _PaidSoFar extends ConsumerWidget {
+  const _PaidSoFar({required this.id});
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return AsyncView(
+      value: ref.watch(taxInstalmentSummaryProvider(id)),
+      onRetry: () => ref.invalidate(taxInstalmentSummaryProvider(id)),
+      skeleton: const CardRowsSkeleton(
+        rows: 2,
+        leading: false,
+        lines: 1,
+        trailing: 1,
+        trailingWidth: 90,
+      ),
+      builder: (s) {
+        if (s.instalments == 0) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.sm),
+              child: Text(
+                '${s.instalmentsPaid} of ${s.instalments} recorded as '
+                'paid — ${Fmt.money(s.paidTotal)} of '
+                '${Fmt.money(s.scheduledTotal)}',
+                key: const ValueKey('instalments-paid-so-far'),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (s.isBehind)
+              _Notice(
+                key: const ValueKey('instalments-overdue'),
+                colour: scheme.errorContainer,
+                onColour: scheme.onErrorContainer,
+                icon: Icons.error_outline,
+                text:
+                    '${s.overdueCount} instalment'
+                    '${s.overdueCount == 1 ? '' : 's'} past due and '
+                    'unrecorded, ${Fmt.money(s.overdueTotal)} in all. '
+                    'Each one carries 10% of itself once it is late.',
+              )
+            else if (s.nextDueOn != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Space.sm),
+                child: Text(
+                  'Next: ${Fmt.money(s.nextDueAmount ?? 0)} on '
+                  '${Fmt.date(s.nextDueOn!)}',
+                  key: const ValueKey('instalments-next-due'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              )
+            else if (s.allPaid)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Space.sm),
+                child: Text(
+                  'Every instalment recorded as paid.',
+                  key: const ValueKey('instalments-all-paid'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            // Separate from overdue, and stated even when nothing is
+            // outstanding: a company entirely up to date still owes
+            // this on whatever it sent behind time.
+            if (s.lateCount > 0)
+              _Notice(
+                key: const ValueKey('instalments-late-penalty'),
+                colour: scheme.surfaceContainerHighest,
+                onColour: scheme.onSurface,
+                icon: Icons.schedule,
+                text:
+                    '${s.lateCount} instalment'
+                    '${s.lateCount == 1 ? ' was' : 's were'} paid after '
+                    'the due date. s.107C(9) adds '
+                    '${Fmt.money(s.latePenalty)} — this says what the '
+                    'charge comes to, not that LHDN has raised it.',
               ),
           ],
         );

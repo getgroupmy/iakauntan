@@ -836,6 +836,12 @@ final taxFilingHistoryProvider =
       return requireRepo(ref).taxFilingHistory();
     });
 
+/// Where the instalment year stands: scheduled, paid, overdue, late.
+final taxInstalmentSummaryProvider = FutureProvider.autoDispose
+    .family<TaxInstalmentSummary, String>((ref, id) {
+      return requireRepo(ref).taxInstalmentSummary(id);
+    });
+
 /// How a first basis period differs, where the estimate says it is one.
 final taxFirstPeriodProvider = FutureProvider.autoDispose
     .family<TaxFirstPeriod, String>((ref, id) {
