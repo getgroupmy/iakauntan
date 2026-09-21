@@ -32,6 +32,8 @@ import 'package:iakauntan/src/features/pos/menu_links_screen.dart';
 import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
 import 'package:iakauntan/src/features/pos/recipes_screen.dart';
+import 'package:iakauntan/src/features/pos/scales_screen.dart';
+import 'package:iakauntan/src/features/pos/stalls_screen.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 import 'package:iakauntan/src/features/stock/landed_cost_screen.dart';
 import 'package:iakauntan/src/features/stock/transfers_screen.dart';
@@ -1906,6 +1908,158 @@ void main() {
       // question is answered either way -- "every outlet" is a real
       // setting, not an absence.
       expect(find.text('every outlet'), findsOneWidget);
+    });
+  });
+
+  group('the stalls screen', () {
+    testWidgets('builds, and a stall with no dishes says so', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const StallsScreen(), [
+          posOutletsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'o1', 'name': 'Medan Selera Kajang'},
+            ],
+          ),
+          posStallsProvider('o1').overrideWith(
+            (ref) async => [
+              {
+                'id': 's1',
+                'code': 'A1',
+                'name': 'Nasi kandar',
+                'operator': 'Encik Rahim',
+                'commission_percent': 12.5000,
+                'item_count': 8,
+                'is_active': true,
+              },
+              {
+                'id': 's2',
+                'code': 'A2',
+                'name': 'Air tebu',
+                'operator': 'Puan Siti',
+                'commission_percent': 10.0000,
+                'item_count': 0,
+                'is_active': false,
+              },
+            ],
+          ),
+        ]),
+      );
+      // 12.5000 is what a numeric column holds and 12.5 is what a
+      // court agreed to.
+      expect(
+        find.text('Encik Rahim · 12.5% commission · 8 dishes'),
+        findsOneWidget,
+      );
+      // A stall that owns no dish settles for nothing however much the
+      // court takes, so the list says it outright rather than "0
+      // dishes".
+      expect(
+        find.text('Puan Siti · 10% commission · nothing on the menu yet'),
+        findsOneWidget,
+      );
+      expect(find.text('Closed'), findsOneWidget);
+      expect(find.byKey(const ValueKey('stall-items-s1')), findsOneWidget);
+      // One court, so no picker to choose between.
+      expect(find.text('Court'), findsNothing);
+    });
+
+    testWidgets('and says a food court is an outlet with stalls in it',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const StallsScreen(), [
+          posOutletsProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('No outlet yet'), findsOneWidget);
+    });
+  });
+
+  group('the scales screen', () {
+    testWidgets('builds, and an item with no scale number says so',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ScalesScreen(), [
+          weighedItemsProvider.overrideWith(
+            (ref) async => [
+              {
+                'item_id': 'i1',
+                'name': 'Ayam bersih',
+                'unit_price': 12.90,
+                'uom_code': 'kg',
+                'scale_plu': '0042',
+              },
+              {
+                'item_id': 'i2',
+                'name': 'Udang sederhana',
+                'unit_price': 38,
+                'uom_code': 'kg',
+              },
+            ],
+          ),
+          scaleFormatsProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('RM 12.90 per kg · scale 0042'), findsOneWidget);
+      // The scale cannot ring up an item it has no number for, so the
+      // row says that outright rather than leaving the line short.
+      expect(
+        find.text('RM 38.00 per kg · no number on the scale'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and a label layout is read back in words', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ScalesScreen(), [
+          weighedItemsProvider.overrideWith((ref) async => []),
+          scaleFormatsProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'f1',
+                'name': 'Avery Berkel',
+                'prefix': '02',
+                'code_digits': 5,
+                'value_digits': 5,
+                'total_digits': 13,
+                'value_kind': 'weight_grams',
+                'is_active': true,
+              },
+              {
+                'id': 'f2',
+                'name': 'Old Digi',
+                'prefix': '21',
+                'code_digits': 4,
+                'value_digits': 5,
+                'total_digits': 12,
+                'value_kind': 'price',
+                'is_active': false,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('Everything here is counted'), findsOneWidget);
+      await tester.tap(find.text('Labels'));
+      await tester.pumpAndSettle();
+
+      // Every make of scale lays the digits out differently, so the
+      // list reads the stored layout back as a sentence somebody can
+      // check against the label in their hand.
+      expect(
+        find.text('Starts 02 · 5 digits of item · 5 of grams · 13 in all'),
+        findsOneWidget,
+      );
+      // A value that is money rather than weight is a different label
+      // entirely, and the same row shape has to say which.
+      expect(
+        find.text('Starts 21 · 4 digits of item · 5 of ringgit · 12 in all'),
+        findsOneWidget,
+      );
+      expect(find.text('Off'), findsOneWidget);
     });
   });
 }
