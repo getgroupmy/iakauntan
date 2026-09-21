@@ -5,8 +5,16 @@ import 'package:go_router/go_router.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/core/widgets.dart';
+import 'package:iakauntan/src/data/models.dart';
+import 'package:iakauntan/src/features/crm/leads_screen.dart';
+import 'package:iakauntan/src/features/crm/pipeline_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
+import 'package:iakauntan/src/features/landing/no_access_screen.dart';
+import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
+import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
+import 'package:iakauntan/src/data/reserved_names_repository.dart';
 
 /// Screens that nothing had ever constructed.
 ///
@@ -155,6 +163,256 @@ void main() {
         ]),
       );
       expect(find.textContaining('Parking at the client'), findsOneWidget);
+    });
+  });
+
+  group('the pipeline board', () {
+    testWidgets('builds with a stage and an opportunity', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PipelineScreen(), [
+          pipelineStagesProvider.overrideWith(
+            (ref) async => [
+              PipelineStage(
+                id: 's1',
+                pipelineId: 'p1',
+                name: 'Qualifying',
+                probability: 30,
+                stageType: 'open',
+                sortOrder: 1,
+              ),
+            ],
+          ),
+          opportunitiesProvider.overrideWith(
+            (ref) async => [
+              Opportunity(
+                id: 'o1',
+                opportunityNo: 'OPP-001',
+                name: 'Kedai Kopi fit-out',
+                stageId: 's1',
+                pipelineId: 'p1',
+                amount: 45000,
+              ),
+            ],
+          ),
+          canWriteProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.textContaining('Qualifying'), findsOneWidget);
+      expect(find.textContaining('Kedai Kopi'), findsOneWidget);
+    });
+  });
+
+  group('the recurring journals screen', () {
+    testWidgets('builds and lists one', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const RecurringScreen(), [
+          recurringJournalsProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'r1',
+                'name': 'Monthly rent accrual',
+                'frequency': 'monthly',
+                'next_run_on': '2026-10-01',
+                'is_active': true,
+              },
+            ],
+          ),
+          canPostProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.textContaining('Monthly rent accrual'), findsOneWidget);
+    });
+
+    testWidgets('and says so when there are none', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const RecurringScreen(), [
+          recurringJournalsProvider.overrideWith((ref) async => []),
+          canPostProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.byType(EmptyState), findsOneWidget);
+    });
+  });
+
+  group('the stock take screen', () {
+    testWidgets('builds and lists an adjustment', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const StockTakeScreen(), [
+          stockAdjustmentsProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'a1',
+                'adjustment_no': 'ADJ-001',
+                'adjustment_date': '2026-09-01',
+                'reason': 'stock_take',
+                'status': 'draft',
+              },
+            ],
+          ),
+          // The screen also asks for warehouses and what is on hand.
+          // Without them it renders an error rather than the list —
+          // which is exactly the sort of thing only constructing it
+          // shows, and the reason the fixture names every provider the
+          // screen watches rather than only the obvious one.
+          //
+          // The on-hand list has to have something IN it. An empty one
+          // short-circuits to "Nothing to count" and the whole body —
+          // count rows, recent counts, all of it — is never built, so
+          // a fixture that returns `[]` asserts nothing about the
+          // screen it names. Cost half an hour to notice.
+          //
+          // No warehouses, deliberately: the screen picks the first
+          // one into `_warehouseId` without a setState, so a non-empty
+          // list leaves the family key the on-hand override is written
+          // against depending on how many times the widget happens to
+          // rebuild. With none, it stays null and the fixture is the
+          // one the screen reads.
+          warehousesProvider.overrideWith((ref) async => []),
+          stockOnHandProvider(null).overrideWith(
+            (ref) async => [
+              {
+                'item_id': 'i1',
+                'code': 'KOPI-01',
+                'name': 'Kopi beans 1kg',
+                'quantity': 12,
+                'average_cost': 38.50,
+              },
+            ],
+          ),
+          canPostProvider.overrideWithValue(true),
+        ]),
+      );
+      // The item it was given, and the system figure it derived from
+      // the row rather than was handed.
+      expect(find.textContaining('Kopi beans 1kg'), findsOneWidget);
+      expect(find.textContaining('system 12'), findsOneWidget);
+      // The history sits below the count form, so it is off-screen on
+      // a phone — `find.text` does not scroll. The key is enough: the
+      // list was BUILT, which is what this file is for.
+      expect(find.byKey(const ValueKey('stock-adjustment-history')),
+          findsOneWidget);
+    });
+
+    testWidgets('and says there is nothing to count when there is not',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const StockTakeScreen(), [
+          stockAdjustmentsProvider.overrideWith((ref) async => []),
+          warehousesProvider.overrideWith((ref) async => []),
+          stockOnHandProvider(null).overrideWith((ref) async => []),
+          canPostProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('Nothing to count'), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-adjustment-history')),
+          findsNothing);
+    });
+  });
+
+  group('the leads list', () {
+    testWidgets('builds and shows a lead under the open filter',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const LeadsScreen(), [
+          // The screen opens on 'open' and asks the family for exactly
+          // that. Overriding a different key leaves the real provider
+          // in place and the test reaches for the network.
+          leadsProvider('open').overrideWith(
+            (ref) async => [
+              {
+                'id': 'l1',
+                'lead_no': 'LEAD-001',
+                'company_name': 'Restoran Seri Malaya',
+                'status': 'contacted',
+                'source': 'walk-in',
+                'estimated_value': 12000,
+              },
+            ],
+          ),
+          canWriteProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('Restoran Seri Malaya'), findsOneWidget);
+      // Built from the row's parts rather than handed over whole.
+      expect(find.textContaining('via walk-in'), findsOneWidget);
+    });
+
+    testWidgets('and says what a lead is for when there are none',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const LeadsScreen(), [
+          leadsProvider('open').overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(false),
+        ]),
+      );
+      expect(find.text('No leads here'), findsOneWidget);
+      // No write right, so no way to add one from the empty state.
+      expect(find.text('Add lead'), findsNothing);
+    });
+  });
+
+  group('the no-access screen', () {
+    testWidgets('names the module the address was pointed at',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const NoAccessScreen(), [
+          workspaceLookupProvider.overrideWith(
+            (ref) async => (
+              host: WorkspaceHost.found,
+              workspace: <String, dynamic>{
+                'module_code': 'pos',
+                'landing_path': '/pos',
+              },
+            ),
+          ),
+          platformModulesProvider.overrideWith(
+            (ref) async => [
+              ModuleInfo(
+                code: 'pos',
+                name: 'Point of sale',
+                isCore: false,
+                monthlyPrice: 49,
+              ),
+            ],
+          ),
+        ]),
+      );
+      expect(
+        find.text('Point of sale is not part of your subscription'),
+        findsOneWidget,
+      );
+      expect(find.text('Sign out'), findsOneWidget);
+    });
+
+    testWidgets('and falls back to a sentence naming nothing when the '
+        'catalogue does not know the code', (tester) async {
+      // The fallback the screen's own comment promises: better a vague
+      // sentence than `property_strata` printed at a shopkeeper.
+      await onAPhone(
+        tester,
+        wrap(const NoAccessScreen(), [
+          workspaceLookupProvider.overrideWith(
+            (ref) async => (
+              host: WorkspaceHost.found,
+              workspace: <String, dynamic>{
+                'module_code': 'property_strata',
+                'landing_path': '/property',
+              },
+            ),
+          ),
+          platformModulesProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('This address is not open to you'), findsOneWidget);
+      expect(find.textContaining('property_strata'), findsNothing);
     });
   });
 }

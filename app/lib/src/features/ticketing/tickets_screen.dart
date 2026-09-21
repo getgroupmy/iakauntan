@@ -61,60 +61,63 @@ class _TicketsScreenState extends ConsumerState<TicketsScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
+          // No inner scroll view: `FilterBar` already scrolls
+          // horizontally, and a second horizontal viewport inside it is
+          // offered unbounded width and asserts in `performResize`
+          // before it draws -- so this bar has never appeared. The Row
+          // alone is what the other fifteen filter bars do.
           child: FilterBar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: 'open', label: Text('Open')),
-                      ButtonSegment(value: 'resolved', label: Text('Resolved')),
-                      ButtonSegment(value: 'closed', label: Text('Closed')),
-                      ButtonSegment(value: 'all', label: Text('All')),
-                    ],
-                    selected: {_q.status ?? 'all'},
-                    onSelectionChanged: (s) => setState(() {
-                      final v = s.first;
-                      _q = _q.copyWith(status: () => v == 'all' ? null : v);
-                    }),
-                  ),
-                  const SizedBox(width: 12),
-                  FilterChip(
-                    label: const Text('Mine'),
-                    selected: _q.onlyMine,
-                    onSelected: (v) => setState(() {
-                      _q = _q.copyWith(onlyMine: v);
-                    }),
-                  ),
-                  const SizedBox(width: 8),
-                  // The one filter worth a colour: a breached ticket is
-                  // a promise already broken, not a ticket that is
-                  // merely late.
-                  FilterChip(
-                    label: const Text('Breached'),
-                    selected: _q.onlyBreached,
-                    selectedColor: context.colors.danger.withValues(alpha: 0.18),
-                    onSelected: (v) => setState(() {
-                      _q = _q.copyWith(onlyBreached: v);
-                    }),
-                  ),
-                  const SizedBox(width: 8),
-                  teams.maybeWhen(
-                    data: (list) => list.isEmpty
-                        ? const SizedBox.shrink()
-                        : _TeamFilter(
-                            teams: list,
-                            selected: _q.teamId,
-                            onChanged: (id) => setState(() {
-                              _q = _q.copyWith(teamId: () => id);
-                            }),
-                          ),
-                    orElse: () => const SizedBox.shrink(),
-                  ),
-                ],
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'open', label: Text('Open')),
+                    ButtonSegment(value: 'resolved', label: Text('Resolved')),
+                    ButtonSegment(value: 'closed', label: Text('Closed')),
+                    ButtonSegment(value: 'all', label: Text('All')),
+                  ],
+                  selected: {_q.status ?? 'all'},
+                  onSelectionChanged: (s) => setState(() {
+                    final v = s.first;
+                    _q = _q.copyWith(status: () => v == 'all' ? null : v);
+                  }),
+                ),
+                const SizedBox(width: 12),
+                FilterChip(
+                  label: const Text('Mine'),
+                  selected: _q.onlyMine,
+                  onSelected: (v) => setState(() {
+                    _q = _q.copyWith(onlyMine: v);
+                  }),
+                ),
+                const SizedBox(width: 8),
+                // The one filter worth a colour: a breached ticket is
+                // a promise already broken, not a ticket that is
+                // merely late.
+                FilterChip(
+                  label: const Text('Breached'),
+                  selected: _q.onlyBreached,
+                  selectedColor: context.colors.danger.withValues(alpha: 0.18),
+                  onSelected: (v) => setState(() {
+                    _q = _q.copyWith(onlyBreached: v);
+                  }),
+                ),
+                const SizedBox(width: 8),
+                teams.maybeWhen(
+                  data: (list) => list.isEmpty
+                      ? const SizedBox.shrink()
+                      : _TeamFilter(
+                          teams: list,
+                          selected: _q.teamId,
+                          onChanged: (id) => setState(() {
+                            _q = _q.copyWith(teamId: () => id);
+                          }),
+                        ),
+                  orElse: () => const SizedBox.shrink(),
+                ),
+              ],
             ),
           ),
         ),
@@ -176,7 +179,10 @@ class _TeamFilter extends StatelessWidget {
         value: selected,
         hint: const Text('All teams'),
         items: [
-          const DropdownMenuItem<String?>(value: null, child: Text('All teams')),
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('All teams'),
+          ),
           for (final t in teams)
             DropdownMenuItem<String?>(
               value: t['id'] as String,
