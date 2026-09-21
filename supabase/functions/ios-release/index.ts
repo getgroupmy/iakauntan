@@ -29,16 +29,22 @@
  *   GITHUB_RELEASE_TOKEN  a fine-grained PAT with Actions: read+write
  *                         on this repository and nothing else
  *   GITHUB_REPOSITORY     "owner/name"
- *   GITHUB_RELEASE_REF    optional; the branch to build, default main
+ *   GITHUB_RELEASE_REF    optional; the ref to build. Unset, this asks
+ *                         GitHub for the repository's OWN default
+ *                         branch rather than assuming one — see
+ *                         `refToBuild`, and the evening that constant
+ *                         cost.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
 import {
+  defaultBranchOf,
   dispatchBody,
   dispatchRefusal,
   laneOf,
   noteOf,
+  refToBuild,
   runsFrom,
   WORKFLOW,
 } from "./dispatch.ts";
@@ -106,7 +112,31 @@ serveFunction("ios-release", async (req) => {
     const lane = laneOf(body.lane);
     if (!lane) return fail("lane must be testflight or appstore", 400);
 
-    const ref = Deno.env.get("GITHUB_RELEASE_REF") || "main";
+    // Which ref to build. `GITHUB_RELEASE_REF` when it is set, and
+    // otherwise whatever GitHub says this repository's default branch
+    // is — asked rather than assumed, because the constant that used to
+    // be here (`main`) was a months-old snapshot of a branch that is
+    // not the default, and the button cheerfully built it.
+    let defaultBranch: string | null = null;
+    if (!Deno.env.get("GITHUB_RELEASE_REF")) {
+      const repoRes = await fetch(`${API}/repos/${repo}`, { headers });
+      if (repoRes.ok) {
+        defaultBranch = defaultBranchOf(await repoRes.json());
+      }
+    }
+
+    const ref = refToBuild(Deno.env.get("GITHUB_RELEASE_REF"), defaultBranch);
+    if (!ref) {
+      // Deliberately not falling back to a guess. Dispatching the wrong
+      // tree wastes twenty-five minutes on a macOS runner and fails in
+      // a way that looks like a signing problem.
+      return fail(
+        "Could not read this repository's default branch from GitHub, " +
+          "so there is no safe ref to build. Set GITHUB_RELEASE_REF in " +
+          "the function secrets to release anyway.",
+        502,
+      );
+    }
     const res = await fetch(
       `${API}/repos/${repo}/actions/workflows/${WORKFLOW}/dispatches`,
       {

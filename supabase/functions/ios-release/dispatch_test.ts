@@ -8,10 +8,12 @@
  */
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
+  defaultBranchOf,
   dispatchBody,
   dispatchRefusal,
   laneOf,
   noteOf,
+  refToBuild,
   runsFrom,
   WORKFLOW,
 } from "./dispatch.ts";
@@ -129,23 +131,34 @@ Deno.test("a 422 about workflow_dispatch names the real cause", () => {
   // The one refusal worth translating. GitHub says the workflow has no
   // `workflow_dispatch` trigger; the file plainly does have one. What
   // it lacks is a copy on the REF BEING DISPATCHED — this function
-  // sends GITHUB_RELEASE_REF, default `main` — so the message sends
-  // somebody to edit a trigger that was never wrong.
+  // sends the repository's default branch, or GITHUB_RELEASE_REF when
+  // it is set — so the message sends somebody to edit a trigger that
+  // was never wrong.
   //
-  // The first version of this said "default branch", repeating the
-  // usual folklore. It is wrong here: this repository's default branch
-  // is not `main`, the workflow was on the default branch the whole
-  // time, and the dispatch still failed because `main` did not have
-  // it. The ref is what matters.
+  // The first version of this said the file must be ON the default
+  // branch, repeating the usual folklore. It is wrong here: this
+  // repository's default branch is not `main`, the workflow was on the
+  // default branch the whole time, and the dispatch still failed
+  // because `main` did not have it. The REF is what matters.
   const said = dispatchRefusal(
     422,
     '{"message":"Workflow does not have \'workflow_dispatch\' trigger"}',
   );
   assertStringIncludes(said, "GITHUB_RELEASE_REF");
   assertStringIncludes(said, WORKFLOW);
-  // And it must NOT blame the default branch, which is the diagnosis
-  // that cost an evening.
-  assertEquals(said.includes("default branch"), false);
+  // It must explain the REF, which is the actual mechanism.
+  assertStringIncludes(said, "ref");
+  // And it must not repeat the folklore that cost an evening — that a
+  // workflow_dispatch is only registered from the default branch.
+  //
+  // This was once `said.includes("default branch") === false`, which
+  // worked while the function assumed `main`. It no longer
+  // distinguishes anything: the function now READS the default branch
+  // and the sentence says so, correctly. The claim being guarded
+  // against is that the file must BE there, so that is what is
+  // asserted.
+  assertEquals(said.includes("must be on"), false);
+  assertEquals(said.includes("only"), false);
   // And it must not simply repeat GitHub's wording, which is the
   // behaviour being replaced.
   assertEquals(said.includes("does not have"), false);
@@ -174,4 +187,43 @@ Deno.test("and anything else keeps its status and whatever was said", () => {
     dispatchRefusal(503, "   "),
     "GitHub refused to start the build (503).",
   );
+});
+
+Deno.test("the default branch is read, not assumed", () => {
+  assertEquals(
+    defaultBranchOf({ default_branch: "claude/iakauntan-accounting-crm-8snun0" }),
+    "claude/iakauntan-accounting-crm-8snun0",
+  );
+  assertEquals(defaultBranchOf({ default_branch: "  main  " }), "main");
+
+  // Null rather than a guess, so the caller refuses instead of
+  // dispatching something plausible.
+  assertEquals(defaultBranchOf({}), null);
+  assertEquals(defaultBranchOf({ default_branch: "" }), null);
+  assertEquals(defaultBranchOf({ default_branch: 7 }), null);
+  assertEquals(defaultBranchOf(null), null);
+});
+
+Deno.test("the ref is the override, else the default branch, else nothing", () => {
+  // The explicit setting wins, because releasing from a specific ref on
+  // purpose has to stay possible.
+  assertEquals(refToBuild("release/1.2", "main"), "release/1.2");
+  assertEquals(refToBuild("  release/1.2  ", "main"), "release/1.2");
+
+  // Unset — including set-to-blank, which is what an emptied secret
+  // looks like — falls through to what GitHub said.
+  assertEquals(refToBuild(undefined, "some-branch"), "some-branch");
+  assertEquals(refToBuild("", "some-branch"), "some-branch");
+  assertEquals(refToBuild("   ", "some-branch"), "some-branch");
+
+  // And with neither, NULL rather than `main`.
+  //
+  // This is the whole point of the change. `GITHUB_RELEASE_REF ||
+  // "main"` is what this used to be, and `main` here is a months-old
+  // snapshot that is not the default branch — so the console button
+  // built a tree with none of the signing fixes in it and failed at
+  // xcodebuild, twenty-five macOS minutes later, looking exactly like
+  // a signing problem.
+  assertEquals(refToBuild(undefined, null), null);
+  assertEquals(refToBuild("", null), null);
 });

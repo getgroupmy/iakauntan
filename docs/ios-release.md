@@ -22,14 +22,23 @@ would have made them died before the upload. The number never repeats
 and never goes backwards, which is the property Apple needs — it is
 just not a count of builds.
 
-**`GITHUB_RELEASE_REF` decides which code gets built, and its default
-is now the wrong answer.** The function sends it as the dispatch `ref`
-and it defaults to `main`, which is a snapshot from the PR #4 merge.
-Everything that made this workflow actually succeed landed after that
-snapshot. So the button currently builds a tree that fails at signing,
-which is the worst shape a bug can take here: the button is fine, the
-secrets are fine, the code being built is old. Set it to the branch
-that is being developed on.
+**The button builds the repository's default branch**, and
+`GITHUB_RELEASE_REF` overrides that when you want a specific ref.
+
+It used to default to `main` when the secret was unset, and that was
+the worst shape a bug can take here: `main` is a months-old snapshot,
+this repository's default branch is not `main`, and so the button —
+working perfectly, with correct secrets — dispatched a tree in which
+none of the signing fixes existed and failed at `xcodebuild`
+twenty-five macOS minutes later, looking exactly like a signing
+problem.
+
+The function now asks GitHub for `default_branch` instead of assuming
+one. Nobody has to set the secret for the button to build the right
+thing, and if the default branch ever moves the function follows it.
+If that lookup fails it refuses rather than guessing, because
+dispatching the wrong tree is expensive and misleading in equal
+measure.
 
 ## The one constraint everything here follows from
 
@@ -118,7 +127,7 @@ Settings → Secrets and variables → Actions.
 | --- | --- |
 | `GITHUB_RELEASE_TOKEN` | a fine-grained PAT with **Actions: read and write** on this repository and nothing else |
 | `GITHUB_REPOSITORY` | `owner/name` |
-| `GITHUB_RELEASE_REF` | optional; the branch to build. Defaults to `main` |
+| `GITHUB_RELEASE_REF` | optional. Unset, the function asks GitHub for the repository's own default branch and builds that |
 
 **The console never sees any of the Apple secrets.** It holds nothing:
 it calls the function with the operator's own session, the function
@@ -142,9 +151,10 @@ without touching this repository.
 ### Part 0 — the workflow has to be on the branch being built
 
 **`.github/workflows/ios-release.yml` must exist on the ref the
-dispatch names.** That ref is `GITHUB_RELEASE_REF`, which defaults to
-`main` — so unless that variable says otherwise, the file has to be on
-`main`, whatever branch it was written on.
+dispatch names.** That ref is `GITHUB_RELEASE_REF` when it is set, and
+otherwise the repository's own default branch, read from the GitHub
+API. So in the ordinary case the file has to be on the default branch
+— which it is, since that is where this work is developed.
 
 Without it, the API answers
 
@@ -204,9 +214,10 @@ new secret**, twice:
 | `GITHUB_RELEASE_TOKEN` | the `github_pat_…` string |
 | `GITHUB_REPOSITORY` | `getgroupmy/iakauntan` |
 
-Optionally a third, `GITHUB_RELEASE_REF`, naming the branch to build.
-It defaults to `main`, so set it if you want releases cut from
-somewhere else.
+Optionally a third, `GITHUB_RELEASE_REF`, naming the ref to build.
+Unset, the function asks GitHub for the repository's own default branch
+and builds that — so set this only to cut a release from somewhere
+else, such as a release branch or a tag.
 
 **1.3 Check.** Reload Mobile Application in the console. "Not set up
 yet" becomes either a list of runs or **Nothing yet** — both mean it is
@@ -448,7 +459,7 @@ taken. Apple's check sees the reference, not the use.
 | Card: "Not set up yet" | Part 1 is not done, or the token expired |
 | Card: "GitHub answered 403" | the token lacks **Actions: read and write**, or an org owner has not approved it |
 | Card: "GitHub answered 404" | `GITHUB_REPOSITORY` is wrong, or the token cannot see that repository |
-| `422 Workflow does not have 'workflow_dispatch' trigger` | Part 0: `ios-release.yml` is not on the ref being dispatched (`GITHUB_RELEASE_REF`, default `main`). The trigger is fine; the file is on another branch |
+| `422 Workflow does not have 'workflow_dispatch' trigger` | Part 0: `ios-release.yml` is not on the ref being dispatched — `GITHUB_RELEASE_REF`, or the repository's default branch when that is unset. The trigger is fine; the file is on another branch |
 | Run summary: "Not set up yet" with a list | those Actions secrets are missing. The run is green because nothing failed |
 | `The profile is for X, not my.iakauntan.iakauntan` | the profile in 2.5 was made against the wrong App ID |
 | `Provisioning profile "…" doesn't include signing certificate "Apple Distribution: …"` | the profile and the `.p12` are from different certificates. A profile names the certificates it accepts, and a certificate made AFTER the profile is not one of them. Regenerate the profile (2.5) selecting the certificate you are actually signing with, and re-upload `IOS_PROVISIONING_PROFILE`. The certificate is not the problem, though it is what the message names |

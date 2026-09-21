@@ -78,22 +78,22 @@ obvious:
 * So the live product tracks THIS BRANCH. Merging to `main` is
   bookkeeping, plus the one thing in the next bullet.
 * **`workflow_dispatch` needs the file on the ref being dispatched.**
-  `supabase/functions/ios-release` sends `ref: GITHUB_RELEASE_REF`,
-  default `main`, so `ios-release.yml` had to reach `main` before the
-  console's button could start anything — not because `main` is the
-  default branch, which it is not.
-* **And that default is now actively wrong, rather than merely
-  unset.** `main` is a snapshot of this branch as it stood at the PR #4
-  merge, and everything that made the iOS build actually work landed
-  AFTER it: the pods `xcconfig` fix, `ITSAppUsesNonExemptEncryption`,
-  the purpose strings. Pressing the console button today dispatches
-  `main`, builds that older tree, and fails at signing with the forty
-  pod errors that were fixed hours ago — a button that worked, against
-  code that does not, which is the hardest version of this to diagnose.
-  **Set `GITHUB_RELEASE_REF` to `claude/iakauntan-accounting-crm-8snun0`**
-  in Supabase → Edge Functions → Secrets. Dispatching the API directly
-  with an explicit `ref` is unaffected, which is how builds 4 and 5
-  were made.
+  `supabase/functions/ios-release` names a ref, and GitHub looks for
+  the workflow file THERE — not on the default branch because it is the
+  default branch, which is the usual folklore and is not what bit this
+  repository.
+* **That is why the console button no longer assumes `main`.** It
+  used to dispatch `GITHUB_RELEASE_REF || "main"`, and `main` is a
+  snapshot of this branch at the PR #4 merge — so the button built a
+  tree without the pods `xcconfig` fix, `ITSAppUsesNonExemptEncryption`
+  or the purpose strings, and failed at signing with errors fixed hours
+  earlier. A button that worked, against code that did not.
+
+  `ios-release` now reads `default_branch` from the GitHub API and
+  builds that, with `GITHUB_RELEASE_REF` left as an override for
+  releasing from a specific ref on purpose. **The secret no longer
+  needs setting**, and if the default branch moves the function follows
+  it. It refuses rather than guessing if the lookup fails.
 
 **A previous version of this file got this exactly backwards** and
 said the migrations were unapplied, reasoning from "the job runs on

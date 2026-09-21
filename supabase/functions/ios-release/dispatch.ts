@@ -75,6 +75,44 @@ export interface RunSummary {
  * work", and forwarding an upstream shape wholesale is how a console
  * ends up depending on fields nobody chose.
  */
+/**
+ * The repository's own default branch, out of a `GET /repos/{repo}`.
+ *
+ * Null when the payload does not carry one, so the caller can refuse
+ * rather than guess.
+ */
+export function defaultBranchOf(payload: unknown): string | null {
+  const branch = (payload as { default_branch?: unknown })?.default_branch;
+  return typeof branch === "string" && branch.trim() ? branch.trim() : null;
+}
+
+/**
+ * Which ref to build.
+ *
+ * `GITHUB_RELEASE_REF` when somebody has set it, and otherwise the
+ * repository's ACTUAL default branch — read from the API, not assumed.
+ *
+ * This used to be `GITHUB_RELEASE_REF || "main"`, and that constant was
+ * wrong in the most expensive way available. This repository's default
+ * branch is not `main`; `main` is a months-old snapshot. So the console
+ * button dispatched a tree in which none of the signing fixes existed,
+ * and failed at `xcodebuild` with errors that had been fixed hours
+ * earlier — a button that worked perfectly, against code that did not.
+ *
+ * Asking GitHub removes the guess and the secret at once: nobody has to
+ * set `GITHUB_RELEASE_REF` for the button to build the right thing, and
+ * if the default branch ever moves the function follows it without an
+ * edit. The override stays for releasing from somewhere else on purpose.
+ */
+export function refToBuild(
+  configured: string | undefined | null,
+  defaultBranch: string | null,
+): string | null {
+  const explicit = (configured ?? "").trim();
+  if (explicit) return explicit;
+  return defaultBranch;
+}
+
 export function runsFrom(payload: unknown): RunSummary[] {
   const runs = (payload as { workflow_runs?: unknown })?.workflow_runs;
   if (!Array.isArray(runs)) return [];
@@ -105,10 +143,9 @@ export function runsFrom(payload: unknown): RunSummary[] {
  *     422 {"message":"Workflow does not have 'workflow_dispatch' trigger"}
  *
  * The workflow DOES have one. What it does not have is a copy on the
- * REF BEING DISPATCHED. A dispatch names a ref, this function sends
- * `GITHUB_RELEASE_REF` (default `main`), and GitHub looks for the
- * workflow file on that ref — so a file living on some other branch
- * produces this, however correct its trigger is.
+ * REF BEING DISPATCHED. A dispatch names a ref, and GitHub looks for
+ * the workflow file on that ref — so a file living on some other
+ * branch produces this, however correct its trigger is.
  *
  * Said carefully because the obvious reading is wrong twice over.
  * "It must be on the default branch" is the usual folklore and was
@@ -125,9 +162,10 @@ export function dispatchRefusal(status: number, said: string): string {
   if (status === 422 && said.includes("workflow_dispatch")) {
     return "GitHub will not start this build because " +
       `${WORKFLOW} is not on the branch it was asked to build. ` +
-      "A dispatch names a ref — GITHUB_RELEASE_REF, which defaults to " +
-      "`main` — and the workflow file has to exist THERE, whatever " +
-      "branch it was written on. Merge it to that branch, or point " +
+      "A dispatch names a ref — this function uses the repository's " +
+      "own default branch, or GITHUB_RELEASE_REF when that is set — " +
+      "and the workflow file has to exist THERE, whatever branch it " +
+      "was written on. Merge it to that branch, or point " +
       "GITHUB_RELEASE_REF at the branch that has it. See " +
       "docs/ios-release.md.";
   }
