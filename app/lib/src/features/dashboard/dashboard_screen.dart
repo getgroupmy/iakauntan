@@ -473,6 +473,63 @@ List<Widget> moduleTiles(BuildContext context, String code,
     ]);
   }
 
+  if (code == 'accounting' && all.containsKey('tax')) {
+    final t = block('tax');
+    final overdue = n(t, 'overdue');
+    final soon = n(t, 'due_soon');
+    final behind = n(t, 'instalments_overdue');
+    // Date columns arrive as a string or not at all — the server
+    // returns null when nothing is coming.
+    final nextRaw = t['next_due'];
+    final next = nextRaw == null ? null : DateTime.tryParse('$nextRaw');
+    final instRaw = t['instalment_next_due'];
+    final instNext =
+        instRaw == null ? null : DateTime.tryParse('$instRaw');
+    final form = t['next_form']?.toString();
+    tiles.addAll([
+      StatTile(
+        label: 'Returns past their deadline',
+        value: overdue.toStringAsFixed(0),
+        // A late return is a penalty under s.112 and a CP204 nobody
+        // furnished means LHDN raises its own estimate, so this earns
+        // the same alarm the Registrar's tile gets.
+        caption: overdue > 0 ? 'File these first' : 'Nothing is late',
+        icon: Icons.receipt_long_outlined,
+        accent: overdue > 0 ? context.colors.danger : context.colors.success,
+        onTap: () => context.go('/tax-calendar'),
+      ),
+      StatTile(
+        label: 'Returns due within a month',
+        value: soon.toStringAsFixed(0),
+        // The form and the date, not a count of days. "Form C on
+        // 31 January" is what goes in the diary.
+        caption: next == null
+            ? 'Nothing in the next month'
+            : form == null
+            ? 'Next on ${Fmt.date(next)}'
+            : 'Next: $form on ${Fmt.date(next)}',
+        icon: Icons.event_note_outlined,
+        onTap: () => context.go('/tax-calendar'),
+      ),
+      StatTile(
+        label: 'Instalments not paid',
+        value: behind.toStringAsFixed(0),
+        // A different clock from the returns above, and deliberately
+        // its own tile: a company can be entirely up to date on its
+        // returns and behind on its CP204, and each instalment missed
+        // carries a tenth of itself.
+        caption: behind > 0
+            ? 'Each one adds 10% of itself'
+            : instNext == null
+            ? 'None outstanding'
+            : 'Next on ${Fmt.date(instNext)}',
+        icon: Icons.payments_outlined,
+        accent: behind > 0 ? context.colors.danger : null,
+        onTap: () => context.go('/tax-calendar'),
+      ),
+    ]);
+  }
+
   if (code == 'pos' && all.containsKey('pos')) {
     final p = block('pos');
     tiles.addAll([
