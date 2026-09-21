@@ -1,0 +1,55 @@
+-- =====================================================================
+-- The table grant `0660` did not write either
+--
+--     FAIL a policy without the privilege to reach it:
+--     feedback_attachments (DELETE), (INSERT), (SELECT)
+--
+-- `supabase/tests/table_grants.sql` says it in its own header better
+-- than I can: a row policy is TWO things standing together — a table
+-- privilege that lets PostgREST ask about the table at all, and a
+-- policy that decides which rows come back. Miss the first and the
+-- second never runs. The API answers `permission denied for table
+-- feedback_attachments` and the careful policy underneath it is
+-- decoration.
+--
+-- `0460` granted `feedback_reports` on the line after its policies.
+-- `0660` wrote the policies and not the grant.
+--
+-- ---------------------------------------------------------------------
+-- This is the third correction to one migration, and they are one
+-- mistake
+--
+-- `0661` was a missing GRANT on two `app` functions. This is a missing
+-- GRANT on the table. Both are the same error: **writing the rule that
+-- decides access without the permission that makes the rule
+-- reachable.** A policy is not a grant. A SECURITY DEFINER function is
+-- not a grant. Neither gives anybody the right to get as far as being
+-- judged by it.
+--
+-- What makes it worth three files rather than one is that each failed
+-- differently and only one of them was obvious:
+--
+--   * the function grant failed LOUDLY and in the wrong place — it shut
+--     the `mail` bucket, which has nothing to do with feedback;
+--   * this one fails only through PostgREST, so every test running as
+--     the superuser passes and the feature is broken for exactly the
+--     people who use it;
+--   * and the first correction, `maintenance_mode`, was not a
+--     permission at all.
+--
+-- The lesson recorded rather than the fix: after adding a table with
+-- RLS, or a function a policy calls, run the WHOLE suite —
+-- `supabase/tests/run_locally.sh`, two minutes — rather than the new
+-- file and the Python gates. All three of these were waiting in tests
+-- that already existed, and each cost a round trip through CI because
+-- I ran the new assertions and not the old ones.
+--
+-- SELECT, INSERT and DELETE, which is exactly what the three policies
+-- in `0660` cover. No UPDATE: there is nothing on an attachment row
+-- worth changing. A file is added or it is removed, and `0660` has no
+-- update policy, so granting one would be a privilege with no rule
+-- behind it — the mirror image of the mistake above.
+-- =====================================================================
+
+grant select, insert, delete on public.feedback_attachments
+  to authenticated;

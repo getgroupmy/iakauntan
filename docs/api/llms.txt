@@ -6,8 +6,8 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0661` (the highest applied migration).
-741 functions and 348 readable tables, of which
+Schema version `0662` (the highest applied migration).
+741 functions and 349 readable tables, of which
 276 functions only read.
 
 Generated from the catalog by
@@ -1026,6 +1026,7 @@ inconsistent.
 - `expense_claims`
 - `expense_lines`
 - `expenses`
+- `feedback_attachments`
 - `feedback_reports`
 - `firm_members`
 - `firms`
