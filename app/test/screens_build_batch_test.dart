@@ -21,11 +21,13 @@ import 'package:iakauntan/src/features/legal/matters_screen.dart';
 import 'package:iakauntan/src/features/profile/profile_screen.dart';
 import 'package:iakauntan/src/features/property/property_screen.dart';
 import 'package:iakauntan/src/features/secretarial/people_screen.dart';
+import 'package:iakauntan/src/features/settings/email_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/reports/cash_forecast_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
 import 'package:iakauntan/src/data/my_profile_repository.dart';
+import 'package:iakauntan/src/features/pos/delivery_setup_screen.dart';
 import 'package:iakauntan/src/features/pos/menu_links_screen.dart';
 import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
@@ -1743,6 +1745,167 @@ void main() {
         find.text('The bank stays in credit the whole way'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('the email screen', () {
+    testWidgets('builds its settings tab, off until somebody turns it on',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const EmailScreen(), [
+          emailSettingsProvider.overrideWith(
+            (ref) async => {
+              'is_enabled': false,
+              'from_name': 'Kedai Kek Ros',
+              'reply_to': 'hello@kedaikekros.my',
+              'reminder_min_amount': 50,
+              'reminder_days': [7, 14, 30],
+              'sales_digest_to': '',
+            },
+          ),
+          emailOutboxProvider('all').overrideWith((ref) async => []),
+          canAdminProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('Sending'), findsOneWidget);
+      expect(find.text('Kedai Kek Ros'), findsOneWidget);
+      // A postgres array joined into the box somebody types into.
+      expect(find.text('7, 14, 30'), findsOneWidget);
+    });
+
+    testWidgets('and the outbox says why a message failed', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const EmailScreen(), [
+          emailSettingsProvider.overrideWith((ref) async => null),
+          emailOutboxProvider('all').overrideWith(
+            (ref) async => [
+              {
+                'id': 'm1',
+                'status': 'failed',
+                'subject': 'Invoice INV-0042',
+                'to_email': 'akaun@pelanggan.my',
+                'queued_at': '2026-09-20T09:15:00Z',
+                'attempts': 3,
+                'last_error': 'No provider key is configured.',
+                'sales_documents': {'doc_no': 'INV-0042'},
+              },
+              {
+                'id': 'm2',
+                'status': 'sent',
+                'subject': 'Statement, August',
+                'to_email': 'akaun@pelanggan.my',
+                'queued_at': '2026-09-19T09:15:00Z',
+                'attempts': 1,
+              },
+            ],
+          ),
+          canAdminProvider.overrideWithValue(true),
+        ]),
+      );
+      // The second tab is not built until it is asked for.
+      await tester.tap(find.text('Outbox'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invoice INV-0042'), findsOneWidget);
+      // The reason, in red, rather than a status nobody can act on.
+      expect(find.text('No provider key is configured.'), findsOneWidget);
+      // Three attempts is worth saying; one is not, so that row's line
+      // stops at the date.
+      expect(find.textContaining('3 attempts'), findsOneWidget);
+      expect(find.textContaining('1 attempts'), findsNothing);
+      // Only a failed or queued message offers a Send.
+      expect(find.text('Send'), findsOneWidget);
+    });
+  });
+
+  group('the zones and drivers screen', () {
+    testWidgets('builds, and a zone with no postcodes is the catch-all',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const DeliverySetupScreen(), [
+          posDeliveryZonesProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'z1',
+                'name': 'Kajang town',
+                'is_active': true,
+                'fee': 6,
+                'min_order': 20,
+                'free_above': 80,
+                'postcodes': ['43000', '43300'],
+              },
+              {
+                'id': 'z2',
+                'name': 'Everywhere else',
+                'is_active': true,
+                'fee': 0,
+                'min_order': 0,
+                'postcodes': [],
+              },
+            ],
+          ),
+          posDriversProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(
+        find.text('RM 6.00 · over RM 20.00 · free above RM 80.00'),
+        findsOneWidget,
+      );
+      expect(find.text('43000, 43300'), findsOneWidget);
+      // No fee at all is "Free", not "RM 0.00", and no postcodes means
+      // the zone the shop falls back to — said in words, because an
+      // empty line reads as an unfinished zone.
+      expect(find.text('Free'), findsOneWidget);
+      expect(
+        find.text('Anywhere not named by another zone'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and a driver says which outlet, always', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const DeliverySetupScreen(), [
+          posDeliveryZonesProvider.overrideWith((ref) async => []),
+          posDriversProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'd1',
+                'name': 'Hafiz',
+                'is_active': true,
+                'phone': '012-9876543',
+                'vehicle': 'Motorcycle',
+                'plate_no': 'WXY 1234',
+                'outlet_name': 'Jalan Ipoh',
+                'out_now': 2,
+              },
+              {
+                'id': 'd2',
+                'name': 'Suresh',
+                'is_active': false,
+                'out_now': 0,
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('No zones yet'), findsOneWidget);
+      await tester.tap(find.text('Drivers'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hafiz'), findsOneWidget);
+      expect(
+        find.text('012-9876543 · Motorcycle · WXY 1234 · '
+            'Jalan Ipoh only · 2 out now'),
+        findsOneWidget,
+      );
+      // Everything else about this one is missing, but the outlet
+      // question is answered either way -- "every outlet" is a real
+      // setting, not an absence.
+      expect(find.text('every outlet'), findsOneWidget);
     });
   });
 }
