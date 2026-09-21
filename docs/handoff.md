@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `b635b4b0` |
-| CI | green and APPLIED through run 2018 (`a4e92535`) — **every migration to `0674` is live** |
-| Migrations | `0674` is the highest (the tax tile on the home screen) |
+| Head at time of writing | `09f2c4f6` |
+| CI | green through run 2026 (`ce3630fe`); 2027 and 2028 were running when this was written — **every migration to `0674` is live** |
+| Migrations | `0674` is the highest (the tax tile on the home screen). **Nothing since `b635b4b0` touches the database** — the eight commits after it are Dart, tests and gates only |
 | Live database | **level with the branch.** Nothing is waiting |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 348 SQL assertion files, 42 Python gates (+8 gate self-tests), 5,331 Flutter tests, 32 deno tests |
-| API description | 766 functions, 364 tables, version `0674` |
+| Gates | 348 SQL assertion files, **44 Python gates (+10 gate self-tests)**, **5,383 Flutter tests**, 32 deno tests |
+| API description | 766 functions, 364 tables, version `0674` — unchanged, because no migration has been added |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
@@ -144,6 +144,15 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `09f2c4f` | People and profile built; fifteen left, two of which cannot be |
+| `b1c0773` | Six more screens built; the backlog is down to seventeen |
+| `df99117` | **Fix: `Uri.base.origin` throws on a phone, and four screens called it** |
+| `ce3630f` | Four more screens built, and the sentences they assemble |
+| `5ba9f97` | **Fix: a matter number went 37 pixels off a phone, and two gates let it** |
+| `462926c` | Correct the last commit: the tickets filter bar was never broken |
+| `615aeec` | **Fix: the leads filter bar had never drawn**, and a gate for the shape |
+| `bb6505d` | **Fix: the expenses app bar ran off a phone** |
+| `025d87c` | A screen nothing builds is a screen nobody has run — `check_screens_built.py` |
 | `b635b4b` | The tax stack, walked as one year — cross-layer assertions |
 | `4c441a7` | The five tax screens, actually built |
 | `a4e9253` | The handoff, through the tax tile |
@@ -526,6 +535,53 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
+0a. **The screens-built backlog — thirteen left, and it is paying.**
+   `scripts/check_screens_built.py` requires every `*Screen` under
+   `app/lib/src/features` to be constructed by at least one test. It
+   went in with **thirty-eight** exemptions, explicitly a backlog
+   rather than a decision, and is now at **fifteen** — of which
+   `_PreviewScreen` and `_RequestAccessScreen` are private classes
+   that no test outside their own library can name, so **thirteen is
+   the real number and fifteen is where the count stops.**
+
+   Still listed: CashFlow, DeliverySetup, Email, Filing, HrSetup,
+   Onboarding, PayrollRun, Payroll, Recipes, Scales, Stalls, Ticket,
+   Transfers.
+
+   **Putting a screen on a surface for the first time found four real
+   defects in four batches**, none of which any gate or the analyser
+   could see:
+
+   - the expenses app bar overflowed by 104px at 412 wide;
+   - the leads filter bar put a horizontal `ListView` inside
+     `FilterBar`, which is a horizontal scroll view — it threw in
+     `performResize` on every build and had **never once drawn**;
+   - a matter number and its status chip overflowed by 37px;
+   - `menu_links_screen.dart` called `Uri.base.origin` inside `build`,
+     which throws on every native run, so the published-menus list was
+     a column of grey error boxes on the phone and perfect in a
+     browser.
+
+   `app/test/screens_build_batch_test.dart` is the pattern. Build at
+   **412x900** — an overflow is a test failure needing no assertion —
+   put one realistic answer through **every** provider the screen
+   watches, and assert something the screen DERIVED rather than was
+   handed.
+
+   Three traps, each paid for once:
+
+   - **An empty list can build nothing.** `StockTakeScreen` with an
+     empty on-hand list short-circuits to "Nothing to count" and never
+     builds its body, so a fixture returning `[]` asserts nothing
+     about the screen it names.
+   - **Get the family key right.** `PropertyScreen` reads
+     `propertySitesProvider('strata')`, not `(null)`, when only one
+     property module is held — the filter is not shown and the list is
+     narrowed silently. Override the wrong key and the real provider
+     is left in place, reaching for the network.
+   - **A missing provider renders an error view, not a blank.** Name
+     every one, including the ones a screen only reads for a name.
+
 0. ~~The skeleton pass.~~ **Finished and GATED — do not reopen it.**
    All 309 `AsyncView` call sites now account for themselves:
    `skeleton:`, or an explicit `loading:`, or a named exemption with a
@@ -675,13 +731,30 @@ cd app && flutter test --concurrency=2 --reporter failures-only
 flutter analyze --fatal-infos --fatal-warnings
 ```
 
-### All fifty `check_*.py` files — run every one, every time
+### All fifty-four `check_*.py` files — run every one, every time
 
-**Forty-two are gates; eight are gates' own assertions.** The loop
-below runs all fifty, which is what you want: a gate that is wrong is
-worse than no gate, because it is believed. The figure was previously
-written here as "forty-eight", which was the total then and read like
-a count of gates — it was not.
+**Forty-four are gates; ten are gates' own assertions.** The loop
+below runs all fifty-four, which is what you want: a gate that is
+wrong is worse than no gate, because it is believed. The figure was
+once written here as "forty-eight", which was the total then and read
+like a count of gates — it was not.
+
+Two of the forty-four are new and both were written because a defect
+had already shipped through the gap:
+
+- `check_nested_scrollables.py` — an EXPANDING viewport inside a
+  scroll view on the axis it scrolls is offered infinity and asserts
+  in `performResize` before it draws. `ListView`, `GridView`,
+  `CustomScrollView`, `PageView`, `ReorderableListView`,
+  `NestedScrollView` and `TabBarView` expand;
+  `SingleChildScrollView` sizes to its child and does NOT, so it is
+  allowed. Every entry in that table was settled by building the
+  widget and watching whether it threw, after the first version of
+  the gate accused a screen that was fine.
+- `check_web_only_apis.py` — `Uri.base.origin` throws on any scheme
+  but http and https, and `Uri.base` is a `file:` URI on every native
+  platform. `Uri.base.host` and the rest are fine; only `origin`
+  throws. `kIsWeb` within three lines above counts as a guard.
 
 ```bash
 for f in scripts/check_*.py; do
@@ -731,14 +804,45 @@ After any migration: `python3 scripts/generate_api_description.py "$DB"`.
 
 Each of these was paid for once. None is obvious from the code.
 
+**Not every nested scroll view is broken, and I said four of them
+were.** A `ListView` inside a same-axis scroll view throws; a
+`SingleChildScrollView` inside one does not — it is built on
+`_RenderSingleChildViewport`, which sizes to its child rather than to
+its constraints, so it draws, and the outer keeps scrolling. I wrote a
+commit message, a code comment and a CI step name saying
+`tickets_screen.dart` had "never drawn", and it had drawn perfectly
+well. What caught it was writing the test EXPECTING it to fail against
+the unfixed screen and watching it pass. `462926c6` is the correction.
+**Establish which it is by pumping the two shapes and looking**, not
+by reasoning about render objects — it takes two minutes.
+
+**`Uri.base.origin` throws; it does not give a wrong answer.**
+`Bad state: Origin is only applicable schemes http and https`, and
+`Uri.base` is a `file:` URI on Android, iOS, macOS and Windows — so an
+unguarded call is a crash on every native run and is invisible to a
+web build, which is where this app is mostly looked at. Four had
+shipped. `shareOrigin()` in `core/safe_link.dart` is the answer and
+`check_web_only_apis.py` is the gate. A widget test catches it for
+free, because `Uri.base` is a `file:` URI in the test harness too.
+
+**`check_narrow_rows.py` measures two things as zero**, and it is not
+fixable inside the estimate: a bare `Text(matter.matterNo)` (no
+quotes, no `$`, so neither a literal nor an interpolation) and a
+trailing `Column` whose widest line is a bare `Text`. Counting the
+bare expression as an unknown was written, run and reverted — it does
+not close the gap, because the number that is wrong is the ROOM, not
+the want. `docs/widget-tests.md` carries the full account. The thing
+that catches it is building the screen at 412px.
+
 **A screen nothing constructs cannot be known to build.** Five were
 written in one stretch with a full set of tests underneath them, every
 one of those tests on the MODELS, and nothing anywhere called any of
 the five constructors. They did build; that is luck rather than
 evidence. `scripts/check_screens_built.py` now refuses a new screen
-that no test puts on screen, and its thirty-eight exemptions are a
-BACKLOG that should shrink — unlike `check_async_skeletons.py`'s
-seven, which are a decision.
+that no test puts on screen, and its exemptions are a BACKLOG that
+should shrink — unlike `check_async_skeletons.py`'s seven, which are a
+decision. Thirty-eight when it went in, fifteen now, and see "Open
+work" above for what putting those twenty-three on a surface found.
 
 **Do not run the DB gates while `run_locally.sh` is rebuilding the same
 database.** It drops and rebuilds the local cluster's schema, so
