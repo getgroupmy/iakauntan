@@ -29,6 +29,7 @@ void main() {
     String? computation,
     String? estimate,
     DateTime? efiling,
+    String status = 'not_started',
   }) => TaxFiling(
     filingType: type,
     name: 'Return of a company',
@@ -41,6 +42,7 @@ void main() {
     efilingDueDate: efiling,
     daysLeft: daysLeft,
     isOverdue: overdue,
+    status: status,
     description: null,
     fiscalYearId: 'fy1',
     computationId: computation,
@@ -86,6 +88,125 @@ void main() {
     });
   });
 
+  group('started is not done', () {
+    test('an obligation nobody has touched is not started', () {
+      expect(filing().isStarted, isFalse);
+    });
+
+    test('one somebody has opened is', () {
+      // And it is still ON the list — `0669` only takes `filed` and
+      // `not_applicable` off, so this state exists precisely to be
+      // shown beside a deadline that is still owed.
+      expect(filing(status: 'in_preparation').isStarted, isTrue);
+    });
+
+    test('and a filed one never reaches the screen at all', () {
+      // The server does not return it. Asserting the predicate anyway
+      // says what `isStarted` MEANS: begun and still owed, not "has
+      // a record against it".
+      expect(filing(status: 'filed').isStarted, isFalse);
+      expect(filing(status: 'not_applicable').isStarted, isFalse);
+    });
+  });
+
+  group('what was recorded', () {
+    TaxFilingRecord record({
+      String status = 'filed',
+      bool late = false,
+      String? notes,
+    }) => TaxFilingRecord(
+      id: 'r1',
+      filingType: 'form_c',
+      name: 'Return of a company',
+      formLabel: 'C',
+      periodFrom: DateTime(2025, 7, 1),
+      periodTo: DateTime(2026, 6, 30),
+      yearOfAssessment: 2026,
+      dueDate: DateTime(2027, 1, 31),
+      status: status,
+      filedOn: status == 'filed' ? DateTime(2027, 1, 20) : null,
+      reference: 'ACK-1',
+      notes: notes,
+      wasLate: late,
+    );
+
+    test('filed and dismissed are different states', () {
+      expect(record().isFiled, isTrue);
+      expect(record().isDismissed, isFalse);
+      expect(record(status: 'not_applicable').isDismissed, isTrue);
+      expect(record(status: 'not_applicable').isFiled, isFalse);
+    });
+
+    test('and an unrecognised state is neither', () {
+      // Rather than falling through to "filed", which would put a
+      // green tick beside an obligation nobody has met.
+      expect(record(status: 'something_else').isFiled, isFalse);
+      expect(record(status: 'something_else').isDismissed, isFalse);
+    });
+
+    test('every recorded figure lands in its own field', () {
+      final r = TaxFilingRecord.fromMap(const {
+        'filing_id': 'rec-1',
+        'filing_type': 'cp58',
+        'filing_name': 'Statement of incentives',
+        'form_label': 'CP58',
+        'period_from': '2026-01-01',
+        'period_to': '2026-12-31',
+        'year_of_assessment': 2026,
+        'due_date': '2027-03-31',
+        'status': 'not_applicable',
+        'filed_on': null,
+        'reference': null,
+        'notes': 'No agents were paid anything.',
+        'was_late': false,
+      });
+
+      expect(r.id, 'rec-1');
+      expect(r.filingType, 'cp58');
+      expect(r.formLabel, 'CP58');
+      expect(r.periodFrom, DateTime(2026, 1, 1));
+      expect(r.periodTo, DateTime(2026, 12, 31));
+      expect(r.yearOfAssessment, 2026);
+      expect(r.dueDate, DateTime(2027, 3, 31));
+      expect(r.status, 'not_applicable');
+      expect(r.filedOn, isNull);
+      expect(r.notes, 'No agents were paid anything.');
+      expect(r.isDismissed, isTrue);
+      expect(r.wasLate, isFalse);
+    });
+
+    test('late comes from the server rather than being recomputed', () {
+      // The two dates sit in different columns of the same row and the
+      // comparison is `filed_on > due_date` in SQL. Recomputing it here
+      // would be a second opinion that can disagree with the one the
+      // penalty is assessed on.
+      final r = TaxFilingRecord.fromMap(const {
+        'filing_id': 'rec-2',
+        'filing_type': 'form_c',
+        'form_label': 'C',
+        'due_date': '2027-01-31',
+        'filed_on': '2027-03-05',
+        'status': 'filed',
+        'was_late': true,
+        'year_of_assessment': 2026,
+      });
+      expect(r.wasLate, isTrue);
+      expect(r.isFiled, isTrue);
+    });
+
+    test('a row that says nothing about lateness is not late', () {
+      final r = TaxFilingRecord.fromMap(const {
+        'filing_id': 'rec-3',
+        'filing_type': 'form_c',
+        'status': 'filed',
+        'year_of_assessment': 2026,
+      });
+      expect(r.wasLate, isFalse);
+      expect(r.dueDate, isNull);
+      expect(r.filedOn, isNull);
+    });
+  });
+
   group('reading the server back', () {
     test('every field lands in its own place', () {
       // Different values in every position, so a transposition between
@@ -124,6 +245,25 @@ void main() {
       expect(f.estimateId, 'est-1');
       expect(f.hasWorking, isTrue);
       expect(f.isImminent, isFalse);
+      expect(f.status, 'not_started');
+      expect(f.isStarted, isFalse);
+      expect(f.filingId, isNull);
+    });
+
+    test('a started obligation comes back saying so', () {
+      final f = TaxFiling.fromMap(const {
+        'filing_type': 'form_c',
+        'form_label': 'C',
+        'due_date': '2027-01-31',
+        'days_left': 132,
+        'is_overdue': false,
+        'year_of_assessment': 2026,
+        'status': 'in_preparation',
+        'filing_id': 'rec-9',
+      });
+      expect(f.status, 'in_preparation');
+      expect(f.isStarted, isTrue);
+      expect(f.filingId, 'rec-9');
     });
 
     test('a form with no e-filing concession has none', () {

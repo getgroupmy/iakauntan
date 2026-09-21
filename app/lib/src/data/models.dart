@@ -2281,12 +2281,14 @@ class TaxFiling {
     required this.dueDate,
     required this.daysLeft,
     required this.isOverdue,
+    required this.status,
     this.statuteRef,
     this.efilingDueDate,
     this.description,
     this.fiscalYearId,
     this.computationId,
     this.estimateId,
+    this.filingId,
   });
 
   final String filingType;
@@ -2310,6 +2312,12 @@ class TaxFiling {
   final bool isOverdue;
   final String? description;
 
+  /// `not_started`, or `in_preparation` where somebody has begun it.
+  /// `filed` and `not_applicable` never appear here — `0669` takes
+  /// those off the list, which is the whole point of recording one.
+  final String status;
+  final String? filingId;
+
   final String? fiscalYearId;
 
   /// The working already opened for this period, where there is one.
@@ -2326,6 +2334,12 @@ class TaxFiling {
   /// Whether the work behind it has been started at all.
   bool get hasWorking => computationId != null || estimateId != null;
 
+  /// Somebody has said they are on it. NOT that it is done: a Form C
+  /// in preparation is still on the list, and a screen that treated
+  /// the two the same would clear a deadline on the intention to meet
+  /// it.
+  bool get isStarted => status == 'in_preparation';
+
   factory TaxFiling.fromMap(Map<String, dynamic> j) => TaxFiling(
     filingType: j['filing_type']?.toString() ?? '',
     name: j['filing_name']?.toString() ?? '',
@@ -2338,10 +2352,81 @@ class TaxFiling {
     efilingDueDate: Fmt.parseDate(j['efiling_due_date']),
     daysLeft: Fmt.toInt(j['days_left']),
     isOverdue: j['is_overdue'] == true,
+    status: j['status']?.toString() ?? 'not_started',
     description: j['description']?.toString(),
     fiscalYearId: j['fiscal_year_id']?.toString(),
     computationId: j['computation_id']?.toString(),
     estimateId: j['estimate_id']?.toString(),
+    filingId: j['filing_id']?.toString(),
+  );
+}
+
+/// What somebody recorded against an obligation, after the fact.
+///
+/// The counterpart to [TaxFiling]: that is what is still owed, this is
+/// what was done about one. Nothing disappears when a deadline comes
+/// off the calendar — it moves here, including a dismissal and the
+/// reason given for it.
+class TaxFilingRecord {
+  TaxFilingRecord({
+    required this.id,
+    required this.filingType,
+    required this.name,
+    required this.formLabel,
+    required this.periodTo,
+    required this.yearOfAssessment,
+    required this.status,
+    required this.wasLate,
+    this.periodFrom,
+    this.dueDate,
+    this.filedOn,
+    this.reference,
+    this.notes,
+  });
+
+  final String id;
+  final String filingType;
+  final String name;
+  final String formLabel;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+  final int yearOfAssessment;
+
+  final DateTime? dueDate;
+  final String status;
+  final DateTime? filedOn;
+
+  /// LHDN's acknowledgement, which is the only thing that proves any
+  /// of this happened.
+  final String? reference;
+  final String? notes;
+
+  /// Recorded as filed after the date it was due. Computed on the
+  /// server rather than here, because the two dates sit in different
+  /// columns of the same row and whether one is after the other is
+  /// what a penalty is assessed on.
+  final bool wasLate;
+
+  /// Somebody said this obligation does not apply. It carries a reason
+  /// and stays readable, because a CP58 clicked away has to be
+  /// findable when LHDN asks about it.
+  bool get isDismissed => status == 'not_applicable';
+  bool get isFiled => status == 'filed';
+
+  factory TaxFilingRecord.fromMap(Map<String, dynamic> j) => TaxFilingRecord(
+    id: j['filing_id']?.toString() ?? '',
+    filingType: j['filing_type']?.toString() ?? '',
+    name: j['filing_name']?.toString() ?? '',
+    formLabel: j['form_label']?.toString() ?? '',
+    periodFrom: Fmt.parseDate(j['period_from']),
+    periodTo: Fmt.parseDate(j['period_to']),
+    yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+    dueDate: Fmt.parseDate(j['due_date']),
+    status: j['status']?.toString() ?? '',
+    filedOn: Fmt.parseDate(j['filed_on']),
+    reference: j['reference']?.toString(),
+    notes: j['notes']?.toString(),
+    wasLate: j['was_late'] == true,
   );
 }
 

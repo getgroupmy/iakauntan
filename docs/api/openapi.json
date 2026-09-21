@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0668",
+    "version": "0669",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -26859,6 +26859,69 @@
                 },
                 "required": [
                   "p_sale"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/clear_tax_filing": {
+      "post": {
+        "operationId": "clear_tax_filing",
+        "summary": "Undoes a recording, putting the obligation back on the computed list",
+        "description": "Undoes a recording, putting the obligation back on the computed list. The safe direction -- a deadline that reappears is a nuisance, one that vanished wrongly is a penalty -- but it also erases the acknowledgement number, so it is a deliberate act.\n\n`public.clear_tax_filing(p_org_id uuid, p_filing_type text, p_period_to date)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_filing_type": {
+                    "type": "string"
+                  },
+                  "p_period_to": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_filing_type",
+                  "p_period_to"
                 ]
               }
             }
@@ -54452,6 +54515,83 @@
         }
       }
     },
+    "/rpc/record_tax_filing": {
+      "post": {
+        "operationId": "record_tax_filing",
+        "summary": "Records what somebody has done about one obligation, keyed on the type and the period it covers",
+        "description": "Records what somebody has done about one obligation, keyed on the type and the period it covers. A note rather than a submission: nothing here reaches LHDN. Refuses an obligation this company does not have, so a Form C cannot be ticked off by a sole proprietor.\n\n`public.record_tax_filing(p_org_id uuid, p_filing_type text, p_period_to date, p_status text, p_filed_on date, p_reference text, p_notes text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_filing_type": {
+                    "type": "string"
+                  },
+                  "p_period_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_status": {
+                    "type": "string"
+                  },
+                  "p_filed_on": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_reference": {
+                    "type": "string"
+                  },
+                  "p_notes": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_filing_type",
+                  "p_period_to"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/redeem_loyalty_points": {
       "post": {
         "operationId": "redeem_loyalty_points",
@@ -69862,6 +70002,114 @@
         }
       }
     },
+    "/rpc/tax_filing_history": {
+      "post": {
+        "operationId": "tax_filing_history",
+        "summary": "Everything recorded against an obligation, including what was dismissed as not applicable and why",
+        "description": "Everything recorded against an obligation, including what was dismissed as not applicable and why. Nothing disappears when it comes off the calendar -- it moves here.\n\n`public.tax_filing_history(p_org_id uuid, p_limit integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_limit": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "filing_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "filing_type": {
+                        "type": "string"
+                      },
+                      "filing_name": {
+                        "type": "string"
+                      },
+                      "form_label": {
+                        "type": "string"
+                      },
+                      "period_from": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "period_to": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "year_of_assessment": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "due_date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "filed_on": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "reference": {
+                        "type": "string"
+                      },
+                      "notes": {
+                        "type": "string"
+                      },
+                      "was_late": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/tax_partnership_allocation": {
       "post": {
         "operationId": "tax_partnership_allocation",
@@ -70033,8 +70281,8 @@
     "/rpc/tax_upcoming_filings": {
       "post": {
         "operationId": "tax_upcoming_filings",
-        "summary": "Every income tax obligation this company has against its own basis periods, computed rather than stored, with\u2026",
-        "description": "Every income tax obligation this company has against its own basis periods, computed rather than stored, with what is already late kept in the list. The e-filing date is shown beside the statutory one, never instead of it.\n\n`public.tax_upcoming_filings(p_org_id uuid, p_within_days integer)` Reads only. Requires a signed-in user.",
+        "summary": "Every income tax obligation this company still has against its own basis periods, computed rather than\u2026",
+        "description": "Every income tax obligation this company still has against its own basis periods, computed rather than stored, with what is already late kept in the list and what has been filed or dismissed taken out of it. The e-filing date is shown beside the statutory one, never instead of it.\n\n`public.tax_upcoming_filings(p_org_id uuid, p_within_days integer)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -70129,6 +70377,13 @@
                         "format": "uuid"
                       },
                       "estimate_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "filing_id": {
                         "type": "string",
                         "format": "uuid"
                       }
@@ -76762,6 +77017,70 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/tax_filing_types"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/tax_filings": {
+      "get": {
+        "operationId": "select_tax_filings",
+        "summary": "Read tax_filings",
+        "description": "What somebody has recorded against an obligation `0668` computes. A note, not a submission -- nothing here reaches LHDN and nothing verifies the claim. Keyed on the type and the period, because Form E covers a calendar year while Form C covers the basis period and both can sit against one fiscal year.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/tax_filings"
                   }
                 }
               }
@@ -99340,6 +99659,73 @@
           "form_label",
           "basis",
           "applies_to"
+        ]
+      },
+      "tax_filings": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filing_type": {
+            "type": "string"
+          },
+          "period_from": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date"
+          },
+          "year_of_assessment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "fiscal_year_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "filed_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "recorded_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "org_id",
+          "filing_type",
+          "period_to",
+          "year_of_assessment"
         ]
       },
       "tax_other_income": {

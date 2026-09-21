@@ -2709,6 +2709,61 @@ class Repo {
     return [for (final r in rows) TaxFiling.fromMap(r)];
   }
 
+  /// Records what was done about one obligation.
+  ///
+  /// A note rather than a submission — nothing here reaches LHDN and
+  /// nothing verifies the claim. `0669` refuses an obligation this
+  /// company does not have, so a sole proprietor cannot tick off a
+  /// Form C and then not file the Form B they owe.
+  Future<String> recordTaxFiling({
+    required String filingType,
+    required DateTime periodTo,
+    String status = 'filed',
+    DateTime? filedOn,
+    String? reference,
+    String? notes,
+  }) async {
+    final id = await callRpc(
+      'record_tax_filing',
+      params: {
+        'p_org_id': orgId,
+        'p_filing_type': filingType,
+        'p_period_to': Fmt.iso(periodTo),
+        'p_status': status,
+        'p_filed_on': filedOn == null ? null : Fmt.iso(filedOn),
+        'p_reference': reference,
+        'p_notes': notes,
+      },
+    );
+    return id as String;
+  }
+
+  /// Undoes a recording, putting the deadline back on the calendar.
+  Future<void> clearTaxFiling({
+    required String filingType,
+    required DateTime periodTo,
+  }) async {
+    await callRpc(
+      'clear_tax_filing',
+      params: {
+        'p_org_id': orgId,
+        'p_filing_type': filingType,
+        'p_period_to': Fmt.iso(periodTo),
+      },
+    );
+  }
+
+  /// Everything recorded, including what was dismissed and why.
+  Future<List<TaxFilingRecord>> taxFilingHistory({int limit = 100}) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_filing_history',
+        params: {'p_org_id': orgId, 'p_limit': limit},
+      ),
+    );
+    return [for (final r in rows) TaxFilingRecord.fromMap(r)];
+  }
+
   /// Starts, or reopens, the CP204 estimate for a financial year.
   Future<String> openTaxEstimate(
     String fiscalYearId, {

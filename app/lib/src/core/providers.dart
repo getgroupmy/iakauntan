@@ -830,6 +830,12 @@ final taxFilingCalendarProvider =
       return requireRepo(ref).taxUpcomingFilings();
     });
 
+/// What has already been recorded against an obligation.
+final taxFilingHistoryProvider =
+    FutureProvider.autoDispose<List<TaxFilingRecord>>((ref) {
+      return requireRepo(ref).taxFilingHistory();
+    });
+
 /// The CP204 estimate row itself.
 final taxEstimateProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, id) {
