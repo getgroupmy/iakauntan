@@ -18,6 +18,8 @@ import 'package:iakauntan/src/features/legal/matters_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
+import 'package:iakauntan/src/features/pos/menu_links_screen.dart';
+import 'package:iakauntan/src/features/pos/promotions_screen.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
 import 'package:iakauntan/src/features/ticketing/teams_screen.dart';
@@ -907,6 +909,147 @@ void main() {
         ]),
       );
       expect(find.text('Nothing on deposit'), findsOneWidget);
+    });
+  });
+
+  group('the promotions screen', () {
+    testWidgets('builds, and says what each rule actually does',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PromotionsScreen(), [
+          enabledModulesProvider.overrideWith((ref) async => {'pos'}),
+          myModuleAccessProvider.overrideWith((ref) async => {'pos': 'write'}),
+          posPromotionsProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'pr1',
+                'name': 'Morning teh',
+                'kind': 'buy_x_get_y',
+                'buy_quantity': 2,
+                'get_quantity': 1,
+                'percent': 100,
+                'is_active': true,
+                'times_used': 1,
+                'weekdays': [1, 2, 3, 4, 5],
+                'starts_at': '07:00:00',
+                'ends_at': '11:00:00',
+              },
+              {
+                'id': 'pr2',
+                'name': 'Half-price Tuesday',
+                'kind': 'buy_x_get_y',
+                'buy_quantity': 1,
+                'get_quantity': 1,
+                'percent': 50,
+                'is_active': false,
+                'times_used': 12,
+              },
+            ],
+          ),
+        ]),
+      );
+      // "Three for two" is what a shop SAYS; buy 2 get 1 free is what
+      // it means, and the screen says the second.
+      expect(
+        find.textContaining('Buy 2, get 1 free'),
+        findsOneWidget,
+      );
+      // Under a hundred per cent it is not free, and the sentence has
+      // to change. This is the branch a wrong answer ships in.
+      expect(
+        find.textContaining('Buy 1, get 1 at 50% off'),
+        findsOneWidget,
+      );
+      // Weekday numbers into names, and a Postgres time truncated to
+      // the minute -- nobody writes a happy hour to the second.
+      expect(
+        find.textContaining('Mon Tue Wed Thu Fri · 07:00–11:00'),
+        findsOneWidget,
+      );
+      // Singular and plural of the same count, on two rows.
+      expect(find.textContaining('1 bill ·'), findsNothing);
+      expect(find.textContaining('· 1 bill'), findsOneWidget);
+      expect(find.textContaining('12 bills'), findsOneWidget);
+      expect(find.textContaining('retired'), findsOneWidget);
+    });
+
+    testWidgets('and says so plainly when the company has no till',
+        (tester) async {
+      // Entitlement, not permission: the module was never bought.
+      await onAPhone(
+        tester,
+        wrap(const PromotionsScreen(), [
+          enabledModulesProvider.overrideWith((ref) async => {'accounting'}),
+          myModuleAccessProvider.overrideWith((ref) async => const {}),
+        ]),
+      );
+      expect(find.text('The till is not switched on'), findsOneWidget);
+      // And no button to make one, which would be a dead end.
+      expect(find.text('New promotion'), findsNothing);
+    });
+  });
+
+  group('the published menus screen', () {
+    testWidgets('builds, and says which of the three ways a link is dead',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const MenuLinksScreen(), [
+          posMenuLinksProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 'l1',
+                'kind': 'table',
+                'table_code': '12',
+                'label': 'By the window',
+                'token': 'abc123',
+                'outlet_name': 'Jalan Ipoh',
+                'orders': 4,
+                'is_active': true,
+              },
+              {
+                'id': 'l2',
+                'kind': 'takeaway',
+                'token': 'def456',
+                'outlet_name': 'Jalan Ipoh',
+                'orders': 0,
+                'is_active': false,
+              },
+              {
+                'id': 'l3',
+                'kind': 'delivery',
+                'token': 'ghi789',
+                'outlet_name': 'Jalan Ipoh',
+                'orders': 0,
+                'is_active': true,
+                'single_use': true,
+                'used_at': '2026-09-01T10:00:00Z',
+              },
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('Table 12 · By the window'), findsOneWidget);
+      expect(find.text('Takeaway'), findsOneWidget);
+      // A sticker that quietly stopped working is found by a customer
+      // holding a phone, so the list names the reason.
+      expect(find.textContaining('Switched off'), findsOneWidget);
+      expect(find.textContaining('Used'), findsOneWidget);
+      // The URL is assembled here, token-encoded, not sent by the
+      // server.
+      expect(find.textContaining('/#/menu/abc123'), findsOneWidget);
+    });
+
+    testWidgets('and an empty list says what publishing one is for',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const MenuLinksScreen(), [
+          posMenuLinksProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Nothing published'), findsOneWidget);
     });
   });
 }

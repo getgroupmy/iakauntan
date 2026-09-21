@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -217,7 +218,7 @@ class _TicketShareDialogState extends ConsumerState<_TicketShareDialog> {
     // Shown once. The token is hashed on the way in and never stored in
     // the clear, so a link that is closed without being copied has to be
     // reissued rather than looked up.
-    final url = '${Uri.base.origin}/#/ticket/$token';
+    final url = '${shareOrigin()}/#/ticket/$token';
     await showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(

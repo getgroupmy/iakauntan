@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/safe_link.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -1836,7 +1837,7 @@ class _SignatureRow extends ConsumerWidget {
     );
     if (!ok || token == null || !context.mounted) return;
 
-    final url = '${Uri.base.origin}/#/sign/$token';
+    final url = '${shareOrigin()}/#/sign/$token';
     await showDialog<void>(
       context: context,
       builder: (_) => _LinkDialog(url: url, who: signature.personName),

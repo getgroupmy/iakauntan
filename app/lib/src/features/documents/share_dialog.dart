@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/safe_link.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -175,7 +176,7 @@ class _ShareDialogState extends ConsumerState<_ShareDialog> {
     await showDialog<void>(
       context: context,
       builder: (_) => _TokenDialog(
-        url: '${Uri.base.origin}/#/share/$token',
+        url: '${shareOrigin()}/#/share/$token',
         docNo: widget.docNo,
       ),
     );

@@ -1294,6 +1294,15 @@ jobs:
       - name: Check no expanding viewport is nested on the axis it scrolls
         run: python3 scripts/check_nested_scrollables.py
 
+      # `Uri.base.origin` throws on every scheme but http and https,
+      # and on Android, iOS, macOS and Windows `Uri.base` is a file:
+      # URI -- so an unguarded call is a crash on a phone, not a wrong
+      # string. Four had shipped, one of them inside a `build`, which
+      # made the published-menus list a column of grey error boxes on
+      # the phone and perfect in a browser.
+      - name: Check no web-only API is called where a phone reaches it
+        run: python3 scripts/check_web_only_apis.py
+
       # The app icons, which nothing else looks at. The analyser does
       # not read an asset catalogue, no test renders one, and a build
       # succeeds with a wrong-sized image, half a rename, or a "dark"
@@ -2110,6 +2119,9 @@ jobs:
 
       - name: The nested-scrollable gate's own assertions
         run: python3 scripts/check_nested_scrollables_test.py
+
+      - name: The web-only-API gate's own assertions
+        run: python3 scripts/check_web_only_apis_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py
