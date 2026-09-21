@@ -34,11 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `c17acd62` |
-| CI | green through run 1993 (`9cdf63c1`); 1995 was in flight |
-| Migrations | `0659` is the highest (`create_previous_fiscal_year`) |
-| Live database | **level with the branch.** See below for why, which is not what it looks like |
-| Mobile | **iOS build 5 in TestFlight, Android version code 5 on Play internal testing.** Both from this repository's own workflows |
+| Head at time of writing | `6d5f5834` |
+| CI | green and APPLIED through run 2008 (`ecf46283`); 2009 (`6d5f5834`) in flight |
+| Migrations | `0666` is the highest (Form B and Form P) |
+| Live database | **level with the branch through `0665`.** `0666` was pushed and is waiting on run 2009 |
+| Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
+| Gates | 339 SQL assertion files, 48 Python gates, 5,244 Flutter tests, 32 deno tests |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
@@ -142,6 +143,15 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `6d5f583` | **Form B and Form P (`0666`), on the machinery Form C already had** |
+| `ecf4628` | **Form C: the gap between the accounts and the return (`0665`)** |
+| `4b3117f` | Say when the beta button actually appears, rather than that it has |
+| `bc0f1e6` | **Capital allowances, Schedule 3 (`0664`)** |
+| `4317718` | **A beta tester carries the report button with them (`0663`)** |
+| `2063024` | The last screens that were still spinning, and the gate that keeps them |
+| `8defd45` | A policy is only half a permission (`0662`) |
+| `c692c36` | A policy nobody can evaluate shuts every bucket (`0661`) |
+| `46227d6` | Attach a screenshot to a bug report (`0660`) |
 | `0e69d4d` | Eleven more skeletons; four dialogs that all open from a figure |
 | `7078fc6` | Nine more; the stock card is the second real `TableSkeleton` |
 | `0e64536` | **Fix: `functions.invoke` throws, so the release card's refusal handling never ran** |
@@ -270,37 +280,113 @@ message. Read those rather than the diffs.
    now exactly the way to get `BadDeviceToken` on every push. Both
    files carry the table instead.
 
+## The tax computations — `0664`, `0665`, `0666`
+
+Four migrations built a thing this product did not have: the arithmetic
+between the accounts and a return. It is worth understanding as one
+piece, because each layer only makes sense on the one below.
+
+**`0664` — Schedule 3 capital allowances.** Rates by asset class,
+effective-dated, with the motor caps and the small-value rule.
+`capital_allowance_schedule(org, year)` produces the working: qualifying
+expenditure, initial and annual allowances, the balancing adjustment on
+disposal, residual carried forward. An asset carries a
+`ca_class_code`, and **null is a real answer** — land attracts no
+allowance and never will.
+
+**`0665` — Form C.** The company's computation. The add-backs come off
+the CHART OF ACCOUNTS: an account carries a `tax_treatment` and the
+computation reads the profit and loss and applies it. What a tag cannot
+say is a typed `tax_adjustments` row with a reason.
+
+**`0666` — Form B and Form P**, on `app.tax_business_income`, which is
+`0665`'s business half extracted so the three forms cannot disagree
+about it.
+
+### The five rules that are easy to get wrong and are each asserted
+
+1. **Capital allowances are NOT apportioned** for part-year ownership.
+   An asset in use at the end of the basis period gets the full year,
+   bought in January or December. `0084`'s `app.months_held` pro-rates
+   accounting depreciation to the month, CORRECTLY, and reaching for it
+   here by analogy is the single likeliest mistake — there is an
+   assertion whose only job is that a December asset and a January one
+   come out identical. A secondary source says to pro-rate. It is
+   wrong.
+2. **Allowances cannot create a loss.** They go against adjusted income
+   and stop at nothing; what is left is unabsorbed capital allowance,
+   which is NOT a loss and carries forward under its own rules. Adding
+   the two together is the mistake the screen's wording exists to
+   prevent.
+3. **Losses come off statutory income, AFTER the allowances.**
+4. **Zakat is a rebate against the TAX, capped at it.** s.6A(3) gives
+   relief, not a refund.
+5. **A partnership pays no tax.** It allocates. A partner's salary is
+   not an expense — a partner cannot employ themselves — so it is added
+   back and handed to that partner.
+
+### Things that fail silently here
+
+- **A tax treatment on the wrong side of the ledger** drops its line
+  rather than applying it. The computation still balances and is wrong
+  by whatever that account holds. `tax_computation_misfiled` finds them
+  and the Form C screen warns above the figures.
+- **An asset filed in a small-value class that is not a small-value
+  asset** gets NOTHING rather than the class's 100%. RM2,000 exactly is
+  not under RM2,000. The safe direction, and the residual sitting at
+  the whole cost is the signal to reclassify.
+- **Partnership shares that do not come to 100** allocate a fraction of
+  the income and the remainder appears nowhere. The allocation still
+  adds up, down its own column, to the wrong total.
+
+### The limitations, stated to the user and still true
+
+- Every rate in `0664`, `0665` and `0666` is seeded `is_verified =
+  FALSE` — published summaries, not transcribed from the Act. The same
+  flag and the same meaning as `0025`'s payroll schedules. **They want
+  an accountant's check before anybody files.**
+- `0664`'s RM20,000 small-value aggregate cap UNDER-claims where a
+  company buys more than that in a year: the excess should go at
+  ordinary rates and that is not modelled.
+- One basis period per year of assessment. A company changing its
+  accounting date has a period that is not twelve months, and Schedule
+  3 apportionment across it is not modelled.
+- Form P assumes the accounts EXPENSED the partners' salaries. Where
+  they were shown below the line the allocation over-states by that
+  amount; the screen says so.
+- **Nothing files.** No submission, no CP204 or CP500 estimate.
+
+### Where they are
+
+Financial statements → the calculator icon picks a financial year and
+opens the right form by entity type. Fixed assets → the receipt icon
+opens the capital allowance schedule. The account editor carries the
+tax treatment picker, and **until accounts are tagged every computation
+is the profit unchanged** — which is not wrong, only empty, and the
+screen cannot warn about it.
+
 ## Open work, ranked
 
-0. ~~The skeleton pass.~~ **Done, and it should not be "finished" any
-   further.** 276 of 313 `AsyncView` call sites carry a `skeleton:`.
-   The 37 left are deliberate, and forcing bones onto them would break
-   the rule the whole pass followed — `core/skeletons.dart`'s own: a
-   skeleton belongs where the LAYOUT is already decided and only the
-   values are missing. They fall into four groups:
+0. ~~The skeleton pass.~~ **Finished and GATED — do not reopen it.**
+   All 309 `AsyncView` call sites now account for themselves:
+   `skeleton:`, or an explicit `loading:`, or a named exemption with a
+   reason. `scripts/check_async_skeletons.py` refuses a new one that
+   does none of the three, and refuses a stale exemption too.
 
-   * **a payload that chooses a whole surface** — the till, the diary,
-     the kiosk board and the floor plan all pick a register and then
-     draw an entirely different screen depending on the answer; a
-     matter, a filing, a forecast and a manufacturing order each
-     choose between "not found" and a full page; `reports_screen` and
-     `group_reports_screen` build their layout from a spec COMPUTED
-     from the rows.
-   * **a `loading:` fallback already better than bones** —
-     `matter_detail_screen`'s AppBar falls back to the word "Matter",
-     which is not waiting for anything.
-   * **a block usually absent entirely** — `tax_details_card`'s second
-     site resolves to `const SizedBox.shrink()`.
-   * **`core/widgets.dart` itself**, four of them, where `AsyncView` is
-     defined.
+   Seven keep the circle on purpose and they share one shape: a lookup
+   whose job is to decide WHICH surface to show. The till, the diary,
+   the kiosk board and the floor plan each pick a register and then
+   draw an entirely different screen; the platform console picks a
+   section; the landing preview is `core/page_waiting.dart`'s own
+   argument about an operator-edited page. Bones cannot outline a
+   branch.
 
-   `landing_cms`'s preview is the one to re-read if this is ever
-   revisited: `core/page_waiting.dart` argues that a skeleton over an
-   operator-edited page is a guess at a shape the payload is about to
-   decide, and it is still right.
-
-   Eleven `LinearProgressIndicator`s were removed along the way, all of
-   them a `loading:` that `skeleton:` had made unreachable.
+   The gate itself had a bug worth knowing about: it matched the type
+   argument with `<[^>]*>`, which stops at the first `>`, so
+   `AsyncView<List<Map<String, dynamic>>>` was invisible to it and it
+   reported a clean sweep over five bare call sites. What caught it was
+   its own staleness check refusing five exemptions that then matched
+   nothing. `test_nested_generics` is that bug written down.
 
 1. **Try iOS push and calls on a real handset.** The code is all here
    — `AppDelegate.swift`, `push_native.dart`, `callkit.dart`, `0657`,
@@ -393,7 +479,7 @@ cd app && flutter test --concurrency=2 --reporter failures-only
 flutter analyze --fatal-infos --fatal-warnings
 ```
 
-### All forty-one Python gates — run every one, every time
+### All forty-eight Python gates — run every one, every time
 
 ```bash
 for f in scripts/check_*.py; do
@@ -442,6 +528,60 @@ After any migration: `python3 scripts/generate_api_description.py "$DB"`.
 ## Traps found this session
 
 Each of these was paid for once. None is obvious from the code.
+
+**A mutation harness that reports everything killed is broken.** A
+migration is not idempotent, so re-applying one to the same database
+fails on "already exists" — and every mutant after the first reads as
+KILLED, including the control. The first capital-allowance run reported
+four mutants killed and proved nothing. Run the migration and its test
+inside ONE transaction the test's own `rollback` undoes, and always
+include a control that must SURVIVE.
+
+**And it leaves the database without the migration.** That rollback
+takes the schema with it. `check_query_columns.py` then reports "no such
+relation" for every new table and `check_rpc_grants.py` reports every
+new function granted to nobody. Re-apply the migration and regenerate
+`docs/api` before running the gates.
+
+**`Positioned` must be a DIRECT child of its `Stack`.** A `LayoutBuilder`
+between them throws "wants to apply ParentData of type StackParentData
+to a RenderObject set up to accept BoxParentData". Wrap the builder in
+`Positioned.fill` and put a second `Stack` inside it.
+
+**A widget in `MaterialApp.builder` is ABOVE the navigator.** The
+builder's child IS the navigator, so `Navigator.of(context)` walks
+upward and finds nothing — "Navigator operation requested with a context
+that does not include a Navigator", on every tap, in production, under a
+green test suite. `core/router.dart` exports `rootNavigatorKey` for
+exactly this. A test that wraps the widget under `home:` puts it BELOW
+the navigator and proves nothing.
+
+**`pg_temp.sign_in_as` does not change the database role.** It sets the
+JWT claim; the session is still `postgres`, which owns every table and
+is exempt from row level security. A `check_refused` on a direct insert
+therefore passes as the OWNER — the insert succeeds. Issue `set local
+role authenticated` at the top level (it does not survive a `do` block)
+and `grant select` on any temp fixture table the block reads.
+
+**RLS does not raise on an UPDATE it hides.** It updates no rows,
+silently. Assert by EFFECT — read the value back — rather than with
+`check_refused`, which fails with "it was not refused at all". An
+INSERT does raise, because `WITH CHECK` is about the row being written.
+
+**postgrest-dart defaults `ascending` to FALSE.** A bare
+`.order('sort_order')` is Z to A, and supabase-js defaults it the other
+way, so the same call means the opposite in an edge function.
+`check_order_direction.py` catches it.
+
+**`0.14 * 100` is `14.000000000000002`.** Round before formatting a
+percentage or it goes into the dropdown exactly like that.
+
+**A `Column` of a fixed-height strip and a body OVERFLOWS.** In debug
+that is the yellow stripe; in RELEASE it is clipped silently, so the
+screen looks right and the content has quietly lost its last row.
+
+**A `TabBar` with text-only tabs is 48 pixels, not 46.** Test against a
+real one rather than against the number.
 
 **A `revoke … from public` does not remove a direct grant.** A hosted
 Supabase project's default privileges hand a newly created function in
