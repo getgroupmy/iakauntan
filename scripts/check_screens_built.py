@@ -58,8 +58,18 @@ APP = ROOT / 'app'
 # Screens nobody has written a build test for yet. A BACKLOG, not a
 # decision -- see the docstring. The value is the file, so a reader can
 # go straight to it.
+#: What is left, and why it is the floor rather than a backlog.
+#:
+#: Thirty-eight when this gate went in, and every one of them was work
+#: somebody had not got to. These two are not: a private class cannot
+#: be named by a test in another library at all, so no amount of
+#: effort takes them off. They are listed rather than skipped so the
+#: count says 115 of 117 honestly instead of 117 of 117 by omission.
+#:
+#: If one of them ever becomes public, or grows a test inside its own
+#: library, the staleness check below refuses the entry and this list
+#: empties itself.
 EXEMPT: dict[str, str] = {
-    'HrSetupScreen': 'lib/src/features/hr/hr_setup_screen.dart',
     # Private, so no test outside its own library can name it at all.
     # Listed rather than skipped so the count is honest about them.
     '_PreviewScreen': 'lib/src/features/admin/landing_cms.dart',

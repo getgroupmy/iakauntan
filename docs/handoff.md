@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `9b82619e` |
+| Head at time of writing | the commit titled "The screens-built backlog is empty" |
 | CI | green through run 2032 (`cf784b49`); 2033–2037 were running when this was written — **every migration to `0674` is live** |
 | Migrations | `0674` is the highest (the tax tile on the home screen). **Nothing since `b635b4b0` touches the database** — the eight commits after it are Dart, tests and gates only |
 | Live database | **level with the branch.** Nothing is waiting |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 348 SQL assertion files, **44 Python gates (+10 gate self-tests)**, **5,407 Flutter tests**, 32 deno tests |
+| Gates | 348 SQL assertion files, **44 Python gates (+10 gate self-tests)**, **5,414 Flutter tests**, 32 deno tests |
 | API description | 766 functions, 364 tables, version `0674` — unchanged, because no migration has been added |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
@@ -542,20 +542,18 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The screens-built backlog — TWO left, and it found six defects.**
+0a. ~~The screens-built backlog.~~ **EMPTY — and it found SEVEN
+   defects on the way.**
    `scripts/check_screens_built.py` requires every `*Screen` under
    `app/lib/src/features` to be constructed by at least one test. It
    went in with **thirty-eight** exemptions, explicitly a backlog
-   rather than a decision, and is now at **four** — of which
-   `_PreviewScreen` and `_RequestAccessScreen` are private classes
-   that no test outside their own library can name, so **two is the
-   real number and four is where the count stops.**
+   rather than a decision, and is now at **two** — and those two are
+   `_PreviewScreen` and `_RequestAccessScreen`, private classes that
+   no test outside their own library can name. **No amount of effort
+   takes them off, so this list is a floor and not a backlog.** All
+   115 reachable screens are built by a test.
 
-   Still listed and still work: **`FilingScreen`** (one financial
-   statement, ~800 lines, a dozen providers) and **`HrSetupScreen`**
-   (the tabbed HR setup, ~980 lines). Both are big; neither is hard.
-
-   **Putting a screen on a surface for the first time found SIX real
+   **Putting a screen on a surface for the first time found SEVEN real
    defects**, none of which any gate or the analyser could see:
 
    - the expenses app bar overflowed by 104px at 412 wide;
@@ -570,13 +568,26 @@ deal with, and the estimate screen is honest about not knowing.
      which throws on every native run, so the published-menus list was
      a column of grey error boxes on the phone and perfect in a
      browser;
-   - and the worst: the ticket reply box overflowed by **252px**, so
-     Send was entirely off the right edge and **a ticket could not be
-     replied to from a phone at all.** A release build clips that
-     silently, so the button was not broken-looking, it was absent.
+   - the ticket reply box overflowed by **252px**, so Send was
+     entirely off the right edge and **a ticket could not be replied
+     to from a phone at all.** A release build clips that silently, so
+     the button was not broken-looking, it was absent;
+   - and the largest, **289px**, on the balance card of a set of
+     financial statements. The reason it survived is worth keeping:
+     the BAD-news branch of the same Row ("Out by RM 1,250.40") fits
+     comfortably, so the screen looked correct exactly when something
+     was wrong with the accounts and broke exactly when they were
+     fine.
 
-   Five of the six are invisible to a browser, which is where this app
-   is mostly looked at. That is the whole argument for the method.
+   Six of the seven are invisible to a browser, which is where this
+   app is mostly looked at. That is the whole argument for the method.
+
+   **What to do with the pattern now.** The file is
+   `app/test/screens_build_batch_test.dart`, 74 tests over 37 screens.
+   It is worth applying to the dialogs and sheets next — `showDialog`
+   and `showModalBottomSheet` bodies are not `*Screen` classes, so the
+   gate never asked about them, and they carry the same kind of Row
+   that produced five of these seven.
 
    `app/test/screens_build_batch_test.dart` is the pattern. Build at
    **412x900** — an overflow is a test failure needing no assertion —

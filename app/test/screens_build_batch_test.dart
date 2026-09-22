@@ -17,6 +17,7 @@ import 'package:iakauntan/src/features/documents/knock_off_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filing_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
+import 'package:iakauntan/src/features/hr/hr_setup_screen.dart';
 import 'package:iakauntan/src/features/hr/onboarding_screen.dart';
 import 'package:iakauntan/src/features/hr/payroll_screen.dart';
 import 'package:iakauntan/src/features/legal/matters_screen.dart';
@@ -2506,6 +2507,74 @@ void main() {
         ]),
       );
       expect(find.text('Not found'), findsOneWidget);
+    });
+  });
+
+  group('the HR setup screen', () {
+    testWidgets('builds its payroll tab out of the settings row',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const HrSetupScreen(), [
+          payrollSettingsProvider.overrideWith(
+            (ref) async => {
+              'employer_epf_no': 'E1234567890',
+              'employer_socso_no': 'A1234567890',
+              'employer_tax_no': 'E 1234567890',
+              'hrdf_registration_no': '',
+              'hrdf_category': null,
+              // 0 is a real setting, not a missing one, and the screen
+              // has to say which.
+              'pay_day': 0,
+            },
+          ),
+        ]),
+      );
+      expect(find.text('Employer registrations'), findsOneWidget);
+      // These appear on the statutory submissions, so they are read
+      // back into the boxes rather than left for somebody to retype.
+      expect(find.text('E1234567890'), findsOneWidget);
+      expect(find.text('A1234567890'), findsOneWidget);
+      // Pay day 0 is the last day of the month, not "unset".
+      expect(find.text('Last day of the month'), findsOneWidget);
+      expect(find.text('Save settings'), findsOneWidget);
+      // Ten tabs, scrollable, and the last one is reachable.
+      expect(find.text('Statutory rates'), findsOneWidget);
+    });
+
+    testWidgets('and a second tab is a list keyed on its own table',
+        (tester) async {
+      // Every simple configuration list goes through ONE provider
+      // keyed by table name, so the fixture has to name the table --
+      // and a tab whose table is not overridden reaches the network.
+      await onAPhone(
+        tester,
+        wrap(const HrSetupScreen(), [
+          payrollSettingsProvider.overrideWith((ref) async => null),
+          setupRowsProvider((table: 'departments', orderBy: 'name'))
+              .overrideWith(
+            (ref) async => [
+              {
+                'id': 'd1',
+                'name': 'Kitchen',
+                'code': 'KIT',
+                'cost_centre': 'CC-01',
+              },
+              {'id': 'd2', 'name': 'Front of house', 'code': 'FOH'},
+            ],
+          ),
+          setupRowsProvider((table: 'positions', orderBy: 'name'))
+              .overrideWith((ref) async => []),
+        ]),
+      );
+      await tester.tap(find.text('Structure'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kitchen'), findsOneWidget);
+      // Code and cost centre joined, and the cost centre dropped when
+      // there is not one rather than leaving a trailing separator.
+      expect(find.text('KIT · CC-01'), findsOneWidget);
+      expect(find.text('FOH'), findsOneWidget);
     });
   });
 }
