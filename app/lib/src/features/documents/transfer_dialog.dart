@@ -136,8 +136,8 @@ class _TransferDialogState extends ConsumerState<_TransferDialog> {
               trailingWidth: 110,
             ),
           _ when lines.every((l) => l.outstanding <= 0) => Text(
-              'Every line has already been taken forward to a '
-              '${target.toLowerCase()}.',
+              'Every line has already been taken forward to '
+              '${articleFor(target)} ${target.toLowerCase()}.',
             ),
           _ => SingleChildScrollView(
               child: Column(

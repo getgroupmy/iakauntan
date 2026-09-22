@@ -19,7 +19,12 @@ import 'package:iakauntan/src/features/assets/disposal_dialog.dart';
 import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
+import 'package:iakauntan/src/features/banking/book_balance.dart';
+import 'package:iakauntan/src/features/banking/transfers_history_dialog.dart';
 import 'package:iakauntan/src/features/documents/credit_dialog.dart';
+import 'package:iakauntan/src/features/documents/repeat_dialog.dart';
+import 'package:iakauntan/src/features/documents/transfer.dart';
+import 'package:iakauntan/src/features/documents/transfer_dialog.dart';
 import 'package:iakauntan/src/features/documents/deposit_apply_sheet.dart';
 import 'package:iakauntan/src/features/documents/withholding_dialog.dart';
 import 'package:iakauntan/src/features/contacts/contact_delete.dart';
@@ -31,6 +36,8 @@ import 'package:iakauntan/src/features/hr/departure_dialog.dart';
 import 'package:iakauntan/src/features/hr/hire_dialog.dart';
 import 'package:iakauntan/src/features/hr/leave_bands_dialog.dart';
 import 'package:iakauntan/src/features/items/item_categories_dialog.dart';
+import 'package:iakauntan/src/features/items/item_packs_dialog.dart';
+import 'package:iakauntan/src/features/items/item_prices_dialog.dart';
 import 'package:iakauntan/src/features/items/stock_card_dialog.dart';
 import 'package:iakauntan/src/features/ledger/journal_editor.dart';
 import 'package:iakauntan/src/features/loyalty/loyalty_tiers_dialog.dart';
@@ -4170,6 +4177,611 @@ void main() {
       );
     });
   });
+
+  group('the bank account, and taking a document forward', () {
+    testWidgets('the book balance offers to rebuild itself, not the ledger',
+        (tester) async {
+      // `current_balance` is a running total that twenty-three
+      // statements across thirteen migrations add to and take from, and
+      // a running total maintained from twenty-three places drifts.
+      // Somebody who thinks this button might rewrite the LEDGER will
+      // not press it, so the sentence has to say which way round it
+      // goes.
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'accountant'),
+          repoProvider.overrideWithValue(_Repo()),
+        ],
+        (context) => showBookBalance(context, account: const {
+          'id': 'b1',
+          'name': 'Maybank current',
+          'currency': 'MYR',
+          'current_balance': 48250.75,
+        }),
+      );
+
+      expect(find.text('Maybank current'), findsOneWidget);
+      expect(find.text('RM 48,250.75'), findsOneWidget);
+      expect(find.text('What this account says it holds.'), findsOneWidget);
+      expect(find.text(kResyncBlurb), findsOneWidget);
+      expect(find.textContaining('The ledger is not changed'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Rebuild from the ledger'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and offers nothing to somebody who cannot post',
+        (tester) async {
+      // A viewer can see what the account says and must not be able to
+      // write to it.
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'viewer'),
+          repoProvider.overrideWithValue(_Repo()),
+        ],
+        (context) => showBookBalance(context, account: const {
+          'id': 'b1',
+          'name': 'Maybank current',
+          'currency': 'MYR',
+          'current_balance': 48250.75,
+        }),
+      );
+
+      expect(find.text('RM 48,250.75'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Rebuild from the ledger'),
+        findsNothing,
+      );
+      expect(find.text(kResyncBlurb), findsNothing);
+    });
+
+    testWidgets('a rebuild that moves the number says so, and by how much',
+        (tester) async {
+      // The whole point: a repair that silently corrects a figure
+      // teaches nobody that the figure was wrong, and it is wrong for a
+      // reason — something posted against the bank's GL account without
+      // going through the running total.
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'accountant'),
+          repoProvider.overrideWithValue(_Repo(resynced: 47100.25)),
+        ],
+        (context) => showBookBalance(context, account: const {
+          'id': 'b1',
+          'name': 'Maybank current',
+          'currency': 'MYR',
+          'current_balance': 48250.75,
+        }),
+      );
+
+      await tester.tap(
+          find.widgetWithText(FilledButton, 'Rebuild from the ledger'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('RM 48,250.75 → RM 47,100.25, down by '
+            'RM 1,150.50'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Something posted to this account without going '
+            'through the running total'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and one that does not says nothing moved', (tester) async {
+      // A sen out is out, and equal is equal. Saying "rebuilt" over an
+      // unchanged figure would invite somebody to go looking for a
+      // posting that does not exist.
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'accountant'),
+          repoProvider.overrideWithValue(_Repo(resynced: 48250.75)),
+        ],
+        (context) => showBookBalance(context, account: const {
+          'id': 'b1',
+          'name': 'Maybank current',
+          'currency': 'MYR',
+          'current_balance': 48250.75,
+        }),
+      );
+
+      await tester.tap(
+          find.widgetWithText(FilledButton, 'Rebuild from the ledger'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('The balance already matched the ledger. Nothing moved.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('worth looking at what'), findsNothing);
+    });
+
+    testWidgets('the transfer register names both ends and what the bank '
+        'took', (tester) async {
+      // Each amount is in the money of the account it touches, so the
+      // two ends of a cross-border transfer are in different
+      // currencies and one prefix on both would misstate one of them.
+      // Sent, arrived and charges are three separate facts and a single
+      // figure hides two of them.
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'accountant'),
+          bankTransfersProvider.overrideWith((ref) async => const [
+                {
+                  'id': 't1',
+                  'transfer_no': 'TRF-0007',
+                  'transfer_date': '2026-08-14',
+                  'status': 'posted',
+                  'amount_sent': 10000,
+                  'amount_received': 3180.50,
+                  'bank_charges': 25,
+                  'from_account': {'name': 'Maybank MYR', 'currency': 'MYR'},
+                  'to_account': {'name': 'OCBC SGD', 'currency': 'SGD'},
+                },
+              ]),
+        ],
+        showTransfersHistory,
+      );
+
+      expect(find.text('Transfers between accounts'), findsOneWidget);
+      expect(
+        find.text('TRF-0007 · Maybank MYR → OCBC SGD'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('14/08/2026 · RM 10,000.00 · SGD 3,180.50 arrived · '
+            'RM 25.00 charges'),
+        findsOneWidget,
+      );
+      // Money moved between a company's own accounts has no customer
+      // who might have paid against it, so nothing makes it
+      // un-undoable except already being void.
+      expect(find.widgetWithText(TextButton, 'Void'), findsOneWidget);
+    });
+
+    testWidgets('and a voided one is struck through and cannot be voided '
+        'again', (tester) async {
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'accountant'),
+          bankTransfersProvider.overrideWith((ref) async => const [
+                {
+                  'id': 't1',
+                  'transfer_no': 'TRF-0008',
+                  'transfer_date': '2026-08-15',
+                  'status': 'void',
+                  'amount_sent': 2000,
+                  'amount_received': 2000,
+                  'bank_charges': 0,
+                  'from_account': {'name': 'Maybank MYR', 'currency': 'MYR'},
+                  'to_account': {'name': 'CIMB MYR', 'currency': 'MYR'},
+                },
+              ]),
+        ],
+        showTransfersHistory,
+      );
+
+      expect(find.widgetWithText(TextButton, 'Void'), findsNothing);
+      // Same currency, same amount, no charges: one figure and no
+      // "arrived", because nothing about it differs.
+      expect(
+        find.text('15/08/2026 · RM 2,000.00'),
+        findsOneWidget,
+      );
+      final title = tester.widget<Text>(
+          find.text('TRF-0008 · Maybank MYR → CIMB MYR'));
+      expect(title.style?.decoration, TextDecoration.lineThrough);
+    });
+
+    testWidgets('and says so plainly when nothing has been moved',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          memberRoleProvider.overrideWith((ref) async => 'accountant'),
+          bankTransfersProvider.overrideWith((ref) async => const []),
+        ],
+        showTransfersHistory,
+      );
+
+      expect(find.text('Nothing moved yet'), findsOneWidget);
+    });
+
+    testWidgets('a repeat opens on everything still outstanding',
+        (tester) async {
+      // Emailing a draft would send a customer a document with no
+      // number to pay against, so the database ignores auto-email
+      // unless the schedule also posts. Keeping the two in step here
+      // stops the switch looking like it did nothing.
+      await opened(
+        tester,
+        const [],
+        (context) => showRepeatDialog(context, 'doc1', 'INV-0042'),
+      );
+
+      expect(find.text('Repeat this document'), findsOneWidget);
+      expect(find.text('Repeat of INV-0042'), findsOneWidget);
+
+      final email = tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, 'Email it to the customer'));
+      expect(email.onChanged, isNull);
+      expect(find.text('Only once it posts automatically'), findsOneWidget);
+
+      await tester.tap(
+          find.widgetWithText(SwitchListTile, 'Post it automatically'));
+      await tester.pumpAndSettle();
+
+      final now = tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, 'Email it to the customer'));
+      expect(now.onChanged, isNotNull);
+      expect(find.text('Needs email switched on in Settings'), findsOneWidget);
+    });
+
+    testWidgets('a transfer opens on what is left, not on the original',
+        (tester) async {
+      // "The rest of it" is the common case, so it is already filled
+      // in and the partial case is typing over a number rather than
+      // working one out.
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(outstanding: const [
+            TransferLine(
+              lineId: 'l1',
+              lineNo: 1,
+              description: 'Kopi O beans, 1kg',
+              quantity: 10,
+              taken: 4,
+              outstanding: 6,
+            ),
+            TransferLine(
+              lineId: 'l2',
+              lineNo: 2,
+              description: 'Condensed milk, carton',
+              quantity: 3,
+              taken: 3,
+              outstanding: 0,
+            ),
+          ])),
+        ],
+        (context, ref) => showTransferDialog(
+          context,
+          ref,
+          sourceId: 'so1',
+          sourceType: 'sales_order',
+          targetType: 'delivery_order',
+        ),
+      );
+
+      expect(find.text('Transfer to Delivery Order'), findsOneWidget);
+      expect(find.text('6 of 10 outstanding'), findsOneWidget);
+      // A line already taken forward in full says so and its box is
+      // shut, rather than offering a quantity the database would
+      // refuse.
+      expect(find.text('All 3 already taken'), findsOneWidget);
+      expect(find.text('6'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Create Delivery Order'),
+          findsOneWidget);
+    });
+
+    testWidgets('and says so when the whole thing has already gone forward',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(outstanding: const [
+            TransferLine(
+              lineId: 'l1',
+              lineNo: 1,
+              description: 'Kopi O beans, 1kg',
+              quantity: 10,
+              taken: 10,
+              outstanding: 0,
+            ),
+          ])),
+        ],
+        (context, ref) => showTransferDialog(
+          context,
+          ref,
+          sourceId: 'so1',
+          sourceType: 'sales_order',
+          targetType: 'invoice',
+        ),
+      );
+
+      // "an invoice", not "a invoice". Invoice is the one singular of
+      // the fourteen that begins with a vowel, and it is the one the
+      // product says most often.
+      expect(
+        find.text('Every line has already been taken forward to an invoice.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and still says "a" where the type takes one', (tester) async {
+      // The other half. An article helper that answered "an" to
+      // everything would pass the test above and read wrongly on the
+      // other thirteen.
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(outstanding: const [
+            TransferLine(
+              lineId: 'l1',
+              lineNo: 1,
+              description: 'Kopi O beans, 1kg',
+              quantity: 10,
+              taken: 10,
+              outstanding: 0,
+            ),
+          ])),
+        ],
+        (context, ref) => showTransferDialog(
+          context,
+          ref,
+          sourceId: 'so1',
+          sourceType: 'sales_order',
+          targetType: 'delivery_order',
+        ),
+      );
+
+      expect(
+        find.text('Every line has already been taken forward to a '
+            'delivery order.'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('what an item costs, and how it comes packed', () {
+    final kopi = Item(
+      id: 'i1',
+      code: 'KOPI-O',
+      name: 'Kopi O beans',
+      itemType: 'stock',
+      uomCode: 'KGM',
+      unitPrice: 40,
+    );
+
+    testWidgets('a named price is measured against the list price',
+        (tester) async {
+      // "How much am I discounting?" is the question somebody opens
+      // this to answer, so the percentage is against LIST rather than
+      // against the level's own adjustment.
+      await opened(
+        tester,
+        [
+          priceLevelsProvider.overrideWith((ref) async => const [
+                {
+                  'id': 'pl1',
+                  'code': 'WHOLESALE',
+                  'name': 'Wholesale',
+                  'adjustment_percent': -10,
+                  'is_active': true,
+                },
+              ]),
+          itemPricesProvider.overrideWith((ref, id) async => const [
+                {
+                  'id': 'ip1',
+                  'price_level_id': 'pl1',
+                  'unit_price': 34,
+                  'min_quantity': 20,
+                  'price_levels': {'code': 'WHOLESALE', 'name': 'Wholesale'},
+                },
+              ]),
+        ],
+        (context) => showItemPrices(context, kopi),
+      );
+
+      expect(find.text('Kopi O beans · prices'), findsOneWidget);
+      expect(
+        find.textContaining('List price RM 40.00. A named price below '
+            'overrides it'),
+        findsOneWidget,
+      );
+      expect(find.text('WHOLESALE · Wholesale'), findsOneWidget);
+      // 34 against a list of 40 is 15% off, and the minimum comes with
+      // it because a price that only applies from twenty units is not
+      // the price of one.
+      expect(find.text('from 20 units · -15.0% on list'), findsOneWidget);
+      expect(find.text('RM 34.00'), findsOneWidget);
+    });
+
+    testWidgets('and a level with no named price falls back to its '
+        'percentage', (tester) async {
+      await opened(
+        tester,
+        [
+          priceLevelsProvider.overrideWith((ref) async => const [
+                {
+                  'id': 'pl1',
+                  'code': 'WHOLESALE',
+                  'name': 'Wholesale',
+                  'adjustment_percent': -10,
+                  'is_active': true,
+                },
+              ]),
+          itemPricesProvider.overrideWith((ref, id) async => const []),
+        ],
+        (context) => showItemPrices(context, kopi),
+      );
+
+      expect(
+        find.text('No named prices — every level is a percentage of the '
+            'list price.'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextButton, 'Add price'), findsOneWidget);
+    });
+
+    testWidgets('with no levels at all there is nothing to price against',
+        (tester) async {
+      // An empty list with an Add button would invite somebody to name
+      // a price for nobody. The way out is attached to the sentence
+      // instead.
+      await opened(
+        tester,
+        [
+          priceLevelsProvider.overrideWith((ref) async => const []),
+          itemPricesProvider.overrideWith((ref, id) async => const []),
+        ],
+        (context) => showItemPrices(context, kopi),
+      );
+
+      expect(
+        find.textContaining('No price levels have been set up, so there is '
+            'nothing to price against yet.'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(OutlinedButton, 'Set up price levels'),
+        findsOneWidget,
+      );
+      // And no offer to add a price, because there is no level to hang
+      // one on.
+      expect(find.widgetWithText(TextButton, 'Add price'), findsNothing);
+    });
+
+    testWidgets('price levels say which way each one moves the price',
+        (tester) async {
+      // Nought is "list price" and not "+0% on list": a level that does
+      // not move anything is a named group of customers, and saying it
+      // in percentages reads like an adjustment that failed to apply.
+      await opened(
+        tester,
+        [
+          priceLevelsProvider.overrideWith((ref) async => const [
+                {
+                  'id': 'pl1',
+                  'code': 'RETAIL',
+                  'name': 'Retail',
+                  'adjustment_percent': 0,
+                  'is_active': true,
+                  'is_default': true,
+                },
+                {
+                  'id': 'pl2',
+                  'code': 'WHOLESALE',
+                  'name': 'Wholesale',
+                  'adjustment_percent': -12.5,
+                  'is_active': true,
+                },
+                {
+                  'id': 'pl3',
+                  'code': 'EXPORT',
+                  'name': 'Export',
+                  'adjustment_percent': 7,
+                  'is_active': false,
+                },
+              ]),
+        ],
+        showPriceLevels,
+      );
+
+      expect(find.text('Price levels'), findsOneWidget);
+      expect(find.text('list price'), findsOneWidget);
+      expect(find.text('-12.5% on list'), findsOneWidget);
+      // A sign on the way up, so the two read as opposites rather than
+      // as two numbers.
+      expect(find.text('+7% on list · inactive'), findsOneWidget);
+      // `StatusChip` runs its word through `Fmt.label`, which
+      // capitalises, so the chip reads "Default" whatever case the
+      // column holds.
+      expect(find.text('Default'), findsOneWidget);
+    });
+
+    testWidgets('a pack size says what one of them holds', (tester) async {
+      // `ref_uom_factors` leaves the packaging codes out on purpose —
+      // a carton is only as big as what is in it — so this is the only
+      // place a shop can say, and `app.uom_qty` has nowhere else to
+      // look.
+      await opened(
+        tester,
+        [
+          canWriteProvider.overrideWithValue(true),
+          uomCodesProvider.overrideWith((ref) async => const [
+                {'code': 'CT', 'name': 'Carton'},
+                {'code': 'BX', 'name': 'Box'},
+                {'code': 'KGM', 'name': 'Kilogram'},
+              ]),
+          itemUomOptionsProvider.overrideWith((ref, id) async => const [
+                {'uom_code': 'CT', 'qty_in_stock_uom': 24, 'is_pack': true},
+                // A reference unit, which the standards body has
+                // already sized. Not this shop's to change, and not a
+                // declared pack.
+                {'uom_code': 'GRM', 'qty_in_stock_uom': 0.001,
+                  'is_pack': false},
+              ]),
+        ],
+        (context) => showItemPacks(context, kopi),
+      );
+
+      expect(find.text('How Kopi O beans is packed'), findsOneWidget);
+      expect(
+        find.textContaining('Stocked in KGM. A carton is only as big as '
+            'what is in it'),
+        findsOneWidget,
+      );
+      expect(find.text('1 CT = 24 KGM'), findsOneWidget);
+      // The reference unit is not a pack and must not be offered as one
+      // to forget.
+      expect(find.textContaining('1 GRM'), findsNothing);
+      expect(find.byKey(const ValueKey('forget-pack-CT')), findsOneWidget);
+    });
+
+    testWidgets('and says what nothing declared costs you', (tester) async {
+      // Not an empty list: a quantity written in cartons stops
+      // converting rather than converting wrongly, and that is worth
+      // saying where somebody is deciding whether to bother.
+      await opened(
+        tester,
+        [
+          canWriteProvider.overrideWithValue(true),
+          uomCodesProvider.overrideWith((ref) async => const [
+                {'code': 'CT', 'name': 'Carton'},
+              ]),
+          itemUomOptionsProvider.overrideWith((ref, id) async => const []),
+        ],
+        (context) => showItemPacks(context, kopi),
+      );
+
+      expect(
+        find.textContaining('Nothing declared. A quantity written in any '
+            'other unit converts by the reference factor, and a packaging '
+            'unit has none.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a reader is shown the packs and offered no way to change '
+        'them', (tester) async {
+      await opened(
+        tester,
+        [
+          canWriteProvider.overrideWithValue(false),
+          uomCodesProvider.overrideWith((ref) async => const [
+                {'code': 'CT', 'name': 'Carton'},
+              ]),
+          itemUomOptionsProvider.overrideWith((ref, id) async => const [
+                {'uom_code': 'CT', 'qty_in_stock_uom': 24, 'is_pack': true},
+              ]),
+        ],
+        (context) => showItemPacks(context, kopi),
+      );
+
+      expect(find.text('1 CT = 24 KGM'), findsOneWidget);
+      expect(find.byKey(const ValueKey('forget-pack-CT')), findsNothing);
+    });
+  });
 }
 
 /// Answers only what the dialogs under test ask for.
@@ -4184,6 +4796,8 @@ class _Repo implements Repo {
     this.closed = const [],
     this.banks = const [],
     this.rpc = const {},
+    this.resynced = 0,
+    this.outstanding = const [],
   });
 
   final List<Map<String, dynamic>> late;
@@ -4206,8 +4820,24 @@ class _Repo implements Repo {
   /// all of them.
   final Map<String, dynamic> rpc;
 
+  /// What the ledger says this account really holds.
+  final double resynced;
+
+  /// What is still available to take forward, line by line.
+  final List<TransferLine> outstanding;
+
   @override
   Future<List<Map<String, dynamic>>> bankAccounts() async => banks;
+
+  @override
+  Future<double> resyncBankBalance(String bankAccountId) async => resynced;
+
+  @override
+  Future<List<TransferLine>> transferOutstanding(
+    String sourceId,
+    String targetType,
+  ) async =>
+      outstanding;
 
   @override
   Future<dynamic> callRpc(String fn, {Map<String, dynamic>? params}) async {

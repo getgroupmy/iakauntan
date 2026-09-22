@@ -552,7 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The DIALOGS backlog — 57 of 121 openers left. In progress.**
+0a. **The DIALOGS backlog — 50 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet
    classes**, more than there are screens, which the screens gate
@@ -562,7 +562,7 @@ deal with, and the estimate screen is honest about not knowing.
    classes are private, so a gate demanding `_MappingDialog` be
    constructed would be unsatisfiable for 89% of the surface. The way
    in is the way the app goes in: `showFsMapping(context)`,
-   `showPersonEditor(context, person: ...)`. 121 of those exist; 64
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 71
    are covered.
 
    `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
@@ -576,7 +576,7 @@ deal with, and the estimate screen is honest about not knowing.
    it by hand — the gate refuses a stale entry in both directions, so
    it self-checks.
 
-   **Ten defects so far, and the reason some of them cluster here.** A
+   **Eleven defects so far, and the reason some of them cluster here.** A
    dialog's box is the screen LESS its insets LESS its content
    padding, so about 284px on a 412px phone. The identical `ListTile`
    row throws inside a dialog at 412 and draws on a screen at 360 —
@@ -636,6 +636,12 @@ deal with, and the estimate screen is honest about not knowing.
      `double.toString()`, so an expectation of RM 4,800.50 arrived as
      "4800.5" — one decimal place in a money box. `toStringAsFixed(2)`,
      which is what the asset editor's cost field already did.
+   - `transfer_dialog.dart` said "taken forward to **a invoice**".
+     Invoice is the one document singular of fourteen that begins with
+     a vowel, and it is the one the product says most often. There is
+     an `articleFor` in `doc_types.dart` now, with BOTH halves
+     asserted — an article function answering "an" to everything would
+     pass the invoice case and read wrongly on the other thirteen.
 
    **Traps, each paid for once:**
 
@@ -671,6 +677,14 @@ deal with, and the estimate screen is honest about not knowing.
      there asserts the form did not load.
    - Material shows a field's helper text OR its error, never both.
      Assert the helper BEFORE tapping Save.
+   - `StatusChip` runs its word through `Fmt.label`, which
+     capitalises — the chip reads "Default", not "default", whatever
+     case the column holds.
+   - **The full suite was OOM-killed at `--concurrency=2` once and the
+     container restarted.** Nothing was lost (the work was on disk),
+     but a run that dies takes twenty minutes with it. Run the single
+     changed file first, and keep `--concurrency=1` in reserve — it
+     works and is roughly twice as slow.
    - Check whether the opener takes a `WidgetRef` before writing the
      host. `showCreditDialog` does, and four tests written against
      `opened` failed to COMPILE rather than failing an assertion — the
