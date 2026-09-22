@@ -41,6 +41,7 @@ import '../auth/phone_number.dart';
 import '../auth/reset_cooldown.dart' show looksLikeAnAddress;
 import 'bank_feeds_card.dart';
 import 'bank_rules_card.dart';
+import '../shared/ocr_key_pool_editor.dart';
 import 'payment_methods_card.dart';
 import 'collect_payments_card.dart';
 import 'contact_changes.dart';
@@ -769,7 +770,7 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                   const _OnDeviceNotice()
                 else if (_keySource(ocr) == 'platform')
                   _BillingSection(ocr: ocr)
-                else
+                else ...[
                   _OwnKeyFields(
                     ocr: ocr,
                     canEdit: widget.canEdit,
@@ -789,11 +790,70 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                       'Key removed',
                     ),
                   ),
+                  // 0675. More than one key, each with what it may
+                  // spend and when it may run.
+                  //
+                  // BELOW the single key rather than instead of it, and
+                  // that is not tidiness. The scan asks the pool first
+                  // and falls back on the single key, so a company that
+                  // never opens this carries on exactly as it did; and
+                  // Document AI needs a project, a location and a
+                  // processor, which a pool row has nowhere to put --
+                  // the field above is the only way to configure that
+                  // reader at all.
+                  const SizedBox(height: Space.lg),
+                  _OwnKeyPool(
+                    provider: ocr.provider,
+                    canEdit: widget.canEdit && !_saving,
+                  ),
+                ],
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// This company's own pool of keys for the reader it has chosen.
+///
+/// The same editor the platform console draws, handed this company's
+/// id instead of null — `app.can_admin(org_id)` is what decides
+/// whether the person looking may change anything, and it decides in
+/// the database rather than here.
+///
+/// Drawn only once a company is resolved. It always is by the time
+/// this card is on screen, but `currentOrgIdProvider` is nullable and
+/// a pool asked for with a null id is the PLATFORM's pool — which this
+/// screen must never show and the database would refuse anyway.
+class _OwnKeyPool extends ConsumerWidget {
+  const _OwnKeyPool({required this.provider, required this.canEdit});
+
+  final String provider;
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orgId = ref.watch(currentOrgIdProvider);
+    if (orgId == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(
+          'More than one key',
+          subtitle: 'Each with what it may spend and when it may run. '
+              'Scans move between them, so a key that has reached its '
+              'limit stands down until the limit resets.',
+        ),
+        const SizedBox(height: Space.sm),
+        OcrKeyPoolEditor(
+          provider: provider,
+          orgId: orgId,
+          canEdit: canEdit,
+        ),
+      ],
     );
   }
 }

@@ -552,8 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-00. **GEMINI AND THE KEY POOL — the platform half is done, the tenant
-   half is not.** The user asked for Google AI Studio as a SmartScan
+00. **GEMINI AND THE KEY POOL — built, both halves.** The user asked for Google AI Studio as a SmartScan
    reader, with several keys, per-key limits "time day month", and an
    on/off in the admin console. They chose the widest reading of all
    three questions: caps AND a schedule, platform pool AND per-company,
@@ -577,14 +576,16 @@ deal with, and the estimate screen is honest about not knowing.
    `is_active` false and the Readers screen is the on/off.
    `/admin/reader-keys` in the console manages the platform pool.
 
-   **Not done: the tenant half.** The database and the edge function
-   already take an `org_id` everywhere and guard it with
-   `app.can_admin`, so a company's own pool WORKS — there is just no
-   screen for it. `settings_screen.dart` still has the single-key path
-   (`setOcrCredentials`), which the edge function falls back to. The
-   shape to build is `OcrKeyPoolEditor(provider:, orgId:)` lifted out
-   of `ocr_keys_admin.dart` so the console and the tenant card draw one
-   editor rather than two.
+   **The tenant half is done too.** `OcrKeyPoolEditor(provider:,
+   orgId:, canEdit:)` in `features/shared/` is ONE editor used twice:
+   the console hands it a null org id, the Settings card hands it the
+   company's, and the database decides who may do what. It sits BELOW
+   the single-key field rather than replacing it, for two reasons that
+   are not tidiness — the scan asks the pool first and falls back on
+   the single key, so a company that never opens it carries on exactly
+   as before; and Document AI needs a project, a location and a
+   processor, which a pool row has nowhere to put, so that field is
+   still the only way to configure that reader at all.
 
    **The trap worth reading before touching any of this.** A function
    the edge function cannot reach fails by SILENTLY DOING NOTHING.

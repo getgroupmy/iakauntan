@@ -6,6 +6,7 @@ import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/ocr_repository.dart';
 import 'package:iakauntan/src/features/admin/ocr_keys_admin.dart';
+import 'package:iakauntan/src/features/shared/ocr_key_pool_editor.dart';
 import 'package:iakauntan/src/features/admin/platform_console_screen.dart';
 
 /// The console page for a reader's pool of keys. `0675`.
@@ -372,6 +373,11 @@ void main() {
     });
 
     testWidgets('an empty pool says what happens without one', (tester) async {
+      // Not "no keys". What an empty pool MEANS differs by side, and
+      // the difference is the whole reason the editor takes an org id:
+      // the platform's falls back on the key in the function's
+      // environment, and a company's falls back on its single key or
+      // on the platform's.
       tester.view.physicalSize = const Size(1200, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -380,11 +386,72 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('No keys yet'), findsOneWidget);
       expect(
         find.textContaining('falls back on the key in the'),
         findsOneWidget,
       );
+      expect(find.textContaining('Scans run on the single key'), findsNothing);
+    });
+
+    testWidgets('and a company is told the other thing', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ocrKeyPoolProvider.overrideWith((ref, args) async => const []),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: OcrKeyPoolEditor(provider: 'gemini', orgId: 'o1'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.textContaining('Scans run on the single key above'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('function'), findsNothing);
+    });
+
+    testWidgets('a reader who may not edit is offered nothing that changes '
+        'it', (tester) async {
+      // Seeing what is configured and being allowed to change it are
+      // two permissions, and the database refuses the second either
+      // way — this is the screen agreeing rather than the screen
+      // deciding.
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ocrKeyPoolProvider.overrideWith((ref, args) async => [key()]),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: OcrKeyPoolEditor(
+                provider: 'gemini',
+                orgId: 'o1',
+                canEdit: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Studio one'), findsOneWidget);
+      expect(find.byKey(const ValueKey('add-reader-key')), findsNothing);
+      expect(find.byKey(const ValueKey('reader-key-menu-k1')), findsNothing);
     });
 
     testWidgets('a reader switched off says the pool is not the problem',

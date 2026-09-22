@@ -46,6 +46,8 @@ import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/offline_controller.dart';
 import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
+import 'package:iakauntan/src/data/ocr_repository.dart';
+import 'package:iakauntan/src/features/shared/ocr_key_pool_editor.dart';
 import 'package:iakauntan/src/features/secretarial/beneficial_owner_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/charge_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/filing_lifecycle.dart';
@@ -4780,6 +4782,172 @@ void main() {
 
       expect(find.text('1 CT = 24 KGM'), findsOneWidget);
       expect(find.byKey(const ValueKey('forget-pack-CT')), findsNothing);
+    });
+  });
+
+  group('keying in a reader key, and what it may spend', () {
+    testWidgets('a new key must be pasted, and says why it cannot wait',
+        (tester) async {
+      // The key cannot be read back anywhere in this app, so "required"
+      // would not explain why it cannot be filled in later.
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => editKey(context, ref, 'gemini', null, null),
+      );
+
+      expect(find.text('Add a key'), findsOneWidget);
+      expect(
+        find.textContaining('It cannot be read back, here or anywhere '
+            'else in this app.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Give the key a name'), findsOneWidget);
+
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('key-save')));
+      expect(save.onPressed, isNull);
+    });
+
+    testWidgets('and the caps say they are counted here, not at Google',
+        (tester) async {
+      // The belief this kills is that the console reads Google's
+      // counter. It does not and cannot: Google's own day rolls over on
+      // Pacific time and this schema is Malaysian throughout, so a cap
+      // set here is a budget of our own and has to be set UNDER what
+      // the account allows.
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => editKey(context, ref, 'gemini', null, null),
+      );
+
+      expect(find.text('What it may spend'), findsOneWidget);
+      expect(
+        find.textContaining('Blank is no cap'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Counted here, not at the provider'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('rolls over on Pacific time'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an empty clock says "any" rather than showing nothing',
+        (tester) async {
+      // Nothing selected means ALWAYS. A blank heading would read as a
+      // clock that failed to load, and the difference between those two
+      // is the difference between leaving it alone and going to look
+      // for a bug.
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => editKey(context, ref, 'gemini', null, null),
+      );
+
+      expect(find.text('Hours — any'), findsOneWidget);
+      expect(find.text('Days — any'), findsOneWidget);
+      expect(find.text('Months — any'), findsOneWidget);
+
+      // Scrolled to first: the clock is below the caps in a dialog
+      // that scrolls, and `tap` on something off-screen warns and does
+      // nothing rather than failing.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('days-6')),
+        120,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.tap(find.byKey(const ValueKey('days-6')));
+      await tester.pumpAndSettle();
+
+      // Chosen, so the heading stops claiming it is unrestricted.
+      expect(find.text('Days — any'), findsNothing);
+      expect(find.text('Days'), findsOneWidget);
+      expect(find.text('Hours — any'), findsOneWidget);
+    });
+
+    testWidgets('an existing key is not made to be retyped', (tester) async {
+      // The whole reason the key is optional on an update: this app
+      // cannot show anybody the secret it holds, so a cap that could
+      // only be raised by retyping the key could not be raised at all.
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => editKey(
+          context,
+          ref,
+          'gemini',
+          null,
+          OcrPoolKey(
+            id: 'k1',
+            label: 'Studio one',
+            keyTail: '4242',
+            isActive: true,
+            inWindow: true,
+            hasHeadroom: true,
+            spentMinute: 0,
+            spentDay: 0,
+            spentMonth: 0,
+            perMinute: 15,
+            perDay: 1500,
+            lastError: 'RESOURCE_EXHAUSTED: quota exceeded',
+          ),
+        ),
+      );
+
+      expect(find.text('Studio one'), findsWidgets);
+      expect(
+        find.textContaining('Leave blank to keep the key that is on file'),
+        findsOneWidget,
+      );
+      // The last four, so it can be matched against Google's own list.
+      expect(find.textContaining('…4242'), findsOneWidget);
+      // The caps arrive filled in rather than blank, or saving would
+      // clear them. Found by FIELD: the hours are chips numbered 00 to
+      // 23, so a bare `find.text('15')` matches the chip as well.
+      expect(
+        find.widgetWithText(TextField, '15'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextField, '1500'),
+        findsOneWidget,
+      );
+      // What the provider last said, so a key revoked at their end
+      // reads differently from one that is merely busy.
+      expect(
+        find.textContaining('Last refused: RESOURCE_EXHAUSTED'),
+        findsOneWidget,
+      );
+
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('key-save')));
+      expect(save.onPressed, isNotNull,
+          reason: 'nothing is missing, so the key need not be retyped');
+    });
+
+    testWidgets('a cap of nought is refused where it is typed',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => editKey(context, ref, 'gemini', null, null),
+      );
+
+      await tester.enterText(find.byKey(const ValueKey('key-label')), 'One');
+      await tester.enterText(
+          find.byKey(const ValueKey('key-secret')), 'AIza-something');
+      await tester.enterText(find.byKey(const ValueKey('cap-day')), '0');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('above nought'), findsOneWidget);
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('key-save')));
+      expect(save.onPressed, isNull);
     });
   });
 }
