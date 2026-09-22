@@ -40,6 +40,7 @@ import 'package:iakauntan/src/features/stock/landed_cost_screen.dart';
 import 'package:iakauntan/src/features/stock/transfers_screen.dart';
 import 'package:iakauntan/src/features/stock/stock_take_screen.dart';
 import 'package:iakauntan/src/features/ticketing/teams_screen.dart';
+import 'package:iakauntan/src/features/ticketing/ticket_screen.dart';
 import 'package:iakauntan/src/features/ticketing/tickets_screen.dart';
 import 'package:iakauntan/src/data/reserved_names_repository.dart';
 
@@ -2230,6 +2231,117 @@ void main() {
       // And the app bar falls back to a name rather than showing an
       // empty title.
       expect(find.text('Payroll run'), findsOneWidget);
+    });
+  });
+
+  group('one ticket', () {
+    testWidgets('builds, and resolves three ids through three providers',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TicketScreen(id: 't1'), [
+          ticketProvider('t1').overrideWith(
+            (ref) async => {
+              'id': 't1',
+              'ticket_no': 'TKT-001',
+              'subject': 'Printer will not print the receipt',
+              'description': 'It feeds the paper and prints nothing.',
+              'status': 'open',
+              'priority': 'p1',
+              'ticket_type': 'problem',
+              'channel': 'phone',
+              'team_id': 'team-1',
+              'category_id': 'cat-1',
+              'assignee_id': 'u1',
+              'opened_at': '2026-09-20T02:00:00Z',
+              'escalation_level': 2,
+              'response_breached': false,
+              'resolution_breached': true,
+            },
+          ),
+          ticketTeamsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'team-1', 'name': 'Front counter'},
+            ],
+          ),
+          ticketCategoriesProvider.overrideWith(
+            (ref) async => [
+              {'id': 'cat-1', 'name': 'Hardware'},
+            ],
+          ),
+          teamProvider.overrideWith(
+            (ref) async => [
+              TeamMember(
+                memberId: 'm1',
+                userId: 'u1',
+                fullName: 'Siti Nurhaliza',
+                role: 'admin',
+                status: 'active',
+              ),
+            ],
+          ),
+          ticketCommentsProvider('t1').overrideWith((ref) async => []),
+          ticketEventsProvider('t1').overrideWith((ref) async => []),
+          cannedResponsesProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('TKT-001'), findsOneWidget);
+      expect(find.text('Printer will not print the receipt'), findsOneWidget);
+      // Three ids, three separate providers, three names on the page.
+      expect(find.text('Front counter'), findsOneWidget);
+      expect(find.text('Hardware'), findsOneWidget);
+      expect(find.text('Siti Nurhaliza'), findsOneWidget);
+      // A code turned into a word, and the escalation count, which is
+      // only shown when there has been one.
+      expect(find.text('Problem'), findsOneWidget);
+      expect(find.text('2 time(s)'), findsOneWidget);
+      // The requester's own door. 0192 built the half of the
+      // conversation they write and nothing could reach it, so a
+      // customer could not answer a question about their own ticket.
+      expect(find.byKey(const ValueKey('ticket-share')), findsOneWidget);
+      // Send is ON the screen. It used to be 252 pixels off the right
+      // edge, so a ticket could not be replied to from a phone at all
+      // -- and a release build clips that silently, so the button was
+      // simply missing rather than obviously broken.
+      final send = tester.getRect(find.byKey(const ValueKey('ticket-send')));
+      expect(send.right, lessThanOrEqualTo(412));
+    });
+
+    testWidgets('and an assignee who has left the team is named as that',
+        (tester) async {
+      // Not a blank and not a raw uuid: the ticket is assigned, and to
+      // somebody the roster no longer holds, which is a different
+      // thing from being unassigned.
+      await onAPhone(
+        tester,
+        wrap(const TicketScreen(id: 't1'), [
+          ticketProvider('t1').overrideWith(
+            (ref) async => {
+              'id': 't1',
+              'ticket_no': 'TKT-002',
+              'subject': 'Old ticket',
+              'status': 'open',
+              'priority': 'p3',
+              'channel': 'email',
+              'assignee_id': 'gone',
+              'opened_at': '2026-09-20T02:00:00Z',
+            },
+          ),
+          ticketTeamsProvider.overrideWith((ref) async => []),
+          ticketCategoriesProvider.overrideWith((ref) async => []),
+          teamProvider.overrideWith((ref) async => []),
+          ticketCommentsProvider('t1').overrideWith((ref) async => []),
+          ticketEventsProvider('t1').overrideWith((ref) async => []),
+          cannedResponsesProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(
+        find.text('Somebody no longer on the team'),
+        findsOneWidget,
+      );
+      // No escalations and no reopenings, so neither row appears --
+      // "0 time(s)" on every ticket is noise.
+      expect(find.textContaining('time(s)'), findsNothing);
     });
   });
 }

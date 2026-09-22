@@ -61,7 +61,6 @@ APP = ROOT / 'app'
 EXEMPT: dict[str, str] = {
     'FilingScreen': 'lib/src/features/financials/filing_screen.dart',
     'HrSetupScreen': 'lib/src/features/hr/hr_setup_screen.dart',
-    'TicketScreen': 'lib/src/features/ticketing/ticket_screen.dart',
     # Private, so no test outside its own library can name it at all.
     # Listed rather than skipped so the count is honest about them.
     '_PreviewScreen': 'lib/src/features/admin/landing_cms.dart',
