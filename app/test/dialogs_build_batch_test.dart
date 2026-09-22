@@ -11,6 +11,9 @@ import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/assets/capital_allowances_dialog.dart';
 import 'package:iakauntan/src/features/assets/capitalise_dialog.dart';
+import 'package:iakauntan/src/features/assets/asset_editor.dart';
+import 'package:iakauntan/src/features/assets/depreciation_dialog.dart';
+import 'package:iakauntan/src/features/assets/disposal_dialog.dart';
 import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
@@ -31,6 +34,11 @@ import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
 import 'package:iakauntan/src/features/pos/offline_problems_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
 import 'package:iakauntan/src/features/pos/sold_out_dialog.dart';
+import 'package:iakauntan/src/features/property/charge_run_sheet.dart';
+import 'package:iakauntan/src/features/property/statutory_charge_sheet.dart';
+import 'package:iakauntan/src/features/property/strata_sheet.dart';
+import 'package:iakauntan/src/features/property/tenancy_sheet.dart';
+import 'package:iakauntan/src/features/property/unit_sheet.dart';
 
 /// Dialogs and sheets that nothing had ever opened.
 ///
@@ -1713,6 +1721,829 @@ void main() {
       expect(find.textContaining('Delete this contact?'), findsOneWidget);
     });
   });
+
+  group('the asset register, over an asset\'s life', () {
+    /// A van bought for RM 90,000, four years into a five-year life.
+    ///
+    /// The figures are chosen so every derived line below is wrong if
+    /// the arithmetic is wrong in the obvious ways: cost minus
+    /// accumulated is 18,000, which is neither the cost nor the
+    /// accumulated, and the annual charge is 18,000 a year, which is
+    /// the same number for a different reason. Any test that agrees
+    /// with both of those by accident has to have got there twice.
+    final van = FixedAsset(
+      id: 'a1',
+      assetNo: 'FA-0007',
+      name: 'Toyota Hiace',
+      acquisitionDate: DateTime(2021, 7, 1),
+      cost: 90000,
+      residualValue: 0,
+      method: 'straight_line',
+      usefulLifeMonths: 60,
+      accumulatedDepreciation: 72000,
+      caClassCode: 'motor_vehicle',
+    );
+
+    List<Override> withClasses() => [
+          capitalAllowanceClassesProvider.overrideWith((ref) async => [
+                CapitalAllowanceClass(
+                  code: 'motor_vehicle',
+                  label: 'Motor vehicles',
+                  initialRate: 0.20,
+                  annualRate: 0.20,
+                  costCap: 50000,
+                ),
+                CapitalAllowanceClass(
+                  code: 'plant',
+                  label: 'Plant and machinery',
+                  initialRate: 0.20,
+                  annualRate: 0.14,
+                  isVerified: true,
+                ),
+                CapitalAllowanceClass(
+                  code: 'small_value',
+                  label: 'Small value assets',
+                  initialRate: 1.0,
+                  annualRate: 0,
+                  smallValueThreshold: 2000,
+                ),
+              ]),
+        ];
+
+    testWidgets('the editor opens on a new asset and prices its own life',
+        (tester) async {
+      // Nothing had ever built this. The annual charge is computed in
+      // the widget from four controllers, so it is the one figure here
+      // that no repository could be wrong about on its behalf.
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref),
+      );
+
+      expect(find.text('New asset'), findsOneWidget);
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Cost *'), '60000');
+      await tester.pumpAndSettle();
+
+      // 60,000 over 60 months, which the form defaults to.
+      expect(
+        find.text('RM 12,000.00 a year, RM 1,000.00 a month'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a residual value comes off the charge, not off the cost',
+        (tester) async {
+      // The distinction the field exists for: an asset is depreciated
+      // down TO the residual, so the residual reduces what is charged
+      // and does not reduce the cost the register carries.
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref),
+      );
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Cost *'), '60000');
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Residual value'), '12000');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('RM 9,600.00 a year, RM 800.00 a month'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('reducing balance says the first year is the biggest one',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref),
+      );
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Cost *'), '60000');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reducing balance'));
+      await tester.pumpAndSettle();
+
+      // 20% is the form's default rate. The sentence has to carry the
+      // "less every year after", or a straight-line reading of it
+      // understates five years of charge badly.
+      expect(
+        find.textContaining('About RM 12,000.00 in the first year, '
+            'less every year after'),
+        findsOneWidget,
+      );
+      // And the months field is gone, not merely ignored.
+      expect(find.widgetWithText(TextField, 'Useful life'), findsNothing);
+    });
+
+    testWidgets('editing a depreciated asset warns that history stands',
+        (tester) async {
+      // The assumption the warning exists to kill is that changing the
+      // cost restates what has already been posted. It does not.
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref, asset: van),
+      );
+
+      // Twice: the dialog is titled with the asset number rather than
+      // "Edit asset", and the number is also prefilled into its own
+      // field. `find.text` reaches inside an `EditableText`, so an
+      // assertion of one here would be an assertion that the form did
+      // NOT load.
+      expect(find.text('FA-0007'), findsNWidgets(2));
+      expect(
+        find.textContaining('RM 72,000.00 has already been charged'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('nothing already posted is rewritten'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the capital allowance class carries its own restriction',
+        (tester) async {
+      // Schedule 3 caps a motor vehicle at RM 50,000 however much it
+      // cost, and this van cost 90,000 — so the cap is the whole
+      // difference between the accounts and the tax computation for
+      // this asset, and it has to be on screen.
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref, asset: van),
+      );
+
+      expect(find.text('Capital allowances'), findsOneWidget);
+      expect(
+        find.textContaining('computed on at most RM 50,000.00'),
+        findsOneWidget,
+      );
+      // Depreciation is added back, so the two sets of figures are not
+      // meant to agree and the heading says so.
+      expect(
+        find.textContaining('depreciation is added back in a tax '
+            'computation'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a small-value class says what it stops applying above',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('asset-ca-class')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Small value assets — 100% then 0%').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('costing less than RM 2,000.00'),
+        findsOneWidget,
+      );
+      // An unverified class is a different warning, and the small
+      // value class here is unverified too.
+      expect(
+        find.textContaining('not transcribed from the Act'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no class at all is an answer, not an unfinished form',
+        (tester) async {
+      // Land and goodwill attract nothing and never will. A blank that
+      // reads as a to-do is a blank somebody fills in wrongly.
+      await openedWithRef(
+        tester,
+        withClasses(),
+        (context, ref) => showAssetEditor(context, ref),
+      );
+
+      expect(
+        find.text('No capital allowance (land, goodwill)'),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('disposal shows the gain as a floor, not the answer',
+        (tester) async {
+      // The number on screen is proceeds minus net book value TODAY.
+      // The database charges the months still outstanding first, so
+      // the posted gain is smaller — and the dialog has to say that,
+      // because a seller reading "gain of 8,000" will book 8,000.
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(banks: [
+            {'id': 'b1', 'name': 'Maybank current', 'bank_name': 'Maybank'},
+          ])),
+        ],
+        (context, ref) => showDisposalDialog(context, ref, asset: van),
+      );
+
+      expect(find.text('Dispose of FA-0007'), findsOneWidget);
+      expect(
+        find.text('Cost RM 90,000.00 · depreciated RM 72,000.00 · '
+            'net book value RM 18,000.00'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Proceeds'), '26000');
+      await tester.pumpAndSettle();
+
+      // 26,000 against a net book value of 18,000.
+      expect(find.text('Gain of about RM 8,000.00'), findsOneWidget);
+      expect(
+        find.textContaining('the posted figure may be smaller than this'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and calls scrapping a loss, at the whole net book value',
+        (tester) async {
+      // Proceeds default to zero, which is what scrapping is. The loss
+      // is then the entire net book value, and the dialog must not
+      // print a negative gain to say so.
+      await openedWithRef(
+        tester,
+        [repoProvider.overrideWithValue(_Repo(banks: const []))],
+        (context, ref) => showDisposalDialog(context, ref, asset: van),
+      );
+
+      expect(find.text('Loss of about RM 18,000.00'), findsOneWidget);
+      expect(find.textContaining('Gain of about'), findsNothing);
+      // Blank proceeds go to cash, and the picker has to offer a way
+      // back to that once an account has been chosen.
+      expect(find.textContaining('they go to cash'), findsOneWidget);
+    });
+
+    testWidgets('the depreciation run prices every asset before posting',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          depreciationPreviewProvider.overrideWith((ref, asAt) async => [
+                DepreciationLine(
+                  assetId: 'a1',
+                  assetNo: 'FA-0007',
+                  name: 'Toyota Hiace',
+                  cost: 90000,
+                  accumulated: 72000,
+                  charge: 1500,
+                  netBookValue: 16500,
+                ),
+                DepreciationLine(
+                  assetId: 'a2',
+                  assetNo: 'FA-0011',
+                  name: 'Laptop',
+                  cost: 4800,
+                  accumulated: 4800,
+                  // Fully depreciated: nothing left to charge, and the
+                  // run must not list it or the total double-counts a
+                  // zero line into the operator's reading of the page.
+                  charge: 0,
+                  netBookValue: 0,
+                ),
+              ]),
+        ],
+        showDepreciationDialog,
+      );
+
+      expect(find.text('Run depreciation'), findsOneWidget);
+      expect(find.text('FA-0007 · Toyota Hiace'), findsOneWidget);
+      expect(find.text('FA-0011 · Laptop'), findsNothing);
+      expect(
+        find.text('net book value after: RM 16,500.00'),
+        findsOneWidget,
+      );
+      // One asset due, so the total is that asset's charge -- and both
+      // appear, which is what makes the total a total.
+      expect(find.text('Total charge'), findsOneWidget);
+      expect(find.text('RM 1,500.00'), findsNWidgets(2));
+    });
+
+    testWidgets('and says so plainly when there is nothing to charge',
+        (tester) async {
+      // Every asset up to date is a legitimate month, not an error.
+      await openedWithRef(
+        tester,
+        [
+          depreciationPreviewProvider.overrideWith((ref, asAt) async => [
+                DepreciationLine(
+                  assetId: 'a2',
+                  assetNo: 'FA-0011',
+                  name: 'Laptop',
+                  cost: 4800,
+                  accumulated: 4800,
+                  charge: 0,
+                  netBookValue: 0,
+                ),
+              ]),
+        ],
+        showDepreciationDialog,
+      );
+
+      expect(
+        find.textContaining('Everything is already depreciated to'),
+        findsOneWidget,
+      );
+      expect(find.text('Total charge'), findsNothing);
+    });
+  });
+
+  group('the property register, from a parcel to the charge run', () {
+    final owner = Contact(
+      id: 'c1',
+      code: 'C-0001',
+      name: 'Puan Aminah',
+      contactType: 'customer',
+    );
+
+    /// A small block: two parcels and the common property.
+    ///
+    /// 700 of 1,000 share units allocated, which is what makes the
+    /// scheme sheet's completeness warning fire on real arithmetic
+    /// rather than on a flag.
+    const units = <Map<String, dynamic>>[
+      {
+        'id': 'u1',
+        'unit_no': 'A-12-03',
+        'unit_type': 'parcel',
+        'share_units': 400,
+        'is_chargeable': true,
+      },
+      {
+        'id': 'u2',
+        'unit_no': 'A-12-04',
+        'unit_type': 'parcel',
+        'share_units': 300,
+        'is_chargeable': true,
+      },
+      {
+        'id': 'u3',
+        'unit_no': 'Surau',
+        'unit_type': 'common',
+        'share_units': null,
+        'is_chargeable': false,
+      },
+    ];
+
+    List<Override> site() => [
+          propertyUnitsProvider.overrideWith((ref, siteId) async => units),
+          contactsProvider.overrideWith((ref, args) async => [owner]),
+        ];
+
+    testWidgets('a strata unit sheet offers parcels, not shophouses',
+        (tester) async {
+      // `app.property_unit_matches_site` refuses the wrong pairing.
+      // Offering only what the tenure allows is what stops the refusal
+      // ever having to happen, so the dropdown's CONTENTS are the
+      // rule — not decoration over it.
+      await opened(
+        tester,
+        site(),
+        (context) => showUnitSheet(context, siteId: 's1', tenure: 'strata'),
+      );
+
+      expect(find.text('Add a parcel'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('unit-type')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Accessory parcel'), findsWidgets);
+      expect(find.text('Shop'), findsNothing);
+      expect(find.text('Office'), findsNothing);
+    });
+
+    testWidgets('and a non-strata one offers shophouses, not parcels',
+        (tester) async {
+      await opened(
+        tester,
+        site(),
+        (context) => showUnitSheet(context, siteId: 's1', tenure: 'landed'),
+      );
+
+      expect(find.text('Add a unit'), findsOneWidget);
+      // No share units field at all: share units belong to a strata
+      // scheme, and the trigger refuses them outright elsewhere.
+      expect(find.byKey(const ValueKey('share-units')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('unit-type')));
+      await tester.pumpAndSettle();
+      expect(find.text('Shop'), findsWidgets);
+      expect(find.text('Parcel'), findsNothing);
+    });
+
+    testWidgets('a chargeable parcel is refused without its share',
+        (tester) async {
+      // Billing a parcel with no allocated share is billing it in
+      // proportion to nothing, which means its neighbours pay its
+      // share. The form has to stop it before the trigger does.
+      await opened(
+        tester,
+        site(),
+        (context) => showUnitSheet(context, siteId: 's1', tenure: 'strata'),
+      );
+
+      await tester.enterText(
+          find.byKey(const ValueKey('unit-no')), 'A-12-05');
+      await tester.pumpAndSettle();
+
+      // Before the refusal, because Material shows a field's helper
+      // text OR its error, never both -- so asserting this after the
+      // tap would be asserting the opposite of what is wanted.
+      expect(
+        find.textContaining('The Charges are levied in proportion to this'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('unit-save')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('A chargeable parcel needs its share'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and common property carries neither owner nor charge',
+        (tester) async {
+      await opened(
+        tester,
+        site(),
+        (context) => showUnitSheet(context, siteId: 's1', tenure: 'strata'),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('unit-type')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Common property').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('unit-owner')), findsNothing);
+      expect(find.byKey(const ValueKey('unit-chargeable')), findsNothing);
+      expect(find.byKey(const ValueKey('share-units')), findsNothing);
+      expect(
+        find.textContaining('never billed and has no owner to bill'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the scheme sheet compares the schedule against the parcels',
+        (tester) async {
+      // 400 + 300 of a stated 1,000. Raising charges against a
+      // denominator the parcels do not add up to is the failure this
+      // line exists to catch, and the figures are read off the units
+      // rather than off a column.
+      await opened(
+        tester,
+        site(),
+        (context) => showStrataSchemeSheet(context, siteId: 's1'),
+      );
+
+      expect(find.text('Set up the scheme'), findsOneWidget);
+      expect(find.text('700 share units allocated so far.'), findsOneWidget);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('total-share-units')), '1000');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Incomplete: 700 of 1000 allocated'),
+        findsOneWidget,
+        reason: 'the schedule says 1,000, not 1000.0',
+      );
+      expect(
+        find.textContaining('a denominator the parcels do not add up to'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and calls the schedule complete when it adds up',
+        (tester) async {
+      await opened(
+        tester,
+        site(),
+        (context) => showStrataSchemeSheet(context, siteId: 's1'),
+      );
+
+      await tester.enterText(
+          find.byKey(const ValueKey('total-share-units')), '700');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('The Schedule of Parcels is complete: 700 of 700 '
+            'allocated.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the MC registration is asked for only once it is an MC',
+        (tester) async {
+      // Developer, then JMB, then MC. A registration number on a
+      // development still in the developer's hands is a number for
+      // something that does not exist yet.
+      await opened(
+        tester,
+        site(),
+        (context) => showStrataSchemeSheet(context, siteId: 's1'),
+      );
+
+      expect(
+        find.widgetWithText(TextFormField, 'MC registration'),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('strata-stage')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Management corporation').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(TextFormField, 'MC registration'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the rate sheet says a rate is added and never edited',
+        (tester) async {
+      // A charge raised for January stays raised at January's rate,
+      // which is why this sheet has no Save-over — and why the
+      // sentence has to be on it.
+      await opened(
+        tester,
+        const [],
+        (context) =>
+            showChargeRateSheet(context, siteId: 's1', schemeId: 'sc1'),
+      );
+
+      expect(find.text('Record the rate resolved'), findsOneWidget);
+      expect(
+        find.textContaining('added and never edited'),
+        findsOneWidget,
+      );
+      // The two statutory bounds, defaulted rather than left blank.
+      expect(find.text('Not less than 10'), findsOneWidget);
+      expect(find.text('Capped at 10'), findsOneWidget);
+    });
+
+    testWidgets('and refuses a sinking fund under the floor', (tester) async {
+      await opened(
+        tester,
+        const [],
+        (context) =>
+            showChargeRateSheet(context, siteId: 's1', schemeId: 'sc1'),
+      );
+
+      await tester.enterText(
+          find.byKey(const ValueKey('rate-per-share-unit')), '0.35');
+      await tester.enterText(find.byKey(const ValueKey('sinking-fund')), '5');
+      // The button is disabled until a date is chosen, so validation is
+      // driven through the form rather than through the button — which
+      // is the state a user without a date is actually in.
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('rate-save')), findsOneWidget);
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('rate-save')));
+      expect(save.onPressed, isNull,
+          reason: 'no effective-from date has been chosen yet');
+    });
+
+    testWidgets('the tenancy sheet will not let a unit to itself twice',
+        (tester) async {
+      // Save is held shut while the dates do not run, because
+      // `tenancies_no_overlap` and the date check are two different
+      // refusals and only one of them is worth a round trip.
+      await opened(
+        tester,
+        site(),
+        (context) => showTenancySheet(context, siteId: 's1'),
+      );
+
+      expect(find.text('Let a unit'), findsOneWidget);
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('tenancy-save')));
+      expect(save.onPressed, isNull,
+          reason: 'neither date has been given yet');
+    });
+
+    testWidgets('and does not offer common property to let', (tester) async {
+      await opened(
+        tester,
+        site(),
+        (context) => showTenancySheet(context, siteId: 's1'),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('tenancy-unit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A-12-03'), findsWidgets);
+      expect(find.text('Surau'), findsNothing);
+    });
+
+    testWidgets('a statutory charge asks for a half only on assessment',
+        (tester) async {
+      // Quit rent is annual and assessment half-yearly. A half on a
+      // quit rent is a period that does not exist, and the unique key
+      // reads it as a different charge — which is how one year gets
+      // entered twice.
+      await opened(
+        tester,
+        site(),
+        (context) => showStatutoryChargeSheet(context, siteId: 's1'),
+      );
+
+      // Assessment is what the sheet opens on, because it is the one
+      // that comes round twice a year.
+      expect(find.text('Record a charge'), findsOneWidget);
+      expect(find.text('Assessment is half-yearly'), findsOneWidget);
+      expect(find.text('The local council'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('statutory-kind')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Quit rent (cukai tanah)').last);
+      await tester.pumpAndSettle();
+
+      // Quit rent is annual: the half goes, and the authority's helper
+      // follows the charge to the state land office.
+      expect(find.text('Assessment is half-yearly'), findsNothing);
+      expect(find.text('The state land office'), findsOneWidget);
+      expect(find.text('The local council'), findsNothing);
+    });
+
+    testWidgets('a paid date with no receipt is refused where it is typed',
+        (tester) async {
+      // `0387`: a typed paid date took the charge off the due list with
+      // no bill, no supplier and nothing in the ledger. The database
+      // refuses it; this is the same refusal, without the round trip.
+      await opened(
+        tester,
+        site(),
+        (context) => showStatutoryChargeSheet(
+          context,
+          siteId: 's1',
+          charge: const {
+            'id': 'q1',
+            'kind': 'quit_rent',
+            'period_year': 2025,
+            'amount': 480,
+            'due_date': '2025-05-31',
+            'paid_on': '2025-05-20',
+          },
+        ),
+      );
+
+      expect(find.text('Amend the charge'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('statutory-reference')),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+          find.byKey(const ValueKey('statutory-reference')), '   ');
+      await tester.tap(find.byKey(const ValueKey('statutory-save')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('takes the charge off the due list with '
+            'nothing behind it'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a billed charge is told its paid date, not asked for it',
+        (tester) async {
+      // The bill is the record of the payment. Offering a second place
+      // to type one would be two records of the same thing.
+      await opened(
+        tester,
+        site(),
+        (context) => showStatutoryChargeSheet(
+          context,
+          siteId: 's1',
+          charge: const {
+            'id': 'q2',
+            'kind': 'assessment',
+            'period_year': 2025,
+            'period_half': 1,
+            'amount': 320,
+            'due_date': '2025-02-28',
+            'bill_document_id': 'd1',
+            // As `propertyStatutoryCharges` selects it. The flat
+            // `bill_no` is `site_screen`'s reshaping, and a fixture
+            // written in that shape would have hidden the defect this
+            // test found: the tooltip below asked the raw row for
+            // `bill_no`, got null, and dropped the number.
+            'purchase_documents': {'doc_no': 'BILL-0042'},
+          },
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('statutory-paid-by-bill')),
+        findsOneWidget,
+      );
+      expect(find.text('Billed, not yet paid'), findsOneWidget);
+      expect(
+        find.textContaining('From bill BILL-0042. Settle the bill and '
+            'this follows it.'),
+        findsOneWidget,
+      );
+      // And it cannot be billed a second time.
+      final bill = tester.widget<TextButton>(
+          find.byKey(const ValueKey('statutory-bill')));
+      expect(bill.onPressed, isNull);
+      expect(
+        find.byTooltip('Already on bill BILL-0042.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the charge run prices the period before it raises it',
+        (tester) async {
+      // The preview is `strata_charge_preview` — the same function the
+      // engine loops over when it writes the invoices — so the total
+      // here is the total the owners receive. The button counts the
+      // rows so nobody raises 47 invoices meaning to raise one.
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(rpc: {
+            'strata_charge_preview': [
+              {
+                'unit_no': 'A-12-03',
+                'owner_name': 'Puan Aminah',
+                'share_units': 400,
+                'maintenance_amount': 140,
+                'sinking_amount': 14,
+                'total_amount': 154,
+              },
+              {
+                'unit_no': 'A-12-04',
+                'owner_name': null,
+                'share_units': 300,
+                'maintenance_amount': 105,
+                'sinking_amount': 10.5,
+                'total_amount': 115.5,
+              },
+            ],
+          })),
+        ],
+        (context, ref) =>
+            showChargeRunSheet(context, ref, strata: true, id: 'sc1'),
+      );
+
+      expect(find.text('Raise maintenance charges'), findsOneWidget);
+      expect(find.text('A-12-03 · Puan Aminah'), findsOneWidget);
+      // A parcel with no owner on file still has to appear, or the
+      // total on the button is bigger than the list explaining it.
+      expect(find.text('A-12-04 · No owner'), findsOneWidget);
+      expect(
+        find.text('400 share units · charges RM 140.00 + sinking fund '
+            'RM 14.00'),
+        findsOneWidget,
+      );
+      expect(find.text('2 invoices'), findsOneWidget);
+      expect(find.text('Raise 2 invoices'), findsOneWidget);
+      // 154 + 115.50.
+      expect(find.text('RM 269.50'), findsOneWidget);
+    });
+
+    testWidgets('and holds the button shut when there is nothing to raise',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(
+              _Repo(rpc: const {'rent_preview': <Map<String, dynamic>>[]})),
+        ],
+        (context, ref) =>
+            showChargeRunSheet(context, ref, strata: false, id: 's1'),
+      );
+
+      expect(find.text('Raise rent'), findsOneWidget);
+      expect(find.text('Nothing to raise for this period.'), findsOneWidget);
+      final raise = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Raise 0 invoices'));
+      expect(raise.onPressed, isNull);
+      // The default due date is stated rather than left to be guessed.
+      expect(
+        find.text('Due on the first day of the period'),
+        findsOneWidget,
+      );
+    });
+  });
 }
 
 /// Answers only what the dialogs under test ask for.
@@ -1722,10 +2553,46 @@ void main() {
 /// says which thing — which is how the fixture above was written
 /// without reading all of `Repo`.
 class _Repo implements Repo {
-  _Repo({this.late = const [], this.closed = const []});
+  _Repo({
+    this.late = const [],
+    this.closed = const [],
+    this.banks = const [],
+    this.rpc = const {},
+  });
 
   final List<Map<String, dynamic>> late;
   final List<Map<String, dynamic>> closed;
+  final List<Map<String, dynamic>> banks;
+
+  /// Answers keyed on the RPC's name, for everything reached through
+  /// one.
+  ///
+  /// This exists because **an extension method is not virtual**. A
+  /// great deal of `Repo` lives in `extension RepoProperty on Repo`
+  /// and its siblings, and Dart dispatches those on the STATIC type —
+  /// so a fake that `implements Repo` and overrides
+  /// `strataChargePreview` is ignored, the real body runs, and the
+  /// test fails somewhere far from the cause. That happened here: the
+  /// charge run sheet rendered `UnimplementedError: Symbol("callRpc")`
+  /// in its own error slot, which is the only reason it was visible at
+  /// all. Every one of those extension methods bottoms out in
+  /// `callRpc`, which IS virtual, so this is the seam that holds for
+  /// all of them.
+  final Map<String, dynamic> rpc;
+
+  @override
+  Future<List<Map<String, dynamic>>> bankAccounts() async => banks;
+
+  @override
+  Future<dynamic> callRpc(String fn, {Map<String, dynamic>? params}) async {
+    if (!rpc.containsKey(fn)) {
+      throw UnimplementedError(
+        'a dialog under test called the RPC "$fn" and this fake does '
+        'not answer it.',
+      );
+    }
+    return rpc[fn];
+  }
 
   @override
   Future<List<Map<String, dynamic>>> lateOrders({DateTime? asAt}) async =>

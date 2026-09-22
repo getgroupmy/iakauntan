@@ -552,7 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The DIALOGS backlog — 87 of 121 openers left. In progress.**
+0a. **The DIALOGS backlog — 72 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet
    classes**, more than there are screens, which the screens gate
@@ -562,7 +562,7 @@ deal with, and the estimate screen is honest about not knowing.
    classes are private, so a gate demanding `_MappingDialog` be
    constructed would be unsatisfiable for 89% of the surface. The way
    in is the way the app goes in: `showFsMapping(context)`,
-   `showPersonEditor(context, person: ...)`. 121 of those exist; 34
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 49
    are covered.
 
    `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
@@ -576,7 +576,7 @@ deal with, and the estimate screen is honest about not knowing.
    it by hand — the gate refuses a stale entry in both directions, so
    it self-checks.
 
-   **Four defects so far, and the reason they cluster here.** A
+   **Six defects so far, and the reason most of them cluster here.** A
    dialog's box is the screen LESS its insets LESS its content
    padding, so about 284px on a 412px phone. The identical `ListTile`
    row throws inside a dialog at 412 and draws on a screen at 360 —
@@ -592,6 +592,25 @@ deal with, and the estimate screen is honest about not knowing.
    - `stock_card_dialog.dart` laid out six columns, four of them
      fixed, totalling 364px in a 284px box. The register scrolls
      sideways now; the closing sentence does not.
+
+   The other two are not about width, and neither was visible in a
+   browser either:
+
+   - `strata_sheet.dart` printed the Schedule of Parcels as
+     `700.0 of 1000.0 allocated`. Share units are numeric, so the
+     parcels come back as doubles and the denominator is parsed as
+     one. `Fmt.qty` on both now — it drops the zeros on a whole
+     number and keeps them on the fractional allocations a schedule
+     is still allowed to make.
+   - `whyNotBillable` was handed a statutory charge row exactly as
+     the database sends it and asked it for `bill_no`, which is not a
+     key that row has: `propertyStatutoryCharges` selects the number
+     as an embedded `purchase_documents(doc_no)`, and only
+     `site_screen` flattens it. So a charge already on BILL-0042 was
+     told "Already on a bill." There is now one `billNoOf(charge)`
+     that reads both shapes, and `statutory_charge_payment_test.dart`
+     asserts the embedded one — every fixture it had used the flat
+     key, which is exactly why the defect survived a tested file.
 
    **Traps, each paid for once:**
 
@@ -609,6 +628,26 @@ deal with, and the estimate screen is honest about not knowing.
      dialog with a paragraph above its list will not construct the
      third row, so assert one row per test when the rows are tall.
      This cost time twice.
+   - **An extension method is NOT virtual, so a `Repo` fake cannot
+     intercept one.** Great swathes of the repository live in
+     `extension RepoProperty on Repo` and its siblings, and Dart
+     dispatches those on the STATIC type — so `implements Repo` with
+     an `@override` of `rentPreview` is silently ignored and the real
+     body runs against a null Supabase client. The seam that holds
+     is `callRpc`, which is a method on `Repo` itself: the fake in
+     `dialogs_build_batch_test.dart` takes an `rpc` map keyed on the
+     function name, and every extension method bottoms out there.
+     Check which of the two you are facing with
+     `grep -n '^class \|^extension ' app/lib/src/data/repository.dart`
+     and the line number of the method.
+   - `find.text` reaches INSIDE an `EditableText`. A dialog titled
+     with a value it also prefills into a field — the asset editor,
+     with the asset number — matches twice, and `findsOneWidget`
+     there asserts the form did not load.
+   - Material shows a field's helper text OR its error, never both.
+     Assert the helper BEFORE tapping Save.
+   - Read the `initState` default before asserting on it. The
+     statutory charge sheet opens on **assessment**, not quit rent.
    - Do NOT run `dart format` on a file you touched. The repository is
      not format-clean and it reflows the whole file.
 
