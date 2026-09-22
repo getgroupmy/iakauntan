@@ -335,6 +335,8 @@ class OcrExtraction {
     this.note,
     this.rawText,
     this.documentKind,
+    this.target,
+    this.fields = const {},
   });
 
   final String? supplierName;
@@ -391,6 +393,29 @@ class OcrExtraction {
   /// taken before 0614 and every one where the list had not loaded.
   final String? documentKind;
 
+  /// Where the reader decided this document goes, as `module.action`.
+  ///
+  /// Not the same question as [documentKind], and a stronger answer.
+  /// `documentKind` is what the app's own classifier made of the text
+  /// afterwards — string matching against letterheads, in Dart. This is
+  /// the reader's own judgement, made while it had the page in front of
+  /// it and a list of the destinations this platform has configured.
+  ///
+  /// Null where the platform has configured none, which is every
+  /// reading before `0681`, and null where the reader could not place
+  /// the document — which it is told to say rather than guess, because
+  /// a document filed wrongly becomes a record somebody has to find and
+  /// undo.
+  final String? target;
+
+  /// What it read for that destination's fields, keyed by column name.
+  ///
+  /// Strings, all of them, and deliberately. The schema asks for what is
+  /// PRINTED, and `03/09/2026` on a Malaysian receipt is not a date
+  /// until somebody who knows the column decides which way round it is.
+  /// Coercion belongs where the column is known.
+  final Map<String, String> fields;
+
   /// The same reading with some of it changed.
   ///
   /// Only ever sets; it cannot put a field back to null, which is what
@@ -413,6 +438,8 @@ class OcrExtraction {
     String? note,
     String? rawText,
     String? documentKind,
+    String? target,
+    Map<String, String>? fields,
   }) =>
       OcrExtraction(
         supplierName: supplierName ?? this.supplierName,
@@ -432,6 +459,8 @@ class OcrExtraction {
         note: note ?? this.note,
         rawText: rawText ?? this.rawText,
         documentKind: documentKind ?? this.documentKind,
+        target: target ?? this.target,
+        fields: fields ?? this.fields,
       );
 
   /// The amount to put in an expense's Amount field.
@@ -464,6 +493,11 @@ class OcrExtraction {
         note: _text(j['note']),
         rawText: _text(j['raw_text']),
         documentKind: _text(j['document_kind']),
+        target: _text(j['target']),
+        fields: {
+          for (final e in ((j['fields'] as Map?) ?? const {}).entries)
+            if (_text(e.value) != null) '${e.key}': _text(e.value)!,
+        },
       );
 
   /// The same shape the server-side readers return, so a scan logged
@@ -497,6 +531,12 @@ class OcrExtraction {
         'note': note,
         'raw_text': rawText,
         'document_kind': documentKind,
+        'target': target,
+        // Omitted when empty rather than written as `{}`: a scan taken
+        // on a phone, or on a platform with no targets configured, has
+        // no answer here, and a stored `{}` reads as "the reader was
+        // asked and found nothing" when it was never asked.
+        if (fields.isNotEmpty) 'fields': fields,
       };
 
   static String? _text(Object? v) {

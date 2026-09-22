@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0680` (the highest applied migration).
-775 functions and 364 readable tables, of which
-298 functions only read.
+Schema version `0681` (the highest applied migration).
+779 functions and 366 readable tables, of which
+300 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**633 of 775 functions carry a `comment on
+**637 of 779 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (563)
+### general (567)
 
 Not gated on any module.
 
@@ -838,6 +838,8 @@ Not gated on any module.
 - `save_layout_rows(p_layout_id uuid, p_rows jsonb)` *(writes)* — Replaces a layout's rows in one go, validating the whole set before deleting anything -- so a refused layout is the one that was there rather than an empty one.
 - `save_ocr_key(p_provider text, p_org_id uuid, p_id uuid, p_label text, p_api_key text, p_per_minute integer, p_per_day integer, p_per_month integer, p_hours smallint[], p_weekdays smallint[], p_months smallint[], p_is_active boolean)` *(writes)* — Adds a key to a reader's pool, or changes one.
 - `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.
+- `scan_extraction_targets()` — What the reader is sent with the document: every configured target, the kinds of paper that land there, and the fields each one wants filled.
+- `scan_target_columns(p_module text, p_action text)` — The real columns of the table a target writes, read out of `information_schema`, with a tick beside the ones the reader is asked for.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
 - `search_platform_users(p_query text, p_limit integer)` — Name/e-mail search across every tenant, for the platform console's user picker.
 - `security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` *(writes)* — Returns who signed in, from what address, who exported, who read something sensitive and who was refused.
@@ -870,6 +872,8 @@ Not gated on any module.
 - `set_received_einvoice_status(p_id uuid, p_status text)` *(writes)* — Moves a received document between received and ignored.
 - `set_requires_self_billed(p_document_id uuid, p_required boolean)` *(writes)* — Says whether a bill owes LHDN a self-billed e-Invoice.
 - `set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text)` *(writes)* — Files the most recent scan of an attachment as a kind of document.
+- `set_scan_kind_target(p_code text, p_module text, p_action text)` *(writes)* — Points a kind of document at the module and action a scan of it becomes, or at neither.
+- `set_scan_target_fields(p_module text, p_action text, p_fields jsonb)` *(writes)* — Replaces which of a target's columns the reader is asked to fill.
 - `set_sst_registration(p_org_id uuid, p_registered boolean, p_from date, p_registration_no text, p_tax_code text)` *(writes)* — The only way to change a company's SST registration.
 - `settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` *(writes)* — Gives a deposit back or keeps it.
 - `settle_from_client_account(p_matter uuid, p_invoice uuid, p_amount numeric, p_date date, p_office_bank uuid, p_reference text)` *(writes)* — Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND arrives in the office one, which is what makes it a transfer rather than a disappearance.
@@ -1255,6 +1259,8 @@ inconsistent.
 - `salutations`
 - `scale_barcode_formats`
 - `scan_document_kinds`
+- `scan_target_fields`
+- `scan_targets`
 - `search_registers`
 - `security_events`
 - `site_pages`

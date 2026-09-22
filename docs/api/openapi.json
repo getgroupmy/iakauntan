@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0680",
+    "version": "0681",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -64341,6 +64341,137 @@
         }
       }
     },
+    "/rpc/scan_extraction_targets": {
+      "post": {
+        "operationId": "scan_extraction_targets",
+        "summary": "What the reader is sent with the document: every configured target, the kinds of paper that land there, and\u2026",
+        "description": "What the reader is sent with the document: every configured target, the kinds of paper that land there, and the fields each one wants filled. The model answers with a target and a value per field, which is what lets one read decide both WHAT the paper is and WHERE it goes. Only targets with fields ticked -- an empty one is a choice the model can make and never fill.\n\n`public.scan_extraction_targets()` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/scan_target_columns": {
+      "post": {
+        "operationId": "scan_target_columns",
+        "summary": "The real columns of the table a target writes, read out of `information_schema`, with a tick beside the ones\u2026",
+        "description": "The real columns of the table a target writes, read out of `information_schema`, with a tick beside the ones the reader is asked for. A FULL OUTER JOIN on purpose: a column that was ticked and has since been dropped comes back with `still_there` false rather than disappearing, so an operator sees what happened instead of wondering where the configuration went. Platform administrators only, and no rows rather than an exception for anybody else.\n\n`public.scan_target_columns(p_module text, p_action text)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_module": {
+                    "type": "string"
+                  },
+                  "p_action": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_module",
+                  "p_action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "column_name": {
+                        "type": "string"
+                      },
+                      "data_type": {
+                        "type": "string"
+                      },
+                      "is_required": {
+                        "type": "boolean"
+                      },
+                      "is_foreign": {
+                        "type": "boolean"
+                      },
+                      "is_asked": {
+                        "type": "boolean"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "sort_order": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "still_there": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/search_mail": {
       "post": {
         "operationId": "search_mail",
@@ -67526,6 +67657,124 @@
                 "schema": {
                   "type": "string",
                   "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/set_scan_kind_target": {
+      "post": {
+        "operationId": "set_scan_kind_target",
+        "summary": "Points a kind of document at the module and action a scan of it becomes, or at neither",
+        "description": "Points a kind of document at the module and action a scan of it becomes, or at neither. Its own function rather than two more arguments on `platform_save_scan_kind`, whose signature is already published -- an overload taking almost the same arguments is the next person calling the wrong one. `destination` follows from the target by trigger, so the screen a scan opens and the fields it fills cannot be edited into disagreeing.\n\n`public.set_scan_kind_target(p_code text, p_module text, p_action text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_code": {
+                    "type": "string"
+                  },
+                  "p_module": {
+                    "type": "string"
+                  },
+                  "p_action": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/set_scan_target_fields": {
+      "post": {
+        "operationId": "set_scan_target_fields",
+        "summary": "Replaces which of a target's columns the reader is asked to fill",
+        "description": "Replaces which of a target's columns the reader is asked to fill. REPLACES rather than merges, because the console sends what is ticked and a merge would make unticking impossible. Refuses a column the target's table does not have -- a tick on a column that is not there is a field asked for for ever and never filled, and nothing downstream would complain. Platform administrators only.\n\n`public.set_scan_target_fields(p_module text, p_action text, p_fields jsonb)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_module": {
+                    "type": "string"
+                  },
+                  "p_action": {
+                    "type": "string"
+                  },
+                  "p_fields": {}
+                },
+                "required": [
+                  "p_module",
+                  "p_action",
+                  "p_fields"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
                 }
               }
             }
@@ -76046,6 +76295,134 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/scan_document_kinds"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/scan_target_fields": {
+      "get": {
+        "operationId": "select_scan_target_fields",
+        "summary": "Read scan_target_fields",
+        "description": "Which of a target's real columns the reader is asked to fill, and the sentence it is asked with. A row here is a tick on the console's checklist; unticking deletes it. `set_scan_target_fields` refuses a column the target's table does not have, so this set cannot outlive the schema it describes. 0681.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/scan_target_fields"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/scan_targets": {
+      "get": {
+        "operationId": "select_scan_targets",
+        "summary": "Read scan_targets",
+        "description": "Where a scanned document can be turned into a record: a module, an action within it, and the table that action writes. The table name is load-bearing -- the console reads its real columns out of `information_schema` to offer them, so a target naming a table that does not exist offers nothing rather than offering a lie. 0681.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/scan_targets"
                   }
                 }
               }
@@ -98938,11 +99315,87 @@
           "updated_by": {
             "type": "string",
             "format": "uuid"
+          },
+          "target_module": {
+            "type": "string"
+          },
+          "target_action": {
+            "type": "string"
           }
         },
         "required": [
           "code",
           "label"
+        ]
+      },
+      "scan_target_fields": {
+        "type": "object",
+        "properties": {
+          "module_code": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "column_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "module_code",
+          "action",
+          "column_name"
+        ]
+      },
+      "scan_targets": {
+        "type": "object",
+        "properties": {
+          "module_code": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "table_name": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "is_active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "module_code",
+          "action",
+          "label",
+          "table_name"
         ]
       },
       "search_registers": {

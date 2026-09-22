@@ -855,6 +855,7 @@ jobs:
                    supabase/tests/ocr_key_pool.sql \
                    supabase/tests/ocr_default_reader.sql \
                    supabase/tests/scan_log.sql \
+                   supabase/tests/scan_targets.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
@@ -1646,6 +1647,15 @@ jobs:
       # is an hour spent on the wrong thing at the worst time.
       - run: deno check supabase/functions/ocr/pool_message_test.ts
       - run: deno test supabase/functions/ocr/pool_message_test.ts
+
+      # `0681`. What the console configures becomes part of the schema
+      # every reader is sent, and three things go wrong quietly there:
+      # a target with no fields is a choice the model can make and
+      # never fill, a missing `null` in the enum turns "I cannot place
+      # this" into a guess, and a field with no description is a column
+      # name answered from the name alone.
+      - run: deno check supabase/functions/ocr/targets_test.ts
+      - run: deno test supabase/functions/ocr/targets_test.ts
 
       # Reading an e-mail well enough to file what was in it.
       #

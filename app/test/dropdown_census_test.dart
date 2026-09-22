@@ -34,11 +34,22 @@ const dropdownCensus = <String, int>{
   // here anyway. The module and the company beside it are pickers:
   // both of those lists grow.
   'features/admin/promotions_admin.dart': 1,
-  // 0614. Where a kind of scanned document goes. The list is a `const`
-  // in `scan_kinds_repository.dart` -- six screens this app knows how
-  // to open -- so it cannot grow without somebody editing Dart, and a
-  // seventh would arrive beside a screen to open.
-  'features/admin/scan_kinds_admin.dart': 1,
+  // 0681. Two now, and neither grows the way a picker's list grows.
+  // Which MODULE a scanned paper goes into: the modules are a table
+  // `0018` seeded and a handful of migrations have added to -- eleven
+  // today, and a twelfth is a migration, not a row somebody types. And
+  // which ACTION within it, which is shorter still: one module's worth,
+  // three at the most, and it is not drawn at all when the module has
+  // only one. Both are read all the way through by whoever is choosing.
+  //
+  // `0614`'s free-text destination dropdown is GONE from this file --
+  // it named a screen and nothing more, and these two name the record,
+  // which is what lets the console list the fields it has.
+  //
+  // Same trigger for undoing either: the day somebody would type
+  // rather than read the list, it comes off here and a
+  // `SearchablePicker` goes in.
+  'features/admin/scan_kinds_admin.dart': 2,
   // Four since the paste path. The fourth is which amount column comes
   // first in a pasted contribution table — two options, and the whole
   // difference between them has to be readable at a glance, because

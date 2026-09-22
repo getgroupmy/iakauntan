@@ -6,6 +6,7 @@ import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/scan_kinds_repository.dart';
+import '../../data/scan_targets_repository.dart';
 
 /// What a scanned paper can be recognised as, from the operator's side.
 ///
@@ -212,6 +213,9 @@ class _ScanKindDialogState extends ConsumerState<_ScanKindDialog> {
     text: '${widget.existing?.sortOrder ?? 100}',
   );
   late String? _destination = widget.existing?.destination;
+  // The target, as `module.action`. Null for a kind that is filed and
+  // nothing else, which is three of the ones this shipped with.
+  late String? _target = widget.existing?.targetKey;
   late bool _active = widget.existing?.isActive ?? true;
   bool _busy = false;
 
@@ -266,6 +270,27 @@ class _ScanKindDialogState extends ConsumerState<_ScanKindDialog> {
             isActive: _active,
           ),
     );
+    if (!mounted) return;
+
+    // The target is a second call, and it goes SECOND. `0681` put it
+    // in its own function rather than widening the seven-argument
+    // `platform_save_scan_kind`, and the kind has to exist before it
+    // can be pointed anywhere — which for a new kind means after the
+    // save above.
+    if (ok) {
+      final parts = _target?.split('.');
+      await runWithFeedback(
+        context,
+        successMessage: null,
+        action: () => ref
+            .read(scanTargetsRepoProvider)
+            .setKindTarget(
+              _isNew ? _code.text.trim() : widget.existing!.code,
+              parts?.first,
+              parts?.last,
+            ),
+      );
+    }
     if (!mounted) return;
     setState(() => _busy = false);
     if (ok) Navigator.of(context).pop(true);
@@ -346,23 +371,25 @@ class _ScanKindDialogState extends ConsumerState<_ScanKindDialog> {
                 ),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String?>(
-                key: const ValueKey('scan-kind-destination'),
-                isExpanded: true,
-                initialValue: _destination,
-                decoration: const InputDecoration(
-                  labelText: 'Where it goes',
-                  helperText:
-                      'Filed only means the paper is kept and the form is '
-                      'typed in.',
-                ),
-                items: [
-                  for (final d in scanKindDestinations)
-                    DropdownMenuItem(value: d.$1, child: Text(d.$2)),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() => _destination = v),
+              // Module, then action, then the fields that record has.
+              // `0681`. The old free-text "Where it goes" named a
+              // SCREEN and nothing more, so the reader was asked the
+              // same eleven questions about every document ever
+              // scanned; these name the RECORD, which is what lets the
+              // list below exist at all.
+              ScanKindTargetPicker(
+                value: _target,
+                enabled: !_busy,
+                onChanged: (v) => setState(() {
+                  _target = v;
+                  // `destination` follows the target by trigger in the
+                  // database. Cleared here so the dialog does not go on
+                  // showing the screen the old target opened while the
+                  // new one is selected — the save is what makes it
+                  // true, and showing a stale answer in between is how
+                  // somebody saves the wrong thing twice.
+                  if (v != null) _destination = null;
+                }),
               ),
               const SizedBox(height: Space.md),
               TextField(
@@ -424,6 +451,343 @@ class _ScanKindDialogState extends ConsumerState<_ScanKindDialog> {
           onPressed: _busy ? null : _save,
           child: const Text('Save'),
         ),
+      ],
+    );
+  }
+}
+
+/// Which module a scanned paper goes into, which action it becomes,
+/// and what that record has room for.
+///
+/// `0681`. Three controls, and the third is the one that was missing:
+/// until now a kind named a SCREEN in free text, so every document ever
+/// scanned was asked the same eleven questions out of one hard-coded
+/// schema in the edge function — whether it was a bill, a bank
+/// statement or a name card.
+///
+/// ## The fields are discovered, not typed
+///
+/// They are the real columns of the table the action writes, read out
+/// of `information_schema` at the moment this opens. A list somebody
+/// typed goes stale the first time a column is renamed, goes stale
+/// silently, and the symptom is a reader being asked for a field that
+/// no longer exists and a bookkeeper wondering why one box never fills
+/// in. What is stored is the TICK.
+///
+/// ## They belong to the target, not to the kind
+///
+/// A delivery order and a supplier's bill both land in purchasing.
+/// Configuring the same columns twice is two lists that disagree by
+/// Thursday, so the checklist says whose it is — an edit here reaches
+/// every kind pointing at the same place.
+class ScanKindTargetPicker extends ConsumerWidget {
+  const ScanKindTargetPicker({
+    super.key,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  /// `module.action`, or null for filed-and-nothing-else.
+  final String? value;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final targets = ref.watch(scanTargetsProvider);
+
+    return AsyncView<List<ScanTarget>>(
+      value: targets,
+      onRetry: () => ref.invalidate(scanTargetsProvider),
+      skeleton: const CardRowsSkeleton(rows: 2, leading: false),
+      builder: (all) {
+        final modules = <String, String>{};
+        for (final t in all) {
+          modules[t.module] = t.moduleName ?? t.module;
+        }
+        final chosen = all.where((t) => t.key == value).firstOrNull;
+        // The module comes off the chosen target rather than being held
+        // separately: one source of truth, and re-opening the dialog
+        // shows what is stored without a second field to keep in step.
+        final module = chosen?.module;
+        final forModule =
+            all.where((t) => t.module == module).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String?>(
+              key: const ValueKey('scan-kind-module'),
+              isExpanded: true,
+              initialValue: module,
+              decoration: const InputDecoration(
+                labelText: 'Which module it goes into',
+                helperText:
+                    'Nothing means the paper is filed and the form is '
+                    'typed in by hand.',
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('Filed only — nothing is created'),
+                ),
+                for (final e in modules.entries)
+                  DropdownMenuItem(value: e.key, child: Text(e.value)),
+              ],
+              onChanged: enabled
+                  ? (m) {
+                      if (m == null) {
+                        onChanged(null);
+                        return;
+                      }
+                      // Straight to the module's first action rather
+                      // than leaving the second dropdown empty: every
+                      // module here has at least one, and an empty
+                      // required field somebody has to notice is a
+                      // save that fails for no visible reason.
+                      final first =
+                          all.where((t) => t.module == m).firstOrNull;
+                      onChanged(first?.key);
+                    }
+                  : null,
+            ),
+            if (module != null && forModule.length > 1) ...[
+              const SizedBox(height: Space.md),
+              DropdownButtonFormField<String>(
+                key: const ValueKey('scan-kind-action'),
+                isExpanded: true,
+                initialValue: value,
+                decoration: const InputDecoration(
+                  labelText: 'What it becomes',
+                ),
+                items: [
+                  for (final t in forModule)
+                    DropdownMenuItem(value: t.key, child: Text(t.label)),
+                ],
+                onChanged: enabled ? onChanged : null,
+              ),
+            ],
+            if (chosen != null) ...[
+              if (chosen.hint != null) ...[
+                const SizedBox(height: Space.sm),
+                Text(
+                  chosen.hint!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const SizedBox(height: Space.lg),
+              _TargetFields(target: chosen),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The columns that record has, and which of them the reader is asked
+/// to fill.
+class _TargetFields extends ConsumerStatefulWidget {
+  const _TargetFields({required this.target});
+
+  final ScanTarget target;
+
+  @override
+  ConsumerState<_TargetFields> createState() => _TargetFieldsState();
+}
+
+class _TargetFieldsState extends ConsumerState<_TargetFields> {
+  /// The edits made since this opened, by column name. Held here rather
+  /// than written on every tick: a checklist that saved on each tap
+  /// would be a round trip per box and a half-configured target the
+  /// moment somebody closed the dialog mid-thought.
+  final _edited = <String, ScanTargetColumn>{};
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final args = (module: widget.target.module, action: widget.target.action);
+    final columns = ref.watch(scanTargetColumnsProvider(args));
+
+    return AsyncView<List<ScanTargetColumn>>(
+      value: columns,
+      onRetry: () => ref.invalidate(scanTargetColumnsProvider(args)),
+      skeleton: const ListSkeleton(rows: 5, trailing: false),
+      builder: (discovered) {
+        final rows = [
+          for (final c in discovered) _edited[c.name] ?? c,
+        ];
+        final asked = rows.where((c) => c.isAsked).toList();
+        final gone = rows.where((c) => !c.stillThere).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              'What the reader is asked to fill in',
+              subtitle:
+                  'The real columns of ${widget.target.tableName}, read '
+                  'from the database just now. Ticked ones go to the AI '
+                  'with the document. Shared by every kind that lands '
+                  'here.',
+            ),
+            if (asked.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.sm),
+                child: Text(
+                  'Nothing is ticked, so this destination is not offered '
+                  'to the reader at all — a choice it could make and then '
+                  'have nothing to fill is worse than not offering it.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.colors.warning,
+                  ),
+                ),
+              ),
+            // Said before the list rather than after: a column that was
+            // ticked and has since been dropped is shown rather than
+            // quietly removed, so somebody sees what happened instead
+            // of wondering where the configuration went.
+            if (gone.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: Space.sm),
+                child: Text(
+                  '${gone.map((c) => c.name).join(', ')} '
+                  '${gone.length == 1 ? 'is' : 'are'} ticked and no longer '
+                  'in the table. Untick to stop asking for '
+                  '${gone.length == 1 ? 'it' : 'them'}.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.colors.danger,
+                  ),
+                ),
+              ),
+            const SizedBox(height: Space.sm),
+            for (final c in rows) _FieldRow(
+              column: c,
+              enabled: !_busy,
+              onChanged: (next) => setState(() => _edited[c.name] = next),
+            ),
+            const SizedBox(height: Space.sm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonal(
+                key: const ValueKey('scan-kind-save-fields'),
+                onPressed: _busy || _edited.isEmpty
+                    ? null
+                    : () => _save(rows.where((c) => c.isAsked).toList()),
+                child: const Text('Save the fields'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _save(List<ScanTargetColumn> asked) async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      doing: 'saving what the reader is asked for',
+      successMessage: 'The reader will be asked for these',
+      action: () => ref
+          .read(scanTargetsRepoProvider)
+          .saveFields(widget.target.module, widget.target.action, asked),
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (ok) _edited.clear();
+    });
+    if (ok) {
+      ref.invalidate(
+        scanTargetColumnsProvider(
+          (module: widget.target.module, action: widget.target.action),
+        ),
+      );
+    }
+  }
+}
+
+class _FieldRow extends StatelessWidget {
+  const _FieldRow({
+    required this.column,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final ScanTargetColumn column;
+  final bool enabled;
+  final ValueChanged<ScanTargetColumn> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CheckboxListTile(
+          key: ValueKey('scan-field-${column.name}'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+          value: column.isAsked,
+          onChanged: enabled
+              ? (v) => onChanged(column.copyWith(isAsked: v ?? false))
+              : null,
+          title: Wrap(
+            spacing: Space.sm,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(column.name),
+              Text(
+                column.dataType,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.scheme.onSurfaceVariant,
+                ),
+              ),
+              if (column.isRequired)
+                const StatusChip('required', compact: true),
+              // Marked rather than hidden. A foreign key cannot be read
+              // off a page — what is printed is a name, not a uuid —
+              // and it is still the honest place to hang "the supplier
+              // as printed, which will be matched to a contact".
+              if (column.isForeign)
+                const StatusChip('matched by name', compact: true),
+              if (!column.stillThere)
+                const StatusChip('no longer a column', compact: true),
+            ],
+          ),
+        ),
+        // The sentence the field is asked with. Only for the ticked
+        // ones: a box under every column of a wide table is a form
+        // nobody reads, and the question only matters once somebody
+        // has decided to ask it.
+        if (column.isAsked)
+          Padding(
+            padding: const EdgeInsets.only(left: 40, bottom: Space.sm),
+            child: TextFormField(
+              key: ValueKey('scan-field-why-${column.name}'),
+              initialValue: column.description ?? '',
+              enabled: enabled,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'How to ask for it',
+                helperText:
+                    'Without this the reader is handed a column name and '
+                    'answers from the name alone.',
+              ),
+              onChanged: (v) => onChanged(
+                column.copyWith(description: v.trim()),
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -53,6 +53,12 @@ import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { poolProblem } from "./pool.ts";
+import {
+  type ScanTarget,
+  targetPrompt,
+  targetSchema,
+  usableTargets,
+} from "./targets.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -94,6 +100,25 @@ interface Extraction {
    * serve a screen most people never open.
    */
   raw_text: string | null;
+
+  /**
+   * Which destination the reader decided this document is, as
+   * `module.action` — or null for "I could not place it", which has to
+   * be sayable or it gets guessed. Null on every scan of a platform
+   * that has configured no targets, which is every scan before `0681`.
+   */
+  target: string | null;
+
+  /**
+   * What it read for that destination's fields, keyed by column name.
+   *
+   * Values only, no types: everything comes back as a string, because
+   * the schema asks for what is PRINTED and a date on a Malaysian
+   * receipt is `03/09/2026` until somebody who knows the column decides
+   * which way round that is. Coercion belongs where the column is
+   * known, not here.
+   */
+  fields: Record<string, string> | null;
 }
 
 interface BeginResult {
@@ -306,6 +331,12 @@ async function readClaude(
   model: string,
   bytes: Uint8Array,
   mime: string,
+  // The schema and the prompt are ARGUMENTS since `0681`, not the
+  // module constants, because what a platform asks a reader for is now
+  // configuration. They default to the constants so a deployment that
+  // has set up no targets behaves exactly as it did.
+  schema: Record<string, unknown> = SCHEMA,
+  system: string = SYSTEM,
 ): Promise<Extraction> {
   // A PDF is a document block and an image is an image block; the API
   // rejects each in the other's place, and a phone camera produces one
@@ -327,11 +358,11 @@ async function readClaude(
     body: JSON.stringify({
       model,
       max_tokens: 4000,
-      system: SYSTEM,
+      system,
       // No extended thinking. This is a bounded transcription with a
       // fixed output shape, and the tenant is paying per scan for an
       // answer while somebody stands at a counter holding the receipt.
-      output_config: { format: { type: "json_schema", schema: SCHEMA } },
+      output_config: { format: { type: "json_schema", schema } },
       messages: [{
         role: "user",
         content: [
@@ -395,6 +426,12 @@ async function readOpenAiShaped(
   model: string,
   bytes: Uint8Array,
   mime: string,
+  // The schema and the prompt are ARGUMENTS since `0681`, not the
+  // module constants, because what a platform asks a reader for is now
+  // configuration. They default to the constants so a deployment that
+  // has set up no targets behaves exactly as it did.
+  schema: Record<string, unknown> = SCHEMA,
+  system: string = SYSTEM,
 ): Promise<Extraction> {
   // Chat-completions takes images, not documents. A PDF would have to go
   // through a different endpoint on every one of these, so it is refused
@@ -417,10 +454,10 @@ async function readOpenAiShaped(
       max_completion_tokens: 4000,
       response_format: {
         type: "json_schema",
-        json_schema: { name: "purchase_document", strict: true, schema: SCHEMA },
+        json_schema: { name: "purchase_document", strict: true, schema },
       },
       messages: [
-        { role: "system", content: SYSTEM },
+        { role: "system", content: system },
         {
           role: "user",
           content: [
@@ -506,6 +543,12 @@ async function readSelfHosted(
   model: string,
   bytes: Uint8Array,
   mime: string,
+  // No schema and no prompt, unlike the two above. A self-hosted
+  // reader is sent `schema=iakauntan.extraction.v1` — a NAME, which it
+  // implements at its end — so there is nothing here to configure and
+  // accepting the arguments in order to ignore them would be the
+  // signature promising something it does not do. Per-target fields
+  // reach an LLM reader and not this one, and `0681`'s console says so.
 ): Promise<Extraction> {
   if (!endpoint) {
     throw new Error(
@@ -629,7 +672,39 @@ function normaliseExtraction(raw: Record<string, unknown>): Extraction {
     total_amount: num("total_amount"),
     lines,
     note: str("note"),
+    target: targetOf(raw),
+    fields: fieldsOf(raw),
   } as Extraction;
+}
+
+/** The destination the reader chose, if it chose a real one. */
+function targetOf(raw: Record<string, unknown>): string | null {
+  const v = raw.target;
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+/**
+ * The per-field values, flattened to strings.
+ *
+ * Everything the schema asks for is `["string", "null"]`, but a model
+ * handed a column called `total_amount` returns a number often enough
+ * that refusing one would drop the field silently. So a number is
+ * taken and stringified, and anything else -- an object, an array, a
+ * boolean -- is dropped, because there is no column this app has that
+ * one of those is the honest value for.
+ */
+function fieldsOf(raw: Record<string, unknown>): Record<string, string> | null {
+  const v = raw.fields;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, value] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof value === "string") {
+      if (value.trim() !== "") out[k] = value.trim();
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      out[k] = String(value);
+    }
+  }
+  return Object.keys(out).length === 0 ? null : out;
 }
 
 /** The same number forgiveness, for a line. */
@@ -741,6 +816,16 @@ async function readGoogle(
     total_amount: toNumber(pick("total_amount")),
     lines,
     note: null,
+    // Null, and not a gap this can close. Document AI answers with the
+    // entities its PROCESSOR was trained on, and a processor is
+    // configured in Google's console rather than in ours — so the
+    // per-target fields of `0681` do not reach it, and pretending
+    // otherwise would put empty columns on a draft and blame the
+    // reader. `raw_text` below is what Document AI offers instead: the
+    // whole page, which the "All data" screen lets somebody assign by
+    // hand.
+    target: null,
+    fields: null,
     raw_text: typeof body?.document?.text === "string"
       ? body.document.text
       : null,
@@ -777,6 +862,8 @@ function normalise(raw: Record<string, unknown>): Extraction {
       };
     }),
     note: str(raw.note),
+    target: targetOf(raw),
+    fields: fieldsOf(raw),
   };
 }
 
@@ -933,7 +1020,18 @@ async function runReader(
   credential: ResolvedKey,
   bytes: Uint8Array,
   mime: string,
+  // What this platform has configured its readers to ask for. Empty
+  // for a platform that has set none up, and then every call below
+  // falls back to the schema and prompt this function shipped with.
+  targets: ScanTarget[] = [],
 ): Promise<Extraction> {
+  const extra = targetSchema(targets);
+  const schema = extra === null ? SCHEMA : {
+    ...SCHEMA,
+    properties: { ...SCHEMA.properties, ...extra },
+  };
+  const system = extra === null ? SYSTEM : SYSTEM + "\n" + targetPrompt(targets);
+
   switch (reader.kind) {
     case "anthropic":
       return await readClaude(
@@ -942,6 +1040,8 @@ async function runReader(
         reader.model ?? "",
         bytes,
         mime,
+        schema,
+        system,
       );
     case "openai":
       return await readOpenAiShaped(
@@ -950,6 +1050,8 @@ async function runReader(
         reader.model ?? "",
         bytes,
         mime,
+        schema,
+        system,
       );
     case "self_hosted":
       return await readSelfHosted(
@@ -1011,6 +1113,7 @@ async function tryFallback(
   orgId: string,
   bytes: Uint8Array,
   mime: string,
+  targets: ScanTarget[],
 ): Promise<{ extraction: Extraction; reader: FallbackReader } | null> {
   try {
     const { data, error } = await db.rpc("ocr_fallback", { p_scan_id: scanId });
@@ -1025,7 +1128,10 @@ async function tryFallback(
       mime_type: mime,
       charged: 0,
     }, orgId);
-    return { extraction: await runReader(reader, credential, bytes, mime), reader };
+    return {
+      extraction: await runReader(reader, credential, bytes, mime, targets),
+      reader,
+    };
   } catch (e) {
     // Logged, not raised, and not written against the scan either: the
     // scan's `error` column is about the reader the company chose.
@@ -1091,6 +1197,20 @@ serveFunction("ocr.failed", async (req: Request) => {
   let bytes: Uint8Array | null = null;
   let mime = begin.mime_type ?? "image/jpeg";
 
+  // Where a document of this sort can go, and what each destination
+  // wants filled in. `0681`. An error here is not a scan failure: a
+  // platform that has configured nothing, or a database older than
+  // this function, reads a document exactly as it always did.
+  let targets: ScanTarget[] = [];
+  {
+    const { data, error } = await db.rpc("scan_extraction_targets");
+    if (error) {
+      console.error("could not read the scan targets", error);
+    } else {
+      targets = usableTargets(data);
+    }
+  }
+
   // From here on every exit settles the scan, because an unsettled scan
   // is a charge nobody gave back.
   try {
@@ -1123,7 +1243,17 @@ serveFunction("ocr.failed", async (req: Request) => {
     // that caused it, and by the time we know it failed the credential
     // is the only thing that says which key that was.
     usedKey = credential.key_id;
-    const extraction = await runReader(begin, credential, bytes, mime);
+    // Read once, with the service role, and passed to both attempts.
+    // Configuration rather than a secret -- `scan_extraction_targets`
+    // is granted to `authenticated` too -- but asking for it twice on
+    // a fallback would be a second round trip to learn the same thing.
+    const extraction = await runReader(
+      begin,
+      credential,
+      bytes,
+      mime,
+      targets,
+    );
 
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
@@ -1187,7 +1317,9 @@ serveFunction("ocr.failed", async (req: Request) => {
     // to retry, and sending a second vendor a request that cannot
     // succeed is one more place the document has been.
     if (bytes) {
-      const rescued = await tryFallback(db, begin.scan_id, orgId, bytes, mime);
+      const rescued = await tryFallback(
+        db, begin.scan_id, orgId, bytes, mime, targets,
+      );
       if (rescued) {
         const { error: settled } = await db.rpc("ocr_finish", {
           p_scan_id: begin.scan_id,

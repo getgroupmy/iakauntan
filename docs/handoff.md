@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the scan log (`0680`) |
+| Head at time of writing | where a scanned paper goes, and what it fills (`0681`) |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0680` is the highest. **`0675`–`0680` are NOT yet applied to the live database** — they go on at the next deploy |
-| Live database | **behind the branch by six migrations.** See "What is not live" below |
+| Migrations | `0681` is the highest. **`0675`–`0681` are NOT yet applied to the live database** — they go on at the next deploy |
+| Live database | **behind the branch by seven migrations.** See "What is not live" below |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 351 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,669 Flutter tests**, 33 deno tests |
-| API description | 775 functions, 364 tables, version `0680` |
+| Gates | 352 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,688 Flutter tests**, 34 deno tests |
+| API description | 779 functions, 366 tables, version `0681` |
 
 ### What is not live
 
@@ -133,6 +133,61 @@ they started. That is a function that died between `ocr_begin` and
 `ocr_finish` — the charge was taken and the refund never ran. It goes
 uncounted precisely because the status reads as "still going" for ever,
 and nobody goes looking for a row that claims to be in progress.
+
+## What a scanned paper fills in
+
+`0681`. `0614` gave a scan a KIND and a free-text `destination`, and
+that destination named a SCREEN. It could not say which module the
+screen belongs to and it could not say what the screen has room for —
+so the reader was asked the same eleven questions about every document
+ever scanned, out of one hard-coded schema in
+`supabase/functions/ocr/index.ts`, whether the paper was a bill, a bank
+statement or a name card.
+
+A kind now points at a **module** and an **action** (`scan_targets`),
+and the fields on offer are the **real columns** of the table that
+action writes, read out of `information_schema` when the console asks.
+What is stored is the tick (`scan_target_fields`).
+
+Three things about that are load-bearing and easy to undo by accident:
+
+- **Discovered, not typed.** A list somebody typed goes stale the first
+  time a column is renamed, silently, and the symptom is a reader being
+  asked for a field that no longer exists.
+  `set_scan_target_fields` refuses a tick on a column the table does not
+  have, so the stored set cannot outlive the schema.
+- **A dropped column is shown, not hidden.** `scan_target_columns` is a
+  FULL OUTER JOIN for that reason — `still_there` false rather than a
+  row quietly vanishing.
+- **Fields belong to the TARGET, not the kind.** A delivery order and a
+  bill both land in purchasing; configuring the same columns twice is
+  two lists that disagree by Thursday. The console says so on the
+  checklist.
+
+`destination` still exists and the app still routes on it. A trigger
+sets it from the target, so the screen a scan opens and the fields it
+fills cannot be edited into disagreeing.
+
+### What reaches the reader
+
+`scan_extraction_targets()` → `supabase/functions/ocr/targets.ts` →
+the JSON schema and the system prompt. The schema is FLAT — one
+property per askable column across every target, plus a `target` enum
+that **includes null**. A model with no way to say "none of these"
+picks the closest one, and the closest one becomes a record somebody
+has to find and undo.
+
+Two readers do not get it and that is deliberate: **Document AI**
+answers with the entities its processor was trained on, configured in
+Google's console rather than ours, and a **self-hosted** reader is sent
+`schema=iakauntan.extraction.v1` — a name it implements at its end.
+
+### Not done, and worth knowing
+
+`OcrExtraction.target` and `.fields` arrive and are asserted. Wiring
+each destination screen's form to read arbitrary columns out of
+`fields` is the next step — 14 files consume `OcrExtraction` today and
+none of them reads the new map yet.
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 
