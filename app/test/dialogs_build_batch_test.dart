@@ -8,6 +8,7 @@ import 'package:iakauntan/src/core/quick_add_dialog.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/core/widgets.dart';
 import 'package:iakauntan/src/data/corp_models.dart';
+import 'package:iakauntan/src/data/places_repository.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/assets/capital_allowances_dialog.dart';
@@ -34,6 +35,10 @@ import 'package:iakauntan/src/features/pos/offline_controller.dart';
 import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/beneficial_owner_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/charge_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/filing_lifecycle.dart';
+import 'package:iakauntan/src/features/secretarial/particulars_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/person_editor.dart';
+import 'package:iakauntan/src/features/secretarial/resolution_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/share_class_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/share_event_sheet.dart';
 import 'package:iakauntan/src/features/pos/offline_problems_dialog.dart';
@@ -3010,6 +3015,382 @@ void main() {
       );
       // Satisfaction is not offered on something not yet registered.
       expect(find.text('Satisfaction'), findsNothing);
+    });
+  });
+
+  group('the statutory clocks, and the file they run against', () {
+    final ahmad = CorpPerson(
+      id: 'p1',
+      kind: 'individual',
+      fullName: 'Ahmad bin Ismail',
+      nric: '790304-08-5533',
+    );
+    final siti = CorpPerson(
+      id: 'p2',
+      kind: 'individual',
+      fullName: 'Siti Nurhaliza binti Omar',
+      nric: '850707-14-2244',
+    );
+
+    List<Override> registry() => [
+          corpPersonsProvider.overrideWith((ref) async => [ahmad, siti]),
+          refStatesProvider.overrideWith((ref) async => const [
+                {'code': '14', 'name': 'Wilayah Persekutuan Kuala Lumpur'},
+                {'code': '10', 'name': 'Selangor'},
+              ]),
+        ];
+
+    CorpFiling filing({String? filingId, String status = 'draft'}) =>
+        CorpFiling(
+          entityId: 'e1',
+          entityName: 'Kedai Kopi Aman Sdn Bhd',
+          filingType: 'annual_return',
+          filingName: 'Annual Return',
+          statuteRef: 'CA 2016 s.68',
+          triggerDate: DateTime(2026, 3, 1),
+          dueDate: DateTime(2026, 3, 31),
+          status: status,
+          legacyForm: 'Form 24',
+          filingId: filingId,
+        );
+
+    testWidgets('a deadline nobody has taken up offers to be started',
+        (tester) async {
+      // `corp_upcoming_filings` computes every deadline the Act imposes
+      // whether or not anybody has begun. Until this dialog existed,
+      // nothing could move a row out of that computed state, so the
+      // screen showed every deadline as due for as long as the company
+      // existed.
+      await opened(
+        tester,
+        registry(),
+        (context) => showFilingStep(context, filing: filing()),
+      );
+
+      expect(find.text('Start this filing'), findsOneWidget);
+      expect(
+        find.text('Kedai Kopi Aman Sdn Bhd · Annual Return (Form 24)'),
+        findsOneWidget,
+      );
+      expect(find.text('CA 2016 s.68 · due 31/03/2026'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Start it'), findsOneWidget);
+      // Nothing to lodge yet, so no date and no reference box.
+      expect(find.byKey(const ValueKey('ssm-reference')), findsNothing);
+    });
+
+    testWidgets('and one somebody is working on asks for the lodgement',
+        (tester) async {
+      await opened(
+        tester,
+        registry(),
+        (context) =>
+            showFilingStep(context, filing: filing(filingId: 'f1')),
+      );
+
+      expect(find.text('Record the lodgement'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Lodged'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ssm-reference')), findsOneWidget);
+      // Blank until the acknowledgement comes back — an empty string
+      // would read like a reference nobody can find.
+      expect(
+        find.text('Leave it blank until it comes back'),
+        findsOneWidget,
+      );
+      final step = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('filing-step')));
+      expect(step.onPressed, isNotNull);
+    });
+
+    testWidgets('a change of particulars names the clock each one starts',
+        (tester) async {
+      // Each of these is a filing with its own deadline, and the
+      // deadline runs from the day the thing happened rather than the
+      // day somebody typed it in. Saying which section on the row is
+      // what makes that obvious before the sheet asks for a date.
+      await opened(
+        tester,
+        registry(),
+        (context) => showParticularsSheet(
+          context,
+          entity: CorpEntity(
+            id: 'e1',
+            name: 'Kedai Kopi Aman Sdn Bhd',
+            entityType: 'sdn_bhd',
+            status: 'active',
+          ),
+        ),
+      );
+
+      expect(find.text('Change of particulars'), findsOneWidget);
+      expect(
+        find.text('Each of these starts a clock with the Registrar'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('CA 2016 s.28 · lodged within 14 days'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('CA 2016 s.46(3) · lodged within 14 days'),
+        findsOneWidget,
+      );
+      // No constitution on file, so adopting one is offered.
+      expect(
+        find.byKey(const ValueKey('adopt-constitution')),
+        findsOneWidget,
+      );
+      // And the quiet half, which is NOT a change of name: the record
+      // catching up with what was always true.
+      expect(
+        find.textContaining('No filing, no former name, no clock'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and stops offering a constitution to a company that has one',
+        (tester) async {
+      await opened(
+        tester,
+        registry(),
+        (context) => showParticularsSheet(
+          context,
+          entity: CorpEntity(
+            id: 'e1',
+            name: 'Kedai Kopi Aman Sdn Bhd',
+            entityType: 'sdn_bhd',
+            status: 'active',
+            hasConstitution: true,
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('adopt-constitution')), findsNothing);
+      expect(find.byKey(const ValueKey('change-name')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('correct-particulars')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a special resolution needs three quarters, not a majority',
+        (tester) async {
+      // s.292(1). 7 for and 3 against carries an ordinary resolution
+      // and fails a special one, on the same numbers — which is the
+      // whole reason the kind is asked before the count.
+      await opened(
+        tester,
+        registry(),
+        (context) => showResolutionSheet(context, entityId: 'e1'),
+      );
+
+      await tester.enterText(find.byKey(const ValueKey('resolution-title')),
+          'That the constitution be adopted');
+      await tester.enterText(find.widgetWithText(TextField, 'For'), '7');
+      await tester.enterText(find.widgetWithText(TextField, 'Against'), '3');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Carried.'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String>,
+          'Passed by'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Members — special').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('three quarters of the votes cast — s.292(1)'),
+        findsOneWidget,
+      );
+      expect(find.text('Not carried on those numbers.'), findsOneWidget);
+    });
+
+    testWidgets('abstentions are not votes cast', (tester) async {
+      // A member who abstains is counted for the quorum and not in the
+      // majority. Adding them to the denominator is how a resolution
+      // that carried gets recorded as having failed — 6 for, 3 against
+      // and 4 abstaining is two thirds, not six thirteenths.
+      await opened(
+        tester,
+        registry(),
+        (context) => showResolutionSheet(context, entityId: 'e1'),
+      );
+
+      await tester.enterText(
+          find.byKey(const ValueKey('resolution-title')), 'That a dividend '
+              'be declared');
+      await tester.enterText(find.widgetWithText(TextField, 'For'), '6');
+      await tester.enterText(find.widgetWithText(TextField, 'Against'), '3');
+      await tester.enterText(find.widgetWithText(TextField, 'Abstained'), '4');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Abstentions are not votes cast, so they do not '
+            'count against it'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a written resolution was circulated, not put to a meeting',
+        (tester) async {
+      // s.297. `meeting_held` is the column that says which, and a
+      // venue carried over from an earlier edit would minute a meeting
+      // that did not happen — so the venue and the chair go away with
+      // it rather than being kept and ignored.
+      await opened(
+        tester,
+        registry(),
+        (context) => showResolutionSheet(context, entityId: 'e1'),
+      );
+
+      // Circulated is the DEFAULT — `meeting_held` starts false — so
+      // the venue and the chair are not on the sheet when it opens.
+      expect(find.widgetWithText(TextField, 'Where'), findsNothing);
+
+      await tester.tap(find.widgetWithText(SwitchListTile,
+          'Passed at a meeting'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Where'), findsOneWidget);
+      expect(find.text('A meeting was held.'), findsOneWidget);
+
+      // And choosing the written kind takes the meeting back off,
+      // rather than leaving a venue behind to minute one that did not
+      // happen.
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String>,
+          'Passed by'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Written, circulated').last);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'Where'), findsNothing);
+      expect(
+        find.textContaining('Circulated for signature under s.297'),
+        findsOneWidget,
+      );
+      // And the switch cannot be turned back on for a written one.
+      final held = tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, 'Passed at a meeting'));
+      expect(held.onChanged, isNull);
+    });
+
+    testWidgets('and refuses a minute that says nine voted out of seven',
+        (tester) async {
+      // Nothing in the database checks it: `present_person_ids` is an
+      // array and the counts are plain integers. A minute that
+      // contradicts itself is worse than one with a gap in it.
+      await opened(
+        tester,
+        registry(),
+        (context) => showResolutionSheet(context, entityId: 'e1'),
+      );
+
+      await tester.enterText(find.byKey(const ValueKey('resolution-title')),
+          'That the accounts be approved');
+      // The attendance list only exists on a resolution passed at a
+      // meeting, and circulated is the default.
+      await tester.tap(find.widgetWithText(SwitchListTile,
+          'Passed at a meeting'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, 'Ahmad bin Ismail'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextField, 'For'), '4');
+      await tester.pumpAndSettle();
+
+      expect(find.text('More votes than people present.'), findsOneWidget);
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('resolution-save')));
+      expect(save.onPressed, isNull);
+    });
+
+    testWidgets('a resolution with no title cannot be recorded at all',
+        (tester) async {
+      await opened(
+        tester,
+        registry(),
+        (context) => showResolutionSheet(context, entityId: 'e1'),
+      );
+
+      expect(
+        find.text('A resolution needs to say what it is.'),
+        findsOneWidget,
+      );
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('resolution-save')));
+      expect(save.onPressed, isNull);
+      // Nothing to remove on one that was never recorded.
+      expect(find.byKey(const ValueKey('resolution-delete')), findsNothing);
+    });
+
+    testWidgets('the person editor asks a body corporate different questions',
+        (tester) async {
+      // An NRIC on a company and a registration number on a person are
+      // both nonsense, and the register carries both kinds.
+      await opened(
+        tester,
+        registry(),
+        (context) => showPersonEditor(context),
+      );
+
+      expect(find.text('Add a person'), findsOneWidget);
+      expect(find.byKey(const ValueKey('person-nric')), findsOneWidget);
+      expect(
+        find.text('As it appears on the identity document'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('person-registration-no')),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('A body corporate'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('person-registration-no')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('person-nric')), findsNothing);
+      // And the residence question goes with it: s.196 is about
+      // directors who are people.
+      expect(
+        find.text('Section 196 requires at least one resident director'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('and opens with the name that was typed into the picker',
+        (tester) async {
+      // `showPersonEditor` is reached from a picker when somebody types
+      // a name that is not on the file. If the typed text does not
+      // arrive in the box they type it twice.
+      await opened(
+        tester,
+        registry(),
+        (context) =>
+            showPersonEditor(context, seedName: 'Tan Chee Keong'),
+      );
+
+      expect(find.text('Tan Chee Keong'), findsOneWidget);
+    });
+
+    testWidgets('a person on the file is titled with their name, and kept '
+        'as one', (tester) async {
+      await opened(
+        tester,
+        registry(),
+        (context) => showPersonEditor(context, person: ahmad),
+      );
+
+      // Twice: the dialog's title and the name field it filled.
+      expect(find.text('Ahmad bin Ismail'), findsNWidgets(2));
+      expect(find.text('790304-08-5533'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Save'), findsOneWidget);
+      // The AMLA half is asked about everybody, not only new people.
+      expect(find.text('Know your client'), findsOneWidget);
+      expect(
+        find.text('Triggers enhanced due diligence under the AMLA'),
+        findsOneWidget,
+      );
     });
   });
 }

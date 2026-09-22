@@ -552,7 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The DIALOGS backlog — 68 of 121 openers left. In progress.**
+0a. **The DIALOGS backlog — 64 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet
    classes**, more than there are screens, which the screens gate
@@ -562,7 +562,7 @@ deal with, and the estimate screen is honest about not knowing.
    classes are private, so a gate demanding `_MappingDialog` be
    constructed would be unsatisfiable for 89% of the surface. The way
    in is the way the app goes in: `showFsMapping(context)`,
-   `showPersonEditor(context, person: ...)`. 121 of those exist; 53
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 57
    are covered.
 
    `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
@@ -668,13 +668,28 @@ deal with, and the estimate screen is honest about not knowing.
    - Material shows a field's helper text OR its error, never both.
      Assert the helper BEFORE tapping Save.
    - Read the `initState` default before asserting on it. The
-     statutory charge sheet opens on **assessment**, not quit rent,
-     and a new charge opens dated **today**, not blank.
+     statutory charge sheet opens on **assessment**, not quit rent; a
+     new charge opens dated **today**, not blank; and a new resolution
+     opens **circulated**, not passed at a meeting — so the venue, the
+     chair and the attendance chips are not on the sheet until the
+     switch is turned on.
    - A `maxLength` truncates before the validator sees it. Typing
      "RINGGIT" into a three-character currency box passes, because
      what arrives is "RIN".
    - Do NOT run `dart format` on a file you touched. The repository is
      not format-clean and it reflows the whole file.
+
+0a-i. **One statutory wording to check with the user, not to change
+   on my own.** `resolution_sheet.dart` tells somebody recording a
+   circulated **directors'** resolution that it was "Circulated for
+   signature under s.297". s.297 of the Companies Act 2016 is the
+   members' written resolution; a directors' written resolution comes
+   from the constitution and the Third Schedule instead. A new
+   resolution opens as kind `board` AND circulated, so this is the
+   FIRST thing the sheet says. Left alone deliberately: changing an
+   Act reference is a statutory claim, and `README.md` says to read it
+   before touching anything statutory. Worth one line of the user's
+   time.
 
 0b. ~~The screens-built backlog.~~ **EMPTY — and it found SEVEN
    defects on the way.**
