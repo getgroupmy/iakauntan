@@ -188,6 +188,14 @@ const dropdownCensus = <String, int>{
   // somebody would type rather than look, the entry comes off and a
   // `SearchablePicker` goes in.
   'features/admin/ocr_keys_admin.dart': 1,
+  // 0679. The same five readers again, asked a different question:
+  // which one a company that has chosen nothing is handed -- and, when
+  // that one is free, which one a failed scan is retried on. Only the
+  // usable ones are offered, so it is shorter than the pool picker
+  // above, never longer. Same trigger for undoing it: the day a
+  // platform operator would type rather than look, this comes off and
+  // a `SearchablePicker` goes in.
+  'features/admin/ocr_catalog_admin.dart': 1,
   'features/settings/sub_account_dialog.dart': 1,
   'features/settings/tax_code_dialog.dart': 2,
   // The four kinds of entity SSM registers: Company, Business, Audit

@@ -3257,6 +3257,16 @@ final ocrProviderCatalogProvider =
       (ref) => ref.watch(platformRepoProvider).ocrProviderCatalog(),
     );
 
+/// The reader a company that has never chosen one is handed.
+///
+/// Resolved by the database, not read raw out of `platform_settings`:
+/// a default set last year may name a reader retired since, and what
+/// the console needs to show is what companies are ACTUALLY getting.
+/// 0678.
+final ocrDefaultProviderProvider = FutureProvider.autoDispose<OcrDefaultState>(
+  (ref) => ref.watch(platformRepoProvider).ocrDefaultState(),
+);
+
 /// The three calls a reader's key pool needs.
 ///
 /// On the CLIENT rather than on a repository. `Repo` does not exist

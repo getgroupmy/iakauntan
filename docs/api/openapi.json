@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0677",
+    "version": "0679",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -42512,6 +42512,96 @@
         }
       }
     },
+    "/rpc/ocr_default_provider": {
+      "post": {
+        "operationId": "ocr_default_provider",
+        "summary": "The reader a company that has never chosen one falls back to, resolved: the platform's choice if it is still\u2026",
+        "description": "The reader a company that has never chosen one falls back to, resolved: the platform's choice if it is still usable, otherwise the first active ready reader. No secret in it -- `ocr_status` already carries the same code to every tenant -- so the console can ask it without a platform-admin round trip.\n\n`public.ocr_default_provider()` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/ocr_default_state": {
+      "post": {
+        "operationId": "ocr_default_state",
+        "summary": "The reader an unchosen company is handed, and whether it is also the one a failed scan retries on -- which it\u2026",
+        "description": "The reader an unchosen company is handed, and whether it is also the one a failed scan retries on -- which it is exactly when it is free and can run on a server. Two jobs for one row, and the console has to be able to say which of them it is doing, because a platform that sets a chargeable default silently has no fallback at all.\n\n`public.ocr_default_state()` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/ocr_key_pool_size": {
       "post": {
         "operationId": "ocr_key_pool_size",
@@ -47613,6 +47703,59 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_set_default_ocr_provider": {
+      "post": {
+        "operationId": "platform_set_default_ocr_provider",
+        "summary": "Chooses the reader a company that has never chosen one is offered",
+        "description": "Chooses the reader a company that has never chosen one is offered. Refuses a reader that is switched off and one with no model set, so the default can never name something `set_ocr_settings` would then refuse -- which is the failure 0678 was written for. Platform administrators only.\n\n`public.platform_set_default_ocr_provider(p_code text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
                 }
               }
             }
@@ -66170,7 +66313,7 @@
       "post": {
         "operationId": "set_ocr_settings",
         "summary": "Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's",
-        "description": "Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's. Refuses to switch on a provider that is not available, and refuses to switch on a reader with nowhere to send the document and no model to send it to. That last one is caught HERE, where an operator can still do something about it, rather than becoming a 404 waiting for somebody to press Scan. Needs `can_admin`.\n\n`public.set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` Writes. Requires a signed-in user.",
+        "description": "Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's. Either may be omitted, in which case what the company is already on is kept, and a company that is on nothing yet gets the platform's default reader: until 0678 the omitted provider was the literal 'claude', which is what made retiring Claude in the console break the switch for every company that had never chosen for itself. Refuses to switch on a reader that is no longer offered, and one with nowhere to send the document and no model to send it to -- caught HERE, where an operator can still do something about it, rather than becoming a 404 waiting for somebody to press Scan. Needs `can_admin`.\n\n`public.set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -90820,6 +90963,9 @@
             "format": "date-time"
           },
           "document_kind": {
+            "type": "string"
+          },
+          "fell_back_to": {
             "type": "string"
           }
         },

@@ -915,6 +915,125 @@ async function credentialFor(
   };
 }
 
+/**
+ * Sending the document to one reader.
+ *
+ * Switches on `kind`, never on the provider's name. That is what lets a
+ * reader be added as a row in the console: a new ChatGPT-shaped
+ * endpoint arrives here already understood.
+ *
+ * A function rather than the body of the handler since `0679`, because
+ * it is now called twice — once for the reader the company chose, and
+ * once more for the platform's free fallback when the first one will
+ * not answer. Two copies of this switch would be two places for a
+ * newly added `kind` to be half-supported.
+ */
+async function runReader(
+  reader: Pick<BeginResult, "kind" | "endpoint" | "model">,
+  credential: ResolvedKey,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<Extraction> {
+  switch (reader.kind) {
+    case "anthropic":
+      return await readClaude(
+        credential.api_key,
+        reader.endpoint ?? "https://api.anthropic.com/v1/messages",
+        reader.model ?? "",
+        bytes,
+        mime,
+      );
+    case "openai":
+      return await readOpenAiShaped(
+        credential.api_key,
+        reader.endpoint ?? "",
+        reader.model ?? "",
+        bytes,
+        mime,
+      );
+    case "self_hosted":
+      return await readSelfHosted(
+        credential.api_key,
+        reader.endpoint ?? "",
+        reader.model ?? "",
+        bytes,
+        mime,
+      );
+    case "google_docai":
+      return await readGoogle(
+        credential.api_key,
+        credential.project_id ?? "",
+        credential.location ?? "us",
+        credential.processor_id ?? "",
+        bytes,
+        mime,
+      );
+    default:
+      // `device` never reaches here — ocr_begin refuses it — and an
+      // unknown kind means the catalog has outrun this function.
+      throw new Error(
+        `This deployment does not know how to talk to a ${reader.kind} ` +
+          "reader. It needs updating before that one can be used.",
+      );
+  }
+}
+
+/** What `public.ocr_fallback` hands back, or null when there is none. */
+interface FallbackReader {
+  provider: string;
+  provider_name: string;
+  kind: BeginResult["kind"];
+  endpoint: string | null;
+  model: string | null;
+}
+
+/**
+ * The reader a failed scan tries instead.
+ *
+ * The database decides whether there is one and records that there
+ * was, in the same statement — see `0679`. Everything this function
+ * adds is the running of it, and two rules that are its own:
+ *
+ *   the PLATFORM's keys, always. `key_source: "platform"` is written
+ *   here rather than carried over, because a company's own key belongs
+ *   to the reader that company chose. Spending it on a different
+ *   vendor because ours timed out is a decision made with somebody
+ *   else's money;
+ *
+ *   and a failure here is swallowed into null. The scan has already
+ *   failed once; the caller's job is to report THAT failure, and a
+ *   fallback that also failed must not replace the first reader's
+ *   message with the second one's.
+ */
+async function tryFallback(
+  db: SupabaseClient,
+  scanId: string,
+  orgId: string,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<{ extraction: Extraction; reader: FallbackReader } | null> {
+  try {
+    const { data, error } = await db.rpc("ocr_fallback", { p_scan_id: scanId });
+    if (error || !data) return null;
+    const reader = data as unknown as FallbackReader;
+
+    const credential = await credentialFor(db, {
+      ...reader,
+      scan_id: scanId,
+      key_source: "platform",
+      storage_path: "",
+      mime_type: mime,
+      charged: 0,
+    }, orgId);
+    return { extraction: await runReader(reader, credential, bytes, mime), reader };
+  } catch (e) {
+    // Logged, not raised, and not written against the scan either: the
+    // scan's `error` column is about the reader the company chose.
+    console.error("the fallback reader failed too", scanId, e);
+    return null;
+  }
+}
+
 serveFunction("ocr.failed", async (req: Request) => {
   if (req.method !== "POST") return fail("Use POST", 405);
 
@@ -964,6 +1083,14 @@ serveFunction("ocr.failed", async (req: Request) => {
   // row, or `OCR_KEY_<CODE>` -- and there is then no row to blame.
   let usedKey: string | null = null;
 
+  // The document itself, hoisted for the same reason `usedKey` is: the
+  // catch retries with it. Null while it has not been fetched, which is
+  // one of the ways the first attempt can fail -- and a fallback cannot
+  // read a file that was never downloaded, so the null is checked
+  // rather than asserted away.
+  let bytes: Uint8Array | null = null;
+  let mime = begin.mime_type ?? "image/jpeg";
+
   // From here on every exit settles the scan, because an unsettled scan
   // is a charge nobody gave back.
   try {
@@ -977,7 +1104,7 @@ serveFunction("ocr.failed", async (req: Request) => {
         }`,
       );
     }
-    const bytes = new Uint8Array(await file.data.arrayBuffer());
+    bytes = new Uint8Array(await file.data.arrayBuffer());
     if (bytes.byteLength > MAX_BYTES) {
       throw new Error(
         "That file is too large to scan. Photograph the document rather " +
@@ -985,7 +1112,7 @@ serveFunction("ocr.failed", async (req: Request) => {
       );
     }
 
-    const mime = begin.mime_type ?? file.data.type ?? "image/jpeg";
+    mime = begin.mime_type ?? file.data.type ?? "image/jpeg";
     if (!mime.startsWith("image/") && mime !== "application/pdf") {
       throw new Error(`There is nothing to read in a ${mime} file.`);
     }
@@ -996,56 +1123,7 @@ serveFunction("ocr.failed", async (req: Request) => {
     // that caused it, and by the time we know it failed the credential
     // is the only thing that says which key that was.
     usedKey = credential.key_id;
-    // On `kind`, never on the provider's name. That is what lets a
-    // reader be added as a row: a new ChatGPT-shaped endpoint arrives
-    // here already understood.
-    let extraction: Extraction;
-    switch (begin.kind) {
-      case "anthropic":
-        extraction = await readClaude(
-          credential.api_key,
-          begin.endpoint ?? "https://api.anthropic.com/v1/messages",
-          begin.model ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      case "openai":
-        extraction = await readOpenAiShaped(
-          credential.api_key,
-          begin.endpoint ?? "",
-          begin.model ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      case "self_hosted":
-        extraction = await readSelfHosted(
-          credential.api_key,
-          begin.endpoint ?? "",
-          begin.model ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      case "google_docai":
-        extraction = await readGoogle(
-          credential.api_key,
-          credential.project_id ?? "",
-          credential.location ?? "us",
-          credential.processor_id ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      default:
-        // `device` never reaches here — ocr_begin refuses it — and an
-        // unknown kind means the catalog has outrun this function.
-        throw new Error(
-          `This deployment does not know how to talk to a ${begin.kind} ` +
-            "reader. It needs updating before that one can be used.",
-        );
-    }
+    const extraction = await runReader(begin, credential, bytes, mime);
 
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
@@ -1079,6 +1157,52 @@ serveFunction("ocr.failed", async (req: Request) => {
       });
       if (noted) console.error("could not note the key error", usedKey, noted);
     }
+
+    // 0679. Before the scan is written off, the platform's free reader
+    // gets one attempt at it.
+    //
+    // After `note_ocr_key_error` on purpose: the key that failed
+    // failed, and a fallback that rescues the document does not make
+    // that untrue -- the console needs to see a vendor having a bad
+    // afternoon even when nobody noticed, because the day the fallback
+    // is also down is the day somebody wishes they had.
+    //
+    // Only when the file was actually read. A scan that failed on a
+    // missing file, an oversized one or an unreadable type has nothing
+    // to retry, and sending a second vendor a request that cannot
+    // succeed is one more place the document has been.
+    if (bytes) {
+      const rescued = await tryFallback(db, begin.scan_id, orgId, bytes, mime);
+      if (rescued) {
+        const { error: settled } = await db.rpc("ocr_finish", {
+          p_scan_id: begin.scan_id,
+          p_status: "ok",
+          p_extracted: rescued.extraction,
+          // The first reader's failure is kept ON the successful row.
+          // Losing it would hide the whole point: the company's chosen
+          // reader is not working, and somebody has to be able to find
+          // that out without a fallback that silently covers for it
+          // for a month.
+          p_error: `${begin.provider_name} failed and ` +
+            `${rescued.reader.provider_name} read it instead: ${message}`,
+        });
+        if (settled) {
+          console.error("could not settle a rescued scan", begin.scan_id, settled);
+        }
+        return json({
+          scan_id: begin.scan_id,
+          provider: begin.provider,
+          // Named, not buried. The company is told which reader read
+          // its document, because that is a different vendor from the
+          // one it chose and it is entitled to know which.
+          fell_back_to: rescued.reader.provider,
+          fell_back_to_name: rescued.reader.provider_name,
+          charged: begin.charged,
+          extraction: rescued.extraction,
+        });
+      }
+    }
+
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
       p_status: "failed",

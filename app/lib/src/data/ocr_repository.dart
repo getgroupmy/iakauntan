@@ -12,6 +12,7 @@ class OcrProvider {
     required this.takesKey,
     required this.runsOnDevice,
     required this.ready,
+    this.isActive = true,
     this.blurb,
   });
 
@@ -28,6 +29,13 @@ class OcrProvider {
   /// model has not been chosen is listed and refused rather than hidden,
   /// so an administrator can see it exists and ask for it.
   final bool ready;
+
+  /// Whether the platform still offers it. `ocr_status` lists the active
+  /// readers PLUS the one this company is on, so a false here means
+  /// exactly one thing: your company is on a reader that has been
+  /// retired since you chose it, and nothing will scan until you pick
+  /// another. 0678.
+  final bool isActive;
   final String? blurb;
 
   factory OcrProvider.fromJson(Map<String, dynamic> j) => OcrProvider(
@@ -37,10 +45,58 @@ class OcrProvider {
         takesKey: j['takes_key'] != false,
         runsOnDevice: j['runs_on_device'] == true,
         ready: j['ready'] != false,
+        isActive: j['is_active'] != false,
         blurb: (j['blurb']?.toString().trim().isEmpty ?? true)
             ? null
             : j['blurb'].toString().trim(),
       );
+}
+
+/// The platform's default reader, and what it is doing.
+///
+/// One row, two jobs. It is what a company that has chosen nothing is
+/// handed — and, WHEN IT IS FREE, it is also what a failed scan is
+/// retried on. The second is conditional on the first, which is why
+/// this is a small object rather than a code: a console showing only
+/// the name cannot say that setting a chargeable default has silently
+/// left the platform with no fallback at all. 0679.
+class OcrDefaultState {
+  const OcrDefaultState({
+    required this.provider,
+    required this.name,
+    required this.price,
+    required this.isFree,
+    required this.isFallback,
+    required this.runsOnDevice,
+  });
+
+  final String provider;
+  final String name;
+  final double price;
+  final bool isFree;
+
+  /// Whether a scan that failed on the company's own reader is retried
+  /// on this one. Free, active, and able to run on a server.
+  final bool isFallback;
+  final bool runsOnDevice;
+
+  static const none = OcrDefaultState(
+    provider: '',
+    name: '',
+    price: 0,
+    isFree: false,
+    isFallback: false,
+    runsOnDevice: false,
+  );
+
+  factory OcrDefaultState.fromJson(Map<String, dynamic> j) => OcrDefaultState(
+    provider: j['provider']?.toString() ?? '',
+    name: j['name']?.toString() ?? j['provider']?.toString() ?? '',
+    price: OcrSettings._num(j['price']),
+    isFree: j['is_free'] == true,
+    isFallback: j['is_fallback'] == true,
+    runsOnDevice: j['runs_on_device'] == true,
+  );
 }
 
 /// What an organization has chosen about reading its own paperwork.
@@ -58,6 +114,10 @@ class OcrSettings {
     required this.balance,
     required this.price,
     this.providers = const [],
+    this.defaultProvider,
+    this.chosen = false,
+    this.fallback,
+    this.fallbackName,
   });
 
   final bool enabled;
@@ -88,6 +148,30 @@ class OcrSettings {
   /// the platform can add one without an app release.
   final List<OcrProvider> providers;
 
+  /// The reader the platform hands to a company that has never chosen
+  /// one. Null only from an older database that does not send it.
+  final String? defaultProvider;
+
+  /// The free reader a failed scan is retried on, and its name.
+  ///
+  /// Null when there is none — the platform's default is this
+  /// company's own reader, or is chargeable, or runs on the device.
+  /// The database applies the same test `ocr_fallback` does, so a
+  /// sentence drawn from this cannot promise a retry that would not
+  /// happen. 0679.
+  final String? fallback;
+  final String? fallbackName;
+
+  /// Whether THIS company ever picked a reader, as opposed to being
+  /// shown the platform's default.
+  ///
+  /// The distinction is the whole of `0678`. Until then the default was
+  /// the literal `'claude'` inside `ocr_status`, so a company that had
+  /// never opened this screen was indistinguishable from one that had
+  /// deliberately chosen Claude — and when Claude was retired in the
+  /// console, both were handed a reader the save would refuse.
+  final bool chosen;
+
   OcrProvider? get current =>
       providers.where((p) => p.code == provider).firstOrNull;
 
@@ -109,6 +193,24 @@ class OcrSettings {
   /// Whether the chosen reader runs in the app rather than on a server.
   bool get onDevice => current?.runsOnDevice ?? (provider == 'mlkit');
 
+  /// The company is on a reader the platform no longer offers.
+  ///
+  /// Nothing will scan and the save will be refused, so the screen has
+  /// to show the reader list whether or not scanning is switched on —
+  /// until `0678` that list was drawn only when it was ON, and turning
+  /// it on was the call that failed. A company could not reach the
+  /// control that fixes it from any screen it had.
+  bool get retired => current != null && !current!.isActive;
+
+  /// Whether the reader list must be drawn although scanning is OFF.
+  ///
+  /// The one case, and the fix for the reported bug. Every scanning
+  /// control lived inside `if (ocr.enabled)`; a company whose reader
+  /// had been retired could not switch scanning on, because the save
+  /// refuses a retired reader, so the only way to change the reader
+  /// was through the door the reader had locked.
+  bool get mustChooseAnother => !enabled && retired;
+
   /// Roughly how many more scans the balance buys.
   int get scansLeft =>
       price <= 0 ? 0 : (balance / price).floor();
@@ -129,6 +231,10 @@ class OcrSettings {
             .whereType<Map>()
             .map((p) => OcrProvider.fromJson(Map<String, dynamic>.from(p)))
             .toList(),
+        defaultProvider: j['default_provider']?.toString(),
+        chosen: j['chosen'] == true,
+        fallback: j['fallback']?.toString(),
+        fallbackName: j['fallback_name']?.toString(),
       );
 
   static double _num(Object? v) =>
@@ -418,10 +524,19 @@ extension RepoOcr on Repo {
     return OcrSettings.fromJson(Map<String, dynamic>.from(data));
   }
 
+  /// Moves the switch, and optionally the reader or whose key it uses.
+  ///
+  /// Both are nullable and null means "leave it alone", which is what
+  /// lets the switch be moved without naming a reader. `0678`: naming
+  /// one was the bug. The screen echoed back the provider `ocr_status`
+  /// had handed it, that provider was the literal `'claude'` for any
+  /// company that had never chosen, and once Claude was retired in the
+  /// console the echo came back as `Claude is not available` — the
+  /// screen asking for something it had never been asked to want.
   Future<void> setOcrSettings({
     required bool enabled,
-    required String provider,
-    required String keySource,
+    String? provider,
+    String? keySource,
   }) =>
       client.rpc('set_ocr_settings', params: {
         'p_org_id': orgId,
@@ -670,6 +785,29 @@ extension PlatformOcrCatalog on PlatformRepo {
       if (blurb != null) 'p_blurb': blurb,
     },
   );
+
+  /// Which reader a company that has never chosen one is offered, and
+  /// whether it is also the one a failed scan retries on.
+  ///
+  /// Resolved rather than raw: if the reader named in the setting has
+  /// since been retired, this describes the one companies are ACTUALLY
+  /// being given, which is the question an operator looking at the
+  /// dropdown is asking.
+  Future<OcrDefaultState> ocrDefaultState() async {
+    final data = await client.rpc('ocr_default_state');
+    return OcrDefaultState.fromJson(
+      data is Map ? Map<String, dynamic>.from(data) : const {},
+    );
+  }
+
+  /// Chooses it. Refused if the reader is switched off or has no model,
+  /// so the default can never name something the tenant's own save
+  /// would then refuse — which is the failure `0678` was written for.
+  Future<void> setDefaultOcrProvider(String code) async =>
+      await client.rpc(
+        'platform_set_default_ocr_provider',
+        params: {'p_code': code},
+      );
 }
 
 /// One key out of a reader's pool, as the console is allowed to see it.

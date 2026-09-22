@@ -33,6 +33,18 @@ import '../../data/ocr_repository.dart';
 /// by the credit ledger and by whichever companies chose it, so it goes
 /// inactive and stops being offered rather than disappearing from under
 /// its own history.
+///
+/// ## Which one a company gets
+///
+/// Switching a reader on here says it is ON OFFER. It does not say
+/// anybody is using it, and until `0678` there was no way to say that
+/// at all: the reader a company that had never chosen one fell back to
+/// was the literal `'claude'` inside `ocr_status`. So retiring Claude
+/// and switching Gemini on — exactly the pair of taps this screen
+/// invites — left every such company pointed at a reader that the
+/// tenant's own save would then refuse, with `Claude is not available`
+/// and no control anywhere to fix it. The dropdown at the top of this
+/// list is the missing half.
 class OcrCatalogAdminTab extends ConsumerWidget {
   const OcrCatalogAdminTab({super.key});
 
@@ -63,6 +75,8 @@ class OcrCatalogAdminTab extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.only(bottom: 96),
             children: [
+              _DefaultReader(readers: rows),
+              const Divider(height: 1),
               for (final r in rows)
                 ListTile(
                   title: Row(
@@ -85,7 +99,9 @@ class OcrCatalogAdminTab extends ConsumerWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: Text(
-                    '${Fmt.money(Fmt.toDouble(r['price']))} / scan',
+                    Fmt.toDouble(r['price']) <= 0
+                        ? 'Free'
+                        : '${Fmt.money(Fmt.toDouble(r['price']))} / scan',
                   ),
                   onTap: () => _edit(context, ref, r),
                 ),
@@ -143,6 +159,22 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
     text: '${widget.existing?['blurb'] ?? ''}',
   );
   late bool _active = widget.existing?['is_active'] != false;
+
+  /// Whether this reader costs a company anything.
+  ///
+  /// Not a column. A price of zero IS free — `ocr_begin` writes a scan
+  /// charged at zero and never touches the credit ledger, and
+  /// `outOfCredit` is false at any balance — so a second column
+  /// recording the same fact would be a second chance for the two to
+  /// disagree. What was missing was a way to SAY it: the only control
+  /// was a price box, and a free reader was a box somebody had to
+  /// think to type `0` into.
+  ///
+  /// A new reader starts chargeable, which is the safer default: a
+  /// reader wrongly marked free is scans given away, and a reader
+  /// wrongly priced is a number somebody notices.
+  late bool _free = widget.existing != null &&
+      Fmt.toDouble(widget.existing!['price']) <= 0;
   bool _busy = false;
 
   @override
@@ -172,8 +204,23 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
       );
       return;
     }
+    if (!_free && (double.tryParse(_price.text.trim()) ?? 0) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'A chargeable reader needs a price. Mark it free instead if '
+            'it costs a company nothing.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _busy = true);
-    final priceNow = double.tryParse(_price.text.trim());
+    // Free is zero, and it is sent rather than inferred: a reader
+    // switched from chargeable to free has a price in the box that
+    // nobody cleared, and leaving it would mean the word said one
+    // thing and the ledger did another.
+    final priceNow = _free ? 0.0 : double.tryParse(_price.text.trim());
     final priceBefore = widget.existing == null
         ? null
         : Fmt.toDouble(widget.existing!['price']);
@@ -244,17 +291,43 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
                 controller: _model,
                 decoration: const InputDecoration(labelText: 'Model'),
               ),
-              const SizedBox(height: Space.sm),
-              TextField(
-                controller: _price,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Price per scan',
-                  helperText: 'Ringgit, charged against purchased credit',
-                ),
+              const SizedBox(height: Space.md),
+              // Said in words before it is said in ringgit. What an
+              // operator is deciding is whether this reader costs a
+              // company anything; the number is only how much.
+              SegmentedButton<bool>(
+                key: const ValueKey('reader-charging'),
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Chargeable')),
+                  ButtonSegment(value: true, label: Text('Free')),
+                ],
+                selected: {_free},
+                onSelectionChanged: (v) => setState(() => _free = v.first),
               ),
+              const SizedBox(height: Space.sm),
+              if (_free)
+                Text(
+                  'Companies are not charged for this reader and it does '
+                  'not touch their credit balance. Whatever it costs the '
+                  'platform is still spent — a free reader on the '
+                  'platform\'s own key is scans the platform pays for.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.scheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                TextField(
+                  controller: _price,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Price per scan',
+                    helperText: 'Ringgit, charged against purchased credit',
+                  ),
+                ),
               const SizedBox(height: Space.sm),
               TextField(
                 controller: _blurb,
@@ -293,6 +366,144 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
               : const Text('Save'),
         ),
       ],
+    );
+  }
+}
+
+/// Which reader a company that has never chosen one is handed.
+///
+/// The other half of the switch above it. `is_active` decides what is
+/// ON OFFER; this decides what is GIVEN, and the two were never the
+/// same question — a catalog where four readers are active still has
+/// to hand exactly one of them to a company that has expressed no
+/// opinion.
+///
+/// Only the usable ones are listed. `platform_set_default_ocr_provider`
+/// refuses a reader that is switched off or has no model set, so
+/// offering one here would be offering a choice whose save cannot
+/// succeed; and the point of the setting is that the fallback is never
+/// something the tenant's own save would refuse.
+class _DefaultReader extends ConsumerWidget {
+  const _DefaultReader({required this.readers});
+
+  final List<Map<String, dynamic>> readers;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Active, and with a model where the kind needs one — the same
+    // test `app.ocr_provider_ready` applies, because a dropdown that
+    // offers what the RPC refuses is a dropdown that lies.
+    final usable = readers.where((r) {
+      if (r['is_active'] != true) return false;
+      final kind = '${r['kind']}';
+      if (kind != 'anthropic' && kind != 'openai') return true;
+      return '${r['model'] ?? ''}'.trim().isNotEmpty;
+    }).toList();
+
+    final current = ref.watch(ocrDefaultProviderProvider);
+
+    return Padding(
+      padding: const EdgeInsets.all(Space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            'What a new company gets',
+            subtitle:
+                'A company that has never picked a reader is offered this '
+                'one. Switching a reader on above only puts it on the '
+                'list — it does not hand it to anybody.',
+          ),
+          const SizedBox(height: Space.sm),
+          if (usable.isEmpty)
+            Text(
+              'No reader is both switched on and finished, so nothing can '
+              'be the default. Switch one on and give it a model.',
+              style: TextStyle(fontSize: 12, color: context.colors.warning),
+            )
+          else
+            DropdownButtonFormField<String>(
+              key: const ValueKey('default-reader'),
+              initialValue:
+                  usable.any((r) => '${r['code']}' == current.value?.provider)
+                  ? current.value?.provider
+                  : null,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Default reader',
+                // Named rather than left blank while it loads: a blank
+                // dropdown on a screen that decides what every company
+                // gets reads as "none", which is never true.
+                helperText: current.isLoading
+                    ? 'Reading what companies are getting now…'
+                    : 'Companies that chose their own keep it.',
+                // Free or not is the difference between having a
+                // fallback and not having one, so it is shown on the
+                // item rather than left to be looked up above.
+                //
+                // `initialValue` matches on the code alone, so the
+                // label may say a price that has just been edited in
+                // the dialog above; the list is invalidated on save.
+                
+              ),
+              items: [
+                for (final r in usable)
+                  DropdownMenuItem(
+                    value: '${r['code']}',
+                    child: Text(
+                      '${r['name'] ?? r['code']}'
+                      '${Fmt.toDouble(r['price']) <= 0 ? ' — free' : ''}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (code) async {
+                if (code == null) return;
+                final ok = await runWithFeedback(
+                  context,
+                  doing: 'setting the default reader',
+                  action: () => ref
+                      .read(platformRepoProvider)
+                      .setDefaultOcrProvider(code),
+                  successMessage: 'New companies get this reader',
+                );
+                if (ok) ref.invalidate(ocrDefaultProviderProvider);
+              },
+            ),
+          // What the second job of this reader is, said plainly.
+          //
+          // A platform that sets a chargeable default has not made a
+          // small pricing decision — it has switched the fallback off.
+          // That is invisible from the dropdown itself, and the day it
+          // matters is the day a vendor is down, which is the worst
+          // day to find out.
+          if (current.value case final d? when d.provider.isNotEmpty) ...[
+            const SizedBox(height: Space.sm),
+            Text(
+              d.isFallback
+                  ? '${d.name} is free, so it is also the fallback: a scan '
+                        'that fails on the reader a company chose is '
+                        'retried on this one, once, at no charge to them.'
+                  : d.runsOnDevice
+                  ? '${d.name} runs on the phone, so there is no fallback. '
+                        'A scan that fails on a company\'s chosen reader '
+                        'fails — a server cannot retry on the device.'
+                  : 'There is no fallback. ${d.name} costs '
+                        '${Fmt.money(d.price)} a scan, and a reader used '
+                        'without asking must not be charged for, so a scan '
+                        'that fails on a company\'s chosen reader fails. '
+                        'Mark a reader free and make it the default to turn '
+                        'the fallback on.',
+              style: TextStyle(
+                fontSize: 12,
+                color: d.isFallback
+                    ? context.scheme.onSurfaceVariant
+                    : context.colors.warning,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

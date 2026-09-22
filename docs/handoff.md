@@ -34,13 +34,67 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `40a8c538` — the dialogs pass, in progress |
-| CI | green through run 2045 (`1cfca06c`); 2046–2047 running — **every migration to `0674` is live** |
-| Migrations | `0674` is the highest (the tax tile on the home screen). **Nothing since `b635b4b0` touches the database** — the eight commits after it are Dart, tests and gates only |
-| Live database | **level with the branch.** Nothing is waiting |
+| Head at time of writing | the reader default and the fallback (`0678`, `0679`) |
+| CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
+| Migrations | `0679` is the highest. **`0675`–`0679` are NOT yet applied to the live database** — they go on at the next deploy |
+| Live database | **behind the branch by five migrations.** See "What is not live" below |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 348 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,456 Flutter tests**, 32 deno tests |
-| API description | 766 functions, 364 tables, version `0674` — unchanged, because no migration has been added |
+| Gates | 350 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,647 Flutter tests**, 33 deno tests |
+| API description | 773 functions, 364 tables, version `0679` |
+
+### What is not live
+
+`0675`–`0679` are on the branch and not on the live database. Until they
+are applied:
+
+- the console's **Reader keys** page and the tenant's own key pool talk
+  to functions that do not exist, and fail;
+- the **default reader** is still the literal `'claude'` inside
+  `ocr_status`, which is the live bug reported from
+  `iakauntan.com/#/settings` — see below;
+- there is no fallback reader, so a scan that fails, fails.
+
+## The reported bug, and the three things that had to be true
+
+> `PostgrestException(message: Claude is not available, code: 23514)`
+
+from the AI SmartScan card, on a company whose administrator had just
+switched Gemini ON and Claude OFF in the console. Nothing about it was a
+coding slip, and all three of these had to be true at once:
+
+1. **`ocr_status` answered `coalesce(s.provider, 'claude')`** for a
+   company that had never chosen a reader. The name of the fallback
+   reader was a string literal in a function body, so switching readers
+   on and off in the console changed what was ON OFFER and never changed
+   what anybody GOT.
+2. **The settings card echoed that literal back on the toggle** —
+   `setOcrSettings(enabled: v, provider: ocr.provider, ...)` — so the
+   company asked to switch on a reader it had never wanted, and
+   `set_ocr_settings` refused it, correctly.
+3. **The reader dropdown was drawn inside `if (ocr.enabled)`**, so the
+   only way to choose a different reader was to switch scanning on
+   first, which was the call that was failing. A company in this state
+   could not reach the control that fixes it from any screen it had.
+
+`0678` fixes 1 and the refusal's wording; the settings card fixes 2 and
+3 (`OcrSettings.mustChooseAnother`). The shape of the lesson is worth
+keeping: **a default that cannot be changed from a console is not a
+default, it is a constant with a friendly name.**
+
+### And the rule the fallback is built on
+
+`0679` retries a failed scan on the platform's default reader, ONCE,
+**and only when that reader is free**. The condition is not a
+preference. The fallback runs without asking — nobody chose that vendor
+for that company and nobody was shown its price — so charging for it
+would be billing for a decision the company did not make. For the same
+reason it always runs on the PLATFORM's key, never the company's: a
+company's own key belongs to the reader that company chose.
+
+A platform that prices its default reader has therefore switched the
+fallback off for everybody, which is invisible from the dropdown. The
+console says so in as many words; `ocr_default_state()` is what it
+reads.
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 

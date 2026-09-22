@@ -599,6 +599,69 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
   /// somebody has just asked for a different one.
   String _keySource(OcrSettings ocr) => _pendingKeySource ?? ocr.keySource;
 
+  /// The reader list.
+  ///
+  /// A dropdown rather than segments: the list comes off a table the
+  /// platform can add to, so it has no fixed width and cannot be laid
+  /// out as buttons.
+  ///
+  /// A method rather than inline, because it is drawn from two places
+  /// — under a switch that is on, and under one that is off because
+  /// the reader behind it has been retired. It was inline, in the
+  /// second place it was not drawn at all, and that is the whole of
+  /// `0678`: the control that fixes a retired reader was reachable
+  /// only by first doing the thing the retired reader made impossible.
+  Widget _readerPicker(OcrSettings ocr) => DropdownButtonFormField<String>(
+    key: const ValueKey('smartscan-reader'),
+    initialValue: ocr.providers.any((p) => p.code == ocr.provider)
+        ? ocr.provider
+        : null,
+    isExpanded: true,
+    decoration: const InputDecoration(labelText: 'Reader'),
+    items: [
+      for (final p in ocr.providers)
+        DropdownMenuItem(
+          value: p.code,
+          child: Text(
+            p.runsOnDevice || p.price <= 0
+                ? '${p.name} — free'
+                      '${p.isActive ? '' : ' — no longer offered'}'
+                : '${p.name} — ${Fmt.money(p.price)} a scan'
+                      '${p.isActive ? '' : ' — no longer offered'}',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+    ],
+    onChanged: widget.canEdit && !_saving
+        ? (code) {
+            if (code == null) return;
+            // A half-finished choice belongs to the reader it was made
+            // for. Changing reader abandons it rather than carrying a
+            // banner about a key nobody asked to set.
+            setState(() => _pendingKeySource = null);
+            _write(
+              () => ref
+                  .read(repoProvider)!
+                  .setOcrSettings(
+                    // Changing the reader is not switching scanning
+                    // on. It used to send `true`, which was harmless
+                    // while this was only drawn with scanning already
+                    // on, and is not now that a company with a retired
+                    // reader picks a new one while it is off.
+                    enabled: ocr.enabled,
+                    provider: code,
+                    // Switching to a reader you have no key for would
+                    // be refused, so it falls back to the platform's.
+                    keySource: ocr.keys.contains(code)
+                        ? ocr.keySource
+                        : 'platform',
+                  ),
+              'Reader changed',
+            );
+          }
+        : null,
+  );
+
   void _chooseKeySource(OcrSettings ocr, String chosen) {
     // Going back to the platform's key, or choosing your own when a key
     // is already on file, are both storable straight away.
@@ -672,15 +735,20 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: ocr.enabled,
+                // The switch moves the switch and says nothing about
+                // the reader. It used to echo back `ocr.provider`, and
+                // for a company that had never chosen one that was the
+                // platform's default rather than anything this company
+                // had asked for -- so retiring that reader in the
+                // console turned this toggle into `Claude is not
+                // available`. Null now means "leave the reader alone",
+                // and a company with no reader yet gets whatever the
+                // platform currently hands out. 0678.
                 onChanged: widget.canEdit && !_saving
                     ? (v) => _write(
                         () => ref
                             .read(repoProvider)!
-                            .setOcrSettings(
-                              enabled: v,
-                              provider: ocr.provider,
-                              keySource: ocr.keySource,
-                            ),
+                            .setOcrSettings(enabled: v),
                         v ? 'Scanning is on' : 'Scanning is off',
                       )
                     : null,
@@ -690,55 +758,61 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                   'an amount and sometimes a customer.',
                 ),
               ),
+              // Drawn while scanning is OFF, and only in this one
+              // case. A company on a reader the platform has retired
+              // cannot switch scanning on -- the save is refused, and
+              // rightly, since nothing would scan -- and every control
+              // that could change the reader lived inside
+              // `if (ocr.enabled)`. So the only way out of the state
+              // was through the door that was locked. 0678.
+              if (ocr.mustChooseAnother) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '${ocr.current?.name ?? ocr.provider} is no longer '
+                  'offered, so scanning cannot be switched on with it. '
+                  'Choose another reader and the switch above will work.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.colors.warning,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _readerPicker(ocr),
+              ],
               if (ocr.enabled) ...[
                 const SizedBox(height: 8),
-                // A dropdown rather than segments: the list comes off a
-                // table the platform can add to, so it has no fixed
-                // width and cannot be laid out as buttons.
-                DropdownButtonFormField<String>(
-                  initialValue: ocr.providers.any((p) => p.code == ocr.provider)
-                      ? ocr.provider
-                      : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Reader'),
-                  items: [
-                    for (final p in ocr.providers)
-                      DropdownMenuItem(
-                        value: p.code,
+                _readerPicker(ocr),
+                // Which vendor reads the document when the chosen one
+                // will not, said BEFORE it happens. A company whose
+                // paperwork is being read by somebody it did not pick
+                // is entitled to know that is the arrangement, and
+                // finding out afterwards is not the same thing. 0679.
+                if (ocr.fallbackName != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.alt_route,
+                        size: 14,
+                        color: context.scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
                         child: Text(
-                          p.runsOnDevice
-                              ? '${p.name} — free'
-                              : '${p.name} — ${Fmt.money(p.price)} a scan',
-                          overflow: TextOverflow.ellipsis,
+                          'If ${ocr.current?.name ?? 'this reader'} cannot '
+                          'be reached, the document is read by '
+                          '${ocr.fallbackName} instead — once, and at no '
+                          'charge. Your own key is never used for it.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
-                  ],
-                  onChanged: widget.canEdit && !_saving
-                      ? (code) {
-                          if (code == null) return;
-                          // A half-finished choice belongs to the reader
-                          // it was made for. Changing reader abandons it
-                          // rather than carrying a banner about a key
-                          // nobody asked to set.
-                          setState(() => _pendingKeySource = null);
-                          _write(
-                            () => ref
-                                .read(repoProvider)!
-                                .setOcrSettings(
-                                  enabled: true,
-                                  provider: code,
-                                  // Switching to a reader you have no key
-                                  // for would be refused, so it falls
-                                  // back to the platform's.
-                                  keySource: ocr.keys.contains(code)
-                                      ? ocr.keySource
-                                      : 'platform',
-                                ),
-                            'Reader changed',
-                          );
-                        }
-                      : null,
-                ),
+                    ],
+                  ),
+                ],
                 if (ocr.current?.blurb != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -938,7 +1012,16 @@ class _CreditBalance extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  empty
+                  // A reader the platform has marked free costs this
+                  // company nothing and never touches the balance, so
+                  // the sentence about how many scans are left is not
+                  // about it. Said plainly rather than by printing
+                  // `RM0.00 a scan — about 0 more`, which is three
+                  // true numbers arranged to read as bad news.
+                  ocr.price <= 0
+                      ? 'This reader is free. Nothing is taken from this '
+                            'balance for scanning.'
+                      : empty
                       ? 'Not enough for another scan at '
                             '${Fmt.money(ocr.price)} each. Ask us to top it up.'
                       : '${Fmt.money(ocr.price)} a scan — about '
