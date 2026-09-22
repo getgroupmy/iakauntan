@@ -3257,6 +3257,34 @@ final ocrProviderCatalogProvider =
       (ref) => ref.watch(platformRepoProvider).ocrProviderCatalog(),
     );
 
+/// The three calls a reader's key pool needs.
+///
+/// On the CLIENT rather than on a repository. `Repo` does not exist
+/// until an organization has been resolved and a platform operator
+/// belongs to none, so a pool hung off it would refuse the console the
+/// pool exists for; `PlatformRepo` would work and would be a lie, since
+/// a tenant administrator keeping their own keys is not the platform.
+/// The org id decides, and the database is what enforces it. 0675.
+final ocrKeyPoolApiProvider = Provider<OcrKeyPool>(
+  (ref) => OcrKeyPool(ref.watch(supabaseProvider)),
+);
+
+/// A reader's pool of keys, the platform's or one company's own.
+///
+/// Keyed on the pair, because a screen showing the platform's pool and
+/// a screen showing a tenant's are the same screen with a different
+/// argument — and a family keyed on the provider alone would hand one
+/// of them the other's cache.
+///
+/// Carries no key and cannot: `ocr_keys_for` has no column that could,
+/// and the table behind it has its grants revoked from everybody but
+/// the service role. 0675.
+final ocrKeyPoolProvider = FutureProvider.autoDispose
+    .family<List<OcrPoolKey>, ({String provider, String? orgId})>(
+      (ref, args) =>
+          ref.watch(ocrKeyPoolApiProvider).keys(args.provider, orgId: args.orgId),
+    );
+
 /// Every AI provider, with whether a key is on file. Platform staff
 /// only — the function behind it refuses anybody else, and it has no
 /// column that could carry a key. 0536.

@@ -177,6 +177,17 @@ const dropdownCensus = <String, int>{
   // of `accountSubtypes` -- and it cannot grow, because a new subtype
   // is an enum value in a migration. The TYPE itself is not asked at
   // all: a sub-account is always the same kind as its parent.
+  // 0675. Which reader's key pool the console is looking at. Five
+  // rows today and it grows by one when a platform operator adds a
+  // reader -- which is a thing that happens a handful of times in the
+  // life of the product, not a list anybody would search. `Claude`,
+  // `ChatGPT`, `Grok`, `Gemini`, `Document AI`: somebody choosing
+  // between those is reading all five, which is what a dropdown is
+  // for. The same argument as the kinds of paper below, and the same
+  // trigger for undoing it: if this ever reaches the size where
+  // somebody would type rather than look, the entry comes off and a
+  // `SearchablePicker` goes in.
+  'features/admin/ocr_keys_admin.dart': 1,
   'features/settings/sub_account_dialog.dart': 1,
   'features/settings/tax_code_dialog.dart': 2,
   // The four kinds of entity SSM registers: Company, Business, Audit

@@ -28,6 +28,22 @@
 #     where Supabase puts it and migrations call `gen_random_bytes`
 #     unqualified.
 #
+# And one that is not a stub but a DEFAULT PRIVILEGE, which is worse
+# because it makes this runner more permissive than CI rather than
+# less:
+#
+#   * `_local_stack.sql` reproduces Supabase's
+#     `alter default privileges in schema public grant all on functions
+#     to anon, authenticated, service_role`, so a new `public` function
+#     here arrives executable by `service_role` whether or not anybody
+#     granted it. The database `check_rpc_grants.py` reads in CI does
+#     not have that default. So a migration that grants only to
+#     `authenticated` passes HERE and fails THERE — which is what
+#     happened to `0675`'s `ocr_key_pool_size`, and is why `0677`
+#     exists. Write every grant an edge function depends on; a
+#     privilege that arrives by default arrives only where the default
+#     is set.
+#
 # `supabase start` in CI runs the real thing. Believe that one.
 #
 # ## Using it

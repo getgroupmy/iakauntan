@@ -19,6 +19,7 @@ import 'landing_cms.dart';
 import 'mobile_app_admin.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
+import 'ocr_keys_admin.dart';
 import 'scan_kinds_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'promotions_admin.dart';
@@ -102,6 +103,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/readers',
     primary: false,
     page: OcrCatalogAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    label: 'Reader keys',
+    icon: Icons.vpn_key_outlined,
+    selectedIcon: Icons.vpn_key,
+    path: '/admin/reader-keys',
+    primary: false,
+    page: OcrKeysAdminTab(),
   ),
   (
     group: 'Document scanning',

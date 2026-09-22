@@ -552,6 +552,57 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
+00. **GEMINI AND THE KEY POOL — the platform half is done, the tenant
+   half is not.** The user asked for Google AI Studio as a SmartScan
+   reader, with several keys, per-key limits "time day month", and an
+   on/off in the admin console. They chose the widest reading of all
+   three questions: caps AND a schedule, platform pool AND per-company,
+   and Gemini as another reader in the existing catalog rather than an
+   override.
+
+   **Done and pushed.** `0675` is the pool — `ocr_provider_keys`, many
+   rows per reader, `org_id` null for the platform's and a uuid for a
+   company's own. Each key has a BUDGET (per minute, day, month; null
+   is no cap) and a CLOCK (hours, weekdays, months; empty is always),
+   and runs only when both let it through. `public.claim_ocr_key` takes
+   the next key and spends one call of its budget in one statement,
+   round-robin on `last_used_at` so the pool wears evenly.
+   `0676` moved that function out of `app` and into `public`, because
+   PostgREST does not serve `app` — see the note below, it is the
+   sharpest trap in this stretch. The edge function asks the pool first
+   on both sides and falls back to the older arrangements, so a
+   deployment that has not filled one carries on unchanged. Gemini is a
+   row of `kind = 'openai'` against Google's OpenAI-compatible
+   endpoint, so there is no new protocol handler; it arrives
+   `is_active` false and the Readers screen is the on/off.
+   `/admin/reader-keys` in the console manages the platform pool.
+
+   **Not done: the tenant half.** The database and the edge function
+   already take an `org_id` everywhere and guard it with
+   `app.can_admin`, so a company's own pool WORKS — there is just no
+   screen for it. `settings_screen.dart` still has the single-key path
+   (`setOcrCredentials`), which the edge function falls back to. The
+   shape to build is `OcrKeyPoolEditor(provider:, orgId:)` lifted out
+   of `ocr_keys_admin.dart` so the console and the tenant card draw one
+   editor rather than two.
+
+   **The trap worth reading before touching any of this.** A function
+   the edge function cannot reach fails by SILENTLY DOING NOTHING.
+   `db.rpc("claim_ocr_key")` looks in `public`; `app.claim_ocr_key`
+   would have been missed on every scan and the code would have fallen
+   through to the old key, so everything would have kept working while
+   the pool sat filled and unused with its counters at nought. Anything
+   an edge function calls goes in `public`, `security definer`, granted
+   to `service_role` alone — `public.ocr_finish` has been that shape
+   since `0111`.
+
+   **Also worth knowing.** The caps are counted HERE, not at Google.
+   Google's free-tier day rolls over on Pacific time and this schema is
+   Malaysian throughout, so a cap set in the console is a budget of our
+   own — set it under what the account allows, never equal to it. The
+   screen says so.
+
+
 0a. **The DIALOGS backlog — 50 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet

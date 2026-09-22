@@ -1,3 +1,5 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'attachments_repository.dart' show RepoAttachments;
 import 'repository.dart';
 
@@ -668,4 +670,200 @@ extension PlatformOcrCatalog on PlatformRepo {
       if (blurb != null) 'p_blurb': blurb,
     },
   );
+}
+
+/// One key out of a reader's pool, as the console is allowed to see it.
+///
+/// Everything about it except the key. `keyTail` is the last four
+/// characters, which is what lets two keys off the same Google account
+/// be told apart against the provider's own console, and is short
+/// enough to be no use to anybody who obtains it. There is no field
+/// that could carry the key and no function that would return one to
+/// this app: `ocr_keys_for` is the only reader, and the key column is
+/// not in its result.
+///
+/// [inWindow] and [hasHeadroom] are the two gates, kept apart because
+/// they come back at different times and for different reasons — out
+/// of hours returns at six, spent returns when the window rolls.
+class OcrPoolKey {
+  const OcrPoolKey({
+    required this.id,
+    required this.label,
+    required this.keyTail,
+    required this.isActive,
+    required this.inWindow,
+    required this.hasHeadroom,
+    required this.spentMinute,
+    required this.spentDay,
+    required this.spentMonth,
+    this.perMinute,
+    this.perDay,
+    this.perMonth,
+    this.hours = const [],
+    this.weekdays = const [],
+    this.months = const [],
+    this.lastUsedAt,
+    this.lastError,
+    this.lastErrorAt,
+  });
+
+  final String id;
+  final String label;
+  final String keyTail;
+  final bool isActive;
+
+  /// Whether its clock allows it at this moment.
+  final bool inWindow;
+
+  /// Whether it is under all three of its caps at this moment.
+  final bool hasHeadroom;
+
+  final int spentMinute;
+  final int spentDay;
+  final int spentMonth;
+
+  /// Null is no cap, which is the right answer for a paid key.
+  final int? perMinute;
+  final int? perDay;
+  final int? perMonth;
+
+  /// Empty is always, which is what almost every key wants.
+  final List<int> hours;
+  final List<int> weekdays;
+  final List<int> months;
+
+  final DateTime? lastUsedAt;
+  final String? lastError;
+  final DateTime? lastErrorAt;
+
+  /// Whether a scan would be given this key right now.
+  ///
+  /// All three, because a key fails this for three different reasons
+  /// and the screen says which — `standDownReason`.
+  bool get isUsableNow => isActive && inWindow && hasHeadroom;
+
+  /// Why it would not be, in the words the console shows, or null when
+  /// it would be.
+  ///
+  /// Order matters and is the order somebody can act in: switched off
+  /// is a decision to reverse, out of hours is a wait with a known end,
+  /// and spent is a wait that needs nobody.
+  String? get standDownReason {
+    if (!isActive) return 'Switched off';
+    if (!inWindow) return 'Outside its hours';
+    if (!hasHeadroom) return 'Spent for now';
+    return null;
+  }
+
+  static List<int> _ints(Object? raw) => switch (raw) {
+    final List<dynamic> list => [
+        for (final v in list)
+          if (int.tryParse('$v') case final int n) n,
+      ],
+    _ => const [],
+  };
+
+  static int? _intOrNull(Object? raw) =>
+      raw == null ? null : int.tryParse('$raw');
+
+  factory OcrPoolKey.fromJson(Map<String, dynamic> j) => OcrPoolKey(
+        id: '${j['id']}',
+        label: '${j['label'] ?? ''}',
+        keyTail: '${j['key_tail'] ?? ''}',
+        isActive: j['is_active'] == true,
+        inWindow: j['in_window'] == true,
+        hasHeadroom: j['has_headroom'] == true,
+        spentMinute: _intOrNull(j['spent_minute']) ?? 0,
+        spentDay: _intOrNull(j['spent_day']) ?? 0,
+        spentMonth: _intOrNull(j['spent_month']) ?? 0,
+        perMinute: _intOrNull(j['per_minute']),
+        perDay: _intOrNull(j['per_day']),
+        perMonth: _intOrNull(j['per_month']),
+        hours: _ints(j['hours']),
+        weekdays: _ints(j['weekdays']),
+        months: _ints(j['months']),
+        lastUsedAt: DateTime.tryParse('${j['last_used_at']}'),
+        lastError: (j['last_error']?.toString().trim().isEmpty ?? true)
+            ? null
+            : j['last_error'].toString().trim(),
+        lastErrorAt: DateTime.tryParse('${j['last_error_at']}'),
+      );
+}
+
+/// A reader's pool of keys: the platform's, or one company's own.
+///
+/// Built on the CLIENT and not on a repository, and that is the whole
+/// point rather than a shortcut.
+///
+/// `Repo` is a tenant's, and it does not exist until an organization
+/// has been resolved. A platform operator belongs to no company, so on
+/// the console screen `repoProvider` is null and `requireRepo` refuses
+/// the only people that screen exists for — "Your company has not
+/// finished loading", for ever.
+/// `platform_console_wiring_test.dart` is a whole file about that bug
+/// coming back twice, and it caught this on the way in: the first
+/// version of this pool was an `extension on Repo`.
+///
+/// `PlatformRepo` would work and would be a lie: a tenant administrator
+/// keeping their own company's keys is not the platform.
+///
+/// So it is neither. The three functions take an org id — null for the
+/// platform's pool, a uuid for a company's — and the DATABASE decides
+/// who may ask, by looking at the id it was handed:
+/// `app.is_platform_admin()` for null and `app.can_admin(org_id)` for
+/// the rest. One implementation, one argument list, and the guard in
+/// the one place it can actually be enforced.
+class OcrKeyPool {
+  const OcrKeyPool(this.client);
+
+  final SupabaseClient client;
+
+  Future<List<OcrPoolKey>> keys(String provider, {String? orgId}) async =>
+      Repo.rows(await client.rpc('ocr_keys_for', params: {
+        'p_provider': provider,
+        'p_org_id': orgId,
+      })).map(OcrPoolKey.fromJson).toList();
+
+  /// Adds a key or changes one.
+  ///
+  /// A null [apiKey] on an EXISTING key leaves the stored one alone,
+  /// which is what lets a cap be raised without retyping a secret
+  /// nobody still has — this app cannot show anybody the key it holds.
+  /// On a new one the function refuses a blank, so the screen need not
+  /// decide what an empty box means.
+  Future<String> save(
+    String provider, {
+    String? orgId,
+    String? id,
+    String? label,
+    String? apiKey,
+    int? perMinute,
+    int? perDay,
+    int? perMonth,
+    List<int> hours = const [],
+    List<int> weekdays = const [],
+    List<int> months = const [],
+    bool isActive = true,
+  }) async =>
+      '${await client.rpc('save_ocr_key', params: {
+        'p_provider': provider,
+        'p_org_id': orgId,
+        'p_id': id,
+        'p_label': label,
+        'p_api_key': apiKey,
+        'p_per_minute': perMinute,
+        'p_per_day': perDay,
+        'p_per_month': perMonth,
+        'p_hours': hours,
+        'p_weekdays': weekdays,
+        'p_months': months,
+        'p_is_active': isActive,
+      })}';
+
+  Future<void> remove(String provider, String id, {String? orgId}) async =>
+      await client.rpc('delete_ocr_key', params: {
+        'p_provider': provider,
+        'p_id': id,
+        'p_org_id': orgId,
+      });
 }
