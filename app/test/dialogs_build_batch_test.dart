@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/data/corp_models.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/assets/capital_allowances_dialog.dart';
@@ -21,6 +22,7 @@ import 'package:iakauntan/src/features/ticketing/ticket_routing_sheet.dart';
 import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/offline_controller.dart';
+import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
 import 'package:iakauntan/src/features/pos/offline_problems_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
 import 'package:iakauntan/src/features/pos/sold_out_dialog.dart';
@@ -1401,6 +1403,110 @@ void main() {
         (context) => showSoldOut(context, 'o1'),
       );
       expect(find.byType(AlertDialog), findsOneWidget);
+    });
+  });
+
+  group('appointing an officer', () {
+    List<Override> register() => [
+          corpPersonsProvider.overrideWith(
+            (ref) async => [
+              CorpPerson(
+                id: 'p1',
+                kind: 'individual',
+                fullName: 'Dato Sri Azman bin Hassan',
+                nric: '650412-10-5533',
+              ),
+            ],
+          ),
+          corpPrincipalsProvider('e1').overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(true),
+        ];
+
+    Future<void> asRole(WidgetTester tester, String label) async {
+      await tester.tap(find.byKey(const ValueKey('officer-role')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('opens on a director, with no licence and no principal',
+        (tester) async {
+      await opened(
+        tester,
+        register(),
+        (context) => showOfficerSheet(context, entityId: 'e1'),
+      );
+      expect(find.text('Appoint an officer'), findsOneWidget);
+      // The date on the s.58 notification, which is the form's own
+      // words for what this date IS.
+      expect(find.text('The date on the s.58 notification'), findsOneWidget);
+      // A director needs no licence and stands in for nobody, so
+      // neither section is on the form.
+      expect(find.text('Licence'), findsNothing);
+      expect(find.byKey(const ValueKey('officer-alternate-for')),
+          findsNothing);
+    });
+
+    testWidgets('and a secretary is the only role asked for a licence',
+        (tester) async {
+      // s.20G of the Companies Commission Act requires one of a
+      // secretary and of no other officer. Nobody else is asked, and
+      // `officerValues` CLEARS it when the role moves away — a
+      // director carrying a licence number is a register asserting a
+      // qualification about a role that does not have one.
+      await opened(
+        tester,
+        register(),
+        (context) => showOfficerSheet(context, entityId: 'e1'),
+      );
+      await asRole(tester, 'Secretary');
+      expect(find.text('Licence'), findsOneWidget);
+      expect(
+        find.text('Companies Commission Act, section 20G'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and an auditor is the only role checked against MIA',
+        (tester) async {
+      // s.263 of the Companies Act 2016 wants an approved company
+      // auditor. A secretary is deliberately NOT asked here even
+      // though MIA is a prescribed body under s.20G — that
+      // appointment already carries a licence number above, and a
+      // second card asking for an overlapping one is two places to
+      // record one fact.
+      await opened(
+        tester,
+        register(),
+        (context) => showOfficerSheet(context, entityId: 'e1'),
+      );
+      await asRole(tester, 'Auditor');
+      expect(find.byKey(const ValueKey('officer-mia-later')), findsOneWidget);
+      // And the auditor is not asked for a s.20G licence.
+      expect(find.text('Licence'), findsNothing);
+    });
+
+    testWidgets('and an alternate director is asked whose place they take',
+        (tester) async {
+      // s.208: an alternate acts in a PARTICULAR director's place,
+      // with that director's vote and not as well as it. A chairman
+      // stands in for nobody, so the field is not offered there.
+      await opened(
+        tester,
+        register(),
+        (context) => showOfficerSheet(context, entityId: 'e1'),
+      );
+      await asRole(tester, 'Alternate director');
+      expect(
+        find.byKey(const ValueKey('officer-alternate-for')),
+        findsOneWidget,
+      );
+
+      await asRole(tester, 'Chairman');
+      expect(
+        find.byKey(const ValueKey('officer-alternate-for')),
+        findsNothing,
+      );
     });
   });
 }
