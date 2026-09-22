@@ -535,4 +535,74 @@ void main() {
       expect(chosen, 'c3');
     });
   });
+
+  group('a value settled from outside, inside a Form', () {
+    // The share movement sheet defaults its class to the first one the
+    // moment the list arrives, so the picker's `value` goes from null
+    // to an id DURING a build. `didUpdateWidget` used to write that
+    // row's label straight into the controller -- and the controller
+    // belongs to a `TextFormField`, which tells its `Form` the field
+    // changed, and the `Form` calls `setState`. Mid-build, that is
+    // "setState() or markNeedsBuild() called during build", and it
+    // took the sheet down on the first frame after the classes loaded.
+    //
+    // Both halves are asserted here: that it does not throw, and that
+    // the box still ends up showing the row. Deferring a write is an
+    // easy way to lose it.
+
+    Future<void> pumpInForm(WidgetTester tester, String? value) =>
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Form(
+                child: SearchablePicker<String>(
+                  options: contacts,
+                  value: value,
+                  onChanged: (_) {},
+                  label: 'Customer',
+                  validator: (v) => v == null ? 'Required' : null,
+                ),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('does not mark the Form dirty during the build',
+        (tester) async {
+      await pumpInForm(tester, null);
+      await pumpInForm(tester, 'c3');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsOneWidget);
+    });
+
+    testWidgets('and the options arriving late still fills the box',
+        (tester) async {
+      // The other half of `didUpdateWidget`: the id is known before
+      // the list it belongs to has loaded.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Form(
+              child: SearchablePicker<String>(
+                options: const [],
+                value: 'c3',
+                onChanged: (_) {},
+                label: 'Customer',
+                validator: (v) => v == null ? 'Required' : null,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsNothing);
+
+      await pumpInForm(tester, 'c3');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsOneWidget);
+    });
+  });
 }

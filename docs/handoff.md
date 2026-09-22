@@ -552,7 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The DIALOGS backlog — 72 of 121 openers left. In progress.**
+0a. **The DIALOGS backlog — 68 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet
    classes**, more than there are screens, which the screens gate
@@ -562,7 +562,7 @@ deal with, and the estimate screen is honest about not knowing.
    classes are private, so a gate demanding `_MappingDialog` be
    constructed would be unsatisfiable for 89% of the surface. The way
    in is the way the app goes in: `showFsMapping(context)`,
-   `showPersonEditor(context, person: ...)`. 121 of those exist; 49
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 53
    are covered.
 
    `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
@@ -576,7 +576,7 @@ deal with, and the estimate screen is honest about not knowing.
    it by hand — the gate refuses a stale entry in both directions, so
    it self-checks.
 
-   **Six defects so far, and the reason most of them cluster here.** A
+   **Nine defects so far, and the reason some of them cluster here.** A
    dialog's box is the screen LESS its insets LESS its content
    padding, so about 284px on a 412px phone. The identical `ListTile`
    row throws inside a dialog at 412 and draws on a screen at 360 —
@@ -593,8 +593,8 @@ deal with, and the estimate screen is honest about not knowing.
      fixed, totalling 364px in a 284px box. The register scrolls
      sideways now; the closing sentence does not.
 
-   The other two are not about width, and neither was visible in a
-   browser either:
+   The rest are not about width, and none was visible in a browser
+   either:
 
    - `strata_sheet.dart` printed the Schedule of Parcels as
      `700.0 of 1000.0 allocated`. Share units are numeric, so the
@@ -611,6 +611,27 @@ deal with, and the estimate screen is honest about not knowing.
      that reads both shapes, and `statutory_charge_payment_test.dart`
      asserts the embedded one — every fixture it had used the flat
      key, which is exactly why the defect survived a tested file.
+   - **`SearchablePicker` threw `setState() or markNeedsBuild() called
+     during build` whenever its value was settled from outside inside
+     a `Form`.** `didUpdateWidget` wrote the chosen row's label
+     straight into the controller; the controller belongs to a
+     `TextFormField`, which tells its `Form` the field changed, and
+     the `Form` calls `setState` — mid-build. The share movement sheet
+     defaults its class to the first one the moment the list arrives,
+     so the first frame after the classes loaded took the sheet down.
+     Every register sheet built the same way was one provider
+     resolution away from it. The write is deferred to a post-frame
+     callback now; `searchable_picker_test.dart` asserts BOTH halves,
+     no throw and the box still filled, because deferring a write is
+     an easy way to lose it.
+   - `charge_sheet.dart` computed the s.352 thirty days as
+     `add(Duration(days: 30))` while `CorpCharge.registrationDue`
+     computed the same statutory date as calendar arithmetic — with a
+     comment on the model saying exactly why the other way is wrong.
+     They agree in Malaysia, which keeps no daylight saving, and would
+     name different days anywhere that does. One way now, and
+     `corp_register_test.dart` asserts the two agree across five
+     dates.
 
    **Traps, each paid for once:**
 
@@ -647,7 +668,11 @@ deal with, and the estimate screen is honest about not knowing.
    - Material shows a field's helper text OR its error, never both.
      Assert the helper BEFORE tapping Save.
    - Read the `initState` default before asserting on it. The
-     statutory charge sheet opens on **assessment**, not quit rent.
+     statutory charge sheet opens on **assessment**, not quit rent,
+     and a new charge opens dated **today**, not blank.
+   - A `maxLength` truncates before the validator sees it. Typing
+     "RINGGIT" into a three-character currency box passes, because
+     what arrives is "RIN".
    - Do NOT run `dart format` on a file you touched. The repository is
      not format-clean and it reflows the whole file.
 

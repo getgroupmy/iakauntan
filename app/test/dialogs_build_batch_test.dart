@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:iakauntan/src/core/format.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/quick_add_dialog.dart';
 import 'package:iakauntan/src/core/theme.dart';
@@ -31,6 +32,10 @@ import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/offline_controller.dart';
 import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/beneficial_owner_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/charge_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/share_class_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/share_event_sheet.dart';
 import 'package:iakauntan/src/features/pos/offline_problems_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
 import 'package:iakauntan/src/features/pos/sold_out_dialog.dart';
@@ -2542,6 +2547,469 @@ void main() {
         find.text('Due on the first day of the period'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('the statutory registers a company secretary keeps', () {
+    final aminah = CorpPerson(
+      id: 'p1',
+      kind: 'individual',
+      fullName: 'Aminah binti Hassan',
+      nric: '800101-14-5566',
+    );
+    final lim = CorpPerson(
+      id: 'p2',
+      kind: 'individual',
+      fullName: 'Lim Wei Ming',
+      nric: '751212-10-1122',
+    );
+
+    const shareClasses = <Map<String, dynamic>>[
+      {
+        'id': 'sc1',
+        'code': 'ORD',
+        'name': 'Ordinary',
+        'currency': 'MYR',
+        'votes_per_share': 1,
+        'is_redeemable': false,
+      },
+      {
+        'id': 'sc2',
+        'code': 'PREF',
+        'name': 'Redeemable preference',
+        'currency': 'MYR',
+        'votes_per_share': 0,
+        'is_redeemable': true,
+      },
+    ];
+
+    List<Override> company({List<Map<String, dynamic>>? classes}) => [
+          corpShareClassesProvider
+              .overrideWith((ref, id) async => classes ?? shareClasses),
+          corpPersonsProvider.overrideWith((ref) async => [aminah, lim]),
+        ];
+
+    testWidgets('a class of shares opens on the ordinary case',
+        (tester) async {
+      // ORD / Ordinary / MYR / one vote is what nine companies in ten
+      // have, so the sheet is already filled in with it rather than
+      // asking four questions everybody answers the same way.
+      await opened(
+        tester,
+        company(),
+        (context) => showShareClassSheet(context, entityId: 'e1'),
+      );
+
+      expect(find.text('Add a class of shares'), findsOneWidget);
+      expect(find.text('ORD'), findsOneWidget);
+      expect(find.text('Ordinary'), findsOneWidget);
+      expect(find.text('MYR'), findsOneWidget);
+      // Non-voting is a real class, not a mistake, and the helper says
+      // so where somebody might otherwise think zero is refused.
+      expect(find.text('0 for non-voting'), findsOneWidget);
+    });
+
+    testWidgets('and refuses a currency that is not three letters',
+        (tester) async {
+      await opened(
+        tester,
+        company(),
+        (context) => showShareClassSheet(context, entityId: 'e1'),
+      );
+
+      // Two letters, not seven: the box caps itself at three, so
+      // "RINGGIT" arrives as "RIN" and passes. What the validator is
+      // actually for is the short answer somebody stops typing.
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Currency'), 'RM');
+      await tester.tap(find.byKey(const ValueKey('share-class-save')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Three letters'), findsOneWidget);
+    });
+
+    testWidgets('a share movement multiplies out its own consideration',
+        (tester) async {
+      // The s.78 return reports the total. Asking for it as well as
+      // the price would be asking twice, and the two would part the
+      // first time somebody changed the quantity.
+      await opened(
+        tester,
+        company(),
+        (context) => showShareEventSheet(context, entityId: 'e1'),
+      );
+
+      expect(find.text('Record a share movement'), findsOneWidget);
+      // Allotment is what the sheet opens on, and its note is the
+      // fourteen days s.78 gives.
+      expect(
+        find.text('New shares issued. s.78 return within fourteen days.'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+          find.byKey(const ValueKey('share-quantity')), '250000');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Price per share'), '1.50');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Total consideration RM 375,000.00'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an allotment asks for no transferor, a cancellation no '
+        'transferee', (tester) async {
+      // `corp_share_events_parties_ck` decides this. Asking for a
+      // party the movement cannot have is a form that collects an
+      // answer the database will refuse.
+      await opened(
+        tester,
+        company(),
+        (context) => showShareEventSheet(context, entityId: 'e1'),
+      );
+
+      expect(find.text('From'), findsNothing);
+      expect(find.text('To'), findsWidgets);
+
+      await tester.tap(find.byKey(const ValueKey('share-event-type')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancellation').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('To'), findsNothing);
+      expect(find.text('From'), findsWidgets);
+      expect(
+        find.text('Buy-back or reduction. The issued capital falls.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a transmission names the deceased, and stamping is a '
+        "transfer's business", (tester) async {
+      await opened(
+        tester,
+        company(),
+        (context) => showShareEventSheet(context, entityId: 'e1'),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('share-event-type')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transmission').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('From (deceased)'), findsOneWidget);
+      expect(
+        find.text('On death or bankruptcy — no instrument of transfer.'),
+        findsOneWidget,
+      );
+      // Form 32A and its duty belong to a transfer alone; carried onto
+      // a transmission they would be an instrument that does not exist.
+      expect(find.widgetWithText(TextFormField, 'Stamp duty'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('share-event-type')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transfer').last);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextFormField, 'Stamp duty'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextFormField, 'Stamp certificate'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shares not issued for cash are asked what they were '
+        'issued for', (tester) async {
+      // s.78(2). The price box goes, because there was no price, and
+      // the sentence replaces it rather than sitting beside it.
+      await opened(
+        tester,
+        company(),
+        (context) => showShareEventSheet(context, entityId: 'e1'),
+      );
+
+      await tester.tap(find.widgetWithText(SwitchListTile, 'For cash'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(TextFormField, 'Price per share'),
+        findsNothing,
+      );
+      expect(
+        find.widgetWithText(TextFormField, 'What the consideration was'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a company with no class of shares is told why, and where',
+        (tester) async {
+      // Every movement points at a class. An empty dropdown looks
+      // broken and sends the secretary hunting for the screen that
+      // fixes it, so the way out is attached to the sentence.
+      await opened(
+        tester,
+        company(classes: const []),
+        (context) => showShareEventSheet(context, entityId: 'e1'),
+      );
+
+      expect(
+        find.textContaining('This company has no class of shares yet'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('add-share-class')), findsOneWidget);
+
+      final record = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('share-event-save')));
+      expect(record.onPressed, isNull);
+    });
+
+    testWidgets('a beneficial owner needs a ground, not a nomination',
+        (tester) async {
+      // s.60B does not let you simply nominate somebody. An entry with
+      // nothing ticked asserts that a person controls the company for
+      // no reason anybody wrote down, which is a name and not a
+      // register entry — so the button is shut until one is given.
+      await opened(
+        tester,
+        company(),
+        (context) => showBeneficialOwnerSheet(context, entityId: 'e1'),
+      );
+
+      expect(find.text('Declare a beneficial owner'), findsOneWidget);
+      expect(
+        find.textContaining('A beneficial owner is one because a ground '
+            'applies'),
+        findsOneWidget,
+      );
+      var enter = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('owner-save')));
+      expect(enter.onPressed, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('ground-shares')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('A beneficial owner is one because a ground '
+            'applies'),
+        findsNothing,
+      );
+      enter = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('owner-save')));
+      expect(enter.onPressed, isNotNull);
+    });
+
+    testWidgets('and a ground written in prose counts as much as a tick',
+        (tester) async {
+      // "Control exercised through an arrangement" is a ground under
+      // the Act even though it is not one of the four boxes.
+      await opened(
+        tester,
+        company(),
+        (context) => showBeneficialOwnerSheet(context, entityId: 'e1'),
+      );
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Some other ground'),
+        'Controls the board through a shareholders agreement',
+      );
+      await tester.pumpAndSettle();
+
+      final enter = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('owner-save')));
+      expect(enter.onPressed, isNotNull);
+    });
+
+    testWidgets('a shareholding of two thousand per cent is refused',
+        (tester) async {
+      // `numeric(7,4)` would store it happily. The register would then
+      // say somebody holds twenty times the company.
+      await opened(
+        tester,
+        company(),
+        (context) => showBeneficialOwnerSheet(context, entityId: 'e1'),
+      );
+
+      // Blank is allowed and is NOT nought: an unrecorded holding that
+      // reads as a recorded nought is what an inspection finds. Read
+      // before the refusal, because a field shows its helper or its
+      // error and never both.
+      expect(
+        find.text('Leave empty if it is not a shareholding'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('ground-shares')));
+      await tester.enterText(
+          find.byKey(const ValueKey('owner-percent')), '2000');
+      await tester.tap(find.byKey(const ValueKey('owner-save')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Between 0 and 100'), findsOneWidget);
+    });
+
+    testWidgets('cessation is offered on an existing entry, not a new one',
+        (tester) async {
+      await opened(
+        tester,
+        company(),
+        (context) => showBeneficialOwnerSheet(
+          context,
+          entityId: 'e1',
+          owner: CorpBeneficialOwner(
+            id: 'bo1',
+            personId: 'p1',
+            name: 'Aminah binti Hassan',
+            percent: 35,
+            holds20pcShares: true,
+          ),
+        ),
+      );
+
+      expect(find.text('Amend the entry'), findsOneWidget);
+      expect(find.text('Cessation'), findsOneWidget);
+      expect(
+        find.text('Leave empty while the ground still applies'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a charge counts its own thirty days from the instrument',
+        (tester) async {
+      // s.352. Missing it is not a late fee — an unregistered charge is
+      // void against the liquidator, so the security a bank believes it
+      // holds is not there at the only moment it matters.
+      final created = DateTime.now().subtract(const Duration(days: 5));
+      await opened(
+        tester,
+        company(),
+        (context) => showChargeSheet(
+          context,
+          entityId: 'e1',
+          charge: CorpCharge(
+            id: 'ch1',
+            chargeeName: 'Maybank Islamic Berhad',
+            createdOn: created,
+            chargeType: 'Debenture',
+            amountSecured: 2500000,
+          ),
+        ),
+      );
+
+      expect(find.text('Amend the charge'), findsOneWidget);
+      expect(
+        find.textContaining('Must be lodged by '
+            '${Fmt.date(DateTime(created.year, created.month, created.day + 30))}'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('thirty days from creation (s.352)'),
+          findsOneWidget);
+    });
+
+    testWidgets('and says what an expired one costs', (tester) async {
+      final created = DateTime.now().subtract(const Duration(days: 60));
+      await opened(
+        tester,
+        company(),
+        (context) => showChargeSheet(
+          context,
+          entityId: 'e1',
+          charge: CorpCharge(
+            id: 'ch2',
+            chargeeName: 'CIMB Bank Berhad',
+            createdOn: created,
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('An unregistered charge is void against the '
+            'liquidator'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Must be lodged by'), findsNothing);
+    });
+
+    testWidgets('a lodged charge is told the window closed, not that it '
+        'is late', (tester) async {
+      final created = DateTime.now().subtract(const Duration(days: 60));
+      await opened(
+        tester,
+        company(),
+        (context) => showChargeSheet(
+          context,
+          entityId: 'e1',
+          charge: CorpCharge(
+            id: 'ch3',
+            chargeeName: 'Public Bank Berhad',
+            createdOn: created,
+            registeredOn: created.add(const Duration(days: 10)),
+            chargeNo: 'C-2026-0001',
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Lodged. The thirty days closed on'),
+          findsOneWidget);
+      expect(
+        find.textContaining('void against the liquidator'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a memorandum of satisfaction waits for the satisfaction',
+        (tester) async {
+      // Kept without its date it is a memorandum for a charge still
+      // outstanding, which is the one thing on this register a chargee
+      // would litigate about.
+      await opened(
+        tester,
+        company(),
+        (context) => showChargeSheet(
+          context,
+          entityId: 'e1',
+          charge: CorpCharge(
+            id: 'ch4',
+            chargeeName: 'RHB Bank Berhad',
+            createdOn: DateTime.now().subtract(const Duration(days: 400)),
+            registeredOn:
+                DateTime.now().subtract(const Duration(days: 395)),
+          ),
+        ),
+      );
+
+      expect(find.text('Satisfaction'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextFormField, 'Memorandum filed'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a new charge starts its clock the moment it is opened',
+        (tester) async {
+      // Dated today rather than left blank, because a charge being
+      // registered is almost always one signed today — and a blank
+      // date is a charge with no deadline, which is the one state
+      // this register must never be in.
+      final today = DateTime.now();
+      await opened(
+        tester,
+        company(),
+        (context) => showChargeSheet(context, entityId: 'e1'),
+      );
+
+      expect(find.text('Register a charge'), findsOneWidget);
+      final save = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('charge-save')));
+      expect(save.onPressed, isNotNull);
+      expect(
+        find.textContaining('Must be lodged by '
+            '${Fmt.date(DateTime(today.year, today.month, today.day + 30))}'),
+        findsOneWidget,
+      );
+      // Satisfaction is not offered on something not yet registered.
+      expect(find.text('Satisfaction'), findsNothing);
     });
   });
 }

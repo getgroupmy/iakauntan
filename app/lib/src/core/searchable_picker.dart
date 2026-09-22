@@ -209,7 +209,25 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
     // after the list arrived because only `value` was watched.
     if (oldWidget.value != widget.value ||
         oldWidget.options.length != widget.options.length) {
-      _controller.text = _labelFor(widget.value);
+      final label = _labelFor(widget.value);
+      if (_controller.text == label) return;
+      // AFTER the frame, not in it. The field below is a
+      // `TextFormField`, which listens to its own controller and tells
+      // its enclosing `Form` that the field changed; the `Form` then
+      // calls `setState`. `didUpdateWidget` runs inside the parent's
+      // build, so writing straight into the controller here marks an
+      // ancestor dirty mid-build and trips
+      // "setState() or markNeedsBuild() called during build".
+      //
+      // It needs a picker inside a `Form` whose value is settled from
+      // OUTSIDE — which is the share movement sheet exactly: it
+      // defaults the class to the first one the moment the list
+      // arrives, so the first frame after the classes loaded threw.
+      // Every register sheet built the same way was one provider
+      // resolution away from it.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controller.text != label) _controller.text = label;
+      });
     }
   }
 
