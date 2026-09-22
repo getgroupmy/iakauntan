@@ -357,6 +357,13 @@ wrong. Making the trailing estimate honest means measuring arbitrary
 Dart, which is where a rough static estimate stops being rough and
 starts being a layout engine.
 
+**It then happened again, identically.** `_RunTile` in
+`payroll_screen.dart` — a run number and a status chip against a
+net-pay figure with "net pay" under it — went 55 pixels off the same
+phone, and the gate passed it for the same two reasons. Two instances
+of one shape, both found by pumping and neither by the estimate, is
+the argument this section is making.
+
 So this is a limit to know rather than a bug to fix. **The thing that
 catches it is building the screen at 412x900**, where a `RenderFlex`
 overflow is a test failure with no assertion required. The gate narrows

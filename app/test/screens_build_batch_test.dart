@@ -17,6 +17,7 @@ import 'package:iakauntan/src/features/documents/knock_off_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
 import 'package:iakauntan/src/features/hr/onboarding_screen.dart';
+import 'package:iakauntan/src/features/hr/payroll_screen.dart';
 import 'package:iakauntan/src/features/legal/matters_screen.dart';
 import 'package:iakauntan/src/features/profile/profile_screen.dart';
 import 'package:iakauntan/src/features/property/property_screen.dart';
@@ -80,6 +81,22 @@ void main() {
         GoRoute(
           path: '/settings',
           builder: (_, __) => const Scaffold(body: Text('settings')),
+        ),
+        GoRoute(
+          path: '/hr/payroll/:id',
+          builder: (_, __) => const Scaffold(body: Text('one run')),
+        ),
+        GoRoute(
+          path: '/hr/payslip/:id',
+          builder: (_, __) => const Scaffold(body: Text('one payslip')),
+        ),
+        GoRoute(
+          path: '/hr/remittances',
+          builder: (_, __) => const Scaffold(body: Text('remittances')),
+        ),
+        GoRoute(
+          path: '/hr/ea-forms',
+          builder: (_, __) => const Scaffold(body: Text('ea forms')),
         ),
       ],
     );
@@ -2060,6 +2077,159 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Off'), findsOneWidget);
+    });
+  });
+
+  group('the payroll screen', () {
+    testWidgets('builds, and the remittance badge counts what is overdue',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PayrollScreen(), [
+          // `canRunPayrollProvider` is derived from the role, so the
+          // role is what the fixture sets.
+          memberRoleProvider.overrideWith((ref) async => 'hr_manager'),
+          myPayslipAccessProvider.overrideWith((ref) async => false),
+          payrollRunsProvider.overrideWith(
+            (ref) async => [
+              PayrollRun(
+                id: 'pr1',
+                runNo: 'PAY-2026-09',
+                status: 'posted',
+                periodCode: '2026-09',
+                payDate: DateTime(2026, 9, 25),
+                employeeCount: 14,
+                totalNet: 48250.75,
+              ),
+            ],
+          ),
+          // The contribution nobody was reminded of is the one that
+          // goes late, so the badge is the point of this action.
+          statutoryDueProvider.overrideWith(
+            (ref) async => [
+              {'id': 'd1', 'is_overdue': true},
+              {'id': 'd2', 'is_overdue': false},
+              {'id': 'd3', 'is_overdue': false},
+            ],
+          ),
+        ]),
+      );
+      expect(find.text('PAY-2026-09'), findsOneWidget);
+      expect(
+        find.text('2026-09 · 14 employees · paid 25/09/2026'),
+        findsOneWidget,
+      );
+      // Three due, one of them late, and the tooltip says WHICH number
+      // it is rather than just showing a badge.
+      expect(
+        find.byTooltip('1 statutory contribution overdue'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('EA forms'), findsOneWidget);
+      expect(find.text('New run'), findsOneWidget);
+    });
+
+    testWidgets('and an auditor with no grant gets the request form',
+        (tester) async {
+      // Not an empty list they cannot explain. This is a whole
+      // different screen behind the same route.
+      await onAPhone(
+        tester,
+        wrap(const PayrollScreen(), [
+          memberRoleProvider.overrideWith((ref) async => 'auditor'),
+          myPayslipAccessProvider.overrideWith((ref) async => false),
+          payrollRunsProvider.overrideWith((ref) async => []),
+          payslipAccessRequestsProvider.overrideWith((ref) async => []),
+          statutoryDueProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      // The request screen keeps the same app bar title, so the list
+      // is what distinguishes them -- and what replaced it.
+      expect(find.text('Payslips are closed by default'), findsOneWidget);
+      // No New run button, and no remittance or EA action either --
+      // none of them is this person's to press.
+      expect(find.text('New run'), findsNothing);
+      expect(find.byTooltip('EA forms'), findsNothing);
+    });
+  });
+
+  group('one payroll run', () {
+    testWidgets('builds, and splits every contribution two ways',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PayrollRunScreen(runId: 'pr1'), [
+          memberRoleProvider.overrideWith((ref) async => 'hr_manager'),
+          payrollRunsProvider.overrideWith(
+            (ref) async => [
+              PayrollRun(
+                id: 'pr1',
+                runNo: 'PAY-2026-09',
+                status: 'draft',
+                periodCode: '2026-09',
+                payDate: DateTime(2026, 9, 25),
+                employeeCount: 2,
+                totalGross: 9000,
+                totalNet: 7605,
+                totalEpfEmployee: 990,
+                totalEpfEmployer: 1170,
+                totalSocsoEmployee: 22.25,
+                totalSocsoEmployer: 77.85,
+                totalEisEmployee: 8.90,
+                totalEisEmployer: 8.90,
+                totalPcb: 373.85,
+                totalHrdf: 90,
+              ),
+            ],
+          ),
+          payslipsForRunProvider('pr1').overrideWith(
+            (ref) async => [
+              Payslip(
+                id: 'ps1',
+                employeeName: 'Lim Wei Ling',
+                employeeNo: 'EMP-014',
+                grossPay: 5000,
+                epfEmployee: 550,
+                pcb: 280.15,
+                netPay: 4157.60,
+              ),
+            ],
+          ),
+        ]),
+      );
+      // The title is looked up out of the RUNS list by id -- the
+      // screen is given an id and nothing else.
+      expect(find.text('PAY-2026-09'), findsOneWidget);
+      // Five statutory lines, each split employee/employer, and two of
+      // them are one-sided: PCB is the employee's alone and the HRD
+      // Corp levy is the employer's alone. Those two zeroes are the
+      // ones a table like this gets backwards.
+      expect(find.text('EPF / KWSP'), findsOneWidget);
+      expect(find.text('HRD Corp levy'), findsOneWidget);
+      expect(find.text('Employee'), findsOneWidget);
+      expect(find.text('Employer'), findsOneWidget);
+      expect(find.text('Lim Wei Ling'), findsOneWidget);
+      expect(
+        find.text('EMP-014 · gross RM 5,000.00 · EPF RM 550.00 · '
+            'PCB RM 280.15'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and an id nothing matches says so rather than throwing',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const PayrollRunScreen(runId: 'gone'), [
+          memberRoleProvider.overrideWith((ref) async => 'hr_manager'),
+          payrollRunsProvider.overrideWith((ref) async => []),
+          payslipsForRunProvider('gone').overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('Run not found'), findsOneWidget);
+      // And the app bar falls back to a name rather than showing an
+      // empty title.
+      expect(find.text('Payroll run'), findsOneWidget);
     });
   });
 }

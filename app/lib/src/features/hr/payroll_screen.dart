@@ -124,8 +124,18 @@ class _RunTile extends ConsumerWidget {
       onTap: () => context.go('/hr/payroll/${run.id}'),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+      // Flexible, for the reason `_MatterTile` carries the same note:
+      // a run number and a status chip are both natural-width, and the
+      // box a ListTile gives its title is whatever the trailing left.
+      // With a net-pay figure and "net pay" under it that is not much,
+      // and the chip went 55 pixels off a 412px phone.
       title: Row(children: [
-        Text(run.runNo, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(run.runNo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
         const SizedBox(width: Space.sm),
         StatusChip(run.status, compact: true),
       ]),
