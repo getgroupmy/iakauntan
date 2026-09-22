@@ -7,9 +7,11 @@ import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/assets/capital_allowances_dialog.dart';
+import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
+import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
 
@@ -529,6 +531,134 @@ void main() {
         showWinLoss,
       );
       expect(find.text('Nothing closed in the last year'), findsOneWidget);
+    });
+  });
+
+  group('the forecast and the quotations', () {
+    testWidgets('opens, and totals what the pipeline is out by',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          pipelineQuoteMismatchProvider.overrideWith(
+            (ref) async => [
+              {
+                'opportunity_id': 'o1',
+                'opportunity_no': 'OPP-001',
+                'deal_name': 'Kedai Kopi fit-out',
+                'contact_name': 'Encik Rahim',
+                'deal_amount': 45000,
+                'document_id': 'q1',
+                'doc_no': 'QUO-0011',
+                'quoted_amount': 38000,
+                'difference': -7000,
+              },
+              {
+                'opportunity_id': 'o2',
+                'opportunity_no': 'OPP-002',
+                'deal_name': 'Warehouse racking',
+                'deal_amount': 20000,
+                'document_id': 'q2',
+                'doc_no': 'QUO-0012',
+                'quoted_amount': 23500,
+                'difference': 3500,
+              },
+            ],
+          ),
+        ],
+        showPipelineQuoteMismatch,
+      );
+      expect(find.text('The forecast and the quotations'), findsOneWidget);
+      // Summed by the dialog over both rows, and signed -- over is not
+      // better than under, because both mean the forecast is reporting
+      // a number nobody quoted.
+      expect(find.text('The pipeline is out by'), findsOneWidget);
+      // `Fmt.money` puts the minus AFTER the prefix -- "RM -7,000.00"
+      // -- while the row prepends its own "+" for the other direction.
+      // Both shapes on the page at once, which is the thing to pin.
+      expect(find.text('RM -3,500.00'), findsOneWidget);
+      expect(find.text('+RM 3,500.00'), findsOneWidget);
+      expect(find.text('RM -7,000.00'), findsOneWidget);
+      // On a phone the "Use quoted" button is a menu, because a figure
+      // plus a labelled button is more than a ListTile has left --
+      // this row used to trip Flutter's own "Trailing widget consumes
+      // the entire tile width".
+      expect(
+        find.byKey(const ValueKey<String>('mismatch-menu-o1')),
+        findsOneWidget,
+      );
+      expect(find.text('Use quoted'), findsNothing);
+      // A deal with no customer name still reads.
+      expect(
+        find.text('— · deal RM 20,000.00 · QUO-0012 RM 23,500.00'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and an empty list says which deals are not counted',
+        (tester) async {
+      await opened(
+        tester,
+        [pipelineQuoteMismatchProvider.overrideWith((ref) async => [])],
+        showPipelineQuoteMismatch,
+      );
+      // The sentence that stops somebody trusting a clean result they
+      // should not: a deal with no quotation is not agreement.
+      expect(
+        find.textContaining('there is nothing to compare them to'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('who is away', () {
+    testWidgets('opens, and marks the person nobody can reach',
+        (tester) async {
+      final soon = DateTime.now().add(const Duration(days: 3));
+      await opened(
+        tester,
+        [
+          // Opens on thirty days: far enough to see the trip somebody
+          // has not left a number for while there is still time to ask.
+          whoIsAwayProvider(30).overrideWith(
+            (ref) async => [
+              {
+                'employee_name': 'Ahmad Faiz',
+                'leave_type': 'Annual',
+                'start_date': soon.toIso8601String(),
+                'end_date': soon.toIso8601String(),
+                'contact_while_away': '012-3456789',
+                'has_contact': true,
+              },
+              {
+                'employee_name': 'Nurul Huda',
+                'leave_type': 'Annual',
+                'start_date': soon.toIso8601String(),
+                'end_date': soon.toIso8601String(),
+                'has_contact': false,
+              },
+            ],
+          ),
+        ],
+        showWhoIsAway,
+      );
+      expect(find.text('Who is away'), findsOneWidget);
+      expect(find.text('012-3456789'), findsOneWidget);
+      // `has_contact` is read off the report rather than recomputed
+      // from the text, so an empty string cannot count as a contact on
+      // this side after the database stored it as null.
+      expect(find.text('No contact given'), findsOneWidget);
+      // A date turned into words relative to today.
+      expect(find.textContaining('Annual — Away from'), findsWidgets);
+    });
+
+    testWidgets('and says what would appear when nobody is', (tester) async {
+      await opened(
+        tester,
+        [whoIsAwayProvider(30).overrideWith((ref) async => [])],
+        showWhoIsAway,
+      );
+      expect(find.text('Nobody is away'), findsOneWidget);
     });
   });
 }

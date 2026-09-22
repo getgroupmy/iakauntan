@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/row_actions.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -104,24 +105,35 @@ class _MismatchTile extends ConsumerWidget {
         '${row['doc_no']} ${Fmt.money(Fmt.toDouble(row['quoted_amount']))}',
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(
-          '${difference >= 0 ? '+' : ''}${Fmt.money(difference)}',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            // Over is not better than under: both mean the forecast is
-            // reporting a number nobody quoted.
-            color: context.colors.warning,
+      // `RowActions`, not a bare Row. A figure plus a labelled button
+      // is more than a `ListTile` has left on a phone, and this one
+      // did not merely look tight -- it tripped Flutter's own
+      // assertion, "Trailing widget consumes the entire tile width".
+      // Below 700 the button becomes a menu and the figure stays put.
+      trailing: RowActions(
+        menuKey: 'mismatch-menu-${row['opportunity_id']}',
+        leading: Padding(
+          padding: const EdgeInsets.only(right: Space.sm),
+          child: Text(
+            '${difference >= 0 ? '+' : ''}${Fmt.money(difference)}',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              // Over is not better than under: both mean the forecast
+              // is reporting a number nobody quoted.
+              color: context.colors.warning,
+            ),
           ),
         ),
-        const SizedBox(width: Space.sm),
-        // The document is the priced answer. Taking the deal to it is
-        // the fix, and it is one tap.
-        TextButton(
-          onPressed: () => _adopt(context, ref),
-          child: const Text('Use quoted'),
-        ),
-      ]),
+        actions: [
+          // The document is the priced answer. Taking the deal to it
+          // is the fix, and it is one tap.
+          RowAction(
+            label: 'Use quoted',
+            actionKey: 'use-quoted-${row['opportunity_id']}',
+            onTap: () => _adopt(context, ref),
+          ),
+        ],
+      ),
     );
   }
 
