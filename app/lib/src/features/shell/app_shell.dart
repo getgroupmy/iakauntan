@@ -8,6 +8,7 @@ import '../../core/maintenance.dart';
 import '../../core/platform_live.dart';
 import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
@@ -69,6 +70,40 @@ List<MenuSection<T>> groupByModule<T>(
     if (loose.isNotEmpty) (heading: null, items: loose),
   ];
 }
+
+/// Which menu entries match what somebody typed into the menu's search
+/// box, best first.
+///
+/// This is `matchingOptions` — the searchable picker's matcher — and
+/// deliberately not a second one. Its rules are already asserted in
+/// `searchable_picker_test.dart` and already in everybody's fingers
+/// from every picker in the product: EVERY WORD has to match something,
+/// in any order, so "leave hr" and "hr leave" find the same door; and a
+/// label that STARTS with what was typed comes first, so typing "pay"
+/// puts Payroll above "Repayments".
+///
+/// [keywordsOf] is what makes a menu searchable by more than its own
+/// labels — the heading a destination sits under, so typing a module's
+/// name brings up everything in it, and the route, so somebody who
+/// knows where they are going can type that instead. Keywords can only
+/// ever ADD matches: the matcher requires every word to be found
+/// somewhere in the row, so a keyword nobody types costs nothing.
+///
+/// Generic, like `groupByModule` above it, so what a search does to a
+/// menu can be asserted without building a shell.
+List<T> menuMatches<T>(
+  List<T> items,
+  String query, {
+  required String Function(T) labelOf,
+  required List<String> Function(T) keywordsOf,
+}) => matchingOptions<T>([
+  for (final item in items)
+    PickerOption<T>(
+      value: item,
+      label: labelOf(item),
+      keywords: keywordsOf(item),
+    ),
+], query).map((o) => o.value).toList();
 
 /// What a waiting count reads as on a badge.
 ///
@@ -1200,98 +1235,20 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       body: Row(
         children: [
-          // NavigationRail does not scroll. With every module switched on
-          // there are twenty-one destinations, which is taller than a
-          // laptop screen — everything below HR setup simply could not be
-          // reached, with no scrollbar to suggest there was more.
-          //
-          // The scroll view needs a minimum height of the viewport so the
-          // rail still fills the screen when the list is short, and
-          // IntrinsicHeight so that the Expanded in `trailing` — which is
-          // what pins the account button to the bottom — has a bounded
-          // height to expand into.
           SizedBox(
-            // A definite width, because IntrinsicHeight below measures
-            // this subtree and an intrinsic pass offers unbounded width.
-            // The company switcher is a Row that fills its line, and a
-            // Row cannot size itself against unbounded width at all.
+            // A definite width, because the IntrinsicHeight inside
+            // `_RailMenu` measures this subtree and an intrinsic pass
+            // offers unbounded width. The company switcher is a Row
+            // that fills its line, and a Row cannot size itself against
+            // unbounded width at all.
             width: extended ? extendedWidth : collapsedWidth,
-            child: Column(
-              children: [
-                // Outside the scroll view: the company you are looking at
-                // should not scroll away from you, and keeping it out of
-                // the rail keeps it out of the intrinsic measurement too.
-                _RailHeader(extended: extended),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => SingleChildScrollView(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: constraints.maxHeight,
-                        ),
-                        child: IntrinsicHeight(
-                          // `NavigationRail` takes a flat list of
-                          // destinations and has nowhere to put a
-                          // heading, which is why 0293's switch changed
-                          // nothing here however it was set: the
-                          // grouping reached the More sheet on a phone
-                          // and never reached the side menu at all.
-                          child: grouped
-                              ? _GroupedRail(
-                                  dests: dests,
-                                  selected: _selectedIndexIn(dests),
-                                  groupNames: groupNames,
-                                  unread: unread,
-                                  onSelected: (i) => context.go(dests[i].path),
-                                )
-                              : NavigationRail(
-                                  extended: extended,
-                                  minExtendedWidth: extendedWidth,
-                                  selectedIndex: _selectedIndexIn(dests),
-                                  onDestinationSelected: (i) =>
-                                      context.go(dests[i].path),
-                                  trailing: Expanded(
-                                    child: Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 12,
-                                        ),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const NotificationBell(),
-                                            _AccountButton(),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  destinations: [
-                                    for (final d in dests)
-                                      NavigationRailDestination(
-                                        icon: _badged(
-                                          Icon(d.icon),
-                                          destCarriesUnread(d.path)
-                                              ? unread
-                                              : 0,
-                                        ),
-                                        selectedIcon: _badged(
-                                          Icon(d.selectedIcon),
-                                          destCarriesUnread(d.path)
-                                              ? unread
-                                              : 0,
-                                        ),
-                                        label: Text(d.label),
-                                      ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            child: _RailMenu(
+              dests: dests,
+              extended: extended,
+              grouped: grouped,
+              groupNames: groupNames,
+              unread: unread,
+              selectedPath: dests[_selectedIndexIn(dests)].path,
             ),
           ),
           VerticalDivider(
@@ -1418,73 +1375,509 @@ class AppShell extends ConsumerWidget {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.8,
       ),
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final entry in groupByModule<_Dest>(
-                rest,
-                (d) => d.module,
-                groupNames,
-                grouped,
-              )) ...[
-                if (entry.heading != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                    child: Text(
-                      entry.heading!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.6,
-                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                for (final d in entry.items)
-                  ListTile(
-                    leading: Icon(d.icon),
-                    title: Text(d.label),
-                    trailing: destCarriesUnread(d.path) && unread > 0
-                        ? Badge(label: Text(badgeLabel(unread)))
-                        : null,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      context.go(d.path);
-                    },
-                  ),
-              ],
-              const Divider(),
-              // The phone's only doorway to the person rather than the
-              // company. `_AccountButton` -- the avatar that carries
-              // this on a laptop -- appears three times in this file and
-              // all three are RAIL layouts, so until now the More sheet
-              // offered Sign out and nothing else: no name, no
-              // telephone number, nothing that reads as you. That is
-              // what "why is there no profile settings page on the
-              // mobile app" was about.
-              ListTile(
-                key: const ValueKey('more-your-details'),
-                leading: const Icon(Icons.person_outline),
-                title: const Text('Your details'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/profile');
-                },
+      builder: (ctx) => _MoreSheet(
+        rest: rest,
+        groupNames: groupNames,
+        grouped: grouped,
+        unread: unread,
+      ),
+    );
+  }
+}
+
+/// Everything the bottom bar has no room for, with a box to search it.
+///
+/// Stateful for the box alone. With nothing typed this is the sheet
+/// that was here before, headings and all.
+class _MoreSheet extends StatefulWidget {
+  const _MoreSheet({
+    required this.rest,
+    required this.groupNames,
+    required this.grouped,
+    this.unread = 0,
+  });
+
+  final List<_Dest> rest;
+  final Map<String, String> groupNames;
+  final bool grouped;
+  final int unread;
+
+  @override
+  State<_MoreSheet> createState() => _MoreSheetState();
+}
+
+class _MoreSheetState extends State<_MoreSheet> {
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// The same floor the rail uses, and for the same reason: a box to
+  /// search a list that already fits is one more thing to read.
+  ///
+  /// Counted over the destinations plus the two account rows, because
+  /// all of them are in the list somebody would be scrolling.
+  bool get _searchable =>
+      widget.rest.length + 2 >= _RailMenu.searchAppearsFrom;
+
+  void _go(String path) {
+    Navigator.pop(context);
+    context.go(path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final searching = _searchable && _query.trim().isNotEmpty;
+
+    return SafeArea(
+      child: Padding(
+        // The keyboard. `isScrollControlled` lets the sheet grow, and
+        // without this the box somebody is typing into is the thing
+        // the keyboard covers.
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_searchable)
+              _MenuSearchField(
+                controller: _search,
+                onChanged: (v) => setState(() => _query = v),
               ),
-              Consumer(
-                builder: (context, ref, _) => ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Sign out'),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await ref.read(supabaseProvider).auth.signOut();
-                    ref.read(currentOrgIdProvider.notifier).clear();
-                  },
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: searching ? _results() : _menu(),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The sheet as it has always been: grouped, then the account rows
+  /// under a divider.
+  List<Widget> _menu() => [
+    for (final entry in groupByModule<_Dest>(
+      widget.rest,
+      (d) => d.module,
+      widget.groupNames,
+      widget.grouped,
+    )) ...[
+      if (entry.heading != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text(
+            entry.heading!,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      for (final d in entry.items) _destTile(d),
+    ],
+    const Divider(),
+    // The phone's only doorway to the person rather than the company.
+    // `_AccountButton` -- the avatar that carries this on a laptop --
+    // appears three times in this file and all three are RAIL layouts,
+    // so until now the More sheet offered Sign out and nothing else: no
+    // name, no telephone number, nothing that reads as you. That is
+    // what "why is there no profile settings page on the mobile app"
+    // was about.
+    _yourDetailsTile(),
+    _signOutTile(),
+  ];
+
+  /// One flat ranked run, with the account rows searched alongside the
+  /// destinations.
+  ///
+  /// They are in it because somebody typing "sign" means Sign out, and
+  /// a search that hid the only row matching what was typed while
+  /// leaving it visible underneath would be worse than no search.
+  List<Widget> _results() {
+    const yourDetails = '/profile';
+    const signOut = '__sign-out';
+    final rows = <({String label, List<String> keywords, String path})>[
+      for (final d in widget.rest)
+        (
+          label: d.label,
+          keywords: [
+            d.short ?? '',
+            widget.groupNames[d.module] ?? d.module ?? '',
+            d.path,
+          ],
+          path: d.path,
+        ),
+      (
+        label: 'Your details',
+        keywords: const ['account', 'profile', 'password', 'you'],
+        path: yourDetails,
+      ),
+      (
+        label: 'Sign out',
+        keywords: const ['log out', 'logout', 'leave'],
+        path: signOut,
+      ),
+    ];
+
+    final shown = menuMatches(
+      rows,
+      _query,
+      labelOf: (r) => r.label,
+      keywordsOf: (r) => r.keywords,
+    );
+
+    if (shown.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+          child: Text(
+            'Nothing in the menu matches that.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      for (final r in shown)
+        if (r.path == signOut)
+          _signOutTile()
+        else if (r.path == yourDetails)
+          _yourDetailsTile()
+        else
+          _destTile(widget.rest.firstWhere((d) => d.path == r.path)),
+    ];
+  }
+
+  Widget _destTile(_Dest d) => ListTile(
+    leading: Icon(d.icon),
+    title: Text(d.label),
+    trailing: destCarriesUnread(d.path) && widget.unread > 0
+        ? Badge(label: Text(badgeLabel(widget.unread)))
+        : null,
+    onTap: () => _go(d.path),
+  );
+
+  Widget _yourDetailsTile() => ListTile(
+    key: const ValueKey('more-your-details'),
+    leading: const Icon(Icons.person_outline),
+    title: const Text('Your details'),
+    onTap: () => _go('/profile'),
+  );
+
+  Widget _signOutTile() => Consumer(
+    builder: (context, ref, _) => ListTile(
+      leading: const Icon(Icons.logout),
+      title: const Text('Sign out'),
+      onTap: () async {
+        Navigator.pop(context);
+        await ref.read(supabaseProvider).auth.signOut();
+        ref.read(currentOrgIdProvider.notifier).clear();
+      },
+    ),
+  );
+}
+
+/// The side menu with headings in it.
+///
+/// The side menu: the company, a box to search it, and the doors.
+///
+/// Stateful for one reason — the search box has to remember what is in
+/// it — and the rest of the menu is drawn exactly as it was. With
+/// nothing typed this is the rail that was here before, whichever way
+/// the grouping switch is set.
+///
+/// The box itself is the answer to a real complaint: with every module
+/// switched on there are twenty-one destinations, the rail is taller
+/// than a laptop screen, and finding one means scrolling past fifteen
+/// you did not want.
+class _RailMenu extends StatefulWidget {
+  const _RailMenu({
+    required this.dests,
+    required this.extended,
+    required this.grouped,
+    required this.groupNames,
+    required this.selectedPath,
+    this.unread = 0,
+  });
+
+  final List<_Dest> dests;
+  final bool extended;
+  final bool grouped;
+  final Map<String, String> groupNames;
+
+  /// The route of the destination the current page belongs to, worked
+  /// out by longest matching prefix. A path rather than an index,
+  /// because searching reorders the list and an index into a reordered
+  /// list points at somebody else's door.
+  final String selectedPath;
+
+  final int unread;
+
+  /// Below this many doors the menu does not scroll, and a box to
+  /// search a list you can already see whole is one more thing to read
+  /// before you find what you came for.
+  ///
+  /// A company holding two or three modules is under it; one holding
+  /// most of them is well over.
+  static const searchAppearsFrom = 12;
+
+  @override
+  State<_RailMenu> createState() => _RailMenuState();
+}
+
+class _RailMenuState extends State<_RailMenu> {
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Searching is offered only on the EXTENDED rail.
+  ///
+  /// Collapsed, the menu is eighty pixels of icons with no room for a
+  /// box to type in — and no need for one, because a column of icons is
+  /// a quarter the height of the same column with words beside it and
+  /// was never the thing anybody had to scroll.
+  bool get _searchable =>
+      widget.extended && widget.dests.length >= _RailMenu.searchAppearsFrom;
+
+  void _go(_Dest d) {
+    // Cleared on the way out. The menu is still on screen after
+    // navigating, and leaving it filtered down to two rows is a menu
+    // that looks like most of the product has been taken away.
+    if (_query.isNotEmpty) {
+      _search.clear();
+      setState(() => _query = '');
+    }
+    context.go(d.path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final searching = _searchable && _query.trim().isNotEmpty;
+    final shown = searching
+        ? menuMatches<_Dest>(
+            widget.dests,
+            _query,
+            labelOf: (d) => d.label,
+            // The short name, so a phone label somebody remembers still
+            // finds the door; the heading it sits under, so typing a
+            // module's name brings up the whole of it; and the route,
+            // for somebody who knows where they are going.
+            keywordsOf: (d) => [
+              d.short ?? '',
+              widget.groupNames[d.module] ?? d.module ?? '',
+              d.path,
             ],
+          )
+        : widget.dests;
+
+    return Column(
+      children: [
+        // Outside the scroll view: the company you are looking at
+        // should not scroll away from you, and keeping it out of the
+        // rail keeps it out of the intrinsic measurement too.
+        _RailHeader(extended: widget.extended),
+        // The same, and for the same reason. A search box that scrolls
+        // off the top is a search box you have to scroll to reach,
+        // which is the thing it was put there to stop.
+        if (_searchable)
+          _MenuSearchField(
+            controller: _search,
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        // NavigationRail does not scroll. With every module switched on
+        // there are twenty-one destinations, which is taller than a
+        // laptop screen — everything below HR setup simply could not be
+        // reached, with no scrollbar to suggest there was more.
+        //
+        // The scroll view needs a minimum height of the viewport so the
+        // rail still fills the screen when the list is short, and
+        // IntrinsicHeight so that the Expanded in `trailing` — which is
+        // what pins the account button to the bottom — has a bounded
+        // height to expand into.
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(child: _list(searching, shown)),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _list(bool searching, List<_Dest> shown) {
+    // Results are FLAT, however the grouping switch is set, and ranked
+    // rather than in menu order. Searching is not browsing: the answer
+    // to "where is the thing I typed" is the thing I typed, first,
+    // and headings over a list of three put the answer further down
+    // the page than it needs to be.
+    //
+    // Drawn as `RailTile` rows rather than as a filtered
+    // `NavigationRail`, in both modes. That is safe to do BECAUSE
+    // `_GroupedRail` was built to the extended rail's own
+    // measurements — the same width, the same pill, the destinations
+    // in the same place — so a search does not move the menu about
+    // under somebody's hand. It also means the rail is never handed a
+    // list that has had the current page filtered out of it.
+    if (searching) {
+      return _GroupedRail(
+        dests: shown,
+        selectedPath: widget.selectedPath,
+        groupNames: widget.groupNames,
+        grouped: false,
+        unread: widget.unread,
+        onSelected: _go,
+        emptyMessage: 'Nothing in the menu matches that.',
+      );
+    }
+
+    // `NavigationRail` takes a flat list of destinations and has
+    // nowhere to put a heading, which is why 0293's switch changed
+    // nothing here however it was set: the grouping reached the More
+    // sheet on a phone and never reached the side menu at all.
+    if (widget.grouped) {
+      return _GroupedRail(
+        dests: shown,
+        selectedPath: widget.selectedPath,
+        groupNames: widget.groupNames,
+        unread: widget.unread,
+        onSelected: _go,
+      );
+    }
+
+    return NavigationRail(
+      extended: widget.extended,
+      minExtendedWidth: AppShell.extendedWidth,
+      selectedIndex: _selectedIn(shown),
+      onDestinationSelected: (i) => _go(shown[i]),
+      trailing: Expanded(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [const NotificationBell(), _AccountButton()],
+            ),
+          ),
+        ),
+      ),
+      destinations: [
+        for (final d in shown)
+          NavigationRailDestination(
+            icon: _badged(
+              Icon(d.icon),
+              destCarriesUnread(d.path) ? widget.unread : 0,
+            ),
+            selectedIcon: _badged(
+              Icon(d.selectedIcon),
+              destCarriesUnread(d.path) ? widget.unread : 0,
+            ),
+            label: Text(d.label),
+          ),
+      ],
+    );
+  }
+
+  /// Where the current page sits in [shown], or null when it is not in
+  /// it at all.
+  ///
+  /// `NavigationRail` asserts its `selectedIndex` is inside
+  /// `destinations`, and a thrown build is a blank page in a release
+  /// build with no clue as to why — so a page that is not in the list
+  /// has to arrive here as null rather than as a number.
+  ///
+  /// As the menu is arranged today it cannot happen: search results are
+  /// drawn as rows rather than as a rail, so this is only ever called
+  /// with the full list, which always contains the page you are on. A
+  /// mutation run proved that by surviving a change of this `null` to
+  /// `0` — no test could kill it, because nothing reaches it. It stays
+  /// because it is the correct answer to the question asked, and
+  /// because the day somebody filters a rail instead of replacing it
+  /// is the day the alternative is a blank page.
+  int? _selectedIn(List<_Dest> shown) {
+    final i = shown.indexWhere((d) => d.path == widget.selectedPath);
+    return i < 0 ? null : i;
+  }
+}
+
+/// The box at the top of the side menu.
+///
+/// Deliberately plain: no leading label, no border of its own past the
+/// filled shape, because it sits between the company switcher and the
+/// doors and anything heavier reads as a third thing to deal with
+/// rather than a way through the second.
+class _MenuSearchField extends StatelessWidget {
+  const _MenuSearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: TextField(
+        key: const ValueKey('menu-search'),
+        controller: controller,
+        onChanged: onChanged,
+        // No autofocus. The menu is beside the page rather than in
+        // front of it, and a box that takes the keyboard every time a
+        // screen is opened takes it away from the screen.
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          hintText: 'Search the menu',
+          hintStyle: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+          prefixIcon: const Icon(Icons.search, size: 18),
+          prefixIconConstraints: const BoxConstraints(minWidth: 36),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  key: const ValueKey('menu-search-clear'),
+                  icon: const Icon(Icons.close, size: 16),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Clear',
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(100),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(100),
+            borderSide: BorderSide.none,
           ),
         ),
       ),
@@ -1492,8 +1885,6 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-/// The side menu with headings in it.
-///
 /// Stands in for `NavigationRail` when a platform operator has asked for
 /// the menu to be grouped by module. The rail cannot do this itself —
 /// its `destinations` is a flat list of `NavigationRailDestination` and
@@ -1507,17 +1898,38 @@ class AppShell extends ConsumerWidget {
 class _GroupedRail extends StatelessWidget {
   const _GroupedRail({
     required this.dests,
-    required this.selected,
+    required this.selectedPath,
     required this.groupNames,
     required this.onSelected,
+    this.grouped = true,
     this.unread = 0,
+    this.emptyMessage,
   });
 
   final List<_Dest> dests;
-  final int selected;
+
+  /// The route of the destination the current page belongs to.
+  ///
+  /// A path rather than an index, which is what it used to be. The
+  /// sections reorder the destinations and a search reorders them
+  /// again and throws most of them away, so a position in one list
+  /// says nothing about a position in the other — reading the index
+  /// off a section navigated somewhere else entirely, and this is the
+  /// arrangement where that cannot be got wrong.
+  final String selectedPath;
+
   final Map<String, String> groupNames;
-  final void Function(int index) onSelected;
+  final void Function(_Dest dest) onSelected;
+
+  /// False draws one flat run of rows with no headings, which is what
+  /// search results are.
+  final bool grouped;
+
   final int unread;
+
+  /// What to say when there is nothing to draw. Null means draw
+  /// nothing, which is right for a menu and wrong for a search.
+  final String? emptyMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -1529,11 +1941,22 @@ class _GroupedRail extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 8),
+          if (dests.isEmpty && emptyMessage != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: Text(
+                emptyMessage!,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           for (final section in groupByModule<_Dest>(
             dests,
             (d) => d.module,
             groupNames,
-            true,
+            grouped,
           )) ...[
             if (section.heading != null) RailHeading(section.heading!),
             for (final d in section.items)
@@ -1541,14 +1964,9 @@ class _GroupedRail extends StatelessWidget {
                 icon: d.icon,
                 selectedIcon: d.selectedIcon,
                 label: d.label,
-                // The index the caller knows this destination by. The
-                // sections reorder them, so the position within a
-                // section says nothing about which route it is — reading
-                // the index off the section would navigate somewhere
-                // else entirely.
-                selected: dests.indexOf(d) == selected,
+                selected: d.path == selectedPath,
                 unread: destCarriesUnread(d.path) ? unread : 0,
-                onTap: () => onSelected(dests.indexOf(d)),
+                onTap: () => onSelected(d),
               ),
           ],
           const Spacer(),
