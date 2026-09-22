@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the commit titled "The screens-built backlog is empty" |
-| CI | green through run 2032 (`cf784b49`); 2033–2037 were running when this was written — **every migration to `0674` is live** |
+| Head at time of writing | `40a8c538` — the dialogs pass, in progress |
+| CI | green through run 2045 (`1cfca06c`); 2046–2047 running — **every migration to `0674` is live** |
 | Migrations | `0674` is the highest (the tax tile on the home screen). **Nothing since `b635b4b0` touches the database** — the eight commits after it are Dart, tests and gates only |
 | Live database | **level with the branch.** Nothing is waiting |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 348 SQL assertion files, **44 Python gates (+10 gate self-tests)**, **5,414 Flutter tests**, 32 deno tests |
+| Gates | 348 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,456 Flutter tests**, 32 deno tests |
 | API description | 766 functions, 364 tables, version `0674` — unchanged, because no migration has been added |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
@@ -144,6 +144,16 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `40a8c53` | Three more dialog openers; the journal editor already got it right |
+| `ac26934` | **Fix: the stock card's six columns never fitted a phone** |
+| `1cfca06` | The two ticket routing sheets, and the rule they mirror |
+| `9811e39` | **Fix: `check_narrow_rows` was doing the wrong arithmetic in both directions** |
+| `d005dc4` | **Fix: the same trailing fault again, in the capitalise dialog** |
+| `de3f780` | **Fix: a quote-mismatch row had no width left for its own words** |
+| `637b3d1` | **Fix: the late-orders dialog threw whenever there was a late order** |
+| `4ed1820` | A dialog nothing opens cannot be known to build — `check_dialogs_built.py` |
+| `f47f4c6` | The screens-built backlog is empty |
+| `99af040` | **Fix: good news was 289 pixels too wide to read** |
 | `9b82619` | **Fix: a ticket could not be replied to from a phone** |
 | `c086398` | **Fix: a payroll run number went 55px off — the same shape again** |
 | `964997d` | Stalls and scales; five real ones left |
@@ -542,7 +552,67 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. ~~The screens-built backlog.~~ **EMPTY — and it found SEVEN
+0a. **The DIALOGS backlog — 87 of 121 openers left. In progress.**
+   `scripts/check_dialogs_built.py`, the same idea as the screens gate
+   pointed at the other half of the app: **272 dialog and sheet
+   classes**, more than there are screens, which the screens gate
+   never asked about because a dialog body is not a `*Screen`.
+
+   **It is keyed on the public OPENER, not the class.** 242 of the 272
+   classes are private, so a gate demanding `_MappingDialog` be
+   constructed would be unsatisfiable for 89% of the surface. The way
+   in is the way the app goes in: `showFsMapping(context)`,
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 34
+   are covered.
+
+   `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
+   `opened(tester, overrides, opener)` pumps a button at **412x900**
+   whose `onPressed` calls the opener with its own context, and
+   `openedWithRef` does the same inside a `Consumer` for the openers
+   that want a `WidgetRef` too. Taking the opener as a CALLBACK is
+   what lets a test reach a private dialog class.
+
+   Re-seed `EXEMPT` from reality after each batch rather than editing
+   it by hand — the gate refuses a stale entry in both directions, so
+   it self-checks.
+
+   **Four defects so far, and the reason they cluster here.** A
+   dialog's box is the screen LESS its insets LESS its content
+   padding, so about 284px on a 412px phone. The identical `ListTile`
+   row throws inside a dialog at 412 and draws on a screen at 360 —
+   checked by rendering both. A dialog written at 620 or 760 wide is
+   written on a laptop.
+
+   - `late_orders_dialog.dart` returned a `Flexible` into a `SizedBox`
+     — `Incorrect use of ParentDataWidget`, on every build of the
+     branch that HAS orders, and only that branch.
+   - `quote_mismatch_dialog.dart` and `capitalise_dialog.dart` each
+     tripped `Trailing widget consumes the entire tile width`. Both
+     fixed with `RowActions`.
+   - `stock_card_dialog.dart` laid out six columns, four of them
+     fixed, totalling 364px in a 284px box. The register scrolls
+     sideways now; the closing sentence does not.
+
+   **Traps, each paid for once:**
+
+   - `DataRow.key` is NOT a widget key — a `DataRow` is a
+     configuration object. Assert on what the row renders.
+   - A dialog reading `repoProvider` directly needs a `Repo` fake.
+     Give it a `noSuchMethod` that THROWS with the method's name; that
+     is how you learn what a dialog needs without reading all of
+     `Repo`. And check the real signature before writing `@override`
+     — `lateOrders` takes `{DateTime? asAt}`.
+   - Get the FAMILY KEY right. `showExpiringDocuments` opens on 60
+     days, not 30; the wrong key leaves the real provider live and the
+     dialog renders an error view.
+   - A `ListView` does not build what the viewport cannot reach. A
+     dialog with a paragraph above its list will not construct the
+     third row, so assert one row per test when the rows are tall.
+     This cost time twice.
+   - Do NOT run `dart format` on a file you touched. The repository is
+     not format-clean and it reflows the whole file.
+
+0b. ~~The screens-built backlog.~~ **EMPTY — and it found SEVEN
    defects on the way.**
    `scripts/check_screens_built.py` requires every `*Screen` under
    `app/lib/src/features` to be constructed by at least one test. It
@@ -582,12 +652,8 @@ deal with, and the estimate screen is honest about not knowing.
    Six of the seven are invisible to a browser, which is where this
    app is mostly looked at. That is the whole argument for the method.
 
-   **What to do with the pattern now.** The file is
-   `app/test/screens_build_batch_test.dart`, 74 tests over 37 screens.
-   It is worth applying to the dialogs and sheets next — `showDialog`
-   and `showModalBottomSheet` bodies are not `*Screen` classes, so the
-   gate never asked about them, and they carry the same kind of Row
-   that produced five of these seven.
+   **That pattern is now being applied to the dialogs** — see 0a
+   above, which is where the work is.
 
    `app/test/screens_build_batch_test.dart` is the pattern. Build at
    **412x900** — an overflow is a test failure needing no assertion —
@@ -758,16 +824,30 @@ cd app && flutter test --concurrency=2 --reporter failures-only
 flutter analyze --fatal-infos --fatal-warnings
 ```
 
-### All fifty-four `check_*.py` files — run every one, every time
+### All fifty-six `check_*.py` files — run every one, every time
 
-**Forty-four are gates; ten are gates' own assertions.** The loop
-below runs all fifty-four, which is what you want: a gate that is
-wrong is worse than no gate, because it is believed. The figure was
-once written here as "forty-eight", which was the total then and read
-like a count of gates — it was not.
+**Forty-five are gates; eleven are gates' own assertions.** The loop
+below runs all fifty-six, which is what you want: a gate that is wrong
+is worse than no gate, because it is believed. The figure was once
+written here as "forty-eight", which was the total then and read like
+a count of gates — it was not.
 
-Two of the forty-four are new and both were written because a defect
-had already shipped through the gap:
+`check_dialogs_built.py` is the newest, and "Open work" 0a above says
+what it does and why it is keyed on openers.
+
+**`check_narrow_rows.py` was corrected rather than extended**, and the
+correction is worth knowing because the gate had been quietly wrong
+for as long as it has existed. It counted a money figure written as
+`Text(Fmt.money(...))` as ZERO — only the `Money` widget counted — and
+it SUMMED children that stack, so a Column of two figures measured
+twice its width. Two shipped dialog rows passed it and two innocent
+screen rows would have been accused. It now looks inside every `Text`
+for a money call, and recurses: a Row is the sum of its children, a
+Column or a Wrap is the widest. Verified against all four cases, not
+just the two that were broken.
+
+Three of the forty-five are new this week and each was written because
+a defect had already shipped through the gap:
 
 - `check_nested_scrollables.py` — an EXPANDING viewport inside a
   scroll view on the axis it scrolls is offered infinity and asserts
