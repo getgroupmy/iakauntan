@@ -13,6 +13,7 @@ import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/hr/expiring_documents.dart';
+import 'package:iakauntan/src/features/ticketing/ticket_routing_sheet.dart';
 import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
@@ -823,6 +824,152 @@ void main() {
       // An empty description is not a title. Without the fallback the
       // row would have a blank first line.
       expect(find.text('BILL-0032'), findsOneWidget);
+    });
+  });
+
+  group('assigning a ticket', () {
+    TeamMember member(String id, String name, {String status = 'active'}) =>
+        TeamMember(
+          memberId: 'm-$id',
+          userId: id,
+          fullName: name,
+          role: 'member',
+          status: status,
+        );
+
+    testWidgets('opens, and warns that giving it away opens it',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          teamProvider.overrideWith(
+            (ref) async => [member('u1', 'Siti'), member('u2', 'Ravi')],
+          ),
+        ],
+        (context) => showAssignTicketSheet(
+          context,
+          ticketId: 't1',
+          status: 'new',
+        ),
+      );
+      expect(find.text('Assign this ticket'), findsOneWidget);
+      // `assign_ticket` carries the clause, and the form says so
+      // BEFORE it happens rather than letting the status change under
+      // the reader.
+      expect(
+        find.text('This ticket is still new. Giving it to somebody opens it.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('assign-person')), findsOneWidget);
+    });
+
+    testWidgets('and says nothing about opening one already open',
+        (tester) async {
+      await opened(
+        tester,
+        [teamProvider.overrideWith((ref) async => [member('u1', 'Siti')])],
+        (context) => showAssignTicketSheet(
+          context,
+          ticketId: 't1',
+          status: 'open',
+        ),
+      );
+      expect(find.textContaining('still new'), findsNothing);
+    });
+
+    testWidgets('and an invitation nobody accepted leaves nobody to assign',
+        (tester) async {
+      // A pending member has no `user_id` the database would take, so
+      // the list is empty and the form says why — rather than showing
+      // an empty picker that looks like a loading failure.
+      await opened(
+        tester,
+        [
+          teamProvider.overrideWith(
+            (ref) async => [member('u1', 'Siti', status: 'invited')],
+          ),
+        ],
+        (context) => showAssignTicketSheet(
+          context,
+          ticketId: 't1',
+          status: 'open',
+        ),
+      );
+      expect(
+        find.textContaining('Nobody here has accepted their invitation yet'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and a team roster narrows who it may go to', (tester) async {
+      // `0355` refuses somebody who is not on the team the ticket is
+      // with, so the list offered has to be the set the server will
+      // take.
+      await opened(
+        tester,
+        [
+          teamProvider.overrideWith(
+            (ref) async => [member('u1', 'Siti'), member('u2', 'Ravi')],
+          ),
+          ticketTeamRosterProvider('team-1').overrideWith(
+            (ref) async => [
+              {'user_id': 'u2'},
+            ],
+          ),
+        ],
+        (context) => showAssignTicketSheet(
+          context,
+          ticketId: 't1',
+          status: 'open',
+          teamId: 'team-1',
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('assign-person')));
+      await tester.pumpAndSettle();
+      expect(find.text('Ravi'), findsWidgets);
+      expect(find.text('Siti'), findsNothing);
+    });
+  });
+
+  group('escalating a ticket', () {
+    testWidgets('opens, and is honest that the clock does not reset',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          ticketTeamsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'team-1', 'name': 'Second line'},
+            ],
+          ),
+          teamProvider.overrideWith(
+            (ref) async => [
+              TeamMember(
+                memberId: 'm1',
+                userId: 'u1',
+                fullName: 'Siti',
+                role: 'member',
+                status: 'active',
+              ),
+            ],
+          ),
+        ],
+        (context) => showEscalateTicketSheet(
+          context,
+          ticketId: 't1',
+          status: 'open',
+        ),
+      );
+      // Twice: the title and the button that does it.
+      expect(find.text('Escalate'), findsNWidgets(2));
+      // The SLA that was promised is still the one being measured, and
+      // saying otherwise would be the one thing somebody escalating
+      // wants to believe.
+      expect(
+        find.textContaining('It does not reset the clock'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('escalate-kind')), findsOneWidget);
     });
   });
 }
