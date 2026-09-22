@@ -197,10 +197,44 @@ class _StockCardDialogState extends ConsumerState<_StockCardDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _CardHeader(),
-                        const Divider(height: 1),
-                        for (final row in rows) _MovementRow(row: row),
-                        const Divider(height: 1),
+                        // The register SCROLLS SIDEWAYS, and only the
+                        // register.
+                        //
+                        // Six columns, four of them a fixed width:
+                        // 84 + 80 + 90 + 110 is 364 pixels before the
+                        // two flexible ones are given anything, and a
+                        // dialog on a 412px phone has about 284 to
+                        // give. It overflowed by 80 and had done since
+                        // it was written, because a dialog written at
+                        // 760 wide is written on a laptop.
+                        //
+                        // Sideways rather than narrower, the same
+                        // choice `capital_allowances_dialog.dart`
+                        // makes: a register that wraps mid-figure is
+                        // one nobody can cast.
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const ClampingScrollPhysics(),
+                          child: SizedBox(
+                            width: 700,
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.stretch,
+                              children: [
+                                const _CardHeader(),
+                                const Divider(height: 1),
+                                for (final row in rows)
+                                  _MovementRow(row: row),
+                                const Divider(height: 1),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // The closing line and the warning stay put.
+                        // They are sentences, not columns, and a
+                        // reader should not have to drag sideways to
+                        // find out the card does not agree with the
+                        // item.
                         Padding(
                           padding: const EdgeInsets.only(top: Space.sm),
                           child: Text(

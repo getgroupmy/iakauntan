@@ -13,6 +13,9 @@ import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/hr/expiring_documents.dart';
+import 'package:iakauntan/src/features/items/item_categories_dialog.dart';
+import 'package:iakauntan/src/features/items/stock_card_dialog.dart';
+import 'package:iakauntan/src/features/loyalty/loyalty_tiers_dialog.dart';
 import 'package:iakauntan/src/features/ticketing/ticket_routing_sheet.dart';
 import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
@@ -970,6 +973,247 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('escalate-kind')), findsOneWidget);
+    });
+  });
+
+  group('item categories', () {
+    testWidgets('opens, and nests a child under its parent', (tester) async {
+      await opened(
+        tester,
+        [
+          itemCategoriesProvider.overrideWith(
+            (ref) async => [
+              {'id': 'c1', 'name': 'Drinks', 'code': 'DRK'},
+              {
+                'id': 'c2',
+                'name': 'Hot drinks',
+                'code': 'DRK-H',
+                'parent_id': 'c1',
+              },
+            ],
+          ),
+        ],
+        showItemCategories,
+      );
+      expect(find.text('Categories'), findsOneWidget);
+      expect(find.text('Drinks'), findsOneWidget);
+      expect(find.text('Hot drinks'), findsOneWidget);
+      // The child is indented by its depth. Both rows are ListTiles in
+      // one list, so the only thing that says one is under the other
+      // is where it starts.
+      final parent = tester.getRect(find.text('Drinks')).left;
+      final child = tester.getRect(find.text('Hot drinks')).left;
+      expect(child, greaterThan(parent));
+    });
+
+    testWidgets('and a category whose parent is missing still appears',
+        (tester) async {
+      // The walk down from the top cannot reach it, and a category
+      // that vanishes from this list is one nobody can fix. It comes
+      // back at depth 0 instead.
+      await opened(
+        tester,
+        [
+          itemCategoriesProvider.overrideWith(
+            (ref) async => [
+              {'id': 'c1', 'name': 'Drinks', 'code': 'DRK'},
+              {
+                'id': 'c9',
+                'name': 'Orphaned',
+                'code': 'ORP',
+                'parent_id': 'gone',
+              },
+            ],
+          ),
+        ],
+        showItemCategories,
+      );
+      expect(find.text('Orphaned'), findsOneWidget);
+      expect(
+        tester.getRect(find.text('Orphaned')).left,
+        tester.getRect(find.text('Drinks')).left,
+      );
+    });
+
+    testWidgets('and an empty list says what a category is for',
+        (tester) async {
+      await opened(
+        tester,
+        [itemCategoriesProvider.overrideWith((ref) async => [])],
+        showItemCategories,
+      );
+      expect(find.text('Nothing is filed yet'), findsOneWidget);
+    });
+  });
+
+  group('loyalty tiers', () {
+    testWidgets('opens, and a threshold says how many are in it',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          loyaltyProgramProvider.overrideWith((ref) async => null),
+          loyaltyTiersProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 't1',
+                'program_id': 'p1',
+                'name': 'Emas',
+                'min_points': 2000,
+                'multiplier': 1.5,
+                'members': 1,
+                'is_active': true,
+              },
+              {
+                'id': 't2',
+                'program_id': 'p1',
+                'name': 'Perak',
+                'min_points': 500,
+                'multiplier': 1,
+                'members': 42,
+                'is_active': false,
+              },
+            ],
+          ),
+        ],
+        showLoyaltyTiers,
+      );
+      // A member is in the highest band their EARNED points reach, and
+      // spending never costs a tier — the sentence that stops somebody
+      // reading the threshold as a balance.
+      expect(
+        find.textContaining('Spending points never costs anybody a tier'),
+        findsOneWidget,
+      );
+      // The multiplier is only mentioned when it is not 1, and the
+      // member count is the number that says whether the threshold
+      // means anything at all.
+      expect(
+        find.text('from 2000 points · earns 1.5× · 1 member'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('retired · from 500 points · 42 members'),
+        findsOneWidget,
+      );
+      // A retired tier offers no Retire button; a live one does.
+      expect(find.byTooltip('Retire'), findsOneWidget);
+    });
+
+    testWidgets('and an empty list proposes a scheme', (tester) async {
+      await opened(
+        tester,
+        [
+          loyaltyProgramProvider.overrideWith((ref) async => null),
+          loyaltyTiersProvider.overrideWith((ref) async => []),
+        ],
+        showLoyaltyTiers,
+      );
+      expect(find.textContaining('"Ahli" at nought'), findsOneWidget);
+    });
+  });
+
+  group('the stock card', () {
+    final item = Item(
+      id: 'i1',
+      code: 'KOPI-01',
+      name: 'Kopi beans 1kg',
+      itemType: 'inventory',
+      uomCode: 'KGM',
+    );
+
+    // Opens on the whole company and the whole of time, which is what
+    // the family key has to say.
+    const query = (
+      itemId: 'i1',
+      from: null,
+      to: null,
+      warehouseId: null,
+    );
+
+    testWidgets('opens, and derives the average rather than reading one',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          warehousesProvider.overrideWith((ref) async => []),
+          stockCardProvider(query).overrideWith(
+            (ref) async => [
+              {
+                'moved_on': '2026-09-01',
+                'quantity': 10,
+                'balance_quantity': 10,
+                'balance_value': 380,
+              },
+              {
+                'moved_on': '2026-09-10',
+                'quantity': 5,
+                'balance_quantity': 15,
+                'balance_value': 600,
+              },
+            ],
+          ),
+        ],
+        (context) => showStockCard(context, item),
+      );
+      expect(find.text('Kopi beans 1kg · stock card'), findsOneWidget);
+      // 600 over 15 is 40. The movement carries `average_cost_after`
+      // per WAREHOUSE, so a card spanning several of them has no
+      // single one — value over quantity is the only average that is
+      // true of whatever was actually asked for.
+      expect(
+        find.textContaining('Closing 15 KGM at RM 600.00, an average of '
+            'RM 40.00 each.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and closing at nothing does not divide by it',
+        (tester) async {
+      // Everything sold. The average clause is dropped rather than
+      // computed, which is the difference between a full stop and an
+      // Infinity on the screen.
+      await opened(
+        tester,
+        [
+          warehousesProvider.overrideWith((ref) async => []),
+          stockCardProvider(query).overrideWith(
+            (ref) async => [
+              {
+                'moved_on': '2026-09-01',
+                'quantity': -10,
+                'balance_quantity': 0,
+                'balance_value': 0,
+              },
+            ],
+          ),
+        ],
+        (context) => showStockCard(context, item),
+      );
+      expect(
+        find.textContaining('Closing 0 KGM at RM 0.00.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('an average of'), findsNothing);
+    });
+
+    testWidgets('and a period with no movements says so', (tester) async {
+      await opened(
+        tester,
+        [
+          warehousesProvider.overrideWith((ref) async => []),
+          stockCardProvider(query).overrideWith((ref) async => []),
+        ],
+        (context) => showStockCard(context, item),
+      );
+      // The empty branch has its own sentence and never reaches
+      // `stockCardClosing` — and it names the three ways stock moves,
+      // because "nothing here" invites the question "should there be".
+      expect(
+        find.textContaining('Stock arrives on a bill, leaves on a delivery, '
+            'and is corrected by a stock take'),
+        findsOneWidget,
+      );
     });
   });
 }
