@@ -36,25 +36,33 @@ it has to be committed.
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | where a scanned paper goes, and what it fills (`0681`) |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0681` is the highest. **`0675`–`0681` are NOT yet applied to the live database** — they go on at the next deploy |
-| Live database | **behind the branch by seven migrations.** See "What is not live" below |
+| Migrations | `0681` is the highest, and **applied**. CI's "Apply the migrations" job pushed `0675`–`0681` to the hosted project on run 2065 |
+| Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 352 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,688 Flutter tests**, 34 deno tests |
 | API description | 779 functions, 366 tables, version `0681` |
 
-### What is not live
+### CI applies migrations, and this branch is the default branch
 
-`0675`–`0679` are on the branch and not on the live database. Until they
-are applied:
+Worth stating outright, because it caught me out and it is the single
+most consequential fact about pushing here.
 
-- the console's **Reader keys** page and the tenant's own key pool talk
-  to functions that do not exist, and fail;
-- the **default reader** is still the literal `'claude'` inside
-  `ocr_status`, which is the live bug reported from
-  `iakauntan.com/#/settings` — see below;
-- there is no fallback reader, so a scan that fails, fails;
-- the console's **Scan log** page calls functions that do not exist, so
-  a failure reference still cannot be looked up from anywhere.
+`.github/workflows/ci.yml` has an **Apply the migrations** job and a
+**Deploy the edge functions** job. Both are gated on
+`github.ref_name == github.event.repository.default_branch`, and the
+default branch **is** `claude/iakauntan-accounting-crm-8snun0` — not
+`main`. Applying is further gated on the `MIGRATIONS_AUTOPUSH`
+repository variable, which is `true`.
+
+So a green run on this branch is a **production deploy**. There is one
+Supabase project; a migration applied to it is applied to production,
+its row is in `schema_migrations`, and undoing it means writing another
+migration. A pushed migration that passes CI is live within about
+fifteen minutes of the push.
+
+Do not describe work on this branch as "waiting for a deploy" without
+checking the run first: the "Say that nothing was applied" step being
+SKIPPED in the apply job means something **was** applied.
 
 ## The reported bug, and the three things that had to be true
 
