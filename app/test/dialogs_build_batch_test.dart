@@ -14,7 +14,9 @@ import 'package:iakauntan/src/features/assets/capitalise_dialog.dart';
 import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
+import 'package:iakauntan/src/features/contacts/contact_delete.dart';
 import 'package:iakauntan/src/features/documents/void_document.dart';
+import 'package:iakauntan/src/features/settings/einvoice_credentials.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/hr/expiring_documents.dart';
 import 'package:iakauntan/src/features/items/item_categories_dialog.dart';
@@ -1614,6 +1616,101 @@ void main() {
       );
       expect(find.text('New department'), findsOneWidget);
       expect(find.text('Kitchen'), findsOneWidget);
+    });
+  });
+
+  group('removing e-Invoice credentials', () {
+    testWidgets('says when it switches submission off with them',
+        (tester) async {
+      // The dangerous half. A company left enabled with no credentials
+      // is one marked live against a submitter that cannot log in, so
+      // the dialog says the switch goes too rather than leaving
+      // somebody to find out from a failed submission.
+      await opened(
+        tester,
+        const [],
+        (context) => askRemoveCredentials(
+          context,
+          environment: 'production',
+          alsoDisables: true,
+        ),
+      );
+      expect(find.text('Remove these credentials?'), findsOneWidget);
+      expect(
+        find.textContaining('The production client id and secret are '
+            'deleted, and e-Invoice submission is switched off with them'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and says when it does not', (tester) async {
+      // Submission is pointed at the other environment, so nothing is
+      // switched off — and saying it would be would stop somebody
+      // tidying up a sandbox they no longer use.
+      await opened(
+        tester,
+        const [],
+        (context) => askRemoveCredentials(
+          context,
+          environment: 'sandbox',
+          alsoDisables: false,
+        ),
+      );
+      expect(
+        find.textContaining('Submission is pointed at the other '
+            'environment and is left alone.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('switched off'), findsNothing);
+    });
+  });
+
+  group('deleting a contact', () {
+    testWidgets('names who, and says when it is possible at all',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => confirmAndDeleteContact(
+          context,
+          ref,
+          id: 'c1',
+          name: 'Kedai Runcit Aman',
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey('contact-delete-confirm')),
+        findsOneWidget,
+      );
+      // It is only possible while nothing points at the contact, which
+      // is the sentence that stops somebody reading a refusal as a
+      // bug.
+      expect(
+        find.textContaining('Delete Kedai Runcit Aman?'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('only possible while nothing points at the '
+            'contact'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and falls back to "this contact" for a blank name',
+        (tester) async {
+      // A contact saved with no name is a real row, and "Delete ?" is
+      // not a question.
+      await openedWithRef(
+        tester,
+        const [],
+        (context, ref) => confirmAndDeleteContact(
+          context,
+          ref,
+          id: 'c1',
+          name: '   ',
+        ),
+      );
+      expect(find.textContaining('Delete this contact?'), findsOneWidget);
     });
   });
 }

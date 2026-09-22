@@ -82,9 +82,7 @@ APP = Path(__file__).resolve().parent.parent / 'app'
 #: the screens list started at 38 of 117 and this one starts at 105 of
 #: 122, because nothing has ever asked the question here at all.
 EXEMPT: dict[str, str] = {
-    'askRemoveCredentials': 'lib/src/features/settings/einvoice_credentials.dart',
     'assignTable': 'lib/src/features/pos/assign_table.dart',
-    'confirmAndDeleteContact': 'lib/src/features/contacts/contact_delete.dart',
     'createAccountFromPicker': 'lib/src/features/settings/new_account_dialog.dart',
     'createBankAccountFromPicker': 'lib/src/features/banking/new_bank_account_dialog.dart',
     'createContactFromPicker': 'lib/src/features/contacts/new_contact_dialog.dart',
