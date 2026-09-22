@@ -21,6 +21,7 @@
 library;
 
 import '../../core/csv.dart';
+import '../../data/ocr_repository.dart';
 
 /// One statement line, as read out of the paste.
 class StatementRow {
@@ -470,3 +471,120 @@ double? _mt940Amount(String raw) {
   if (v == null || v < 0) return null;
   return v;
 }
+
+
+/// A statement that was PHOTOGRAPHED rather than exported.
+///
+/// `0682` gave a scan target the ability to repeat: a bank statement is
+/// forty records with the same four fields, not one record, so the
+/// reader is asked for an array and answers in
+/// [OcrExtraction.rows] — keyed by the column names a platform
+/// administrator ticked in the console.
+///
+/// Those keys are `bank_transactions` column names, and
+/// `import_bank_transactions` takes `bank_transactions` column names.
+/// So the shapes already match and nothing here translates between
+/// them. What this does is COERCE: the reader is asked for what is
+/// printed, so a date arrives as `03/09/2026` and an amount as
+/// `1,900.00` or `(250.00)`, and both have to become the ISO date and
+/// the plain number the RPC casts.
+///
+/// It reuses `parseStatementDate` and `_number` rather than writing
+/// that again. A photographed statement and a pasted one carry the same
+/// Malaysian conventions — day-first dates, brackets for a withdrawal,
+/// `RM` in front of the figure — and two parsers for one convention is
+/// two parsers that will disagree about 03/04.
+///
+/// ## The sign, and why this does not try harder
+///
+/// A statement with separate Debit and Credit columns gives the reader
+/// no sign, and the admin's field description ("negative for money
+/// out") is the only thing asking for one. A model that gets it wrong
+/// turns a withdrawal into a deposit, which is the most expensive
+/// mistake available here.
+///
+/// Nothing in this function can tell. What CAN tell is the running
+/// balance, and `0369` already checks it line by line inside
+/// `import_bank_transactions`: a wrong sign breaks the chain and the
+/// whole import is refused, naming the line. So the balance is passed
+/// through whenever the reader gave one, and that check is the reason
+/// this parser is allowed to be naive about the sign.
+StatementParse scannedStatement(OcrExtraction? read) {
+  final rows = <StatementRow>[];
+  final problems = <String>[];
+
+  final source = read?.rows ?? const <Map<String, String>>[];
+  for (var i = 0; i < source.length; i++) {
+    final row = source[i];
+    // 1-based, and the line number a person would count to on the
+    // photograph rather than an index.
+    final at = i + 1;
+
+    final rawDate = _first(row, const ['transaction_date', 'value_date']);
+    final rawAmount = _first(row, const ['amount']);
+
+    if (rawDate == null && rawAmount == null) continue;
+
+    final date = rawDate == null ? null : parseStatementDate(rawDate);
+    if (date == null) {
+      problems.add(
+        'Line $at: no date could be read'
+        '${rawDate == null ? '' : ' from "$rawDate"'}.',
+      );
+      continue;
+    }
+
+    final amount = rawAmount == null ? null : _number(rawAmount);
+    if (amount == null) {
+      problems.add(
+        'Line $at: no amount could be read'
+        '${rawAmount == null ? '' : ' from "$rawAmount"'}.',
+      );
+      continue;
+    }
+
+    rows.add(StatementRow(
+      date: date,
+      amount: amount,
+      description: _first(row, const ['description']),
+      reference: _first(row, const ['reference']),
+      // Passed through rather than dropped, and it is the most
+      // valuable field on the row: it is what `0369` checks the rest
+      // of the reading against.
+      balance: _numberOrNull(_first(row, const ['running_balance'])),
+    ));
+  }
+
+  return StatementParse(rows, problems);
+}
+
+/// Which of the dialog's three sources is previewed and imported.
+///
+/// A photograph wins over whatever is in the text box, because it is
+/// the thing somebody just did -- and because the two cannot be merged:
+/// they are two readings of what is probably the same statement, and
+/// importing both would put every line in twice under two slightly
+/// different descriptions, which is exactly the case
+/// `import_bank_transactions` deduplicates worst.
+///
+/// Its own function rather than an expression inside `build`, because
+/// the precedence is the rule and a rule inside a widget that needs a
+/// camera to reach cannot be asserted.
+StatementParse? statementPreview(StatementParse? scanned, String typed) =>
+    scanned ?? (typed.trim().isEmpty ? null : parseStatement(typed));
+
+/// The first of [keys] the row actually carries, trimmed, or null.
+///
+/// Several keys because the console's checklist is the real columns of
+/// `bank_transactions` and an administrator may reasonably tick
+/// `value_date` rather than `transaction_date` — they are both dates on
+/// the paper and a statement often prints only one.
+String? _first(Map<String, String> row, List<String> keys) {
+  for (final k in keys) {
+    final v = row[k]?.trim();
+    if (v != null && v.isNotEmpty) return v;
+  }
+  return null;
+}
+
+double? _numberOrNull(String? raw) => raw == null ? null : _number(raw);

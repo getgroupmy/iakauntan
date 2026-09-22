@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the `required` that did not grow with `properties` |
+| Head at time of writing | a photographed bank statement becomes bank lines |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0682` is the highest. CI applies on green — see below |
+| Migrations | `0683` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 353 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,713 Flutter tests**, 34 deno tests |
-| API description | 779 functions, 366 tables, version `0682` |
+| Gates | 354 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,732 Flutter tests**, 34 deno tests |
+| API description | 779 functions, 366 tables, version `0683` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -61,8 +61,22 @@ migration. A pushed migration that passes CI is live within about
 fifteen minutes of the push.
 
 Do not describe work on this branch as "waiting for a deploy" without
-checking the run first: the "Say that nothing was applied" step being
-SKIPPED in the apply job means something **was** applied.
+checking the run first.
+
+And read the right thing when you check. The apply job's **"Say that
+nothing was applied" step being SKIPPED means nothing** — it is skipped
+on every green push, because it is skipped whenever the `Apply` step ran
+at all. The tell is inside the `Apply` step's own log, which says either
+
+    **Applied:** 0683_the_five_columns_a_statement_line_has.sql
+
+or
+
+    **Nothing was pending**
+
+This paragraph previously said the opposite, and a session acting on it
+told the user a migration had gone live when the run said nothing of the
+kind.
 
 ## The reported bug, and the three things that had to be true
 
@@ -437,6 +451,75 @@ pull request** unless asked; GitHub access is scoped to
 `getgroupmy/iakauntan`; never disable TLS verification or unset
 `HTTPS_PROXY`; no model identifier in any commit message, code comment
 or anything else pushed to the repository.
+
+## A photographed statement becomes bank lines
+
+The last gap in the SmartScan work. `0682` made `accounting.bank_statement`
+a target that **repeats**, so the reader answers with an array, and the
+edge function returns them in `OcrExtraction.rows` — and nothing read
+them. A photographed statement came back with its lines correctly
+separated and then stopped.
+
+### Nothing had to translate
+
+`import_bank_transactions` (`0369`) already takes
+`{transaction_date, amount, description, reference, running_balance}`.
+Those are `bank_transactions` column names — which is exactly what a
+repeating target's **ticked fields** produce, because the console's
+checklist is built from `information_schema` on the target's own table.
+The two shapes are the same shape, and neither knows about the other.
+
+So the new code only **coerces**: `scannedStatement` in
+`app/lib/src/features/banking/statement_import.dart` turns the printed
+strings a reader hands back — `03/09/2026`, `1,900.00`, `(250.00)`,
+`RM 1,900.00` — into ISO dates and plain numbers, reusing
+`parseStatementDate` and `_number` that the CSV path already had. It
+falls back to `value_date` where `transaction_date` was not ticked, and
+reports an unreadable line by its number rather than dropping it.
+
+`statementPreview(scanned, typed)` is the dialog's precedence rule, and
+it is a function rather than an expression in `build` for one reason:
+the rule cannot be reached in a widget test without a camera. A
+photograph beats a paste; they are never merged, because they are two
+readings of the same statement and importing both puts every line in
+twice under two slightly different descriptions — the case
+`import_bank_transactions` deduplicates worst, since the descriptions
+differ just enough for its key to miss.
+
+### The seam that would have shipped broken
+
+`scan_extraction_targets` **only offers a target that has at least one
+field**. `0682` ticked none. So as pushed, the reader was never asked
+for statement lines at all, and every photograph came back correctly
+empty — a feature that is present, wired, tested and does nothing.
+
+`0683` seeds the five: `transaction_date`, `description`, `reference`,
+`amount`, `running_balance`, each with the sentence the reader is asked
+with. `on conflict do nothing`, so an installation that ticked its own
+set keeps it.
+
+Two of those sentences carry things a general reader gets wrong:
+
+- **the sign.** A statement prints two money columns, or one column
+  with `DR`/`CR` beside it. Neither is a negative number, and a reader
+  left to itself returns the figure as printed — which makes every
+  withdrawal a deposit.
+- **`running_balance` is not optional.** It is the only figure on a
+  statement that can be checked against the rest of it. Leave it
+  unticked and the import still works and is never checked, which is
+  the silent half of `0369`'s whole argument.
+
+The ordering rule is already handled: `targetPrompt` adds *"Every line,
+in the order printed"* to any target that repeats, and
+`import_bank_transactions` reads the statement's direction off its own
+dates.
+
+`supabase/tests/bank_statement_scan.sql` asserts the whole path as one
+thing, and builds its fixture rows **out of the ticked names
+themselves** rather than typing them — so the assertion moves when the
+ticks move. Nothing else joins those two sides: one is a table of
+strings, the other is `->>` on a jsonb, and a rename on either side is
+invisible until a statement imports as nothing.
 
 ## This session's commits
 
@@ -1365,6 +1448,21 @@ After any migration: `python3 scripts/generate_api_description.py "$DB"`.
 ## Traps found this session
 
 Each of these was paid for once. None is obvious from the code.
+
+**A surviving mutant can be a mutant of a different function.**
+`scripts/mutate.py` applied each pattern with `replace(old, new, 1)` —
+first match, no uniqueness check. `statement_import.dart` holds two
+parsers that both contain `if (date == null) {` above `problems.add(`,
+so a mutant aimed at `scannedStatement` landed in `parseCsvStatement`,
+whose branch that test file does not reach, and survived **under the
+name of the function whose assertion was there and correct all along**.
+The control cannot catch this — it applied cleanly and the baseline
+passed. Hand-applying the mutant to check the harness reproduces the
+survival, because it means pasting the same ambiguous pattern and
+hitting the same first match; it reads as confirmation and is not one.
+The harness now refuses an ambiguous pattern, reports un-applied
+mutants under **NOT RUN** and exits 1, and `apply_once` is asserted in
+`scripts/mutate_test.py`. Full write-up in `docs/widget-tests.md`.
 
 **Not every nested scroll view is broken, and I said four of them
 were.** A `ListView` inside a same-axis scroll view throws; a

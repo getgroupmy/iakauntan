@@ -335,6 +335,48 @@ So the test is to TYPE into every box the gate names, one at a time,
 and assert the button after each. The one that matters is the last
 keystroke before it should go live.
 
+## A surviving mutant can be a mutant of a different function
+
+`scripts/mutate.py` applies each mutant with `text.replace(old, new, 1)`
+— **once, at the first match**. So a pattern that matches two places in
+the file mutates the one nearer the top, and if the test under it does
+not cover that one, the mutant survives and the report names the
+function you meant.
+
+`statement_import.dart` holds two statement parsers, and both contain,
+verbatim:
+
+```dart
+    if (date == null) {
+      problems.add(
+```
+
+A mutant anchored on those two lines and aimed at `scannedStatement`
+landed in `parseCsvStatement`, whose branch the test file does not
+reach, and the harness printed
+
+    a row with no date is skipped silently instead of reported  passed
+
+for a function whose assertion was there and correct all along. **The
+control cannot catch this**: the control applied cleanly and the
+baseline passed. Nor does hand-applying the mutant to "check the
+harness" — that means pasting the same ambiguous pattern into the same
+editor and hitting the same first match, which reproduces the survival
+and reads as confirmation.
+
+The harness now refuses an ambiguous pattern rather than guessing:
+
+    <name>   HARNESS ERROR: pattern matches 2 places; extend it until it matches one
+
+and a run with any un-applied mutant says so under **NOT RUN** and
+exits 1, because "every mutant killed" over a mutant that never ran is
+the same lie the control exists to catch. `apply_once` and the four
+assertions on it are in `scripts/mutate_test.py`.
+
+The fix, when you hit it, is to extend the pattern by one line until it
+is unique — not to mutate every match, which is a different and weaker
+experiment.
+
 ## `check_narrow_rows.py` measures two things as zero, and it is not fixable in the estimate
 
 That script exists because three overflows shipped, and it catches the

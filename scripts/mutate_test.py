@@ -124,6 +124,75 @@ class PinnedVersion(unittest.TestCase):
         self.assertTrue(mutate._flutter_bin() or shutil.which('flutter'))
 
 
+class PatternMustBeUnique(unittest.TestCase):
+    """`apply_once`, and the survivor that was never a survivor.
+
+    `statement_import.dart` holds two statement parsers, and both of
+    them contain, verbatim:
+
+        if (date == null) {
+          problems.add(
+
+    A mutant anchored on those two lines and aimed at the second landed
+    in the first, because the replacement takes the first match. The
+    test file under it does not reach the first parser, so the mutant
+    survived -- and was reported under the name of the function whose
+    assertion was there and correct all along.
+
+    The control cannot catch this one: the control applied cleanly and
+    the baseline passed. Only refusing the ambiguous pattern catches it.
+    """
+
+    SOURCE = """void first() {
+  if (date == null) {
+    problems.add('one');
+  }
+}
+
+void second() {
+  if (date == null) {
+    problems.add('two');
+  }
+}
+"""
+
+    def test_a_unique_pattern_is_applied(self):
+        out, why = mutate.apply_once(
+            self.SOURCE, "problems.add('two');", "return;")
+        self.assertIsNone(why)
+        self.assertIn("return;", out)
+        # And only there. The first function is untouched.
+        self.assertIn("problems.add('one');", out)
+
+    def test_a_pattern_matching_twice_is_refused(self):
+        out, why = mutate.apply_once(
+            self.SOURCE,
+            "  if (date == null) {\n    problems.add(",
+            "  if (date == null) {\n    if (true) return;\n    problems.add(")
+        self.assertIsNotNone(why)
+        self.assertIn('2 places', why)
+        # Refused, not half-applied. Returning the mutated text with a
+        # warning would leave the caller free to write it out.
+        self.assertEqual(out, self.SOURCE)
+
+    def test_a_pattern_that_is_not_there_is_refused(self):
+        out, why = mutate.apply_once(self.SOURCE, 'nothing like this', 'x')
+        self.assertEqual(why, 'pattern not found')
+        self.assertEqual(out, self.SOURCE)
+
+    def test_extending_the_pattern_by_one_line_is_the_fix(self):
+        # What the docstring tells the author to do, asserted so the
+        # advice stays true.
+        out, why = mutate.apply_once(
+            self.SOURCE,
+            "  if (date == null) {\n    problems.add('two');",
+            "  if (date == null) {\n    if (true) return;\n"
+            "    problems.add('two');")
+        self.assertIsNone(why)
+        self.assertIn("if (true) return;", out)
+        self.assertIn("problems.add('one');", out)
+
+
 class GrantsCarriedWithTheBlock(unittest.TestCase):
     """`mutate_sql.grants`, and why it exists.
 

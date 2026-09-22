@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import 'book_balance.dart';
 import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
+import '../shared/scan_intake.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
 import 'transfers_history_dialog.dart';
@@ -223,13 +224,17 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
   }
 
   Future<void> _import() async {
-    final text = await showDialog<String>(
+    // A parse rather than the raw text, since `0683`: the dialog now
+    // has three sources — a paste, a file, and a photograph — and only
+    // the first two are text. Handing back what was READ lets all
+    // three arrive the same way, and drops a second parse of the same
+    // paste on the way out.
+    final parsed = await showDialog<StatementParse>(
       context: context,
       builder: (_) => const _PasteDialog(),
     );
-    if (text == null || !mounted) return;
+    if (parsed == null || !mounted) return;
 
-    final parsed = parseStatement(text);
     if (parsed.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(parsed.problems.join(' ')),
@@ -645,17 +650,26 @@ class _LineTile extends StatelessWidget {
       };
 }
 
-class _PasteDialog extends StatefulWidget {
+class _PasteDialog extends ConsumerStatefulWidget {
   const _PasteDialog();
 
   @override
-  State<_PasteDialog> createState() => _PasteDialogState();
+  ConsumerState<_PasteDialog> createState() => _PasteDialogState();
 }
 
-class _PasteDialogState extends State<_PasteDialog> {
+class _PasteDialogState extends ConsumerState<_PasteDialog> {
   final _text = TextEditingController();
   String? _fileName;
   bool _reading = false;
+
+  /// What a photograph was read as. `0683`.
+  ///
+  /// Held apart from `_text` rather than rendered into it: a scan comes
+  /// back as rows, and turning them into CSV so the text box could hold
+  /// them would mean formatting figures in order to parse them straight
+  /// back — a round trip whose only possible effect is to lose one.
+  StatementParse? _scanned;
+  String? _scannedFrom;
 
   @override
   void dispose() {
@@ -693,9 +707,50 @@ class _PasteDialogState extends State<_PasteDialog> {
     }
   }
 
+  /// Photograph the statement and read it.
+  ///
+  /// Parked against `bank_transactions` so the picture is filed where
+  /// the lines it produces will live. There is no single record to hang
+  /// it on -- a statement becomes many rows -- which is exactly why
+  /// `0682` had to give a scan target the ability to repeat.
+  Future<void> _scan() async {
+    setState(() => _reading = true);
+    try {
+      final staged = await showScanIntake(
+        context,
+        ref,
+        table: 'bank_transactions',
+        title: 'Photograph a bank statement',
+      );
+      if (staged == null || !mounted) return;
+
+      final parse = scannedStatement(staged.read);
+      if (parse.rows.isEmpty && parse.problems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Nothing on that photograph read as statement lines. The '
+              'reader has to be asked for them, which a platform '
+              'administrator sets up under Kinds of document.',
+            ),
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _scanned = parse;
+        _scannedFrom = 'photographed';
+      });
+    } finally {
+      if (mounted) setState(() => _reading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final preview = _text.text.trim().isEmpty ? null : parseStatement(_text.text);
+    // The photograph wins while it is there, because it is the thing
+    // somebody just did. Clearing it is what the button below is for.
+    final preview = statementPreview(_scanned, _text.text);
 
     return AlertDialog(
       title: const Text('Import statement'),
@@ -723,6 +778,20 @@ class _PasteDialogState extends State<_PasteDialog> {
                     icon: const Icon(Icons.folder_open_outlined, size: 18),
                     label: const Text('Open a file'),
                   ),
+                  const SizedBox(width: Space.sm),
+                  // The third source. A statement that arrives on paper
+                  // -- posted, or handed over a counter -- had no way in
+                  // here at all: the other two buttons both want a file
+                  // the bank exported.
+                  OutlinedButton.icon(
+                    key: const ValueKey('statement-scan'),
+                    onPressed: _reading ? null : _scan,
+                    icon: const Icon(
+                      Icons.document_scanner_outlined,
+                      size: 18,
+                    ),
+                    label: const Text('Photograph it'),
+                  ),
                   if (_fileName != null) ...[
                     const SizedBox(width: 12),
                     Flexible(
@@ -731,6 +800,29 @@ class _PasteDialogState extends State<_PasteDialog> {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+                    ),
+                  ],
+                  if (_scannedFrom != null) ...[
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        _scannedFrom!,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    // Said, and undoable. A photograph overrides the
+                    // text box while it is there, and somebody who
+                    // photographed the wrong page needs a way back to
+                    // the paste still sitting underneath it.
+                    IconButton(
+                      key: const ValueKey('statement-scan-clear'),
+                      tooltip: 'Use the pasted text instead',
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => setState(() {
+                        _scanned = null;
+                        _scannedFrom = null;
+                      }),
                     ),
                   ],
                 ],
@@ -774,7 +866,7 @@ class _PasteDialogState extends State<_PasteDialog> {
         FilledButton(
           onPressed: preview == null || preview.isEmpty
               ? null
-              : () => Navigator.pop(context, _text.text),
+              : () => Navigator.pop(context, preview),
           child: const Text('Import'),
         ),
       ],

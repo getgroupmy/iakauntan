@@ -48,9 +48,10 @@ void main() {
     'unmatched_lines': unmatched,
   };
 
-  Widget wrap(Map<String, dynamic> st, {String role = 'owner'}) => ProviderScope(
+  Widget wrap(Map<String, dynamic> st, {String role = 'owner', Repo? repo}) =>
+      ProviderScope(
     overrides: [
-      repoProvider.overrideWithValue(_FakeRepo(st)),
+      repoProvider.overrideWithValue(repo ?? _FakeRepo(st)),
       bankAccountsProvider.overrideWith(
         (ref) async => const [
           {'id': 'b1', 'name': 'Maybank Current', 'account_no': '5140 1234'},
@@ -211,6 +212,102 @@ void main() {
       expect(find.byTooltip('Import statement'), findsNothing);
     });
   });
+  /// The three ways a statement gets in.
+  ///
+  /// `0683`. The dialog used to hand back the TEXT it was holding, and
+  /// the screen parsed it on the way out. That was fine while both
+  /// sources were text; a photograph is not. It comes back as rows the
+  /// reader already separated, and rendering them into CSV so the text
+  /// box could hold them would mean formatting every figure in order to
+  /// parse it straight back -- a round trip whose only possible effect
+  /// is to lose one.
+  ///
+  /// So the dialog now hands back the PARSE, and what this group
+  /// asserts is that the paste still survives that change: the rows
+  /// that reach `importBankTransactions` are the rows that were typed,
+  /// in the shape `import_bank_transactions` reads, with the running
+  /// balance still on them.
+  group('getting a statement in', () {
+    testWidgets('a photograph is offered beside the paste and the file',
+        (tester) async {
+      await show(tester, status());
+      await tester.tap(find.byTooltip('Import statement'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('statement-scan')), findsOneWidget);
+      expect(find.text('Open a file'), findsOneWidget);
+    });
+
+    testWidgets('a pasted statement arrives as rows, balance and all',
+        (tester) async {
+      final repo = _FakeRepo(status());
+      await tester.pumpWidget(wrap(status(), repo: repo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Import statement'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Date,Description,Reference,Amount,Balance\n'
+        '01/09/2026,OPENING TRANSFER,REF001,1900.00,1900.00\n'
+        '03/09/2026,CHQ 100123,REF002,-250.00,1650.00\n',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, 'Import'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(repo.imported, isNotNull);
+      expect(repo.imported, hasLength(2));
+
+      // The keys are `bank_transactions` column names, because that is
+      // what `import_bank_transactions` reads them out under. Rename
+      // one on either side and the import silently takes nothing.
+      expect(repo.imported!.first['transaction_date'], '2026-09-01');
+      expect(repo.imported!.first['amount'], 1900.00);
+      expect(repo.imported!.first['running_balance'], 1900.00);
+
+      // The withdrawal keeps its sign, and the balance that proves it
+      // is still attached. Drop the balance and nothing downstream
+      // complains -- the statement just imports unchecked.
+      expect(repo.imported!.last['amount'], -250.00);
+      expect(repo.imported!.last['running_balance'], 1650.00);
+    });
+
+    testWidgets('and the closing figure comes back off the bank, not a '
+        'typed one', (tester) async {
+      final repo = _FakeRepo(status());
+      await tester.pumpWidget(wrap(status(), repo: repo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Import statement'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Date,Description,Amount,Balance\n'
+        '01/09/2026,OPENING,1900.00,1900.00\n',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, 'Import'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 imported'), findsOneWidget);
+    });
+  });
+
   /// The bar, at every width one is opened at.
   ///
   /// Six icon buttons and a title. No labelled text, so it is the
@@ -252,6 +349,27 @@ class _FakeRepo implements Repo {
     bool onlyOpen = false,
   }) async =>
       const [];
+
+  /// What the last import was handed, kept so a test can read it.
+  ///
+  /// Null until something imports, which is itself the assertion in the
+  /// case where the dialog hands back nothing at all.
+  List<Map<String, dynamic>>? imported;
+
+  @override
+  Future<Map<String, dynamic>> importBankTransactions(
+    String bankAccountId,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    imported = rows;
+    return {
+      'imported': rows.length,
+      'skipped': 0,
+      'balance_checks': rows.length - 1,
+      'closing_balance': rows.last['running_balance'],
+      'closing_date': rows.last['transaction_date'],
+    };
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
