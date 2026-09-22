@@ -808,6 +808,153 @@ extension PlatformOcrCatalog on PlatformRepo {
         'platform_set_default_ocr_provider',
         params: {'p_code': code},
       );
+
+  /// Every scan, newest first, with the reason the failed ones failed.
+  ///
+  /// The reason is deliberately absent from what the person scanning
+  /// is shown — a vendor's message quotes the project and the
+  /// processor — so this is the only place in the product it can be
+  /// read. Until `0680` there was no such place: `ocr_scans` had no
+  /// reader in the app at all, and "quote this reference if you get in
+  /// touch" resolved to hand-written SQL against production.
+  Future<List<ScanLogEntry>> scanLog({
+    int limit = 50,
+    String? status,
+    String? search,
+  }) async => Repo.rows(
+    await client.rpc(
+      'platform_scan_log',
+      params: {
+        'p_limit': limit,
+        'p_status': status,
+        'p_search': search,
+      },
+    ),
+  ).map(ScanLogEntry.fromJson).toList();
+
+  /// Read today, failed today, and the ones that never settled.
+  Future<ScanHealth> scanHealth() async {
+    final data = await client.rpc('platform_scan_health');
+    return ScanHealth.fromJson(
+      data is Map ? Map<String, dynamic>.from(data) : const {},
+    );
+  }
+}
+
+/// One scan, as the console is allowed to see it.
+class ScanLogEntry {
+  const ScanLogEntry({
+    required this.id,
+    required this.createdAt,
+    required this.orgName,
+    required this.providerName,
+    required this.keySource,
+    required this.status,
+    required this.charged,
+    required this.refunded,
+    this.logRef,
+    this.finishedAt,
+    this.fellBackTo,
+    this.fileName,
+    this.error,
+  });
+
+  final String id;
+
+  /// The reference quoted on the failure the person scanning saw.
+  /// Null for a scan that succeeded, and for any failure from before
+  /// `0680` — it was minted after the settle and never stored.
+  final String? logRef;
+
+  final DateTime createdAt;
+  final DateTime? finishedAt;
+  final String orgName;
+  final String providerName;
+
+  /// `platform`, `own` or `device`. It decides who the failure is a
+  /// problem for: the platform's key is ours to fix, and a company's
+  /// own is a conversation with them.
+  final String keySource;
+
+  /// `ok`, `failed`, or `pending`.
+  final String status;
+  final double charged;
+  final bool refunded;
+
+  /// The reader that read it when the chosen one would not. 0679.
+  final String? fellBackTo;
+  final String? fileName;
+
+  /// The vendor's own sentence. The whole reason this screen exists.
+  final String? error;
+
+  /// A scan still pending an hour after it started.
+  ///
+  /// The function died between `ocr_begin` and `ocr_finish`, so the
+  /// charge was taken and the refund never ran. Worth its own name
+  /// because it does not look like a failure — the status says
+  /// `pending`, which reads as "still going" for ever.
+  bool get unsettled =>
+      status == 'pending' &&
+      DateTime.now().difference(createdAt) > const Duration(hours: 1);
+
+  /// Money that was taken and not given back.
+  bool get owed => charged > 0 && !refunded && (status == 'failed' || unsettled);
+
+  static DateTime? _date(Object? v) =>
+      v == null ? null : DateTime.tryParse('$v')?.toLocal();
+
+  factory ScanLogEntry.fromJson(Map<String, dynamic> j) => ScanLogEntry(
+    id: '${j['id']}',
+    logRef: j['log_ref']?.toString(),
+    createdAt: _date(j['created_at']) ?? DateTime.now(),
+    finishedAt: _date(j['finished_at']),
+    orgName: j['org_name']?.toString() ?? 'a company since deleted',
+    providerName: j['provider_name']?.toString() ?? '${j['provider']}',
+    keySource: j['key_source']?.toString() ?? 'platform',
+    status: j['status']?.toString() ?? 'pending',
+    charged: OcrSettings._num(j['amount_charged']),
+    refunded: j['refunded'] == true,
+    fellBackTo: j['fell_back_to']?.toString(),
+    fileName: (j['file_name']?.toString().trim().isEmpty ?? true)
+        ? null
+        : j['file_name'].toString().trim(),
+    error: (j['error']?.toString().trim().isEmpty ?? true)
+        ? null
+        : j['error'].toString().trim(),
+  );
+}
+
+/// How scanning is going, in the three numbers worth a glance.
+class ScanHealth {
+  const ScanHealth({
+    required this.ok24h,
+    required this.failed24h,
+    required this.unsettled,
+    required this.unsettledCharged,
+  });
+
+  final int ok24h;
+  final int failed24h;
+
+  /// Scans still pending an hour on. Each one is a charge that was
+  /// taken and never refunded, which is the one combination nobody
+  /// finds on their own.
+  final int unsettled;
+  final double unsettledCharged;
+
+  static const none =
+      ScanHealth(ok24h: 0, failed24h: 0, unsettled: 0, unsettledCharged: 0);
+
+  static int _int(Object? v) =>
+      v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  factory ScanHealth.fromJson(Map<String, dynamic> j) => ScanHealth(
+    ok24h: _int(j['ok_24h']),
+    failed24h: _int(j['failed_24h']),
+    unsettled: _int(j['unsettled']),
+    unsettledCharged: OcrSettings._num(j['unsettled_charged']),
+  );
 }
 
 /// One key out of a reader's pool, as the console is allowed to see it.

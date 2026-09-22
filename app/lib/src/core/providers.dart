@@ -3267,6 +3267,23 @@ final ocrDefaultProviderProvider = FutureProvider.autoDispose<OcrDefaultState>(
   (ref) => ref.watch(platformRepoProvider).ocrDefaultState(),
 );
 
+/// Every scan, newest first, with the reason the failed ones failed.
+///
+/// Keyed on the filter, because a status and a search are the two
+/// questions an operator arrives with — "what is failing" and "what
+/// happened to THIS one" — and they are different lists. 0680.
+final scanLogProvider = FutureProvider.autoDispose
+    .family<List<ScanLogEntry>, ({String? status, String? search})>(
+      (ref, q) => ref
+          .watch(platformRepoProvider)
+          .scanLog(status: q.status, search: q.search),
+    );
+
+/// Read today, failed today, and the scans that never settled.
+final scanHealthProvider = FutureProvider.autoDispose<ScanHealth>(
+  (ref) => ref.watch(platformRepoProvider).scanHealth(),
+);
+
 /// The three calls a reader's key pool needs.
 ///
 /// On the CLIENT rather than on a repository. `Repo` does not exist

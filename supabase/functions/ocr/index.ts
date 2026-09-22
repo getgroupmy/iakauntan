@@ -1141,6 +1141,21 @@ serveFunction("ocr.failed", async (req: Request) => {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // Minted HERE rather than at the return, which is the whole of
+    // `0680`. The reference is what the person scanning is told to
+    // quote, and it used to be created after the scan had been settled
+    // — so it went to this function's stdout and nowhere else, and the
+    // one identifier the message pointed at was the one identifier
+    // nothing could look up. Having it in hand before the settle is
+    // all it takes to write it against the row.
+    const ref = logFailure(e, "ocr.failed", { scan_id: begin.scan_id });
+    const { error: refNoted } = await db.rpc("ocr_note_log_ref", {
+      p_scan_id: begin.scan_id,
+      p_ref: ref,
+    });
+    if (refNoted) {
+      console.error("could not record the reference", begin.scan_id, refNoted);
+    }
     // Against the key, when a key from a pool is what ran. A key
     // revoked at the provider's end has to read differently in the
     // console from one that is merely busy, and the console has no
@@ -1215,10 +1230,10 @@ serveFunction("ocr.failed", async (req: Request) => {
       console.error("scan failed and was not refunded", begin.scan_id, error);
     }
     // The provider's message goes to the log and to `ocr_scans.error`,
-    // which is the organization's own row behind RLS. It does not go in
-    // the response: a Document AI failure quotes the project, the
-    // processor and sometimes the page it choked on.
-    const ref = logFailure(e, "ocr.failed", { scan_id: begin.scan_id });
+    // which is the organization's own row behind RLS, and to the
+    // console's scan log. It does not go in the response: a Document
+    // AI failure quotes the project, the processor and sometimes the
+    // page it choked on.
     return fail(
       "The document could not be read. Quote this reference if you get in touch.",
       502,

@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the reader default and the fallback (`0678`, `0679`) |
+| Head at time of writing | the scan log (`0680`) |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0679` is the highest. **`0675`–`0679` are NOT yet applied to the live database** — they go on at the next deploy |
-| Live database | **behind the branch by five migrations.** See "What is not live" below |
+| Migrations | `0680` is the highest. **`0675`–`0680` are NOT yet applied to the live database** — they go on at the next deploy |
+| Live database | **behind the branch by six migrations.** See "What is not live" below |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 350 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,647 Flutter tests**, 33 deno tests |
-| API description | 773 functions, 364 tables, version `0679` |
+| Gates | 351 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,669 Flutter tests**, 33 deno tests |
+| API description | 775 functions, 364 tables, version `0680` |
 
 ### What is not live
 
@@ -52,7 +52,9 @@ are applied:
 - the **default reader** is still the literal `'claude'` inside
   `ocr_status`, which is the live bug reported from
   `iakauntan.com/#/settings` — see below;
-- there is no fallback reader, so a scan that fails, fails.
+- there is no fallback reader, so a scan that fails, fails;
+- the console's **Scan log** page calls functions that do not exist, so
+  a failure reference still cannot be looked up from anywhere.
 
 ## The reported bug, and the three things that had to be true
 
@@ -95,6 +97,42 @@ A platform that prices its default reader has therefore switched the
 fallback off for everybody, which is invisible from the dropdown. The
 console says so in as many words; `ocr_default_state()` is what it
 reads.
+
+## The reference nobody could redeem
+
+Reported the same day as the one above, from Bills:
+
+> `Could not read it: FunctionException(status: 502, details: {error: The
+> document could not be read. Quote this reference if you get in touch.,
+> details: {ref: e5b6506c-…, scan_id: 6e50da40-…, refunded: false}})`
+
+The vagueness is correct and stays — `0111` keeps the vendor's message
+out of the response because a Document AI failure quotes the project,
+the processor and sometimes the page it choked on. The real reason goes
+to `ocr_scans.error`.
+
+    $ grep -rn "ocr_scans" app/lib --include=*.dart | wc -l
+    0
+
+Nothing read it. So "get in touch" resolved to hand-written SQL against
+production, run by the same person being told to get in touch. `0680`
+is the console page: **Scan log**, at `/admin/scan-log`.
+
+And a sharper one underneath it. `logFailure` mints `ref` with
+`crypto.randomUUID()` and writes it to the function's **stdout only** —
+it was never stored. So of the two identifiers in that banner, the one
+labelled "quote this reference" was the one that could never be
+resolved from the database, and the one that could (`scan_id`) is not
+what the sentence points at. `ocr_scans.log_ref` fixes that; the edge
+function now mints the ref *before* settling so it has it in hand.
+
+### The number that does not look like a failure
+
+`platform_scan_health()` counts scans still `pending` an hour after
+they started. That is a function that died between `ocr_begin` and
+`ocr_finish` — the charge was taken and the refund never ran. It goes
+uncounted precisely because the status reads as "still going" for ever,
+and nobody goes looking for a row that claims to be in progress.
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 

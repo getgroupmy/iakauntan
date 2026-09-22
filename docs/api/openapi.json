@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0679",
+    "version": "0680",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -47630,6 +47630,161 @@
         }
       }
     },
+    "/rpc/platform_scan_health": {
+      "post": {
+        "operationId": "platform_scan_health",
+        "summary": "How scanning is going: read in the last day, failed in the last day, and the count and value of scans still\u2026",
+        "description": "How scanning is going: read in the last day, failed in the last day, and the count and value of scans still pending an hour after they started. That last pair is money: a scan stuck pending is a function that died between `ocr_begin` and `ocr_finish`, so the charge was taken and the refund never ran. Platform administrators only, and an empty object rather than an exception for everybody else.\n\n`public.platform_scan_health()` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_scan_log": {
+      "post": {
+        "operationId": "platform_scan_log",
+        "summary": "Every scan this platform has run, newest first, with the reason the failed ones failed -- which is kept out\u2026",
+        "description": "Every scan this platform has run, newest first, with the reason the failed ones failed -- which is kept out of the response the person scanning sees, because a vendor's message quotes the project and the processor. Searchable by EITHER identifier off that message, the reference or the scan id, since somebody pasting one should not have to know which of the two can be looked up. Platform administrators only: the guard is in the WHERE clause, so a caller who is not one gets no rows rather than an exception -- this is a list, and a screen that 500s is not more secure than one that is empty.\n\n`public.platform_scan_log(p_limit integer, p_status text, p_search text)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_limit": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_status": {
+                    "type": "string"
+                  },
+                  "p_search": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "log_ref": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "finished_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "org_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_name": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "provider_name": {
+                        "type": "string"
+                      },
+                      "key_source": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "amount_charged": {
+                        "type": "number"
+                      },
+                      "refunded": {
+                        "type": "boolean"
+                      },
+                      "fell_back_to": {
+                        "type": "string"
+                      },
+                      "file_name": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_security_log": {
       "post": {
         "operationId": "platform_security_log",
@@ -90966,6 +91121,9 @@
             "type": "string"
           },
           "fell_back_to": {
+            "type": "string"
+          },
+          "log_ref": {
             "type": "string"
           }
         },

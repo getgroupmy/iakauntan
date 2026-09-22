@@ -20,6 +20,7 @@ import 'mobile_app_admin.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'ocr_keys_admin.dart';
+import 'scan_log_admin.dart';
 import 'scan_kinds_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'promotions_admin.dart';
@@ -112,6 +113,18 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/reader-keys',
     primary: false,
     page: OcrKeysAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    label: 'Scan log',
+    // Not `fact_check`, which the platform's own trail already uses.
+    // Two rows in one menu with one glyph is two rows nobody can tell
+    // apart at a glance, which is what an icon is for.
+    icon: Icons.summarize_outlined,
+    selectedIcon: Icons.summarize,
+    path: '/admin/scan-log',
+    primary: false,
+    page: ScanLogAdminTab(),
   ),
   (
     group: 'Document scanning',
