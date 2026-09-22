@@ -171,10 +171,16 @@ void main() {
   });
 
   group('the page', () {
-    Widget harness(List<ScanLogEntry> rows, ScanHealth health) => ProviderScope(
+    Widget harness(
+      List<ScanLogEntry> rows,
+      ScanHealth health, {
+      List<ReaderFault> faults = const [],
+    }) =>
+        ProviderScope(
       overrides: [
         scanLogProvider.overrideWith((ref, q) async => rows),
         scanHealthProvider.overrideWith((ref) async => health),
+        readerFailuresProvider.overrideWith((ref) async => faults),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),
@@ -351,5 +357,170 @@ void main() {
     final trail = platformConsoleSections
         .firstWhere((s) => s.path == '/admin/trail');
     expect(section.single.icon, isNot(trail.icon));
+  });
+
+  /// A fault row off the wire. `0685`.
+  ///
+  /// The screen tests build `ReaderFault` directly, so nothing was
+  /// reading `fromJson` — and a mutation run proved it: swapping `read`
+  /// and `failed` on the way in passed every test while inverting the
+  /// single claim the section is for. A reader that had never worked
+  /// would have read "47 read · 0 failed" and no verdict.
+  group('reading a fault off the wire', () {
+    Map<String, dynamic> row({
+      Object? read = 0,
+      Object? failed = 47,
+    }) =>
+        {
+          'provider': 'gemini',
+          'provider_name': 'Gemini',
+          'read': read,
+          'failed': failed,
+          'fault': 'invalid json payload received. unknown name "strict"',
+          'n': 47,
+          'first_seen': '2026-09-01T10:00:00Z',
+          'last_seen': '2026-09-22T10:00:00Z',
+          'example_ref': 'aaaa1111',
+        };
+
+    test('a row arrives whole', () {
+      final f = ReaderFault.fromJson(row());
+
+      expect(f.provider, 'gemini');
+      expect(f.providerName, 'Gemini');
+      // The two that decide what the screen says. Swapped, a reader
+      // that has never worked reads as one that never fails.
+      expect(f.read, 0);
+      expect(f.failed, 47);
+      // And the message, which is the actionable part — "unknown name
+      // strict" is the fix, not the symptom.
+      expect(f.fault, contains('unknown name'));
+      expect(f.fault, contains('strict'));
+      expect(f.n, 47);
+      expect(f.exampleRef, 'aaaa1111');
+      expect(f.firstSeen, isNotNull);
+      expect(f.lastSeen, isNotNull);
+    });
+
+    test('and the verdict follows the counts, not the other way round', () {
+      expect(ReaderFault.fromJson(row(read: 0, failed: 47)).neverWorked,
+          isTrue);
+      expect(ReaderFault.fromJson(row(read: 300, failed: 1)).neverWorked,
+          isFalse);
+      // Nothing has happened at all, which is not the same as never
+      // working and must not be dressed as it.
+      expect(ReaderFault.fromJson(row(read: 0, failed: 0)).neverWorked,
+          isFalse);
+    });
+
+    test('a count that arrives as a string is still a count', () {
+      // PostgREST returns bigint as a JSON number, but a `count(*)`
+      // has come back as a string from this stack before and a reader
+      // silently scoring zero is the failure that would cause.
+      final f = ReaderFault.fromJson(row(read: '3', failed: '2'));
+      expect(f.read, 3);
+      expect(f.failed, 2);
+    });
+  });
+
+  /// What each reader keeps saying. `0685`.
+  ///
+  /// The log below this answers "what happened to THIS scan", which is
+  /// what somebody asks when they are holding a reference. It cannot
+  /// answer the other question — fifty rows at a time, no grouping, no
+  /// provider filter — so a reader that has failed on every scan since
+  /// the day it was switched on looks exactly like one that failed
+  /// twice last Tuesday.
+  ///
+  /// The row that matters is the one where `read` is zero. `0679`'s
+  /// fallback hides it: the scan quietly goes to another reader, the
+  /// tenant gets their document, the platform pays twice, and nobody
+  /// is told.
+  group('what the readers keep saying', () {
+    Widget harness(List<ReaderFault> faults) => ProviderScope(
+          overrides: [
+            scanLogProvider.overrideWith((ref, q) async => const []),
+            scanHealthProvider.overrideWith((ref) async => ScanHealth.none),
+            readerFailuresProvider.overrideWith((ref) async => faults),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: const Scaffold(body: ScanLogAdminTab()),
+          ),
+        );
+
+    ReaderFault fault({
+      String provider = 'gemini',
+      String name = 'Gemini',
+      int read = 0,
+      int failed = 47,
+      String message = 'invalid json payload received. unknown name '
+          '"strict" at \'response_format.json_schema\': cannot find field.',
+      int n = 47,
+      String? ref = 'aaaa1111',
+    }) =>
+        ReaderFault(
+          provider: provider,
+          providerName: name,
+          read: read,
+          failed: failed,
+          fault: message,
+          n: n,
+          exampleRef: ref,
+        );
+
+    Future<void> show(WidgetTester tester, List<ReaderFault> faults) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(harness(faults));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the vendor\'s own words are on the screen', (tester) async {
+      // The whole reason this section exists. A grouped count with the
+      // message left off would say a reader is failing and not what to
+      // do about it, and "unknown name strict" is the fix.
+      await show(tester, [fault()]);
+
+      expect(find.textContaining('unknown name'), findsOneWidget);
+      expect(find.textContaining('strict'), findsOneWidget);
+    });
+
+    testWidgets('a reader that has never worked says so', (tester) async {
+      await show(tester, [fault(read: 0, failed: 47)]);
+
+      expect(find.text('never worked'), findsOneWidget);
+      // Beside the two numbers that make it a fact rather than a
+      // label. Without them this is 47 unremarkable failures.
+      expect(find.text('0 read · 47 failed'), findsOneWidget);
+      expect(find.text('×47'), findsOneWidget);
+    });
+
+    testWidgets('and a reader that mostly works does not', (tester) async {
+      // The claim that would otherwise be decoration on every row. A
+      // reader with one bad day is not a reader to go and switch off.
+      await show(tester,
+          [fault(provider: 'claude', name: 'Claude', read: 300, failed: 1, n: 1)]);
+
+      expect(find.text('never worked'), findsNothing);
+      expect(find.text('300 read · 1 failed'), findsOneWidget);
+    });
+
+    testWidgets('a reference is offered so the whole row can be found',
+        (tester) async {
+      await show(tester, [fault(ref: 'aaaa1111')]);
+      expect(find.textContaining('aaaa1111'), findsOneWidget);
+    });
+
+    testWidgets('and nothing is drawn when no reader has failed',
+        (tester) async {
+      // The ordinary case. A heading over an empty list is a page
+      // saying something is wrong when nothing is.
+      await show(tester, const []);
+
+      expect(find.text('What the readers keep saying'), findsNothing);
+      expect(find.text('never worked'), findsNothing);
+    });
   });
 }

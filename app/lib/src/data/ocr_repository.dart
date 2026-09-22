@@ -953,6 +953,69 @@ extension PlatformOcrCatalog on PlatformRepo {
       data is Map ? Map<String, dynamic>.from(data) : const {},
     );
   }
+
+  /// Per reader and distinct fault, worst first. `0685`.
+  Future<List<ReaderFault>> readerFailures({int days = 30}) async =>
+      Repo.rows(await client
+              .rpc('platform_reader_failures', params: {'p_days': days}))
+          .map(ReaderFault.fromJson)
+          .toList();
+}
+
+/// One reader, one thing it keeps saying.
+///
+/// `0685`. [read] and [failed] are the READER's totals over the window
+/// and repeat down every one of its rows, which is the whole point:
+/// `read == 0` beside a `failed` of forty-seven is a reader somebody
+/// switched on, has been paying for, and which has never once worked.
+/// Without those two numbers on the row it reads as forty-seven
+/// individually unremarkable failures.
+class ReaderFault {
+  const ReaderFault({
+    required this.provider,
+    required this.providerName,
+    required this.read,
+    required this.failed,
+    required this.fault,
+    required this.n,
+    this.firstSeen,
+    this.lastSeen,
+    this.exampleRef,
+  });
+
+  final String provider;
+  final String providerName;
+  final int read;
+  final int failed;
+
+  /// The vendor's message with the parts that differ per request taken
+  /// out — ids, hex blobs, long numbers, long quoted payload
+  /// fragments. A short quoted name is KEPT: `Unknown name "strict"`
+  /// is the fault, not noise.
+  final String fault;
+  final int n;
+  final DateTime? firstSeen;
+  final DateTime? lastSeen;
+
+  /// One reference, so the whole row can be found in the log below.
+  final String? exampleRef;
+
+  /// Switched on, paid for, and has never returned a reading.
+  bool get neverWorked => read == 0 && failed > 0;
+
+  static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  factory ReaderFault.fromJson(Map<String, dynamic> j) => ReaderFault(
+        provider: '${j['provider'] ?? ''}',
+        providerName: '${j['provider_name'] ?? j['provider'] ?? ''}',
+        read: _int(j['read']),
+        failed: _int(j['failed']),
+        fault: '${j['fault'] ?? ''}',
+        n: _int(j['n']),
+        firstSeen: DateTime.tryParse('${j['first_seen']}'),
+        lastSeen: DateTime.tryParse('${j['last_seen']}'),
+        exampleRef: j['example_ref'] as String?,
+      );
 }
 
 /// One scan, as the console is allowed to see it.

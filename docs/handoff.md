@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | what the reader got wrong |
+| Head at time of writing | what a reader keeps saying |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0684` is the highest. CI applies on green — see below |
+| Migrations | `0685` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 355 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,736 Flutter tests**, 34 deno tests |
-| API description | 781 functions, 366 tables, version `0684` |
+| Gates | 356 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,745 Flutter tests**, 34 deno tests |
+| API description | 782 functions, 366 tables, version `0685` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -576,15 +576,14 @@ corrected must not be lost because the note would not write.
 
 Established by reading the code, in the order I would take them:
 
-1. **Settle the Gemini path.** `0675` gave Gemini `kind: 'openai'`, so it
-   goes through `readOpenAiShaped`, which sends `strict: true`,
-   `max_completion_tokens` and nested `additionalProperties: false`.
-   Google's OpenAI-compatibility layer may not take all three, and
-   **nothing here has proven a Gemini scan ever returned a
-   schema-shaped answer.** The check is one query:
-   `select status, error, count(*) from ocr_scans where provider = 'gemini' group by 1,2`.
-   It needs the live database, which this session could not reach —
-   the Supabase connector was unauthorised throughout.
+1. ~~**Settle the Gemini path.**~~ Could not be settled from here, so
+   `0685` built the instrument that settles it instead — see below.
+   **Go and look at `/#/admin/scan-log`.** The question stands: `0675`
+   gave Gemini `kind: 'openai'`, so it goes through `readOpenAiShaped`
+   with `strict: true`, `max_completion_tokens` and nested
+   `additionalProperties: false`, and Google's OpenAI-compatibility
+   layer is a compatibility layer rather than the same API. Nothing
+   here has proven a Gemini scan ever came back schema-shaped.
 2. **Per-kind PDF handling.** `readOpenAiShaped` refuses
    `application/pdf` by name for everything that speaks
    chat-completions. Correct for ChatGPT and Grok when written;
@@ -612,6 +611,61 @@ Established by reading the code, in the order I would take them:
    **authorisation**. RLS answers "what may this user see"; MCP needs
    "what may this agent do on this user's behalf", which is narrower.
    That is the design question, not the server.
+
+## What a reader keeps saying
+
+`0685`. The Gemini question above could not be answered from the
+container this was built in: the egress proxy blocks `ai.google.dev`
+**and** the Supabase project, so neither Google's documentation nor the
+live scan history was reachable. Writing a native Gemini client against
+remembered field names would have been the same failure that produced
+the `required` regression — silent at every layer this repository
+controls and loud only at the vendor.
+
+So the instrument got built instead, and it is the better artefact
+anyway.
+
+### Why the scan log could not answer it
+
+`0680`'s log answers *"what happened to THIS scan"*, which is what
+somebody asks holding a reference number. Fifty rows at a time, no
+grouping, no provider filter. So a reader that has failed on every scan
+since the day it was switched on looks exactly like a reader that
+failed twice last Tuesday — and `0679`'s fallback hides even that: the
+scan quietly goes to another reader, the tenant gets their document,
+**the platform pays twice**, and the only trace is a row nobody groups.
+
+`public.platform_reader_failures(days)` is one row per reader and
+distinct fault, carrying that reader's `read` and `failed` totals down
+every row. `read = 0` beside `failed = 47` is the row that matters, and
+it sorts first. On `/#/admin/scan-log`, above the search box, drawing
+nothing at all when no reader has failed.
+
+### The normalisation is the whole thing, in both directions
+
+Group on the raw vendor text and every scan is its own group — four
+hundred identical failures read as four hundred unrelated problems,
+which is the same as reading as nothing. So ids, hex blobs, digit runs
+of six or more and long quoted payload fragments are replaced, and
+spacing is collapsed.
+
+Over-normalise and it lies the other way. Two rules exist because of
+that:
+
+- **Short numbers are kept.** `HTTP 400` and `HTTP 429` are a schema
+  this code sent wrongly and a quota somebody has to go and raise —
+  different people, different afternoons.
+- **Short quoted names are kept**, and only quoted runs of 40+
+  characters go. `Unknown name "strict"` is the *fault*; the quoted
+  word is the single most useful thing in the message and the only
+  thing distinguishing it from `Unknown name "max_completion_tokens"`.
+  The first version replaced both and merged two different faults into
+  one line. `supabase/tests/reader_failures.sql` caught it.
+
+A mutation run also caught a real gap on the Dart side: the screen
+tests built `ReaderFault` directly, so nothing read `fromJson`, and
+swapping `read` and `failed` on the way in passed every test while
+inverting the one claim the section exists to make.
 
 ## This session's commits
 

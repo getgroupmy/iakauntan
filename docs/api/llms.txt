@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0684` (the highest applied migration).
-781 functions and 366 readable tables, of which
-301 functions only read.
+Schema version `0685` (the highest applied migration).
+782 functions and 366 readable tables, of which
+302 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**639 of 781 functions carry a `comment on
+**640 of 782 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (569)
+### general (570)
 
 Not gated on any module.
 
@@ -690,6 +690,7 @@ Not gated on any module.
 - `platform_payment_gateways()`
 - `platform_promotions()`
 - `platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` *(writes)* — Publishes a statutory rate table -- EPF, SOCSO, EIS or PCB -- that EVERY company's payroll is then computed from.
+- `platform_reader_failures(p_days integer)` — Per reader and distinct fault: how often, when it started, when it last happened, and one reference to look up.
 - `platform_reservations()`
 - `platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` *(writes)* — Holds a name on our domain -- for a company, for the platform's own use, or parked so nobody else takes it.
 - `platform_restore_account(p_closure_id uuid, p_note text)` *(writes)* — Brings a closed login, company or ledger account back.

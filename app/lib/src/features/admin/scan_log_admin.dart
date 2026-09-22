@@ -83,6 +83,14 @@ class _ScanLogAdminTabState extends ConsumerState<ScanLogAdminTab> {
             children: [
               _Health(health: health.value ?? ScanHealth.none),
               const SizedBox(height: Space.md),
+              // What each reader keeps saying. `0685`. Above the search
+              // box because it answers a question nobody arrives here
+              // holding a reference for -- and the scan log below, by
+              // design, cannot: fifty rows at a time, no grouping and
+              // no provider filter, so a reader that has failed on
+              // every scan since the day it was switched on looks
+              // exactly like a reader that failed twice last Tuesday.
+              _ReaderFaults(faults: ref.watch(readerFailuresProvider)),
               TextField(
                 key: const ValueKey('scan-log-search'),
                 controller: _search,
@@ -203,6 +211,113 @@ class _Health extends StatelessWidget {
           warn: health.unsettled > 0,
         ),
       ],
+    );
+  }
+}
+
+/// What each reader keeps saying, and whether it has ever worked.
+///
+/// `0685`. The row that matters is the one where `read` is zero: a
+/// reader switched on in the console, charged for on every scan, that
+/// has never once returned a reading. `0679`'s fallback hides it --
+/// the scan quietly goes to another reader, the tenant gets their
+/// document, the platform pays twice, and the only trace is a row in a
+/// log nobody groups.
+///
+/// Draws nothing at all when no reader has failed, which is the
+/// ordinary case and should not cost a heading.
+class _ReaderFaults extends StatelessWidget {
+  const _ReaderFaults({required this.faults});
+
+  final AsyncValue<List<ReaderFault>> faults;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = faults.value ?? const <ReaderFault>[];
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('What the readers keep saying',
+            style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 2),
+        Text(
+          'The last 30 days, grouped. A reader with nothing in '
+          '"read" has never once worked.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: Space.sm),
+        for (final f in rows)
+          Padding(
+            key: ValueKey('reader-fault-${f.provider}-${f.n}'),
+            padding: const EdgeInsets.only(bottom: Space.sm),
+            child: _FaultRow(fault: f),
+          ),
+        const SizedBox(height: Space.md),
+      ],
+    );
+  }
+}
+
+class _FaultRow extends StatelessWidget {
+  const _FaultRow({required this.fault});
+
+  final ReaderFault fault;
+
+  @override
+  Widget build(BuildContext context) {
+    final never = fault.neverWorked;
+    final colour =
+        never ? context.colors.danger : context.colors.warning;
+
+    return Container(
+      padding: const EdgeInsets.all(Space.sm),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Wrap rather than Row: the reader's name, its two counts and
+          // the verdict are four chips and a phone is 360 wide.
+          Wrap(
+            spacing: Space.sm,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(fault.providerName,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('${fault.read} read · ${fault.failed} failed',
+                  style: Theme.of(context).textTheme.bodySmall),
+              if (never)
+                Text('never worked',
+                    style: TextStyle(
+                        color: colour,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+              Text('×${fault.n}',
+                  style: TextStyle(color: colour, fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // The vendor's own words. Three lines is enough to tell which
+          // fault it is; the whole thing is on the row in the log, and
+          // the reference beside it is how to get there.
+          Text(
+            fault.fault,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (fault.exampleRef != null) ...[
+            const SizedBox(height: 4),
+            Text('Search ${fault.exampleRef} below for one of them',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ],
+      ),
     );
   }
 }

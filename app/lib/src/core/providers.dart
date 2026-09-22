@@ -3284,6 +3284,12 @@ final scanHealthProvider = FutureProvider.autoDispose<ScanHealth>(
   (ref) => ref.watch(platformRepoProvider).scanHealth(),
 );
 
+/// What each reader keeps saying, worst first. `0685`.
+final readerFailuresProvider =
+    FutureProvider.autoDispose<List<ReaderFault>>(
+  (ref) => ref.watch(platformRepoProvider).readerFailures(),
+);
+
 /// The three calls a reader's key pool needs.
 ///
 /// On the CLIENT rather than on a repository. `Repo` does not exist
