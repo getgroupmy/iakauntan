@@ -552,7 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The DIALOGS backlog — 64 of 121 openers left. In progress.**
+0a. **The DIALOGS backlog — 60 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet
    classes**, more than there are screens, which the screens gate
@@ -562,7 +562,7 @@ deal with, and the estimate screen is honest about not knowing.
    classes are private, so a gate demanding `_MappingDialog` be
    constructed would be unsatisfiable for 89% of the surface. The way
    in is the way the app goes in: `showFsMapping(context)`,
-   `showPersonEditor(context, person: ...)`. 121 of those exist; 57
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 61
    are covered.
 
    `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
@@ -576,7 +576,7 @@ deal with, and the estimate screen is honest about not knowing.
    it by hand — the gate refuses a stale entry in both directions, so
    it self-checks.
 
-   **Nine defects so far, and the reason some of them cluster here.** A
+   **Ten defects so far, and the reason some of them cluster here.** A
    dialog's box is the screen LESS its insets LESS its content
    padding, so about 284px on a 412px phone. The identical `ListTile`
    row throws inside a dialog at 412 and draws on a screen at 360 —
@@ -632,6 +632,10 @@ deal with, and the estimate screen is honest about not knowing.
      name different days anywhere that does. One way now, and
      `corp_register_test.dart` asserts the two agree across five
      dates.
+   - `hire_dialog.dart` pre-filled the salary box with
+     `double.toString()`, so an expectation of RM 4,800.50 arrived as
+     "4800.5" — one decimal place in a money box. `toStringAsFixed(2)`,
+     which is what the asset editor's cost field already did.
 
    **Traps, each paid for once:**
 

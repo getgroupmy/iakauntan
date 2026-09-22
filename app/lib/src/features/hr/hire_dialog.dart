@@ -54,7 +54,13 @@ class _HireDialogState extends ConsumerState<_HireDialog> {
     super.initState();
     // The salary they asked for, as the starting point rather than the
     // answer: it is the number the conversation was about.
-    _salary.text = a.expectedSalary?.toString() ?? '';
+    //
+    // Two decimals, not `toString()`. A `double` prints 4800.0 as
+    // "4800.0" and 4800.50 as "4800.5", so a money box opened on an
+    // expectation of four thousand eight hundred ringgit and fifty sen
+    // showed five sen's worth of digits. The asset editor's cost field
+    // already does it this way.
+    _salary.text = a.expectedSalary?.toStringAsFixed(2) ?? '';
     // The earliest day they could actually start, where they owe
     // notice. Defaulting to today would propose a date the candidate
     // has already told us they cannot make.

@@ -24,6 +24,9 @@ import 'package:iakauntan/src/features/documents/void_document.dart';
 import 'package:iakauntan/src/features/settings/einvoice_credentials.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/hr/expiring_documents.dart';
+import 'package:iakauntan/src/features/hr/departure_dialog.dart';
+import 'package:iakauntan/src/features/hr/hire_dialog.dart';
+import 'package:iakauntan/src/features/hr/leave_bands_dialog.dart';
 import 'package:iakauntan/src/features/items/item_categories_dialog.dart';
 import 'package:iakauntan/src/features/items/stock_card_dialog.dart';
 import 'package:iakauntan/src/features/ledger/journal_editor.dart';
@@ -3391,6 +3394,348 @@ void main() {
         find.text('Triggers enhanced due diligence under the AMLA'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('joining, leaving, and the days in between', () {
+    testWidgets('a hire proposes the earliest day the notice allows',
+        (tester) async {
+      // Defaulting to today would propose a date the candidate has
+      // already said they cannot make. Thirty days' notice means the
+      // box opens on today plus thirty, and the sentence names the
+      // employer they owe it to.
+      final today = DateTime.now();
+      final earliest =
+          DateTime(today.year, today.month, today.day + 30);
+
+      await opened(
+        tester,
+        [
+          departmentsProvider.overrideWith((ref) async => const [
+                {'id': 'd1', 'name': 'Finance'},
+              ]),
+          positionsProvider.overrideWith((ref) async => const [
+                {'id': 'ps1', 'title': 'Account Executive'},
+              ]),
+          directoryProvider.overrideWith((ref) async => [
+                Employee(
+                  id: 'em1',
+                  employeeNo: 'E-0001',
+                  fullName: 'Nurul Huda',
+                ),
+              ]),
+        ],
+        (context) => showHireDialog(
+          context,
+          Applicant(
+            id: 'ap1',
+            fullName: 'Tan Chee Keong',
+            status: 'offer',
+            email: 'tan@example.com',
+            phone: '012-3456789',
+            nric: '900101-14-5555',
+            expectedSalary: 4800,
+            noticePeriodDays: 30,
+            currentEmployer: 'Syarikat Lama Sdn Bhd',
+          ),
+        ),
+      );
+
+      expect(find.text('Hire Tan Chee Keong'), findsOneWidget);
+      // What carries across untouched, said out loud so nobody opens
+      // the employee editor afterwards and types it again.
+      expect(
+        find.text('tan@example.com · 012-3456789 · 900101-14-5555'),
+        findsOneWidget,
+      );
+      expect(find.text('Starts: ${Fmt.date(earliest)}'), findsOneWidget);
+      expect(
+        find.textContaining("They owe 30 days' notice to Syarikat Lama "
+            'Sdn Bhd, so the earliest is ${Fmt.date(earliest)}'),
+        findsOneWidget,
+      );
+      // The salary they asked for is the starting point, not the
+      // answer — so it is in the box AND named in the helper.
+      expect(find.text('They asked for RM 4,800.00'), findsOneWidget);
+      // Two decimals in the box. `double.toString()` would put "4800.0"
+      // here, and an expectation of 4,800.50 in as "4800.5".
+      expect(find.text('4800.00'), findsOneWidget);
+      // Nothing to explain: the proposed date is not inside the notice.
+      expect(
+        find.widgetWithText(TextField, 'Why the date stands *'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('and half a ringgit of expectation survives the box',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          departmentsProvider.overrideWith((ref) async => const []),
+          positionsProvider.overrideWith((ref) async => const []),
+          directoryProvider.overrideWith((ref) async => const <Employee>[]),
+        ],
+        (context) => showHireDialog(
+          context,
+          Applicant(
+            id: 'ap3',
+            fullName: 'Chandran Pillai',
+            status: 'offer',
+            expectedSalary: 4800.50,
+          ),
+        ),
+      );
+
+      expect(find.text('4800.50'), findsOneWidget);
+      expect(find.text('They asked for RM 4,800.50'), findsOneWidget);
+    });
+
+    testWidgets('and somebody between jobs is not told a rule was applied',
+        (tester) async {
+      // No notice owed means no earliest date, and the honest answer is
+      // silence rather than "today" — which would read as a rule.
+      await opened(
+        tester,
+        [
+          departmentsProvider.overrideWith((ref) async => const []),
+          positionsProvider.overrideWith((ref) async => const []),
+          directoryProvider.overrideWith((ref) async => const <Employee>[]),
+        ],
+        (context) => showHireDialog(
+          context,
+          Applicant(
+            id: 'ap2',
+            fullName: 'Lee Mei Fong',
+            status: 'offer',
+          ),
+        ),
+      );
+
+      expect(find.text('Hire Lee Mei Fong'), findsOneWidget);
+      expect(find.text('Starts: ${Fmt.date(DateTime.now())}'), findsOneWidget);
+      expect(find.textContaining("notice"), findsNothing);
+      // No expected salary means no helper claiming they asked for
+      // nothing.
+      expect(find.textContaining('They asked for'), findsNothing);
+    });
+
+    testWidgets('a departure says the payroll goes by the date, not the '
+        'status', (tester) async {
+      // `0371`: `calculate_payroll_run` has never read
+      // `employment_status` — it picks who to pay by
+      // `last_working_date`. A leaver marked in the dropdown alone kept
+      // drawing a salary, kept having EPF and PCB remitted, and kept
+      // being paid by the bank file. The sentence under the empty date
+      // field is the whole point of this dialog.
+      await opened(
+        tester,
+        const [],
+        (context) => showDepartureDialog(
+          context,
+          employee: Employee(
+            id: 'em1',
+            employeeNo: 'E-0004',
+            fullName: 'Rajesh Kumar',
+            hireDate: DateTime(2022, 4, 1),
+          ),
+        ),
+      );
+
+      expect(find.text('Rajesh Kumar is leaving'), findsOneWidget);
+      expect(
+        find.text('The payroll run goes by this date, not by the status.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('A last working day is what takes somebody off '
+            'the payroll'),
+        findsOneWidget,
+      );
+      final record = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Record departure'));
+      expect(record.onPressed, isNull);
+    });
+
+    testWidgets('and asks when notice was given only of a resignation',
+        (tester) async {
+      // A termination and a retirement have no notice date, and `0371`
+      // writes null for both regardless — so asking would invite a date
+      // that means nothing.
+      await opened(
+        tester,
+        const [],
+        (context) => showDepartureDialog(
+          context,
+          employee: Employee(
+            id: 'em1',
+            employeeNo: 'E-0004',
+            fullName: 'Rajesh Kumar',
+            hireDate: DateTime(2022, 4, 1),
+          ),
+        ),
+      );
+
+      expect(find.text('Notice given on'), findsOneWidget);
+
+      await tester.tap(
+          find.widgetWithText(DropdownButtonFormField<String>, 'How'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Terminated').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notice given on'), findsNothing);
+
+      await tester.tap(
+          find.widgetWithText(DropdownButtonFormField<String>, 'How'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Retired').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notice given on'), findsNothing);
+      // 'Serving notice' is never offered: it is "has resigned and the
+      // last day has not come", which the database derives.
+      expect(find.text('Serving notice'), findsNothing);
+    });
+
+    testWidgets('leave bands say what everybody gets without them',
+        (tester) async {
+      // `leave_entitlement_bands` sat in the schema empty and
+      // unreachable, so every leave type fell back to its flat
+      // `default_days` — below the Act's floor for anyone past two
+      // years. The dialog has to say that is what is happening.
+      await opened(
+        tester,
+        [
+          leaveBandsProvider.overrideWith((ref, id) async => const []),
+        ],
+        (context) => showLeaveBands(context, const {
+          'id': 'lt1',
+          'name': 'Annual leave',
+          'default_days': 8,
+          'scales_with_service': false,
+        }),
+      );
+
+      expect(find.text('Annual leave · entitlement'), findsOneWidget);
+      expect(
+        find.textContaining('everybody gets 8 days no matter how long they '
+            'have been here'),
+        findsOneWidget,
+      );
+      expect(find.text('No bands — the flat figure applies.'), findsOneWidget);
+      // And a type that does not scale yet is told that a preset turns
+      // it on and a hand-added band does not.
+      expect(
+        find.textContaining('Applying a preset turns that on; adding a band '
+            'by hand does not'),
+        findsOneWidget,
+      );
+      // The presets name the SECTION, so somebody can check them
+      // against the Act rather than against this screen.
+      expect(
+        find.text('Annual — 8 / 12 / 16 days (s.60E)'),
+        findsOneWidget,
+      );
+      expect(find.text('Sick — 14 / 18 / 22 days (s.60F)'), findsOneWidget);
+    });
+
+    testWidgets('and a top band reads as open-ended, not as a range',
+        (tester) async {
+      // "5 years and over" against "2 to 4 years": a null upper bound
+      // is the top band, and printing it as a range to nothing is how
+      // somebody past it reads themselves out of any band at all.
+      await opened(
+        tester,
+        [
+          leaveBandsProvider.overrideWith((ref, id) async => const [
+                {
+                  'id': 'b1',
+                  'service_years_from': 0,
+                  'service_years_to': 1,
+                  'days': 8,
+                },
+                {
+                  'id': 'b2',
+                  'service_years_from': 2,
+                  'service_years_to': 4,
+                  'days': 12,
+                },
+                {
+                  'id': 'b3',
+                  'service_years_from': 5,
+                  'service_years_to': null,
+                  'days': 16,
+                },
+              ]),
+        ],
+        (context) => showLeaveBands(context, const {
+          'id': 'lt1',
+          'name': 'Annual leave',
+          'default_days': 8,
+          'scales_with_service': true,
+        }),
+      );
+
+      expect(find.text('0 to 1 years'), findsOneWidget);
+      expect(find.text('2 to 4 years'), findsOneWidget);
+      expect(find.text('5 years and over'), findsOneWidget);
+      expect(find.text('16 days'), findsOneWidget);
+      expect(find.text('No bands — the flat figure applies.'), findsNothing);
+      // Already scaling, so the warning is gone.
+      expect(
+        find.textContaining('does not scale with service yet'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a renewal has to run past the document it replaces',
+        (tester) async {
+      // A work permit renewed to a date inside the one it replaces is a
+      // renewal that shortens the permit, and it would drop off the
+      // expiring list while expiring sooner than before.
+      await opened(
+        tester,
+        const [],
+        (context) => showRenewDocument(
+          context,
+          documentId: 'doc1',
+          currentExpiry: DateTime(2027, 6, 30),
+        ),
+      );
+
+      expect(find.text('Renew it'), findsOneWidget);
+      expect(
+        find.textContaining('This one runs to 30/06/2027. The renewal '
+            'replaces it, and it drops off the expiring list.'),
+        findsOneWidget,
+      );
+      // Nothing chosen yet, so the field is not yet in error — the
+      // refusal belongs to a date somebody picked, not to a blank.
+      expect(
+        find.textContaining('A renewal runs past the document it replaces'),
+        findsNothing,
+      );
+      expect(find.text('Choose a date'), findsOneWidget);
+    });
+
+    testWidgets('and a document with no expiry is simply replaced',
+        (tester) async {
+      await opened(
+        tester,
+        const [],
+        (context) => showRenewDocument(
+          context,
+          documentId: 'doc2',
+          currentExpiry: null,
+        ),
+      );
+
+      expect(
+        find.text('The renewal replaces this document.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('drops off the expiring list'), findsNothing);
     });
   });
 }
