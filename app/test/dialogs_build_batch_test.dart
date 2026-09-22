@@ -15,11 +15,15 @@ import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/hr/expiring_documents.dart';
 import 'package:iakauntan/src/features/items/item_categories_dialog.dart';
 import 'package:iakauntan/src/features/items/stock_card_dialog.dart';
+import 'package:iakauntan/src/features/ledger/journal_editor.dart';
 import 'package:iakauntan/src/features/loyalty/loyalty_tiers_dialog.dart';
 import 'package:iakauntan/src/features/ticketing/ticket_routing_sheet.dart';
 import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
+import 'package:iakauntan/src/features/pos/offline_controller.dart';
+import 'package:iakauntan/src/features/pos/offline_problems_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
+import 'package:iakauntan/src/features/pos/sold_out_dialog.dart';
 
 /// Dialogs and sheets that nothing had ever opened.
 ///
@@ -65,6 +69,43 @@ void main() {
                 child: FilledButton(
                   key: const ValueKey('open'),
                   onPressed: () => open(context),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open')));
+    await tester.pumpAndSettle();
+  }
+
+  /// The same, for an opener that wants a `WidgetRef` too.
+  ///
+  /// `showJournalEditor` takes one. A `Builder` cannot supply it, so
+  /// the button lives inside a `Consumer` instead — which is what the
+  /// screens that open it do.
+  Future<void> openedWithRef(
+    WidgetTester tester,
+    List<Override> overrides,
+    void Function(BuildContext context, WidgetRef ref) open,
+  ) async {
+    tester.view.physicalSize = const Size(412, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: overrides,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  key: const ValueKey('open'),
+                  onPressed: () => open(context, ref),
                   child: const Text('open'),
                 ),
               ),
@@ -1214,6 +1255,152 @@ void main() {
             'and is corrected by a stock take'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('the journal editor', () {
+    testWidgets('opens, and stacks each line on a phone', (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          accountsProvider.overrideWith(
+            (ref) async => [
+              Account(
+                id: 'a1',
+                code: '1000',
+                name: 'Cash at bank',
+                accountType: 'asset',
+                accountSubtype: 'cash',
+              ),
+              Account(
+                id: 'a2',
+                code: '4000',
+                name: 'Sales',
+                accountType: 'revenue',
+                accountSubtype: 'sales',
+              ),
+            ],
+          ),
+          departmentsProvider.overrideWith((ref) async => []),
+          projectsProvider.overrideWith((ref) async => []),
+        ],
+        showJournalEditor,
+      );
+      // Debit and Credit are on their own row under the account and
+      // the narrative, rather than beside them in two 110px boxes —
+      // `MediaQuery.sizeOf` in a dialog reports the SCREEN, so the
+      // `< 700` branch is about the phone and engages here. This
+      // dialog is the one that already got that right, which is why it
+      // is worth a test rather than a fix.
+      expect(find.text('Debit'), findsWidgets);
+      expect(find.text('Credit'), findsWidgets);
+      final debit = tester.getRect(find.text('Debit').first);
+      final credit = tester.getRect(find.text('Credit').first);
+      expect(debit.top, credit.top);
+      expect(debit.right, lessThanOrEqualTo(412));
+      expect(credit.right, lessThanOrEqualTo(412));
+    });
+  });
+
+  group('what the tills could not land', () {
+    testWidgets('opens, and counts only the sales that took money',
+        (tester) async {
+      // The distinction the dialog exists for: a refused payload with
+      // nothing on it is a bug in the till, not a hole in the takings.
+      // Both are shown; only one is counted into the figure a manager
+      // acts on.
+      await opened(
+        tester,
+        [
+          posOfflineProblemsProvider.overrideWith(
+            (ref) async => [
+              {
+                'register': 'Counter 1',
+                'taken_at': '2026-09-20T03:15:00Z',
+                'total': 128.50,
+                'message': 'Item KOPI-01 is not on this outlet\'s menu.',
+              },
+              {
+                'register': 'Counter 2',
+                'taken_at': '2026-09-20T04:00:00Z',
+                'total': 61.00,
+                'error_code': '23503',
+              },
+              {
+                'register': 'Counter 2',
+                'taken_at': '2026-09-20T04:05:00Z',
+                'total': 0,
+                'message': 'Empty basket.',
+              },
+            ],
+          ),
+        ],
+        showOfflineProblems,
+      );
+      expect(find.text('What the tills could not land'), findsOneWidget);
+      // Two of the three took money: 128.50 + 61.00.
+      expect(
+        find.text('2 sales worth RM 189.50 never landed.'),
+        findsOneWidget,
+      );
+      // The server's own sentence where there is one...
+      expect(
+        find.text('Item KOPI-01 is not on this outlet\'s menu.'),
+        findsOneWidget,
+      );
+      // ...and the SQLSTATE only where there is not. A code tells a
+      // shop manager nothing, but it beats a blank line.
+      expect(find.text('Refused: 23503'), findsOneWidget);
+      // A till with no name still identifies its row by time.
+      expect(find.textContaining('Counter 1 · '), findsOneWidget);
+    });
+
+    testWidgets('and a list where nothing took money says that',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          posOfflineProblemsProvider.overrideWith(
+            (ref) async => [
+              {'register': 'Counter 1', 'total': 0, 'message': 'Empty.'},
+            ],
+          ),
+        ],
+        showOfflineProblems,
+      );
+      // Not "0 sales worth RM 0.00", which reads as a hole of nothing
+      // rather than as no hole at all.
+      expect(find.text('Nothing took money.'), findsOneWidget);
+      // And the row is LISTED rather than hidden: a till sending an
+      // empty basket is a bug worth seeing, just not worth counting.
+      // Asserted here rather than beside the other two, because the
+      // paragraph above the list pushes a third row past the viewport
+      // and a `ListView` does not build what it cannot reach.
+      expect(find.text('nothing on it'), findsOneWidget);
+    });
+
+    testWidgets('and an empty list says every sale has since landed',
+        (tester) async {
+      await opened(
+        tester,
+        [posOfflineProblemsProvider.overrideWith((ref) async => [])],
+        showOfflineProblems,
+      );
+      expect(find.text('Everything landed'), findsOneWidget);
+    });
+  });
+
+  group('sold out', () {
+    testWidgets('opens', (tester) async {
+      await opened(
+        tester,
+        [
+          posStoppedItemsProvider('o1').overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(true),
+        ],
+        (context) => showSoldOut(context, 'o1'),
+      );
+      expect(find.byType(AlertDialog), findsOneWidget);
     });
   });
 }
