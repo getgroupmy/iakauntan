@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `09f2c4f6` |
-| CI | green through run 2026 (`ce3630fe`); 2027 and 2028 were running when this was written — **every migration to `0674` is live** |
+| Head at time of writing | `9b82619e` |
+| CI | green through run 2032 (`cf784b49`); 2033–2037 were running when this was written — **every migration to `0674` is live** |
 | Migrations | `0674` is the highest (the tax tile on the home screen). **Nothing since `b635b4b0` touches the database** — the eight commits after it are Dart, tests and gates only |
 | Live database | **level with the branch.** Nothing is waiting |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 348 SQL assertion files, **44 Python gates (+10 gate self-tests)**, **5,383 Flutter tests**, 32 deno tests |
+| Gates | 348 SQL assertion files, **44 Python gates (+10 gate self-tests)**, **5,407 Flutter tests**, 32 deno tests |
 | API description | 766 functions, 364 tables, version `0674` — unchanged, because no migration has been added |
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
@@ -144,6 +144,13 @@ in the commit message — read those rather than the diff.
 
 | SHA | What |
 | --- | --- |
+| `9b82619` | **Fix: a ticket could not be replied to from a phone** |
+| `c086398` | **Fix: a payroll run number went 55px off — the same shape again** |
+| `964997d` | Stalls and scales; five real ones left |
+| `5efb0df` | Email and delivery setup; seven real ones left |
+| `cf784b4` | Recipes and cash flow; nine real ones left |
+| `675f351` | Transfers and Onboarding; eleven real ones left |
+| `e455910` | The handoff, through the screens-built stretch |
 | `09f2c4f` | People and profile built; fifteen left, two of which cannot be |
 | `b1c0773` | Six more screens built; the backlog is down to seventeen |
 | `df99117` | **Fix: `Uri.base.origin` throws on a phone, and four screens called it** |
@@ -535,32 +542,41 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The screens-built backlog — thirteen left, and it is paying.**
+0a. **The screens-built backlog — TWO left, and it found six defects.**
    `scripts/check_screens_built.py` requires every `*Screen` under
    `app/lib/src/features` to be constructed by at least one test. It
    went in with **thirty-eight** exemptions, explicitly a backlog
-   rather than a decision, and is now at **fifteen** — of which
+   rather than a decision, and is now at **four** — of which
    `_PreviewScreen` and `_RequestAccessScreen` are private classes
-   that no test outside their own library can name, so **thirteen is
-   the real number and fifteen is where the count stops.**
+   that no test outside their own library can name, so **two is the
+   real number and four is where the count stops.**
 
-   Still listed: CashFlow, DeliverySetup, Email, Filing, HrSetup,
-   Onboarding, PayrollRun, Payroll, Recipes, Scales, Stalls, Ticket,
-   Transfers.
+   Still listed and still work: **`FilingScreen`** (one financial
+   statement, ~800 lines, a dozen providers) and **`HrSetupScreen`**
+   (the tabbed HR setup, ~980 lines). Both are big; neither is hard.
 
-   **Putting a screen on a surface for the first time found four real
-   defects in four batches**, none of which any gate or the analyser
-   could see:
+   **Putting a screen on a surface for the first time found SIX real
+   defects**, none of which any gate or the analyser could see:
 
    - the expenses app bar overflowed by 104px at 412 wide;
    - the leads filter bar put a horizontal `ListView` inside
      `FilterBar`, which is a horizontal scroll view — it threw in
      `performResize` on every build and had **never once drawn**;
    - a matter number and its status chip overflowed by 37px;
+   - a payroll run number and its chip overflowed by 55px — the
+     identical shape, four commits later, and
+     `check_narrow_rows.py` passed both for the identical reason;
    - `menu_links_screen.dart` called `Uri.base.origin` inside `build`,
      which throws on every native run, so the published-menus list was
      a column of grey error boxes on the phone and perfect in a
-     browser.
+     browser;
+   - and the worst: the ticket reply box overflowed by **252px**, so
+     Send was entirely off the right edge and **a ticket could not be
+     replied to from a phone at all.** A release build clips that
+     silently, so the button was not broken-looking, it was absent.
+
+   Five of the six are invisible to a browser, which is where this app
+   is mostly looked at. That is the whole argument for the method.
 
    `app/test/screens_build_batch_test.dart` is the pattern. Build at
    **412x900** — an overflow is a test failure needing no assertion —
