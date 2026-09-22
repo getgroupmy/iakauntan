@@ -24,6 +24,34 @@ import 'ssm_query_hints.dart';
 /// somebody has to clean up later. So a missing supplier is a question,
 /// with the details on screen before the press.
 
+/// Which side of the ledger a scan is being filed on, and the words
+/// for it.
+///
+/// `0682`. All of this was written for suppliers and every sentence in
+/// it said so, which is why the Scan action was hidden on the sales
+/// screens: enabling it there would have asked somebody "which
+/// supplier?" about their own customer.
+///
+/// A record rather than two copies of the file. The work is identical —
+/// look the name up, suggest the near ones, offer to create — and the
+/// only difference is the noun and which `contact_type` is searched.
+class ScanContactKind {
+  const ScanContactKind._(this.type, this.one, this.One);
+
+  /// The `contact_type` searched and written.
+  final String type;
+
+  /// Lower case, mid-sentence: "Create this supplier".
+  final String one;
+
+  /// Capitalised, at the start of one: "Supplier not found".
+  // ignore: non_constant_identifier_names
+  final String One;
+
+  static const supplier = ScanContactKind._('supplier', 'supplier', 'Supplier');
+  static const customer = ScanContactKind._('customer', 'customer', 'Customer');
+}
+
 /// What came of trying to find the supplier.
 enum SupplierOutcome {
   /// Found, or created, and the identifier is on [SupplierMatch.contactId].
@@ -47,8 +75,9 @@ class SupplierMatch {
 Future<SupplierMatch> resolveSupplier(
   BuildContext context,
   WidgetRef ref,
-  OcrExtraction? read,
-) async {
+  OcrExtraction? read, {
+  ScanContactKind kind = ScanContactKind.supplier,
+}) async {
   final name = read?.supplierName?.trim();
   if (name == null || name.isEmpty) {
     return const SupplierMatch(SupplierOutcome.ask);
@@ -64,7 +93,7 @@ Future<SupplierMatch> resolveSupplier(
     // after the name finds nothing — hence the narrowing below rather
     // than a single clever query.
     candidates = await repo.contacts(
-      type: 'supplier',
+      type: kind.type,
       search: _searchable(name),
     );
   } catch (_) {
@@ -108,7 +137,7 @@ Future<SupplierMatch> resolveSupplier(
   if (near.isEmpty) {
     try {
       near = rankedLikeName(
-        await repo.contacts(type: 'supplier'),
+        await repo.contacts(type: kind.type),
         name,
         read?.supplierRegistrationNo,
       );
@@ -124,7 +153,7 @@ Future<SupplierMatch> resolveSupplier(
   // be the screen asking twice.
   final answer = await showDialog<Object>(
     context: context,
-    builder: (_) => _SupplierNotFound(read: read!, near: near),
+    builder: (_) => _SupplierNotFound(read: read!, near: near, kind: kind),
   );
 
   if (answer is Contact) {
@@ -136,7 +165,7 @@ Future<SupplierMatch> resolveSupplier(
       if (!context.mounted) {
         return const SupplierMatch(SupplierOutcome.discarded);
       }
-      final id = await createSupplierFromScan(context, ref, read);
+      final id = await createSupplierFromScan(context, ref, read, kind: kind);
       return id == null
           ? const SupplierMatch(SupplierOutcome.discarded)
           : SupplierMatch(SupplierOutcome.resolved, id);
@@ -245,16 +274,17 @@ const _generic = {
 Future<String?> createSupplierFromScan(
   BuildContext context,
   WidgetRef ref,
-  OcrExtraction? read,
-) async {
+  OcrExtraction? read, {
+  ScanContactKind kind = ScanContactKind.supplier,
+}) async {
   // Reviewed and CORRECTED before it is written, not after. See
   // `_SupplierDraft`.
   final draft = await showDialog<_Draft>(
     context: context,
-    builder: (_) => _SupplierDraft(read: read),
+    builder: (_) => _SupplierDraft(read: read, kind: kind),
   );
   if (draft == null || !context.mounted) return null;
-  return _create(context, ref, draft.read, draft.ssm);
+  return _create(context, ref, draft.read, draft.ssm, kind);
 }
 
 /// What the review dialog hands back.
@@ -338,9 +368,14 @@ String _digits(String s) =>
 enum _NotFoundAnswer { create, choose, discard }
 
 class _SupplierNotFound extends StatelessWidget {
-  const _SupplierNotFound({required this.read, required this.near});
+  const _SupplierNotFound({
+    required this.read,
+    required this.near,
+    this.kind = ScanContactKind.supplier,
+  });
 
   final OcrExtraction read;
+  final ScanContactKind kind;
 
   /// Anything the search turned up that was not good enough to call a
   /// match. Shown because "supplier not found" is hard to believe when
@@ -363,7 +398,7 @@ class _SupplierNotFound extends StatelessWidget {
       // underneath it, and a heading that contradicts its own dialog is
       // how somebody presses Create without reading further.
       title: Text(
-        near.isEmpty ? 'Supplier not found' : 'Is it one of these?',
+        near.isEmpty ? '${kind.One} not found' : 'Is it one of these?',
       ),
       content: SizedBox(
         width: 420,
@@ -376,8 +411,8 @@ class _SupplierNotFound extends StatelessWidget {
                 near.isEmpty
                     ? 'Nothing on file matches this document. It can be '
                           'created from what was read:'
-                    : 'No supplier matches this document exactly. What the '
-                          'document says:',
+                    : 'No ${kind.one} matches this document exactly. What '
+                          'the document says:',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: Space.md),
@@ -479,10 +514,10 @@ class _SupplierNotFound extends StatelessWidget {
                           ),
                         ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Tap one to use it. Create a new supplier only if '
-                        'none of these is the same company.',
-                        style: TextStyle(fontSize: 12),
+                      Text(
+                        'Tap one to use it. Create a new ${kind.one} only '
+                        'if none of these is the same company.',
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ],
                   ),
@@ -523,6 +558,7 @@ Future<String?> _create(
   WidgetRef ref,
   OcrExtraction read,
   SsmEntity? ssm,
+  ScanContactKind kind,
 ) async {
   final repo = ref.read(repoProvider)!;
   final messenger = ScaffoldMessenger.of(context);
@@ -549,7 +585,7 @@ Future<String?> _create(
         id: '',
         code: '',
         name: clean(read.supplierName) ?? '',
-        contactType: 'supplier',
+        contactType: kind.type,
         registrationNo: clean(read.supplierRegistrationNo),
         // The SSM number is also what identifies the party on an
         // e-Invoice, so it seeds the identity field rather than leaving it
@@ -583,7 +619,7 @@ Future<String?> _create(
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              'Supplier created, but the register check was not '
+              '${kind.One} created, but the register check was not '
               'recorded: ${e.userMessage}',
             ),
           ),
@@ -593,7 +629,7 @@ Future<String?> _create(
     return saved.id;
   } catch (e) {
     messenger.showSnackBar(
-      SnackBar(content: Text('Could not create the supplier: $e')),
+      SnackBar(content: Text('Could not create the ${kind.one}: \$e')),
     );
     return null;
   }
@@ -619,7 +655,12 @@ Future<String?> _create(
 /// everything else can be filled in later from the supplier's own
 /// paperwork.
 class _SupplierDraft extends StatefulWidget {
-  const _SupplierDraft({required this.read});
+  const _SupplierDraft({
+    required this.read,
+    this.kind = ScanContactKind.supplier,
+  });
+
+  final ScanContactKind kind;
 
   /// What the document said, or null when nothing was read. An empty
   /// form is still the right place to be: somebody is holding a bill
@@ -710,7 +751,7 @@ class _SupplierDraftState extends State<_SupplierDraft> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Create this supplier'),
+      title: Text('Create this ${widget.kind.one}'),
       content: SizedBox(
         width: 460,
         child: Form(
@@ -728,7 +769,8 @@ class _SupplierDraftState extends State<_SupplierDraft> {
                       // and then never fill in.
                       ? 'Nothing was read from the document, so this is '
                             'blank. The SSM number goes on every '
-                            'e-Invoice raised against this supplier.'
+                            'e-Invoice raised against this '
+                            '${widget.kind.one}.'
                       : 'Read from the document. Correct anything wrong '
                             'before it is saved — this becomes a '
                             'permanent contact, and the SSM number goes '

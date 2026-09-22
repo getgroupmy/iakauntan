@@ -856,6 +856,7 @@ jobs:
                    supabase/tests/ocr_default_reader.sql \
                    supabase/tests/scan_log.sql \
                    supabase/tests/scan_targets.sql \
+                   supabase/tests/smartscan_module.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

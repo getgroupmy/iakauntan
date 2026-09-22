@@ -142,3 +142,75 @@ Deno.test("the prompt names the kinds of paper that land there", () => {
   // And the instruction that keeps a bad guess out of the books.
   assertStringIncludes(said, "`target` is null");
 });
+
+// `0682`. A bank statement is forty records, not one, and a schema that
+// offered only `fields` would get the first line, or an average, or
+// whichever line the model thought mattered — all three of which look
+// like an answer.
+
+Deno.test("a repeating target asks for rows", () => {
+  const schema = targetSchema([
+    {
+      key: "accounting.bank_statement",
+      label: "A bank statement",
+      repeats: true,
+      fields: [{ name: "transaction_date" }, { name: "amount" }],
+    },
+  ])!;
+  const rows = schema.rows as {
+    type: string[];
+    items: { properties: Record<string, unknown> };
+  };
+  assertEquals(rows.type, ["array", "null"]);
+  assertEquals(
+    Object.keys(rows.items.properties).sort(),
+    ["amount", "transaction_date"],
+  );
+});
+
+Deno.test("no repeating target means no rows at all", () => {
+  // Every other document, which is nearly all of them. An unused `rows`
+  // in the schema is an array a model can decide to fill for a bill.
+  const schema = targetSchema([
+    {
+      key: "purchases.bill",
+      label: "A bill",
+      fields: [{ name: "doc_no" }],
+    },
+  ])!;
+  assertEquals("rows" in schema, false);
+});
+
+Deno.test("a repeating target's fields stay out of the single map", () => {
+  // `fields` is for the destination that takes ONE record. A statement
+  // column appearing there would invite the model to answer both, and
+  // the two answers would disagree.
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "running_balance" }],
+    },
+  ])!;
+  const fields = schema.fields as { properties: Record<string, unknown> };
+  assertEquals(Object.keys(fields.properties), ["doc_no"]);
+});
+
+Deno.test("the prompt says one entry per printed line", () => {
+  const said = targetPrompt([
+    {
+      key: "accounting.bank_statement",
+      label: "A bank statement",
+      repeats: true,
+      kinds: ["Bank statement"],
+      fields: [{ name: "amount", description: "Negative for money out." }],
+    },
+  ]);
+  assertStringIncludes(said, "ONE ENTRY PER PRINTED LINE");
+  assertStringIncludes(said, "`rows` rather than");
+  // Every line, in order. A statement with lines missing reconciles to
+  // nothing, and a model left to summarise will drop the small ones.
+  assertStringIncludes(said, "in the order printed");
+});

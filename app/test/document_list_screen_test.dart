@@ -303,12 +303,19 @@ void main() {
       expect(find.text('Scan bill'), findsOneWidget);
     });
 
-    testWidgets('an invoice cannot', (tester) async {
-      // There is nothing to scan: a sales invoice is raised from what
-      // we are owed, not read off a piece of paper somebody handed us.
+    testWidgets('and so can an invoice', (tester) async {
+      // It could not, until `0682`. The reason given was that a sales
+      // invoice is raised from what we are owed rather than read off a
+      // piece of paper — which is true of most of them and not of the
+      // ones that matter: a copy returned with a payment, and every
+      // invoice raised on somebody else's system during a migration.
+      //
+      // The real obstacle was the wording. Everything under the button
+      // asked "which supplier?", which is the wrong question about your
+      // own customer, and `ScanContactKind` carries the noun now.
       await show(tester);
 
-      expect(find.textContaining('Scan'), findsNothing);
+      expect(find.text('Scan invoice'), findsOneWidget);
     });
 
     testWidgets('invoices can be ticked for a batch', (tester) async {

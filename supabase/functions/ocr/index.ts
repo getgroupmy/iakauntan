@@ -119,6 +119,14 @@ interface Extraction {
    * known, not here.
    */
   fields: Record<string, string> | null;
+
+  /**
+   * One entry per printed line, where the destination takes rows.
+   *
+   * A bank statement is forty records, not one. Null for every other
+   * document and for every reader that is not asked — see `0682`.
+   */
+  rows: Record<string, string>[] | null;
 }
 
 interface BeginResult {
@@ -674,7 +682,35 @@ function normaliseExtraction(raw: Record<string, unknown>): Extraction {
     note: str("note"),
     target: targetOf(raw),
     fields: fieldsOf(raw),
+    rows: rowsOf(raw),
   } as Extraction;
+}
+
+/**
+ * The per-line values, where a destination takes rows.
+ *
+ * A row that came back with nothing usable in it is dropped rather than
+ * kept as an empty object: a statement with three blank lines in the
+ * middle is worse than one with three lines missing, because the blanks
+ * look like entries somebody has to go and explain.
+ */
+function rowsOf(raw: Record<string, unknown>): Record<string, string>[] | null {
+  const v = raw.rows;
+  if (!Array.isArray(v)) return null;
+  const out: Record<string, string>[] = [];
+  for (const entry of v) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const row: Record<string, string> = {};
+    for (const [k, value] of Object.entries(entry as Record<string, unknown>)) {
+      if (typeof value === "string") {
+        if (value.trim() !== "") row[k] = value.trim();
+      } else if (typeof value === "number" && Number.isFinite(value)) {
+        row[k] = String(value);
+      }
+    }
+    if (Object.keys(row).length > 0) out.push(row);
+  }
+  return out.length === 0 ? null : out;
 }
 
 /** The destination the reader chose, if it chose a real one. */
@@ -826,6 +862,7 @@ async function readGoogle(
     // hand.
     target: null,
     fields: null,
+    rows: null,
     raw_text: typeof body?.document?.text === "string"
       ? body.document.text
       : null,
@@ -864,6 +901,7 @@ function normalise(raw: Record<string, unknown>): Extraction {
     note: str(raw.note),
     target: targetOf(raw),
     fields: fieldsOf(raw),
+    rows: rowsOf(raw),
   };
 }
 

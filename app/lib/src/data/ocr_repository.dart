@@ -118,6 +118,7 @@ class OcrSettings {
     this.chosen = false,
     this.fallback,
     this.fallbackName,
+    this.hasModule = true,
   });
 
   final bool enabled;
@@ -161,6 +162,18 @@ class OcrSettings {
   /// happen. 0679.
   final String? fallback;
   final String? fallbackName;
+
+  /// Whether the `smartscan` module is switched on for this company.
+  ///
+  /// `0682` made scanning a module of its own. Until then it was a
+  /// SETTING any administrator could turn on, and it is the most
+  /// expensive thing in this product per use — every scan is a call to
+  /// somebody else's model.
+  ///
+  /// Defaults to true so an older database, which does not send it,
+  /// draws the card as it always did rather than telling everybody
+  /// their module is off.
+  final bool hasModule;
 
   /// Whether THIS company ever picked a reader, as opposed to being
   /// shown the platform's default.
@@ -235,6 +248,7 @@ class OcrSettings {
         chosen: j['chosen'] == true,
         fallback: j['fallback']?.toString(),
         fallbackName: j['fallback_name']?.toString(),
+        hasModule: j['has_module'] != false,
       );
 
   static double _num(Object? v) =>
@@ -337,6 +351,7 @@ class OcrExtraction {
     this.documentKind,
     this.target,
     this.fields = const {},
+    this.rows = const [],
   });
 
   final String? supplierName;
@@ -416,6 +431,17 @@ class OcrExtraction {
   /// Coercion belongs where the column is known.
   final Map<String, String> fields;
 
+  /// One entry per printed line, where the destination takes rows.
+  ///
+  /// A bank statement is forty records, not one: a date, a description,
+  /// an amount and a balance, the same four on every line. `0681`
+  /// deliberately left statements out for exactly this reason and
+  /// `0682` is the answer — a target marked `repeats` asks the reader
+  /// for an array instead of an object.
+  ///
+  /// Empty for every other document, which is almost all of them.
+  final List<Map<String, String>> rows;
+
   /// The same reading with some of it changed.
   ///
   /// Only ever sets; it cannot put a field back to null, which is what
@@ -440,6 +466,7 @@ class OcrExtraction {
     String? documentKind,
     String? target,
     Map<String, String>? fields,
+    List<Map<String, String>>? rows,
   }) =>
       OcrExtraction(
         supplierName: supplierName ?? this.supplierName,
@@ -461,6 +488,7 @@ class OcrExtraction {
         documentKind: documentKind ?? this.documentKind,
         target: target ?? this.target,
         fields: fields ?? this.fields,
+        rows: rows ?? this.rows,
       );
 
   /// The amount to put in an expense's Amount field.
@@ -498,6 +526,14 @@ class OcrExtraction {
           for (final e in ((j['fields'] as Map?) ?? const {}).entries)
             if (_text(e.value) != null) '${e.key}': _text(e.value)!,
         },
+        rows: [
+          for (final r in ((j['rows'] as List?) ?? const []))
+            if (r is Map)
+              {
+                for (final e in r.entries)
+                  if (_text(e.value) != null) '${e.key}': _text(e.value)!,
+              },
+        ]..removeWhere((r) => r.isEmpty),
       );
 
   /// The same shape the server-side readers return, so a scan logged
@@ -537,6 +573,7 @@ class OcrExtraction {
         // no answer here, and a stored `{}` reads as "the reader was
         // asked and found nothing" when it was never asked.
         if (fields.isNotEmpty) 'fields': fields,
+        if (rows.isNotEmpty) 'rows': rows,
       };
 
   static String? _text(Object? v) {

@@ -15,6 +15,17 @@ export interface ScanTarget {
   hint?: string | null;
   kinds?: string[] | null;
   fields?: { name: string; description?: string | null }[] | null;
+
+  /**
+   * The fields describe ONE ROW of many. `0682`.
+   *
+   * A bank statement is what this exists for: a date, a description, an
+   * amount and a balance, the same four on every printed line. Asking
+   * for one object would get the first line, or an average of them, or
+   * whichever the model thought was most important — all three of which
+   * look like an answer.
+   */
+  repeats?: boolean;
 }
 
 /**
@@ -45,6 +56,7 @@ export function usableTargets(raw: unknown): ScanTarget[] {
         ? (t as ScanTarget).label
         : key,
       hint: (t as ScanTarget).hint ?? null,
+      repeats: (t as ScanTarget).repeats === true,
       kinds: Array.isArray((t as ScanTarget).kinds)
         ? (t as ScanTarget).kinds!.filter((k) => typeof k === "string")
         : [],
@@ -76,6 +88,12 @@ export function targetSchema(
 
   const properties: Record<string, unknown> = {};
   for (const t of targets) {
+    // A repeating target's columns belong in `rows` and NOWHERE ELSE.
+    // Offered in both, a model is invited to answer both — and a
+    // statement's running balance filled in once at the top and again
+    // per line is two answers that disagree, with nothing to say which
+    // was meant.
+    if (t.repeats) continue;
     for (const f of t.fields ?? []) {
       const existing = properties[f.name] as { description?: string } | undefined;
       const line = f.description?.trim();
@@ -95,7 +113,7 @@ export function targetSchema(
     }
   }
 
-  return {
+  const schema: Record<string, unknown> = {
     target: {
       type: ["string", "null"],
       description:
@@ -105,15 +123,67 @@ export function targetSchema(
         "better placed nowhere than placed wrongly.",
       enum: [...targets.map((t) => t.key), null],
     },
-    fields: {
+  };
+
+  // Only where some target takes one record. A `fields` with no
+  // properties is a key that can never be anything but `{}`, which is
+  // one more thing for a model to think about and fill in wrongly.
+  if (Object.keys(properties).length > 0) {
+    schema.fields = {
       type: ["object", "null"],
       additionalProperties: false,
       description:
         "Values for the chosen destination, as printed. Every key is " +
-        "optional and null means it is not on the document.",
+        "optional and null means it is not on the document. Leave this " +
+        "null when the destination you chose takes rows instead.",
       properties,
-    },
-  };
+    };
+  }
+
+  // `rows` exists only where some target repeats. A bank statement is
+  // not one record with fields, it is forty of them with the same four
+  // — and a schema that offered only `fields` would get the first line,
+  // or an average, or whichever line the model thought mattered. All
+  // three look like an answer.
+  if (targets.some((t) => t.repeats)) {
+    schema.rows = {
+      type: ["array", "null"],
+      description:
+        "One entry per printed line, for a destination that takes rows: " +
+        targets.filter((t) => t.repeats).map((t) => t.key).join(", ") +
+        ". In the order printed, every line, including the ones that " +
+        "look like a running total — a statement with lines missing " +
+        "reconciles to nothing. Null when the destination takes one " +
+        "record instead.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: rowProperties(targets),
+      },
+    };
+  }
+
+  return schema;
+}
+
+/** The columns a repeating target wants, per row. */
+function rowProperties(targets: ScanTarget[]): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const t of targets) {
+    if (!t.repeats) continue;
+    for (const f of t.fields ?? []) {
+      if (properties[f.name]) continue;
+      const line = f.description?.trim();
+      properties[f.name] = {
+        type: ["string", "null"],
+        description: line && line !== ""
+          ? line
+          : `This line's ${f.name.replace(/_/g, " ")}, exactly as ` +
+            "printed. Null if the line does not carry it.",
+      };
+    }
+  }
+  return properties;
 }
 
 /** The lines added to the system prompt, or "" when nothing is set up. */
@@ -131,7 +201,11 @@ export function targetPrompt(targets: ScanTarget[]): string {
     lines.push(
       `${t.key} — ${t.label}` +
         (kinds.length > 0 ? ` (${kinds.join(", ")})` : "") +
-        (t.hint ? `. ${t.hint}` : ""),
+        (t.hint ? `. ${t.hint}` : "") +
+        (t.repeats
+          ? ". ONE ENTRY PER PRINTED LINE, in `rows` rather than " +
+            "`fields`. Every line, in the order printed."
+          : ""),
     );
     for (const f of t.fields ?? []) {
       lines.push(

@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the supplier search that could not be searched |
+| Head at time of writing | SmartScan is a module, and a statement is many rows (`0682`) |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0681` is the highest, and **applied**. CI's "Apply the migrations" job pushed `0675`–`0681` to the hosted project on run 2065 |
+| Migrations | `0682` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 352 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,703 Flutter tests**, 34 deno tests |
-| API description | 779 functions, 366 tables, version `0681` |
+| Gates | 353 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,713 Flutter tests**, 34 deno tests |
+| API description | 779 functions, 366 tables, version `0682` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -251,6 +251,63 @@ The suggestions are tappable now. They were bullets with a "Choose
 existing" button that reopened the picker — so somebody who could SEE
 the right supplier named in front of them had to dismiss the dialog and
 search for it again.
+
+## SmartScan is a module, and a statement is many rows
+
+`0682`.
+
+**The module.** Scanning was switchable per company since `0111`, but
+only as a SETTING any administrator could turn on — and it is the most
+expensive thing in this product per use. `smartscan` is a module now,
+off by default, gated in `app.require_smartscan` and called from every
+door: `ocr_begin`, `ocr_record_local`, and `set_ocr_settings` on the
+way ON only. Switching OFF always works — a company whose module has
+lapsed still has a switch reading "on", and refusing to let them turn
+it off would be refusing to let them tidy up after us.
+
+`ocr_status` reports `has_module` so the Settings card says so rather
+than drawing a switch that refuses. A refusal a screen could have
+predicted is a screen that was not finished.
+
+`ocr_record_local` is the assertion that would rot: it costs the
+platform nothing, which is the argument for leaving it open and exactly
+how a paid feature ends up free on the phone.
+
+**A target that repeats.** `0681` left bank statements out and said
+why — "a statement becomes MANY rows, and a field list that describes
+one record cannot describe it". `scan_targets.repeats` is the fix: the
+reader is asked for an ARRAY of the field objects. A repeating target's
+columns go in `rows` and **nowhere else** — offered in both, a model is
+invited to answer both, and a running balance filled in once at the top
+and again per line is two answers that disagree.
+
+**Invoices.** The Scan action was hidden on the sales side. The reason
+given was that a sales invoice is raised from what we are owed rather
+than read off paper — true of most and not of the ones that matter (a
+copy returned with a payment, every invoice raised on another system
+during a migration). The real obstacle was the wording: everything
+under the button asked "which supplier?". `ScanContactKind` carries the
+noun, and `supplier_doc_no` is written on the purchase side only —
+a sales document's number is this company's own sequence.
+
+### Two traps this paid for
+
+- **`app.demo_modules_in_use` had been redefined four times.** I copied
+  its body from `0233` and reverted `0324`, `0329`, `0470` and `0486`.
+  `demo_rebuild.sql` caught it — 6 modules missing instead of 1. **Copy
+  a function body from the migration that LAST defined it**, which
+  `grep -rln` finds in a second.
+- A one-off `update` over the demo companies is undone by the next
+  `app.demo_rebuild()`, which deletes and recreates them. The seam is
+  `demo_modules_in_use`, and for a feature with no rows of its own the
+  idiom is `select id, '<module>' from organizations where is_demo`.
+
+### Not done
+
+The reader returns a statement's lines. Turning them into
+`bank_transactions` is not wired: that needs a bank account chosen, an
+import batch and the duplicate check, which is the bank-import
+machinery rather than the scan machinery.
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 

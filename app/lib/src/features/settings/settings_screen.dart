@@ -732,6 +732,39 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                     'name card or a bank statement and have it read — the '
                     'supplier, the date, the amounts and the lines',
               ),
+              // A module before it is a setting. `0682`. Drawing the
+              // switch and letting the save refuse would be a screen
+              // that could have predicted its own refusal and did not;
+              // and "AI SmartScan is not switched on for this company"
+              // arriving as a red banner AFTER the tap reads as a bug
+              // rather than as a subscription.
+              if (!ocr.hasModule)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Space.sm),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 16,
+                        color: context.colors.warning,
+                      ),
+                      const SizedBox(width: Space.sm),
+                      Expanded(
+                        child: Text(
+                          'AI SmartScan is a module and it is not switched '
+                          'on for this company. An owner turns it on under '
+                          'Subscription; everything below is what it does '
+                          'once it is.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.warning,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: ocr.enabled,
@@ -744,7 +777,13 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                 // available`. Null now means "leave the reader alone",
                 // and a company with no reader yet gets whatever the
                 // platform currently hands out. 0678.
-                onChanged: widget.canEdit && !_saving
+                // Off is always allowed. A company whose module has
+                // lapsed still has a switch reading "on", and refusing
+                // to let them turn it off would be refusing to let them
+                // tidy up after us — which is what `set_ocr_settings`
+                // does too.
+                onChanged: widget.canEdit && !_saving &&
+                        (ocr.hasModule || ocr.enabled)
                     ? (v) => _write(
                         () => ref
                             .read(repoProvider)!

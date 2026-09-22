@@ -54,12 +54,15 @@ Future<void> _scanInto(
   // Looked up before anybody is asked. The document names its supplier
   // on the letterhead, and searching for a name that is already on
   // screen is work the machine should have done.
-  final match = await resolveSupplier(context, ref, read);
+  final kind = meta.kind.isSales
+      ? ScanContactKind.customer
+      : ScanContactKind.supplier;
+  final match = await resolveSupplier(context, ref, read, kind: kind);
   if (!context.mounted) return;
 
   String? contactId = match.contactId;
   if (match.outcome == SupplierOutcome.ask) {
-    contactId = await _pickSupplier(context, ref, read);
+    contactId = await _pickSupplier(context, ref, read, kind);
   }
 
   if (contactId == null) {
@@ -101,7 +104,12 @@ Future<void> _scanInto(
       header: {
         'contact_id': contactId,
         'doc_date': Fmt.iso(read?.documentDate ?? DateTime.now()),
-        if (read?.documentNo != null) 'supplier_doc_no': read!.documentNo,
+        // Only on the purchase side. `supplier_doc_no` is THEIR number
+        // for the document, and a sales document's number is this
+        // company's own sequence — writing the read one there would
+        // file a customer's reference as our invoice number.
+        if (!meta.kind.isSales && read?.documentNo != null)
+          'supplier_doc_no': read!.documentNo,
       },
       lines: const [],
     );
@@ -216,16 +224,19 @@ Future<bool> _clearOfDuplicates(
 Future<String?> _pickSupplier(
   BuildContext context,
   WidgetRef ref,
-  OcrExtraction? read,
-) {
+  OcrExtraction? read, [
+  ScanContactKind kind = ScanContactKind.supplier,
+]) {
   return showDialog<String>(
     context: context,
-    builder: (_) => _SupplierPicker(read: read),
+    builder: (_) => _SupplierPicker(read: read, kind: kind),
   );
 }
 
 class _SupplierPicker extends ConsumerStatefulWidget {
-  const _SupplierPicker({this.read});
+  const _SupplierPicker({this.read, this.kind = ScanContactKind.supplier});
+
+  final ScanContactKind kind;
 
   /// What the document said. The name seeds the search and is shown as
   /// a reminder — never selected automatically. The rest of it is what
@@ -255,11 +266,11 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
   @override
   Widget build(BuildContext context) {
     final contacts = ref.watch(
-      contactsProvider((type: 'supplier', search: _query)),
+      contactsProvider((type: widget.kind.type, search: _query)),
     );
 
     return AlertDialog(
-      title: const Text('Which supplier?'),
+      title: Text('Which ${widget.kind.one}?'),
       content: SizedBox(
         width: 460,
         height: 420,
@@ -284,10 +295,10 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
             TextField(
               controller: _search,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Search suppliers',
+              decoration: InputDecoration(
+                labelText: 'Search ${widget.kind.one}s',
                 isDense: true,
-                prefixIcon: Icon(Icons.search, size: 18),
+                prefixIcon: const Icon(Icons.search, size: 18),
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
@@ -296,7 +307,7 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
               child: AsyncView(
                 value: contacts,
                 onRetry: () => ref.invalidate(
-                  contactsProvider((type: 'supplier', search: _query)),
+                  contactsProvider((type: widget.kind.type, search: _query)),
                 ),
                 loading: const LinearProgressIndicator(),
                 skeleton: const ListSkeleton(rows: 6, leading: false),
@@ -339,11 +350,16 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
         TextButton.icon(
           key: const ValueKey('picker-new-supplier'),
           onPressed: () async {
-            final id = await createSupplierFromScan(context, ref, widget.read);
+            final id = await createSupplierFromScan(
+              context,
+              ref,
+              widget.read,
+              kind: widget.kind,
+            );
             if (id != null && context.mounted) Navigator.pop(context, id);
           },
           icon: const Icon(Icons.add, size: 18),
-          label: const Text('New supplier'),
+          label: Text('New ${widget.kind.one}'),
         ),
         // No `Spacer()` between these two, however much this wants to
         // push Cancel to the other end. `AlertDialog.actions` are laid
@@ -549,7 +565,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       // Only on the purchase side. A sales invoice is raised from what
       // we are owed, not read off a piece of paper somebody handed us --
       // there is nothing to scan.
-      if (canWrite && !kind.isSales)
+      // `0682`. Hidden on the sales side until now, and the reason was
+      // the wording rather than the machinery: everything under it
+      // asked "which supplier?", which is the wrong question about your
+      // own customer. `ScanContactKind` carries the noun now.
+      if (canWrite)
         _ListAction(
           label: 'Scan ${meta.singular.toLowerCase()}',
           icon: Icons.document_scanner_outlined,
