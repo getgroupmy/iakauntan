@@ -19,6 +19,9 @@ import 'package:iakauntan/src/features/assets/disposal_dialog.dart';
 import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
+import 'package:iakauntan/src/features/documents/credit_dialog.dart';
+import 'package:iakauntan/src/features/documents/deposit_apply_sheet.dart';
+import 'package:iakauntan/src/features/documents/withholding_dialog.dart';
 import 'package:iakauntan/src/features/contacts/contact_delete.dart';
 import 'package:iakauntan/src/features/documents/void_document.dart';
 import 'package:iakauntan/src/features/settings/einvoice_credentials.dart';
@@ -3736,6 +3739,435 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('drops off the expiring list'), findsNothing);
+    });
+  });
+
+  group('what comes back, what is held, and what LHDN takes', () {
+    testWidgets('withholding previews the deduction with the same rounding '
+        'the certificate will use', (tester) async {
+      // The figure is NOT sent: `create_withholding` gets the gross and
+      // the rate and does the arithmetic. So this is a preview, and a
+      // preview that disagrees with the certificate by a cent is worse
+      // than no preview — which is why it goes through `Fmt.taxOn`,
+      // that function's rounding written once.
+      await opened(
+        tester,
+        [
+          withholdingTypesProvider.overrideWith((ref) async => const [
+                {
+                  'code': 's109',
+                  'section': 's.109',
+                  'name': 'Interest or royalty',
+                  'rate': 15,
+                },
+                {
+                  'code': 's109b',
+                  'section': 's.109B',
+                  'name': 'Technical fees, rent of moveable property',
+                  'rate': 10,
+                },
+              ]),
+        ],
+        (context) => showWithholdingDialog(context, 'bill1', 12000),
+      );
+
+      expect(find.text('Withhold tax'), findsOneWidget);
+      // The gross opens at the whole bill, to two decimals.
+      expect(find.text('12000.00'), findsOneWidget);
+      // Nothing withheld until a section is chosen, so the button is
+      // shut: the section is what goes on the form.
+      var go = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Withhold'));
+      expect(go.onPressed, isNull);
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('s.109B').last);
+      await tester.pumpAndSettle();
+
+      // 10% of 12,000, and the rate arrives from the table rather than
+      // being typed.
+      expect(find.text('10.00'), findsOneWidget);
+      expect(find.text('RM 1,200.00'), findsOneWidget);
+      expect(
+        find.textContaining('The supplier is paid RM 10,800.00 and gets a '
+            'certificate for the rest. Remittance is due within one month.'),
+        findsOneWidget,
+      );
+      go = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Withhold'));
+      expect(go.onPressed, isNotNull);
+    });
+
+    testWidgets('and the rate stays editable, because a treaty may cut it',
+        (tester) async {
+      // Which treaty applies depends on where the payee is resident,
+      // and no table here knows that. The section is recorded either
+      // way, because the section is what goes on the form.
+      await opened(
+        tester,
+        [
+          withholdingTypesProvider.overrideWith((ref) async => const [
+                {
+                  'code': 's109',
+                  'section': 's.109',
+                  'name': 'Interest or royalty',
+                  'rate': 15,
+                },
+              ]),
+        ],
+        (context) => showWithholdingDialog(context, 'bill1', 12000),
+      );
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('s.109').last);
+      await tester.pumpAndSettle();
+      expect(find.text('RM 1,800.00'), findsOneWidget);
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Rate'), '8');
+      await tester.pumpAndSettle();
+
+      expect(find.text('A treaty may cut it'), findsOneWidget);
+      expect(find.text('RM 960.00'), findsOneWidget);
+      expect(
+        find.textContaining('The supplier is paid RM 11,040.00'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a credit note opens on everything still creditable',
+        (tester) async {
+      // The common case is that the customer brought the lot back, and
+      // a dialog full of zeros makes that the slowest thing to do.
+      await openedWithRef(
+        tester,
+        [
+          invoiceCreditRemainingProvider.overrideWith((ref, id) async => const [
+                {
+                  'line_id': 'l1',
+                  'description': 'Kopi O beans, 1kg',
+                  'invoiced': 10,
+                  'credited': 0,
+                  'remaining': 10,
+                  'unit_price': 32,
+                  'uom_code': 'kg',
+                },
+                {
+                  'line_id': 'l2',
+                  'description': 'Delivery',
+                  'invoiced': 1,
+                  'credited': 0,
+                  'remaining': 1,
+                  'unit_price': 15,
+                },
+              ]),
+        ],
+        (context, ref) => showCreditDialog(
+          context,
+          ref,
+          invoiceId: 'inv1',
+          invoiceNo: 'INV-0042',
+        ),
+      );
+
+      expect(find.text('Credit INV-0042'), findsOneWidget);
+      expect(find.text('10 invoiced'), findsOneWidget);
+      // 10 x 32 plus 1 x 15, at the invoice's own prices.
+      expect(find.text('Crediting RM 335.00'), findsOneWidget);
+    });
+
+    testWidgets('and a part-credited line says what is left of it',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          invoiceCreditRemainingProvider.overrideWith((ref, id) async => const [
+                {
+                  'line_id': 'l1',
+                  'description': 'Kopi O beans, 1kg',
+                  'invoiced': 10,
+                  'credited': 4,
+                  'remaining': 6,
+                  'unit_price': 32,
+                  'uom_code': 'kg',
+                },
+                {
+                  'line_id': 'l2',
+                  'description': 'Delivery',
+                  'invoiced': 1,
+                  'credited': 1,
+                  'remaining': 0,
+                  'unit_price': 15,
+                },
+              ]),
+        ],
+        (context, ref) => showCreditDialog(
+          context,
+          ref,
+          invoiceId: 'inv1',
+          invoiceNo: 'INV-0042',
+        ),
+      );
+
+      expect(
+        find.text('10 invoiced · 4 credited · 6 left'),
+        findsOneWidget,
+      );
+      // A line with nothing left says so rather than offering a box
+      // that would be refused — and its box is disabled.
+      expect(find.text('All 1 already credited'), findsOneWidget);
+      final spent = tester.widget<TextField>(
+          find.widgetWithText(TextField, 'Delivery'));
+      expect(spent.enabled, isFalse);
+      // Seeded with what is left: 6 x 32, and nothing for the line
+      // that is done.
+      expect(find.text('Crediting RM 192.00'), findsOneWidget);
+    });
+
+    testWidgets('an invoice credited to the last line offers no box at all',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          invoiceCreditRemainingProvider.overrideWith((ref, id) async => const [
+                {
+                  'line_id': 'l1',
+                  'description': 'Kopi O beans, 1kg',
+                  'invoiced': 10,
+                  'credited': 10,
+                  'remaining': 0,
+                  'unit_price': 32,
+                },
+              ]),
+        ],
+        (context, ref) => showCreditDialog(
+          context,
+          ref,
+          invoiceId: 'inv1',
+          invoiceNo: 'INV-0042',
+        ),
+      );
+
+      expect(
+        find.text('Every line on this invoice has already been credited.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Crediting'), findsNothing);
+    });
+
+    testWidgets("a bill's credit note is the same dialog, one table over",
+        (tester) async {
+      // `0376` is `0269` one table over: same arithmetic, same words,
+      // different function and the other direction. The test is that
+      // the PURCHASE provider is the one consulted — the wrong one
+      // would leave the real repository live and render an error view.
+      await openedWithRef(
+        tester,
+        [
+          billCreditRemainingProvider.overrideWith((ref, id) async => const [
+                {
+                  'line_id': 'bl1',
+                  'description': 'Packaging, printed',
+                  'invoiced': 500,
+                  'credited': 0,
+                  'remaining': 500,
+                  'unit_price': 0.4,
+                },
+              ]),
+        ],
+        (context, ref) => showCreditDialog(
+          context,
+          ref,
+          invoiceId: 'bill1',
+          invoiceNo: 'BILL-0009',
+          purchase: true,
+        ),
+      );
+
+      expect(find.text('Credit BILL-0009'), findsOneWidget);
+      expect(find.text('Crediting RM 200.00'), findsOneWidget);
+    });
+
+    testWidgets('a deposit opens on whichever of the two balances binds',
+        (tester) async {
+      // Both ends bind: the deposit cannot give more than is left of
+      // it, and the document cannot take more than it still owes. Here
+      // the DOCUMENT is the smaller, which is the case a field opened
+      // on the deposit's own balance would get wrong.
+      await opened(
+        tester,
+        [
+          outstandingProvider.overrideWith((ref, args) async => [
+                BusinessDocument(
+                  id: 'd1',
+                  docType: 'invoice',
+                  docNo: 'INV-0101',
+                  docDate: DateTime(2026, 9, 1),
+                  contactId: 'c1',
+                  status: 'posted',
+                  totalAmount: 900,
+                  balanceAmount: 900,
+                ),
+              ]),
+        ],
+        (context) => showApplyDepositSheet(
+          context,
+          depositId: 'dep1',
+          kind: 'customer',
+          contactId: 'c1',
+          currency: 'MYR',
+          balance: 2500,
+        ),
+      );
+
+      expect(find.text('Apply to an invoice'), findsOneWidget);
+      expect(
+        find.textContaining('RM 2,500.00 is still held'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('apply-document')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('INV-0101 · RM 900.00 outstanding').last);
+      await tester.pumpAndSettle();
+
+      // 900, not 2,500.
+      expect(find.text('900.00'), findsOneWidget);
+      expect(
+        find.textContaining('At most RM 900.00 — the smaller of what is '
+            'held and what is owed.'),
+        findsOneWidget,
+      );
+      final apply = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('apply-save')));
+      expect(apply.onPressed, isNotNull);
+    });
+
+    testWidgets('and will not apply more than the document owes',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          outstandingProvider.overrideWith((ref, args) async => [
+                BusinessDocument(
+                  id: 'd1',
+                  docType: 'invoice',
+                  docNo: 'INV-0101',
+                  docDate: DateTime(2026, 9, 1),
+                  contactId: 'c1',
+                  status: 'posted',
+                  totalAmount: 900,
+                  balanceAmount: 900,
+                ),
+              ]),
+        ],
+        (context) => showApplyDepositSheet(
+          context,
+          depositId: 'dep1',
+          kind: 'customer',
+          contactId: 'c1',
+          currency: 'MYR',
+          balance: 2500,
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('apply-document')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('INV-0101 · RM 900.00 outstanding').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const ValueKey('apply-amount')), '1500');
+      await tester.pumpAndSettle();
+
+      final apply = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('apply-save')));
+      expect(apply.onPressed, isNull,
+          reason: 'the invoice only owes 900');
+    });
+
+    testWidgets('a deposit in another currency is offered nothing to go '
+        'against', (tester) async {
+      // `apply_deposit` refuses a document in another currency and
+      // sends it to a receipt instead, so the exchange difference is
+      // struck where the rest of them are. Narrowing the CHOICE is what
+      // stops somebody reading that refusal after picking.
+      await opened(
+        tester,
+        [
+          outstandingProvider.overrideWith((ref, args) async => [
+                BusinessDocument(
+                  id: 'd1',
+                  docType: 'invoice',
+                  docNo: 'INV-0101',
+                  docDate: DateTime(2026, 9, 1),
+                  contactId: 'c1',
+                  status: 'posted',
+                  currency: 'SGD',
+                  totalAmount: 900,
+                  balanceAmount: 900,
+                ),
+                // Right currency, wrong status: a draft is not a
+                // liability anything can be set against yet.
+                BusinessDocument(
+                  id: 'd2',
+                  docType: 'invoice',
+                  docNo: 'INV-0102',
+                  docDate: DateTime(2026, 9, 2),
+                  contactId: 'c1',
+                  status: 'draft',
+                  totalAmount: 400,
+                  balanceAmount: 400,
+                ),
+              ]),
+        ],
+        (context) => showApplyDepositSheet(
+          context,
+          depositId: 'dep1',
+          kind: 'customer',
+          contactId: 'c1',
+          currency: 'MYR',
+          balance: 2500,
+        ),
+      );
+
+      expect(
+        find.textContaining('This customer has nothing outstanding in MYR. '
+            'A deposit goes against a posted invoice; raise it first.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('apply-document')), findsNothing);
+      final apply = tester.widget<FilledButton>(
+          find.byKey(const ValueKey('apply-save')));
+      expect(apply.onPressed, isNull);
+    });
+
+    testWidgets("and a supplier's deposit says bill, not invoice",
+        (tester) async {
+      await opened(
+        tester,
+        [
+          outstandingProvider.overrideWith(
+              (ref, args) async => const <BusinessDocument>[]),
+        ],
+        (context) => showApplyDepositSheet(
+          context,
+          depositId: 'dep2',
+          kind: 'supplier',
+          contactId: 'c9',
+          currency: 'MYR',
+          balance: 800,
+        ),
+      );
+
+      expect(find.text('Apply to a bill'), findsOneWidget);
+      expect(
+        find.textContaining('A deposit goes against a posted bill; enter it '
+            'first.'),
+        findsOneWidget,
+      );
     });
   });
 }

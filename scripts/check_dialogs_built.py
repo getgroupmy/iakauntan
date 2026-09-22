@@ -92,7 +92,6 @@ EXEMPT: dict[str, str] = {
     'resolveSupplier': 'lib/src/features/shared/supplier_from_scan.dart',
     'showActivityDialog': 'lib/src/features/documents/email_dialog.dart',
     'showApplicantEditor': 'lib/src/features/hr/applicant_editor.dart',
-    'showApplyDepositSheet': 'lib/src/features/documents/deposit_apply_sheet.dart',
     'showAppraisalCycles': 'lib/src/features/hr/appraisal_cycles_dialog.dart',
     'showAppraisalGoals': 'lib/src/features/hr/appraisal_goals_dialog.dart',
     'showAppraisalReview': 'lib/src/features/hr/appraisal_review.dart',
@@ -104,7 +103,6 @@ EXEMPT: dict[str, str] = {
     'showBudgetLineEditor': 'lib/src/features/reports/budget_line_editor.dart',
     'showCloseDealDialog': 'lib/src/features/crm/close_deal_dialog.dart',
     'showCompose': 'lib/src/features/mail/compose_dialog.dart',
-    'showCreditDialog': 'lib/src/features/documents/credit_dialog.dart',
     'showCreditLedger': 'lib/src/features/settings/credit_ledger_dialog.dart',
     'showDeliveryDay': 'lib/src/features/pos/delivery_day_dialog.dart',
     'showDeliveryFeeDialog': 'lib/src/features/pos/delivery_sheet.dart',
@@ -141,7 +139,6 @@ EXEMPT: dict[str, str] = {
     'showTimeEntrySheet': 'lib/src/features/timesheets/time_entry_sheet.dart',
     'showTransferDialog': 'lib/src/features/documents/transfer_dialog.dart',
     'showTransfersHistory': 'lib/src/features/banking/transfers_history_dialog.dart',
-    'showWithholdingDialog': 'lib/src/features/documents/withholding_dialog.dart',
 }
 
 _LINE_COMMENT = re.compile(r'//[^\n]*')

@@ -552,7 +552,7 @@ deal with, and the estimate screen is honest about not knowing.
 
 ## Open work, ranked
 
-0a. **The DIALOGS backlog — 60 of 121 openers left. In progress.**
+0a. **The DIALOGS backlog — 57 of 121 openers left. In progress.**
    `scripts/check_dialogs_built.py`, the same idea as the screens gate
    pointed at the other half of the app: **272 dialog and sheet
    classes**, more than there are screens, which the screens gate
@@ -562,7 +562,7 @@ deal with, and the estimate screen is honest about not knowing.
    classes are private, so a gate demanding `_MappingDialog` be
    constructed would be unsatisfiable for 89% of the surface. The way
    in is the way the app goes in: `showFsMapping(context)`,
-   `showPersonEditor(context, person: ...)`. 121 of those exist; 61
+   `showPersonEditor(context, person: ...)`. 121 of those exist; 64
    are covered.
 
    `app/test/dialogs_build_batch_test.dart` is the pattern. Two hosts:
@@ -671,6 +671,11 @@ deal with, and the estimate screen is honest about not knowing.
      there asserts the form did not load.
    - Material shows a field's helper text OR its error, never both.
      Assert the helper BEFORE tapping Save.
+   - Check whether the opener takes a `WidgetRef` before writing the
+     host. `showCreditDialog` does, and four tests written against
+     `opened` failed to COMPILE rather than failing an assertion — the
+     quickest failure in this whole pass, and the reason to read the
+     signature first.
    - Read the `initState` default before asserting on it. The
      statutory charge sheet opens on **assessment**, not quit rent; a
      new charge opens dated **today**, not blank; and a new resolution
