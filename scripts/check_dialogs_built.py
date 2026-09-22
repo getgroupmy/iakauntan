@@ -138,7 +138,6 @@ EXEMPT: dict[str, str] = {
     'showItemPacks': 'lib/src/features/items/item_packs_dialog.dart',
     'showItemPrices': 'lib/src/features/items/item_prices_dialog.dart',
     'showJournalEditor': 'lib/src/features/ledger/journal_editor.dart',
-    'showLateOrders': 'lib/src/features/documents/late_orders_dialog.dart',
     'showLeaveBands': 'lib/src/features/hr/leave_bands_dialog.dart',
     'showLogAttemptSheet': 'lib/src/features/collections/log_attempt_sheet.dart',
     'showLoyaltyTiers': 'lib/src/features/loyalty/loyalty_tiers_dialog.dart',
@@ -180,7 +179,6 @@ EXEMPT: dict[str, str] = {
     'showUncapitalisedPurchases': 'lib/src/features/assets/capitalise_dialog.dart',
     'showUnitSheet': 'lib/src/features/property/unit_sheet.dart',
     'showWhoIsAway': 'lib/src/features/hr/who_is_away.dart',
-    'showWinLoss': 'lib/src/features/crm/win_loss_dialog.dart',
     'showWithholdingDialog': 'lib/src/features/documents/withholding_dialog.dart',
 }
 

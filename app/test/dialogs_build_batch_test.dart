@@ -5,7 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/models.dart';
+import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/assets/capital_allowances_dialog.dart';
+import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
+import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
@@ -404,4 +407,158 @@ void main() {
       );
     });
   });
+
+  group('past the date we promised', () {
+    testWidgets('opens, and says how much of the order is still to go',
+        (tester) async {
+      // This one reads the repository directly rather than through a
+      // provider, so the fixture is a fake `Repo` — and its
+      // `noSuchMethod` names any method the dialog calls that this
+      // fake has not answered, which is how you find out what one
+      // needs without reading all of it.
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(
+            late: [
+              {
+                'document_id': 'd1',
+                'doc_no': 'SO-0042',
+                'contact_name': 'Kedai Runcit Aman',
+                'delivery_date': '2026-09-01',
+                'outstanding': 4,
+                'ordered': 10,
+                'days_late': 21,
+                'amount': 1800,
+              },
+            ],
+          )),
+        ],
+        showLateOrders,
+      );
+      expect(find.text('Past the date we promised'), findsOneWidget);
+      expect(find.text('SO-0042 · Kedai Runcit Aman'), findsOneWidget);
+      // Four of ten, not "4 outstanding" — the fraction is the thing
+      // somebody chasing an order needs.
+      expect(
+        find.text('Promised 01/09/2026 · 4 of 10 still to go'),
+        findsOneWidget,
+      );
+      expect(find.text('21 days late'), findsOneWidget);
+    });
+
+    testWidgets('and a customer with no name on the row still reads',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(
+            late: [
+              {
+                'document_id': 'd1',
+                'doc_no': 'SO-0043',
+                'delivery_date': '2026-09-10',
+                'outstanding': 1,
+                'ordered': 1,
+                'days_late': 3,
+                'amount': 90,
+              },
+            ],
+          )),
+        ],
+        showLateOrders,
+      );
+      // An em dash rather than "null", which is what an unguarded
+      // interpolation would have put on the row.
+      expect(find.text('SO-0043 · —'), findsOneWidget);
+    });
+
+    testWidgets('and nothing late says what would appear here',
+        (tester) async {
+      await opened(
+        tester,
+        [repoProvider.overrideWithValue(_Repo(late: []))],
+        showLateOrders,
+      );
+      expect(find.text('Nothing is late'), findsOneWidget);
+    });
+  });
+
+  group('why deals closed', () {
+    testWidgets('opens, and gives each reason its share of the total',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(
+            closed: [
+              {
+                'outcome': 'lost',
+                'reason': 'Price',
+                'competitors': 'Sistem Kira, AutoCount',
+                'amount': 75000,
+                'deals': 3,
+              },
+              {
+                'outcome': 'won',
+                'reason': 'Existing relationship',
+                'amount': 25000,
+                'deals': 1,
+              },
+            ],
+          )),
+        ],
+        showWinLoss,
+      );
+      expect(find.text('Why deals closed'), findsOneWidget);
+      // The share is worked out here from a total the dialog sums
+      // itself; nothing hands it a percentage.
+      expect(find.textContaining('RM 100,000.00 closed'), findsOneWidget);
+      expect(find.text('3 deals · 75%'), findsOneWidget);
+      // One deal, singular, and the other quarter.
+      expect(find.text('1 deal · 25%'), findsOneWidget);
+      // Competitors are NAMED rather than counted: "three competitors"
+      // tells nobody who to go and look at.
+      expect(find.text('vs Sistem Kira, AutoCount'), findsOneWidget);
+    });
+
+    testWidgets('and a year with nothing closed says so', (tester) async {
+      await opened(
+        tester,
+        [repoProvider.overrideWithValue(_Repo(closed: []))],
+        showWinLoss,
+      );
+      expect(find.text('Nothing closed in the last year'), findsOneWidget);
+    });
+  });
+}
+
+/// Answers only what the dialogs under test ask for.
+///
+/// `noSuchMethod` throws with the method's name rather than returning
+/// null, so a dialog that reaches for something this does not answer
+/// says which thing — which is how the fixture above was written
+/// without reading all of `Repo`.
+class _Repo implements Repo {
+  _Repo({this.late = const [], this.closed = const []});
+
+  final List<Map<String, dynamic>> late;
+  final List<Map<String, dynamic>> closed;
+
+  @override
+  Future<List<Map<String, dynamic>>> lateOrders({DateTime? asAt}) async =>
+      late;
+
+  @override
+  Future<List<Map<String, dynamic>>> winLoss({
+    required DateTime from,
+    required DateTime to,
+  }) async =>
+      closed;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        'a dialog under test called Repo.'
+        '${invocation.memberName} and this fake does not answer it.',
+      );
 }
