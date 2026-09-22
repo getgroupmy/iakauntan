@@ -15,6 +15,7 @@ import 'package:iakauntan/src/features/documents/contra_screen.dart';
 import 'package:iakauntan/src/features/documents/deposits_screen.dart';
 import 'package:iakauntan/src/features/documents/knock_off_screen.dart';
 import 'package:iakauntan/src/features/expenses/expenses_screen.dart';
+import 'package:iakauntan/src/features/financials/filing_screen.dart';
 import 'package:iakauntan/src/features/financials/filings_screen.dart';
 import 'package:iakauntan/src/features/hr/onboarding_screen.dart';
 import 'package:iakauntan/src/features/hr/payroll_screen.dart';
@@ -2342,6 +2343,169 @@ void main() {
       // No escalations and no reopenings, so neither row appears --
       // "0 time(s)" on every ticket is noise.
       expect(find.textContaining('time(s)'), findsNothing);
+    });
+  });
+
+  group('one financial statement', () {
+    List<Override> filing({
+      required bool balances,
+      required bool exemptionClaimed,
+      required bool groundApplies,
+      bool late = false,
+    }) =>
+        [
+          fsFilingProvider('f1').overrideWith(
+            (ref) async => {
+              'id': 'f1',
+              'status': 'draft',
+              'fy_end': '2026-06-30',
+              'corp_entity_id': 'e1',
+              'audit_status': exemptionClaimed ? 'audit_exempt' : 'audited',
+            },
+          ),
+          corpEntitiesProvider.overrideWith(
+            (ref) async => [
+              CorpEntity(
+                id: 'e1',
+                name: 'Maju Jaya Sdn Bhd',
+                entityType: 'sdn_bhd',
+                status: 'active',
+                registrationNo: '202101001234',
+              ),
+            ],
+          ),
+          fsBalanceCheckProvider('f1').overrideWith(
+            (ref) async => {
+              'balances': balances,
+              'difference': balances ? 0 : 1250.40,
+              'assets': 500000,
+              'liabilities': 200000,
+              'equity': balances ? 300000 : 298749.60,
+            },
+          ),
+          fsDeadlinesProvider('f1').overrideWith(
+            (ref) async => {
+              'is_late': late,
+              'days_left': 45,
+              'circulate_by': '2026-12-30',
+              'lodge_by': '2027-01-29',
+              'basis': 'Six months after the year end, lodged within 30 days.',
+            },
+          ),
+          fsExemptionProvider('f1').overrideWith(
+            (ref) async => [
+              {'ground': 'zero_revenue', 'qualifies': groundApplies},
+              {'ground': 'threshold_qualified', 'qualifies': false},
+              {'ground': 'dormant', 'qualifies': false},
+            ],
+          ),
+          fsExportProvider('f1').overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(true),
+          canAdminProvider.overrideWithValue(true),
+        ];
+
+    testWidgets('builds, and names the company these accounts are for',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(
+          const FilingScreen(filingId: 'f1'),
+          filing(
+            balances: true,
+            exemptionClaimed: false,
+            groundApplies: false,
+          ),
+        ),
+      );
+      // `fs_set_entity` was granted and called by nothing, so
+      // `corp_entity_id` was null on every filing and the deadline
+      // list named the practice rather than the client.
+      expect(find.text('Maju Jaya Sdn Bhd (202101001234)'), findsOneWidget);
+      expect(
+        find.text('The statement of financial position balances'),
+        findsOneWidget,
+      );
+      expect(find.text('Due in 45 days'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fs-mapping')), findsOneWidget);
+      // All three grounds, including the ones that do not apply:
+      // showing only the one that succeeds answers "am I exempt" and
+      // leaves "why not" to guesswork.
+      expect(find.text('An audit is required'), findsOneWidget);
+      expect(find.text('Zero Revenue'), findsOneWidget);
+      expect(find.text('Dormant'), findsOneWidget);
+    });
+
+    testWidgets('and says outright when the position does not balance',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(
+          const FilingScreen(filingId: 'f1'),
+          filing(
+            balances: false,
+            exemptionClaimed: false,
+            groundApplies: false,
+          ),
+        ),
+      );
+      expect(find.text('Out by RM 1,250.40'), findsOneWidget);
+    });
+
+    testWidgets('and flags exemption claimed with no ground for it',
+        (tester) async {
+      // The dangerous combination: filing unaudited accounts that
+      // needed an audit. Neither half is wrong on its own.
+      await onAPhone(
+        tester,
+        wrap(
+          const FilingScreen(filingId: 'f1'),
+          filing(
+            balances: true,
+            exemptionClaimed: true,
+            groundApplies: false,
+          ),
+        ),
+      );
+      expect(
+        find.text('Exemption claimed, but no ground applies'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('but not when a ground does apply', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(
+          const FilingScreen(filingId: 'f1'),
+          filing(
+            balances: true,
+            exemptionClaimed: true,
+            groundApplies: true,
+          ),
+        ),
+      );
+      expect(find.text('Audit exemption available'), findsOneWidget);
+      expect(
+        find.text('Exemption claimed, but no ground applies'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('and a filing that is gone says so', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const FilingScreen(filingId: 'f1'), [
+          fsFilingProvider('f1').overrideWith((ref) async => null),
+          corpEntitiesProvider.overrideWith((ref) async => []),
+          fsBalanceCheckProvider('f1').overrideWith((ref) async => null),
+          fsDeadlinesProvider('f1').overrideWith((ref) async => null),
+          fsExemptionProvider('f1').overrideWith((ref) async => []),
+          fsExportProvider('f1').overrideWith((ref) async => []),
+          canWriteProvider.overrideWithValue(true),
+          canAdminProvider.overrideWithValue(true),
+        ]),
+      );
+      expect(find.text('Not found'), findsOneWidget);
     });
   });
 }

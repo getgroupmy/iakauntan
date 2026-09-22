@@ -361,11 +361,19 @@ class _BalanceCard extends ConsumerWidget {
                           : context.colors.danger,
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      balances
-                          ? 'The statement of financial position balances'
-                          : 'Out by ${Fmt.money(diff)}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    // Expanded, because the good-news sentence is a
+                    // long one and a bare Text in a Row takes its
+                    // natural width: it went 289 pixels off a 412px
+                    // phone, which a release build clips in silence.
+                    // The bad-news one is short and fitted, which is
+                    // exactly why nobody saw this.
+                    Expanded(
+                      child: Text(
+                        balances
+                            ? 'The statement of financial position balances'
+                            : 'Out by ${Fmt.money(diff)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),

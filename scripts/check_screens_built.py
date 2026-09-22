@@ -59,7 +59,6 @@ APP = ROOT / 'app'
 # decision -- see the docstring. The value is the file, so a reader can
 # go straight to it.
 EXEMPT: dict[str, str] = {
-    'FilingScreen': 'lib/src/features/financials/filing_screen.dart',
     'HrSetupScreen': 'lib/src/features/hr/hr_setup_screen.dart',
     # Private, so no test outside its own library can name it at all.
     # Listed rather than skipped so the count is honest about them.
