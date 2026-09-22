@@ -704,6 +704,43 @@ extension RepoOcr on Repo {
     return out?.toString();
   }
 
+  /// Records that somebody accepted a reading, and what they changed.
+  ///
+  /// `0684`. Returns the names of the fields that differed — empty
+  /// where the reader was right, null where there was no scan to write
+  /// on (an on-device capture that was never read still reaches here).
+  ///
+  /// The corrected reading is the only ground truth this system
+  /// produces. It arrives free, from somebody holding the paper, and
+  /// before this it was handed to the form and dropped.
+  Future<List<String>?> noteScanCorrection({
+    required String attachmentId,
+    required OcrExtraction accepted,
+  }) async {
+    // `callRpc` rather than `client.rpc`: it notes a 42501 the way the
+    // rest of Repo does, and — the reason this matters here — it is on
+    // the CLASS, so a test double can intercept it. This method is on
+    // `extension RepoOcr`, and an extension method binds to the static
+    // type, so a fake that declared it would never be called and the
+    // real body would run against the fake's client.
+    // See docs/widget-tests.md.
+    final out = await callRpc('ocr_note_correction', params: {
+      'p_org_id': orgId,
+      'p_attachment_id': attachmentId,
+      'p_accepted': accepted.toJson(),
+    });
+    if (out == null) return null;
+    return [for (final f in out as List) f.toString()];
+  }
+
+  /// Per reader: how many readings a person checked, how many they had
+  /// to change, and the field each gets wrong most. `0684`.
+  Future<List<Map<String, dynamic>>> platformScanAccuracy({
+    int days = 90,
+  }) async =>
+      Repo.rows(
+          await callRpc('platform_scan_accuracy', params: {'p_days': days}));
+
   /// Every movement of the scanning balance, newest first.
   Future<List<Map<String, dynamic>>> creditLedger() async => Repo.rows(
       await client

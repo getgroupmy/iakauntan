@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | a photographed bank statement becomes bank lines |
+| Head at time of writing | what the reader got wrong |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0683` is the highest. CI applies on green — see below |
+| Migrations | `0684` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 354 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,732 Flutter tests**, 34 deno tests |
-| API description | 779 functions, 366 tables, version `0683` |
+| Gates | 355 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,736 Flutter tests**, 34 deno tests |
+| API description | 781 functions, 366 tables, version `0684` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -520,6 +520,98 @@ themselves** rather than typing them — so the assertion moves when the
 ticks move. Nothing else joins those two sides: one is a table of
 strings, the other is `->>` on a jsonb, and a rename on either side is
 invisible until a statement imports as nothing.
+
+## What the reader got wrong — and the rest of the SmartScan list
+
+`0684`. `ocr_scans.extracted` held what the model said and nothing held
+what the person changed it to. `showScanResult(canApply: true)` puts the
+reading on screen beside the fields it is about to fill; somebody
+corrects the total, the date, the supplier — and that correction, the
+only ground truth this system produces, was handed to the form and
+dropped.
+
+### Three states, because two cannot say it
+
+The obvious design is one `corrected` column, and it cannot tell apart
+the two interesting cases. A scan with no correction is either a
+reading somebody checked and AGREED with — the reader was right, the
+datum the whole thing is for — or one nobody looked at. Opposite facts,
+both null.
+
+| | |
+| --- | --- |
+| `reviewed_at` null | nobody accepted this reading |
+| `reviewed_at` set, `corrected` null | accepted as read. **The reader was right** |
+| `reviewed_at` set, `corrected` set | somebody changed something, and `corrected` is what to |
+
+`corrected` is written only where it differs, and `raw_text` is stripped
+on the way in.
+
+### What counts as a difference
+
+Not `jsonb <>`. `1900` and `1900.00` are the same money and different
+JSON, and a reader marked wrong for a trailing zero would bury the real
+signal under noise that scales with volume. So the comparison is per
+field and by type — money as numeric, dates as date, text trimmed and
+case-folded, null against `''` treated as agreement. The field list is
+`app.scan_corrected_fields()` and lives nowhere else, so the write path
+and the report cannot disagree about what a correction is.
+
+`public.platform_scan_accuracy(days)` is the payoff: per reader, how
+many readings a person checked, how many they changed, the share
+accepted as read, and **the field that reader gets wrong most**. That
+last column is the useful one — readers do not fail evenly, and a reader
+that reads totals perfectly and dates badly wants a better sentence in
+that field's description rather than replacing.
+
+### Called even when nothing changed
+
+`rememberCorrection` fires on every accepted reading. Recording only the
+corrections gives every reader a denominator of nothing and a score of
+0% for ever. Best effort, beside `rememberDocumentKind` and for the same
+reason: this is a note about a reading, and a bill that was read and
+corrected must not be lost because the note would not write.
+
+### The rest of the list, not yet done
+
+Established by reading the code, in the order I would take them:
+
+1. **Settle the Gemini path.** `0675` gave Gemini `kind: 'openai'`, so it
+   goes through `readOpenAiShaped`, which sends `strict: true`,
+   `max_completion_tokens` and nested `additionalProperties: false`.
+   Google's OpenAI-compatibility layer may not take all three, and
+   **nothing here has proven a Gemini scan ever returned a
+   schema-shaped answer.** The check is one query:
+   `select status, error, count(*) from ocr_scans where provider = 'gemini' group by 1,2`.
+   It needs the live database, which this session could not reach —
+   the Supabase connector was unauthorised throughout.
+2. **Per-kind PDF handling.** `readOpenAiShaped` refuses
+   `application/pdf` by name for everything that speaks
+   chat-completions. Correct for ChatGPT and Grok when written;
+   **Gemini reads PDFs natively**, and a supplier's emailed invoice is
+   a PDF far more often than a photograph. OpenAI takes them now too,
+   through a different request shape.
+3. **A default model on the ChatGPT row.** `0113` inserts `openai` with
+   `model: null` and a blurb saying to set one in the console. Claude
+   ships with `claude-opus-5` and Gemini with `gemini-2.0-flash`;
+   ChatGPT ships as a row that cannot run until somebody types a model
+   name they have to already know.
+4. **Prompt caching on Claude, and a cheap Claude row.** The system
+   prompt plus the schema is re-sent on every scan and has GROWN since
+   `0681` — `targetPrompt` appends every configured field — while being
+   identical for every scan on a platform. Anthropic caching needs an
+   explicit `cache_control`; it is not automatic. And `claude-opus-5` at
+   RM 0.30 is the careful reader: rather than swapping the model and
+   losing the awkward layouts it was chosen for, add a second row.
+5. **MCP.** `docs/gaps-against-rillet.md` kept it off its list for a good
+   reason — *"an agent calling undescribed, non-idempotent write
+   functions is the worst version of this"* — and both preconditions
+   have since been met (`0307` idempotency keys, `docs/api/` describing
+   781 functions and 366 tables, regenerated and CI-checked). What is
+   missing is the thing that page never had to consider:
+   **authorisation**. RLS answers "what may this user see"; MCP needs
+   "what may this agent do on this user's behalf", which is narrower.
+   That is the design question, not the server.
 
 ## This session's commits
 

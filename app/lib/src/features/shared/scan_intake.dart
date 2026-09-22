@@ -55,6 +55,12 @@ Future<StagedReceipt?> showScanIntake(
     // and this is a note about the reading rather than part of it.
     await rememberDocumentKind(ref,
         attachmentId: staged.attachmentId, accepted: accepted);
+    // And what they changed. `0684`. Beside the kind because it is the
+    // same sort of note -- a person's opinion about a reading -- and
+    // because this is the last place that holds BOTH the reading and
+    // the attachment it belongs to.
+    await rememberCorrection(ref,
+        attachmentId: staged.attachmentId, accepted: accepted);
     return StagedReceipt(
       attachmentId: staged.attachmentId,
       placeholderId: staged.placeholderId,

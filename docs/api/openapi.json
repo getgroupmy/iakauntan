@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0683",
+    "version": "0684",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -42798,6 +42798,70 @@
         }
       }
     },
+    "/rpc/ocr_note_correction": {
+      "post": {
+        "operationId": "ocr_note_correction",
+        "summary": "Records that a person accepted the most recent scan of an attachment, and what they changed on the way",
+        "description": "Records that a person accepted the most recent scan of an attachment, and what they changed on the way. Returns the field names that differed -- empty where the reader was right, null where there was no scan to write on. 0684.\n\n`public.ocr_note_correction(p_org_id uuid, p_attachment_id uuid, p_accepted jsonb)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_attachment_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_accepted": {}
+                },
+                "required": [
+                  "p_org_id",
+                  "p_attachment_id",
+                  "p_accepted"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/ocr_record_local": {
       "post": {
         "operationId": "ocr_record_local",
@@ -47614,6 +47678,83 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_scan_accuracy": {
+      "post": {
+        "operationId": "platform_scan_accuracy",
+        "summary": "Per reader: readings a person checked, readings they had to change, the share accepted as read, and the field\u2026",
+        "description": "Per reader: readings a person checked, readings they had to change, the share accepted as read, and the field each reader gets wrong most. The answer to whether a cheaper reader is actually cheaper. Empty for a non-admin rather than an exception. 0684.\n\n`public.platform_scan_accuracy(p_days integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_days": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string"
+                      },
+                      "reviewed": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "corrected": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "accuracy": {
+                        "type": "number"
+                      },
+                      "worst_field": {
+                        "type": "string"
+                      },
+                      "worst_count": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -91502,7 +91643,16 @@
           },
           "log_ref": {
             "type": "string"
-          }
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewed_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "corrected": {}
         },
         "required": [
           "org_id",

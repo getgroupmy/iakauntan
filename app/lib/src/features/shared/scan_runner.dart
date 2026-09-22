@@ -146,3 +146,33 @@ Future<void> rememberDocumentKind(
     // Deliberately swallowed; see above.
   }
 }
+
+/// Files what the person accepted, and what they changed on the way.
+///
+/// `0684`. The correction is the only ground truth this system
+/// produces: somebody holding the paper, looking at the reading beside
+/// it, putting a figure right. It arrives free and was dropped on the
+/// floor, which left every question about which reader is better --
+/// and whether a cheaper one is actually cheaper -- unanswerable.
+///
+/// Called unconditionally, including when nothing was changed. A
+/// reading accepted as it stands is the reader being RIGHT, and that is
+/// the datum the count is built on; recording only the corrections
+/// would give a denominator of nothing.
+///
+/// Best effort, for the same reason `rememberDocumentKind` is: this is
+/// a note about a reading, and a bill that was read and corrected must
+/// not be lost because the note would not write.
+Future<void> rememberCorrection(
+  WidgetRef ref, {
+  required String attachmentId,
+  required OcrExtraction accepted,
+}) async {
+  try {
+    await ref
+        .read(repoProvider)
+        ?.noteScanCorrection(attachmentId: attachmentId, accepted: accepted);
+  } catch (_) {
+    // Deliberately swallowed; see above.
+  }
+}
