@@ -1181,6 +1181,9 @@ jobs:
       # while doing it, and are further from anybody noticing: a
       # MyInvois submission that stops working fails on a schedule
       # rather than in front of a user.
+      - name: Check nothing a person typed goes raw into an or() filter
+        run: python3 scripts/check_or_filters.py
+
       - name: Check the column names are columns
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
@@ -2155,6 +2158,9 @@ jobs:
 
       - name: The web-only-API gate's own assertions
         run: python3 scripts/check_web_only_apis_test.py
+
+      - name: The or() gate's own assertions
+        run: python3 scripts/check_or_filters_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py

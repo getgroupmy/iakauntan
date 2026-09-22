@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | where a scanned paper goes, and what it fills (`0681`) |
+| Head at time of writing | the supplier search that could not be searched |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
 | Migrations | `0681` is the highest, and **applied**. CI's "Apply the migrations" job pushed `0675`–`0681` to the hosted project on run 2065 |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 352 SQL assertion files, **45 Python gates (+11 gate self-tests)**, **5,688 Flutter tests**, 34 deno tests |
+| Gates | 352 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,703 Flutter tests**, 34 deno tests |
 | API description | 779 functions, 366 tables, version `0681` |
 
 ### CI applies migrations, and this branch is the default branch
@@ -196,6 +196,61 @@ Google's console rather than ours, and a **self-hosted** reader is sent
 each destination screen's form to read arbitrary columns out of
 `fields` is the next step — 14 files consume `OcrExtraction` today and
 none of them reads the new map yet.
+
+## `or()` is a grammar, not a parameter
+
+Reported off a phone, on the supplier picker after a scan:
+
+> `PostgrestException(message: "failed to parse logic tree
+> ((name.ilike.%SHAHARUDIN, SHAM SUNDER & PARTNERS%, …", code: PGRST100)`
+
+PostgREST's `or` parses its own argument. A comma starts another
+branch, a dot separates column from operator from value, parentheses
+nest, and `&` ends the query string. Five call sites interpolated typed
+text straight into it, so **any Malaysian firm with a comma or an `&`
+in its name was unsearchable**.
+
+`Repo.orValue` double-quotes and escapes; `Repo.orLike(column, q)`
+builds one `ilike` branch with it. `scripts/check_or_filters.py` fails
+on any `or()` whose string carries a `$` interpolation that is not
+going through one of the two. It has a self-test, because a gate that
+has stopped matching passes everything cheerfully.
+
+The gate cannot see `.eq()`, `.ilike()` or `.contains()` — those are
+separate query parameters and postgrest-dart encodes them. Only the
+logic tree parses its own argument.
+
+### The half that was worse
+
+`resolveSupplier` wraps that lookup in `catch (_)` and treats a failure
+as "no supplier found". So the parse error never surfaced as an error:
+it became a missing-supplier dialog with an empty list of near-misses,
+next to a Create button. **That is how a second contact record for a
+company already on file gets made.** The catch stays — a lookup that
+fails for a real reason should still not offer to create a duplicate —
+but it was hiding a bug, not a network blip.
+
+### Suggesting, rather than asking again
+
+The substring search finds nothing whenever the two spellings differ at
+all, and they usually do: one was typed by a person, the other read off
+a letterhead. `rankedLikeName` now scores every supplier on file
+against the printed name.
+
+On WORDS, not characters — two spellings of one company share their
+distinctive words and differ in punctuation, in `&` against `and`, in
+whether `Sdn Bhd` was typed at all. Generic words (`sdn`, `bhd`,
+`trading`, `partners`, and the rest of `_generic`) come off first,
+because they are on half the letterheads in the country and a scorer
+that counted them would rank every company against every other. The
+score is over the SMALLER word set, so a supplier saved as two words
+matches a six-word letterhead. A registration number outranks
+everything: it is an identity, not a label.
+
+The suggestions are tappable now. They were bullets with a "Choose
+existing" button that reopened the picker — so somebody who could SEE
+the right supplier named in front of them had to dismiss the dialog and
+search for it again.
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 

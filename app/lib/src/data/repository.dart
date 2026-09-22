@@ -787,7 +787,11 @@ class Repo {
     }
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or('name.ilike.%$q%,code.ilike.%$q%,email.ilike.%$q%');
+      query = query.or([
+        Repo.orLike('name', q),
+        Repo.orLike('code', q),
+        Repo.orLike('email', q),
+      ].join(','));
     }
 
     final data = await query.order('name', ascending: true).limit(200);
@@ -1011,7 +1015,11 @@ class Repo {
 
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or('name.ilike.%$q%,code.ilike.%$q%,barcode.ilike.%$q%');
+      query = query.or([
+        Repo.orLike('name', q),
+        Repo.orLike('code', q),
+        Repo.orLike('barcode', q),
+      ].join(','));
     }
 
     final data = await query.order('code', ascending: true).limit(300);
@@ -3060,7 +3068,8 @@ class Repo {
         .select('id')
         .eq('body', 'pcb')
         .lte('effective_from', day)
-        .or('effective_to.is.null,effective_to.gt.$day')
+        .or('effective_to.is.null,effective_to.gt.'
+            '${Repo.orValue(day)}')
         .order('effective_from', ascending: false)
         .limit(1);
     final list = (schedules as List).cast<Map<String, dynamic>>();
@@ -3172,7 +3181,8 @@ class Repo {
         .from('capital_allowance_classes')
         .select()
         .lte('effective_from', today)
-        .or('effective_to.is.null,effective_to.gt.$today')
+        .or('effective_to.is.null,effective_to.gt.'
+            '${Repo.orValue(today)}')
         // `ascending: true` said out loud. postgrest-dart defaults it
         // to FALSE, so the bare `.order('sort_order')` this was written
         // as put industrial buildings at the top of the picker and
@@ -3319,7 +3329,10 @@ class Repo {
       final q = search.trim();
       query = kind.isSales
           ? query.ilike('doc_no', '%$q%')
-          : query.or('doc_no.ilike.%$q%,supplier_doc_no.ilike.%$q%');
+          : query.or([
+              Repo.orLike('doc_no', q),
+              Repo.orLike('supplier_doc_no', q),
+            ].join(','));
     }
 
     final data = await query.order('doc_date', ascending: false).limit(limit);
@@ -5611,6 +5624,35 @@ class Repo {
     }, onConflict: 'user_id');
   }
 
+  /// A value safe to sit inside a PostgREST `or(...)` filter tree.
+  ///
+  /// `or` is not a parameter, it is a little language: commas separate
+  /// the branches, dots separate column from operator from value, and
+  /// parentheses nest. So a supplier called
+  ///
+  ///     SHAHARUDIN, SHAM SUNDER & PARTNERS
+  ///
+  /// interpolated raw produced
+  ///
+  ///     failed to parse logic tree ... unexpected "&" (PGRST100)
+  ///
+  /// off a live phone, and any Malaysian firm with a comma in its name
+  /// could not be searched for at all. Worse where the failure was
+  /// caught: `resolveSupplier` treats a thrown lookup as "no match", so
+  /// the crash quietly became "supplier not found" and the dialog that
+  /// offers the near-misses never opened.
+  ///
+  /// PostgREST's own answer is to double-quote the value, escaping `\`
+  /// and `"` inside it. That is all this does, and every `or()` built
+  /// from anything a person typed has to use it -- which
+  /// `scripts/check_or_filters.py` now insists on.
+  static String orValue(String v) =>
+      '"${v.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
+
+  /// `column.ilike."%what they typed%"`, escaped.
+  static String orLike(String column, String q) =>
+      '$column.ilike.${orValue('%$q%')}';
+
   static List<Map<String, dynamic>> _rows(dynamic data) =>
       (data as List? ?? const [])
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -6500,7 +6542,10 @@ extension RepoExtras on Repo {
     if (status != null && status != 'all') query = query.eq('status', status);
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or('name.ilike.%$q%,matter_no.ilike.%$q%');
+      query = query.or([
+        Repo.orLike('name', q),
+        Repo.orLike('matter_no', q),
+      ].join(','));
     }
 
     final data = await query.order('matter_no', ascending: false).limit(200);
@@ -7010,8 +7055,11 @@ extension RepoHr on Repo {
       q = q.eq('employment_status', status);
     }
     if (search != null && search.trim().isNotEmpty) {
-      final s = '%${search.trim()}%';
-      q = q.or('full_name.ilike.$s,employee_no.ilike.$s');
+      final s = search.trim();
+      q = q.or([
+        Repo.orLike('full_name', s),
+        Repo.orLike('employee_no', s),
+      ].join(','));
     }
     return Repo._rows(
       await q.order('employee_no', ascending: true),
