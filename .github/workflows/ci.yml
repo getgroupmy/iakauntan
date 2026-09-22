@@ -852,6 +852,7 @@ jobs:
                    supabase/tests/stock_value_returns_to_zero.sql \
                    supabase/tests/malaysian_clock.sql \
                    supabase/tests/ocr_credit.sql \
+                   supabase/tests/ocr_key_pool.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

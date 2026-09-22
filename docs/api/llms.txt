@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0674` (the highest applied migration).
-766 functions and 364 readable tables, of which
-292 functions only read.
+Schema version `0675` (the highest applied migration).
+770 functions and 364 readable tables, of which
+294 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**624 of 766 functions carry a `comment on
+**627 of 770 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (554)
+### general (558)
 
 Not gated on any module.
 
@@ -540,6 +540,7 @@ Not gated on any module.
 - `declarable_reliefs(p_tax_year integer)` — The reliefs an employee may put on a TP1 for a tax year, with LHDN's ceiling on each.
 - `delete_mia_credential(p_id uuid)` *(writes)* — Removes a recorded MIA credential.
 - `delete_my_account()` *(writes)* — 0158's name for close_my_account().
+- `delete_ocr_key(p_provider text, p_id uuid, p_org_id uuid)` *(writes)* — Takes a key out of a pool for good.
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)* — Marks a held cheque as paid in, and POSTS NOTHING.
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
 - `detach_company_from_firm(p_org_id uuid)` *(writes)* — Ends the appointment between a company and the accounting practice keeping its books, and returns how many memberships it removed.
@@ -637,6 +638,8 @@ Not gated on any module.
 - `next_contact_code(p_org_id uuid, p_type app.contact_type)` *(writes)* — The next code in the series for a contact of this type -- C-2026-00013, S-2026-00001, P-2026-00343.
 - `next_document_number(p_org_id uuid, p_doc_type text)` *(writes)* — Allocates the next number for a document type, e.g.
 - `ocr_begin(p_org_id uuid, p_attachment_id uuid)` *(writes)* — Opens a scan and hands back what the caller needs to run it -- provider, endpoint, model, storage path -- having first charged for it.
+- `ocr_key_pool_size(p_provider text, p_org_id uuid)`
+- `ocr_keys_for(p_provider text, p_org_id uuid)` — A pool as the console sees it: everything about each key except the key.
 - `ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` *(writes)* — Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is `device` and `amount_charged` is zero.
 - `ocr_status(p_org_id uuid)`
 - `open_appraisal_cycle(p_cycle uuid)` *(writes)* — Creates an appraisal for everybody the cycle covers and returns how many were made.
@@ -828,6 +831,7 @@ Not gated on any module.
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)* — Raises every recurring document due on or before a date for ONE company, and returns how many.
 - `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)* — The same for recurring journals, one company, returning how many were advanced.
 - `save_layout_rows(p_layout_id uuid, p_rows jsonb)` *(writes)* — Replaces a layout's rows in one go, validating the whole set before deleting anything -- so a refused layout is the one that was there rather than an empty one.
+- `save_ocr_key(p_provider text, p_org_id uuid, p_id uuid, p_label text, p_api_key text, p_per_minute integer, p_per_day integer, p_per_month integer, p_hours smallint[], p_weekdays smallint[], p_months smallint[], p_is_active boolean)` *(writes)* — Adds a key to a reader's pool, or changes one.
 - `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
 - `search_platform_users(p_query text, p_limit integer)` — Name/e-mail search across every tenant, for the platform console's user picker.

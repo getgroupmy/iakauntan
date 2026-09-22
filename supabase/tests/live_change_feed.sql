@@ -59,10 +59,13 @@ begin;
 -- company is specifically not being shown. The list below is the exception in full, and it
 -- is a list rather than a pattern so that adding to it takes a
 -- decision.
-do $$
-declare
-  v_missing text[];
-  v_receipts text[] := array[
+-- ONE list, in a function, because this file needs it TWICE -- once to
+-- say these tables have no trigger, and again to say they are not
+-- missing one. Two copies of a decision is two copies that drift, and
+-- this one did: `ocr_provider_keys` was added to the first and the
+-- second went on demanding a trigger for it.
+create or replace function pg_temp.feed_exempt() returns text[]
+language sql immutable as $fn$ select array[
     'security_events', 'payslip_access_log', 'ssm_api_log',
     -- 0619, and the fourth for a reason of its own. `account_closures`
     -- records that a company, a login or a ledger account has been
@@ -72,7 +75,32 @@ declare
     -- cannot select from has moved -- and in the one case that matters,
     -- to announce the company's own closure to the members who are in
     -- the same instant losing access to it.
-    'account_closures'];
+    'account_closures',
+    -- 0675, and the fifth. `ocr_provider_keys` is a pool of reader
+    -- keys, RLS on with no policies and grants revoked, so the first
+    -- half of the `ssm_api_log` argument applies unchanged: a notice
+    -- would wake every client watching that company to say a table they
+    -- cannot select from has moved.
+    --
+    -- The second half is worse here than anywhere else on this list.
+    -- The counters that decide whether a key has anything left are ON
+    -- THE ROW, and `app.claim_ocr_key` updates them as part of the
+    -- claim -- so with the trigger attached, EVERY SCAN THE PLATFORM
+    -- RUNS would append a change notice and wake every client watching
+    -- that organization, for ever, about a number nobody can read.
+    --
+    -- Its two nearest neighbours, `org_ocr_credentials` and
+    -- `ai_provider_credentials`, do carry the trigger: 0547 attached it
+    -- to everything with an `org_id` that existed at the time, and
+    -- neither is written often enough for anybody to have noticed. That
+    -- is not a precedent to follow, and it is written down here rather
+    -- than quietly diverged from.
+    'ocr_provider_keys'] $fn$;
+
+do $$
+declare
+  v_missing text[];
+  v_receipts text[] := pg_temp.feed_exempt();
   v_wrongly_on text[];
 begin
   select coalesce(array_agg(c.relname order by c.relname), '{}')
@@ -161,9 +189,7 @@ begin
      -- select from it either, and the change it records is a company's
      -- own closure, which is not news to push at the members who are
      -- losing access to it in the same instant.
-     and c.relname not in
-       ('security_events', 'payslip_access_log', 'ssm_api_log',
-        'account_closures')
+     and not (c.relname = any (pg_temp.feed_exempt()))
      and exists (
        select 1 from information_schema.columns col
         where col.table_schema = 'public'

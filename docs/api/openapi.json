@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0674",
+    "version": "0675",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -32807,6 +32807,68 @@
         }
       }
     },
+    "/rpc/delete_ocr_key": {
+      "post": {
+        "operationId": "delete_ocr_key",
+        "summary": "Takes a key out of a pool for good",
+        "description": "Takes a key out of a pool for good. `p_org_id` null is the platform's pool and needs a platform administrator; a uuid is that company's own. Deleting the last usable key in a pool does not switch the reader off -- scans then fail at the claim with nothing to give, which `ocr_key_pool_size` is what Settings asks to warn about beforehand.\n\n`public.delete_ocr_key(p_provider text, p_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_provider": {
+                    "type": "string"
+                  },
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_provider",
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/delete_pos_recipe": {
       "post": {
         "operationId": "delete_pos_recipe",
@@ -42435,6 +42497,202 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/ocr_key_pool_size": {
+      "post": {
+        "operationId": "ocr_key_pool_size",
+        "summary": "Ocr key pool size",
+        "description": "`public.ocr_key_pool_size(p_provider text, p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_provider": {
+                    "type": "string"
+                  },
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_provider"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/ocr_keys_for": {
+      "post": {
+        "operationId": "ocr_keys_for",
+        "summary": "A pool as the console sees it: everything about each key except the key",
+        "description": "A pool as the console sees it: everything about each key except the key. The last four characters only, so two can be told apart.\n\n`public.ocr_keys_for(p_provider text, p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_provider": {
+                    "type": "string"
+                  },
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_provider"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "key_tail": {
+                        "type": "string"
+                      },
+                      "per_minute": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "per_day": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "per_month": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "hours": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "format": "int16"
+                        }
+                      },
+                      "weekdays": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "format": "int16"
+                        }
+                      },
+                      "months": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "format": "int16"
+                        }
+                      },
+                      "is_active": {
+                        "type": "boolean"
+                      },
+                      "in_window": {
+                        "type": "boolean"
+                      },
+                      "spent_minute": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "spent_day": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "spent_month": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "has_headroom": {
+                        "type": "boolean"
+                      },
+                      "last_used_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "last_error": {
+                        "type": "string"
+                      },
+                      "last_error_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -63477,6 +63735,110 @@
                 "schema": {
                   "type": "integer",
                   "format": "int32"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/save_ocr_key": {
+      "post": {
+        "operationId": "save_ocr_key",
+        "summary": "Adds a key to a reader's pool, or changes one",
+        "description": "Adds a key to a reader's pool, or changes one. `p_org_id` null is the platform's pool and needs a platform administrator; a uuid is that company's own and needs an administrator of it. On an update a null `p_api_key` LEAVES THE KEY ALONE, which is what lets a cap be raised without retyping a secret nobody still has; a blank one is refused rather than stored, because a key that is the empty string fails at the provider with a message about authentication. Caps are per minute, per day and per month, null for no cap; the clock arrays are Asia/Kuala_Lumpur and empty means always. The key cannot be read back by anything but the service role.\n\n`public.save_ocr_key(p_provider text, p_org_id uuid, p_id uuid, p_label text, p_api_key text, p_per_minute integer, p_per_day integer, p_per_month integer, p_hours smallint[], p_weekdays smallint[], p_months smallint[], p_is_active boolean)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_provider": {
+                    "type": "string"
+                  },
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_label": {
+                    "type": "string"
+                  },
+                  "p_api_key": {
+                    "type": "string"
+                  },
+                  "p_per_minute": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_per_day": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_per_month": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_hours": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "format": "int16"
+                    }
+                  },
+                  "p_weekdays": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "format": "int16"
+                    }
+                  },
+                  "p_months": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "format": "int16"
+                    }
+                  },
+                  "p_is_active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "p_provider"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
