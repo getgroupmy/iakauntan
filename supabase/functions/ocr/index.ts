@@ -55,6 +55,7 @@ import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { poolProblem } from "./pool.ts";
 import {
   type ScanTarget,
+  requiredWith,
   targetPrompt,
   targetSchema,
   usableTargets,
@@ -1064,9 +1065,25 @@ async function runReader(
   targets: ScanTarget[] = [],
 ): Promise<Extraction> {
   const extra = targetSchema(targets);
+  // `required` grows with `properties`, and forgetting that broke every
+  // scan on any platform that had configured a single field.
+  //
+  // `SCHEMA` is `strict: true` with `additionalProperties: false` and
+  // an explicit `required` naming every property — "every field is
+  // required and nullable rather than optional", which is its own
+  // header's rule. OpenAI's strict mode enforces it: a property that is
+  // not in `required` is an invalid schema and the call comes back 400.
+  // That reached the caller as `The document could not be read`, which
+  // is what this function says about everything, so it looked like the
+  // reader having a bad day rather than us sending a malformed request.
+  //
+  // It bit only after somebody ticked a field in the console, because
+  // an empty target list leaves the schema untouched — so it presented
+  // as scanning that had worked all week and suddenly did not.
   const schema = extra === null ? SCHEMA : {
     ...SCHEMA,
     properties: { ...SCHEMA.properties, ...extra },
+    required: requiredWith(SCHEMA.required, extra),
   };
   const system = extra === null ? SYSTEM : SYSTEM + "\n" + targetPrompt(targets);
 

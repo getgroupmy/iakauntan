@@ -34,7 +34,7 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | SmartScan is a module, and a statement is many rows (`0682`) |
+| Head at time of writing | the `required` that did not grow with `properties` |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
 | Migrations | `0682` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
@@ -308,6 +308,40 @@ The reader returns a statement's lines. Turning them into
 `bank_transactions` is not wired: that needs a bank account chosen, an
 import batch and the duplicate check, which is the bank-import
 machinery rather than the scan machinery.
+
+## A schema is `strict`, and `required` grows with `properties`
+
+Scanning worked all week and then stopped, with the sentence this
+function says about everything:
+
+> `The document could not be read. Quote this reference if you get in
+> touch.`
+
+`SCHEMA` in `supabase/functions/ocr/index.ts` is `strict: true` with
+`additionalProperties: false` and an explicit `required` naming every
+property — its own header says "every field is required and nullable
+rather than optional". `0681` merged the configured target fields into
+`properties` and **not** into `required`. OpenAI's strict mode rejects
+that schema outright: 400 from the vendor, caught, reported as the
+document being unreadable.
+
+Two things made it hard to see:
+
+- **It only bites once somebody ticks a field in the console.** An
+  empty target list leaves the schema untouched, so it presented as a
+  feature that had worked for days and suddenly did not — with nothing
+  deployed in between except the console that made ticking possible.
+- **The nested objects have the same rule.** `fields`, and each item of
+  `rows`, are objects with `additionalProperties: false` and no
+  `required`. Strict mode is not a top-level-only rule, and the second
+  400 looks exactly like the first.
+
+`requiredWith(base, extra)` in `targets.ts` is the fix and is tested on
+its own, because getting it wrong is silent at every layer this
+repository controls and loud only at the vendor.
+
+**The rule:** in this codebase a JSON schema sent to a reader is strict.
+Add a property, add its name to `required`, at every level.
 
 ### THE DEFAULT BRANCH IS THIS BRANCH, NOT `main`
 

@@ -1,5 +1,10 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { targetPrompt, targetSchema, usableTargets } from "./targets.ts";
+import {
+  requiredWith,
+  targetPrompt,
+  targetSchema,
+  usableTargets,
+} from "./targets.ts";
 
 // What a platform configures in the console becomes part of the schema
 // every reader is sent. Three things can go wrong quietly there and
@@ -213,4 +218,83 @@ Deno.test("the prompt says one entry per printed line", () => {
   // Every line, in order. A statement with lines missing reconciles to
   // nothing, and a model left to summarise will drop the small ones.
   assertStringIncludes(said, "in the order printed");
+});
+
+// The one that broke scanning in production.
+//
+// `SCHEMA` in `index.ts` is `strict: true`, `additionalProperties:
+// false`, with an explicit `required` naming every property. OpenAI's
+// strict mode enforces that: a property not in `required` is an invalid
+// schema and the call comes back 400. Merging the configured fields
+// into `properties` and not into `required` therefore broke every scan
+// — but only on a platform that had ticked at least one field, because
+// an empty target list leaves the schema alone. It presented as
+// scanning that had worked all week and suddenly stopped.
+
+Deno.test("every property the targets add is also required", () => {
+  const extra = targetSchema([
+    {
+      key: "purchases.bill",
+      label: "A bill",
+      fields: [{ name: "doc_no" }],
+    },
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }],
+    },
+  ])!;
+  const base = ["supplier_name", "note"];
+  const required = requiredWith(base, extra);
+
+  // Nothing lost...
+  for (const k of base) assertEquals(required.includes(k), true);
+  // ...and every added property named.
+  for (const k of Object.keys(extra)) {
+    assertEquals(required.includes(k), true, `${k} is not required`);
+  }
+  // `target`, `fields` and `rows` for this pair.
+  assertEquals(required.length, base.length + 3);
+});
+
+Deno.test("no targets adds nothing to required", () => {
+  assertEquals(requiredWith(["a"], null), ["a"]);
+});
+
+Deno.test("a name is never required twice", () => {
+  // A duplicate in `required` is not rejected by every vendor, and is
+  // rejected by some. Cheaper to make impossible than to find out.
+  const extra = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+  ])!;
+  const required = requiredWith(["target", "supplier_name"], extra);
+  assertEquals(required.filter((k) => k === "target").length, 1);
+});
+
+Deno.test("the nested objects name their properties too", () => {
+  // Strict mode is not only a top-level rule. `fields` and each row of
+  // `rows` are objects with `additionalProperties: false`, and a
+  // vendor rejects either one for the same reason.
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }, { name: "transaction_date" }],
+    },
+  ])!;
+
+  const fields = schema.fields as {
+    required: string[];
+    properties: Record<string, unknown>;
+  };
+  assertEquals(fields.required, Object.keys(fields.properties));
+
+  const rows = schema.rows as {
+    items: { required: string[]; properties: Record<string, unknown> };
+  };
+  assertEquals(rows.items.required.sort(), ["amount", "transaction_date"]);
+  assertEquals(rows.items.required.length, Object.keys(rows.items.properties).length);
 });

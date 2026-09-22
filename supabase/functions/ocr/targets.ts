@@ -132,10 +132,15 @@ export function targetSchema(
     schema.fields = {
       type: ["object", "null"],
       additionalProperties: false,
+      // As above. `additionalProperties: false` without `required` is
+      // what a vendor in strict mode rejects, and the rejection reads
+      // as the document being unreadable.
+      required: Object.keys(properties),
       description:
         "Values for the chosen destination, as printed. Every key is " +
-        "optional and null means it is not on the document. Leave this " +
-        "null when the destination you chose takes rows instead.",
+        "required and null means it is not on the document. Leave this " +
+        "whole object null when the destination you chose takes rows " +
+        "instead.",
       properties,
     };
   }
@@ -146,6 +151,7 @@ export function targetSchema(
   // or an average, or whichever line the model thought mattered. All
   // three look like an answer.
   if (targets.some((t) => t.repeats)) {
+    const rowProps = rowProperties(targets);
     schema.rows = {
       type: ["array", "null"],
       description:
@@ -158,7 +164,11 @@ export function targetSchema(
       items: {
         type: "object",
         additionalProperties: false,
-        properties: rowProperties(targets),
+        // Every property named, here as at the top level. Strict mode
+        // applies to NESTED objects too, and a row schema missing this
+        // is the same 400 one level down.
+        required: Object.keys(rowProps),
+        properties: rowProps,
       },
     };
   }
@@ -220,4 +230,27 @@ export function targetPrompt(targets: ScanTarget[]): string {
     "first becomes a record somebody has to find and undo.",
   );
   return lines.join("\n");
+}
+
+/**
+ * The `required` list a schema needs once the target properties are in
+ * it.
+ *
+ * Its own function, and tested, because getting it wrong is silent at
+ * every layer this repository controls and loud only at the vendor:
+ * `SCHEMA` is `strict: true` with `additionalProperties: false`, and
+ * OpenAI's strict mode rejects a schema whose `properties` are not all
+ * named in `required`. The rejection arrives as a 400 that the edge
+ * function reports as "The document could not be read", which is what
+ * it says about everything.
+ *
+ * Deduplicated: a repeated name is accepted by some vendors and
+ * rejected by others, and that is cheaper to make impossible than to
+ * find out.
+ */
+export function requiredWith(
+  base: readonly string[],
+  extra: Record<string, unknown> | null,
+): string[] {
+  return [...new Set([...base, ...Object.keys(extra ?? {})])];
 }
