@@ -126,7 +126,6 @@ EXEMPT: dict[str, str] = {
     'showEditLeaveContact': 'lib/src/features/hr/who_is_away.dart',
     'showEmailDialog': 'lib/src/features/documents/email_dialog.dart',
     'showEscalateTicketSheet': 'lib/src/features/ticketing/ticket_routing_sheet.dart',
-    'showExpiringDocuments': 'lib/src/features/hr/expiring_documents.dart',
     'showFilingDetails': 'lib/src/features/financials/filing_details.dart',
     'showFilingStep': 'lib/src/features/secretarial/filing_lifecycle.dart',
     'showForecastLineSheet': 'lib/src/features/forecasting/forecast_screen.dart',
@@ -175,7 +174,6 @@ EXEMPT: dict[str, str] = {
     'showTimeEntrySheet': 'lib/src/features/timesheets/time_entry_sheet.dart',
     'showTransferDialog': 'lib/src/features/documents/transfer_dialog.dart',
     'showTransfersHistory': 'lib/src/features/banking/transfers_history_dialog.dart',
-    'showUncapitalisedPurchases': 'lib/src/features/assets/capitalise_dialog.dart',
     'showUnitSheet': 'lib/src/features/property/unit_sheet.dart',
     'showWithholdingDialog': 'lib/src/features/documents/withholding_dialog.dart',
 }

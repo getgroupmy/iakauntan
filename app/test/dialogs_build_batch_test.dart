@@ -7,10 +7,12 @@ import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/assets/capital_allowances_dialog.dart';
+import 'package:iakauntan/src/features/assets/capitalise_dialog.dart';
 import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
+import 'package:iakauntan/src/features/hr/expiring_documents.dart';
 import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/legal/over_agreed_fee_dialog.dart';
 import 'package:iakauntan/src/features/pos/recipe_requirement_dialog.dart';
@@ -659,6 +661,168 @@ void main() {
         showWhoIsAway,
       );
       expect(find.text('Nobody is away'), findsOneWidget);
+    });
+  });
+
+  group('documents expiring', () {
+    testWidgets('opens, and an expired pass says what the law calls it',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          // SIXTY, not thirty. `0025`'s comment named that window and
+          // it is the right default — a work permit renewal takes
+          // weeks, so a fortnight's notice is notice of something
+          // already too late to do calmly. Keying the fixture on 30
+          // leaves the real provider in place and the dialog renders
+          // an error view instead of rows.
+          expiringDocumentsProvider(60).overrideWith(
+            (ref) async => [
+              {
+                'document_id': 'd1',
+                'employee_name': 'Bikash Rai',
+                'title': 'Work permit',
+                'doc_type': 'work_permit',
+                'consequence': 'offence',
+                'days_until': -14,
+                'is_expired': true,
+                'expires_date': '2026-09-08',
+              },
+            ],
+          ),
+        ],
+        showExpiringDocuments,
+      );
+      expect(find.text('Documents expiring'), findsOneWidget);
+      // Negative days become words.
+      expect(
+        find.textContaining('Work Permit · Expired 14 days ago'),
+        findsOneWidget,
+      );
+      // The note appears ONLY on the offence, and says what it is
+      // rather than "renew soon" — which on a pass that lapsed a
+      // fortnight ago understates it to the point of being wrong.
+      expect(
+        find.textContaining('an offence by the company under s.55B'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and the day before is its own sentence', (tester) async {
+      // A row of its own rather than a second row above: the offence
+      // note runs to four lines in a dialog this narrow, and a
+      // `ListView` does not build what the viewport cannot reach.
+      await opened(
+        tester,
+        [
+          expiringDocumentsProvider(60).overrideWith(
+            (ref) async => [
+              {
+                'document_id': 'd2',
+                'employee_name': 'Siti Aminah',
+                'title': 'Driving licence',
+                'doc_type': 'licence',
+                'consequence': 'renewal',
+                'days_until': 1,
+                'is_expired': false,
+                'expires_date': '2026-09-23',
+              },
+            ],
+          ),
+        ],
+        showExpiringDocuments,
+      );
+      expect(
+        find.textContaining('Licence · Expires tomorrow'),
+        findsOneWidget,
+      );
+      // No offence, so no note. A renewal is not a crime.
+      expect(find.textContaining('s.55B'), findsNothing);
+    });
+
+    testWidgets('and a document with no date on it says that', (tester) async {
+      await opened(
+        tester,
+        [
+          expiringDocumentsProvider(60).overrideWith(
+            (ref) async => [
+              {
+                'document_id': 'd3',
+                'employee_name': 'Lim Wei Ling',
+                'title': 'Degree certificate',
+                'doc_type': 'certificate',
+                'consequence': 'renewal',
+              },
+            ],
+          ),
+        ],
+        showExpiringDocuments,
+      );
+      // Null days is not zero days. "Expires today" on a certificate
+      // with no expiry would be a fabricated deadline.
+      expect(find.textContaining('No expiry date'), findsOneWidget);
+    });
+  });
+
+  group('purchases that were never capitalised', () {
+    testWidgets('opens, and each row offers to capitalise it',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          uncapitalisedPurchasesProvider.overrideWith(
+            (ref) async => [
+              {
+                'document_id': 'b1',
+                'line_id': 'l1',
+                'doc_no': 'BILL-0031',
+                'doc_date': '2026-08-14',
+                'description': 'Dell workstation',
+                'supplier_name': 'Tech Supply Sdn Bhd',
+                'account_code': '6300',
+                'account_name': 'Office equipment',
+                'amount': 6800,
+              },
+            ],
+          ),
+        ],
+        showUncapitalisedPurchases,
+      );
+      expect(find.text('Dell workstation'), findsOneWidget);
+      expect(
+        find.text('BILL-0031 · 14/08/2026 · Tech Supply Sdn Bhd · '
+            '6300 Office equipment'),
+        findsOneWidget,
+      );
+      expect(find.text('RM 6,800.00'), findsOneWidget);
+    });
+
+    testWidgets('and a line with no description falls back to its number',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          uncapitalisedPurchasesProvider.overrideWith(
+            (ref) async => [
+              {
+                'document_id': 'b2',
+                'line_id': 'l2',
+                'doc_no': 'BILL-0032',
+                'doc_date': '2026-08-20',
+                'description': '',
+                'supplier_name': 'Tech Supply Sdn Bhd',
+                'account_code': '6300',
+                'account_name': 'Office equipment',
+                'amount': 1200,
+              },
+            ],
+          ),
+        ],
+        showUncapitalisedPurchases,
+      );
+      // An empty description is not a title. Without the fallback the
+      // row would have a blank first line.
+      expect(find.text('BILL-0032'), findsOneWidget);
     });
   });
 }
