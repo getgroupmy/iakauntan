@@ -82,9 +82,7 @@ APP = Path(__file__).resolve().parent.parent / 'app'
 #: the screens list started at 38 of 117 and this one starts at 105 of
 #: 122, because nothing has ever asked the question here at all.
 EXEMPT: dict[str, str] = {
-    'askDiscard': 'lib/src/features/documents/void_document.dart',
     'askRemoveCredentials': 'lib/src/features/settings/einvoice_credentials.dart',
-    'askVoidReason': 'lib/src/features/documents/void_document.dart',
     'assignTable': 'lib/src/features/pos/assign_table.dart',
     'confirmAndDeleteContact': 'lib/src/features/contacts/contact_delete.dart',
     'createAccountFromPicker': 'lib/src/features/settings/new_account_dialog.dart',
@@ -93,8 +91,6 @@ EXEMPT: dict[str, str] = {
     'createSupplierFromScan': 'lib/src/features/shared/supplier_from_scan.dart',
     'pickMsicCode': 'lib/src/features/settings/msic_picker.dart',
     'pickedTaxCode': 'lib/src/features/settings/tax_code_dialog.dart',
-    'promptForText': 'lib/src/core/widgets.dart',
-    'quickAdd': 'lib/src/core/quick_add_dialog.dart',
     'resolveSupplier': 'lib/src/features/shared/supplier_from_scan.dart',
     'showActivityDialog': 'lib/src/features/documents/email_dialog.dart',
     'showApplicantEditor': 'lib/src/features/hr/applicant_editor.dart',

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
+import 'package:iakauntan/src/core/quick_add_dialog.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/core/widgets.dart';
 import 'package:iakauntan/src/data/corp_models.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
@@ -12,6 +14,7 @@ import 'package:iakauntan/src/features/assets/capitalise_dialog.dart';
 import 'package:iakauntan/src/features/crm/quote_mismatch_dialog.dart';
 import 'package:iakauntan/src/features/crm/win_loss_dialog.dart';
 import 'package:iakauntan/src/features/documents/late_orders_dialog.dart';
+import 'package:iakauntan/src/features/documents/void_document.dart';
 import 'package:iakauntan/src/features/financials/fs_mapping.dart';
 import 'package:iakauntan/src/features/hr/expiring_documents.dart';
 import 'package:iakauntan/src/features/items/item_categories_dialog.dart';
@@ -1507,6 +1510,110 @@ void main() {
         find.byKey(const ValueKey('officer-alternate-for')),
         findsNothing,
       );
+    });
+  });
+
+  group('discarding and voiding', () {
+    testWidgets('discarding says nothing in the ledger changes',
+        (tester) async {
+      await opened(
+        tester,
+        const [],
+        (context) => askDiscard(context, docNo: 'INV-0042'),
+      );
+      expect(find.text('Discard INV-0042?'), findsOneWidget);
+      // The whole point of the distinction: this one was never posted.
+      expect(
+        find.textContaining('nothing in the ledger changes'),
+        findsOneWidget,
+      );
+      expect(find.text('Keep it'), findsOneWidget);
+    });
+
+    testWidgets('voiding says the number is kept, and why', (tester) async {
+      await opened(
+        tester,
+        const [],
+        (context) => askVoidReason(context, docNo: 'INV-0042'),
+      );
+      expect(find.text('Void INV-0042'), findsOneWidget);
+      // A gap in a numbered run is the thing an auditor asks about, so
+      // the document stays and keeps its number. That sentence is the
+      // difference between this dialog and the one above.
+      expect(
+        find.textContaining('a gap in a numbered run is the thing an '
+            'auditor asks about'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('void-reason')), findsOneWidget);
+    });
+
+    testWidgets('and voiding will not go through without a reason',
+        (tester) async {
+      // The button is always enabled and the handler refuses instead,
+      // so pressing it with an empty box must leave the dialog open.
+      await opened(
+        tester,
+        const [],
+        (context) => askVoidReason(context, docNo: 'INV-0042'),
+      );
+      await tester.tap(find.text('Void it'));
+      await tester.pumpAndSettle();
+      expect(find.text('Void INV-0042'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('void-reason')),
+        'Raised against the wrong customer',
+      );
+      await tester.tap(find.text('Void it'));
+      await tester.pumpAndSettle();
+      expect(find.text('Void INV-0042'), findsNothing);
+    });
+  });
+
+  group('the two core prompts', () {
+    testWidgets('promptForText keeps Save dead until something is typed',
+        (tester) async {
+      await opened(
+        tester,
+        const [],
+        (context) => promptForText(
+          context,
+          title: 'Name this view',
+          label: 'Name',
+          suggestions: const ['Overdue', 'This month'],
+        ),
+      );
+      expect(find.text('Name this view'), findsOneWidget);
+      // A suggestion fills the box rather than saving by itself.
+      expect(find.text('Overdue'), findsOneWidget);
+      // By its LABEL, not by type: the host that opened the dialog has
+      // a FilledButton of its own, so `find.byType` matches two.
+      final save = find.widgetWithText(FilledButton, 'Save');
+      expect(tester.widget<FilledButton>(save).onPressed, isNull);
+
+      await tester.tap(find.text('Overdue'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(save).onPressed, isNotNull);
+    });
+
+    testWidgets('and quickAdd opens with the name it was handed',
+        (tester) async {
+      // Reached from a picker when somebody types a name that is not
+      // on the list, so the typed text has to arrive in the box — or
+      // they type it twice.
+      await opened(
+        tester,
+        const [],
+        (context) => quickAdd(
+          context,
+          title: 'New department',
+          seed: 'Kitchen',
+          save: ({required String name, String? code}) async => 'd1',
+        ),
+      );
+      expect(find.text('New department'), findsOneWidget);
+      expect(find.text('Kitchen'), findsOneWidget);
     });
   });
 }
