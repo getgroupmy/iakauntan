@@ -1635,6 +1635,16 @@ jobs:
       - run: deno check supabase/functions/places/parse_test.ts
       - run: deno test supabase/functions/places/parse_test.ts
 
+      # Why a pool of reader keys had nothing to give. Three states that
+      # look identical from the scan's side -- no key, no scan -- and
+      # are three different things to do next: add a key, switch one on
+      # or wait for a window to roll. The message is the only thing
+      # anybody sees and it is seen at the moment scanning has stopped,
+      # so sending somebody to add a key when the keys are merely busy
+      # is an hour spent on the wrong thing at the worst time.
+      - run: deno check supabase/functions/ocr/pool_message_test.ts
+      - run: deno test supabase/functions/ocr/pool_message_test.ts
+
       # Reading an e-mail well enough to file what was in it.
       #
       # `0354`'s reason for existing: the router dropped every MIME part

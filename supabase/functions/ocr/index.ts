@@ -52,6 +52,7 @@
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
+import { poolProblem } from "./pool.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -780,17 +781,81 @@ function normalise(raw: Record<string, unknown>): Extraction {
 }
 
 /**
+ * A key taken out of a pool, and the row it came from.
+ *
+ * `key_id` is null for the two older ways of holding a key — the
+ * single `org_ocr_credentials` row and the `OCR_KEY_<CODE>` secret —
+ * which have no counters to spend and no row to blame when the
+ * provider refuses them.
+ */
+interface ResolvedKey extends OwnCredential {
+  key_id: string | null;
+  key_label: string | null;
+}
+
+async function whyThePoolIsEmpty(
+  db: SupabaseClient,
+  provider: string,
+  orgId: string | null,
+): Promise<string> {
+  const { data } = await db.rpc("ocr_key_pool_size", {
+    p_provider: provider,
+    p_org_id: orgId,
+  });
+  const pool = (data ?? {}) as { keys?: number; usable?: number };
+  return poolProblem(pool.keys ?? 0, pool.usable ?? 0);
+}
+
+/**
  * The key the scan runs on.
  *
  * Read here with the service role, which is the only reader
- * `org_ocr_credentials` has — the table's grants to `anon` and
- * `authenticated` are revoked, so this is not merely the convention.
+ * `org_ocr_credentials` and `ocr_provider_keys` have — both tables have
+ * their grants to `anon` and `authenticated` revoked, so this is not
+ * merely the convention.
+ *
+ * The POOL is asked first, on both sides. `app.claim_ocr_key` picks the
+ * next key that is inside its clock and under its caps and spends one
+ * call of its budget in the same statement, so nothing here has to
+ * decide anything about rate limits. Null back means the pool had
+ * nothing, and then the two older arrangements are tried — a single
+ * `org_ocr_credentials` row, or `OCR_KEY_<CODE>` — so that filling a
+ * pool is something a deployment opts into rather than something that
+ * breaks it on the way past.
+ *
+ * The order is deliberate and is the safe one: a platform that has
+ * filled a pool means the pool to be used, and a platform that has not
+ * carries on exactly as it did.
  */
 async function credentialFor(
   db: SupabaseClient,
   begin: BeginResult,
   orgId: string,
-): Promise<OwnCredential> {
+): Promise<ResolvedKey> {
+  const poolOwner = begin.key_source === "own" ? orgId : null;
+  const { data: claimed, error: claimError } = await db.rpc(
+    "claim_ocr_key",
+    { p_provider: begin.provider, p_org_id: poolOwner },
+  );
+  if (claimError) {
+    console.error("could not ask the key pool", begin.provider, claimError);
+  }
+  // A set-returning function comes back as an array, and an empty one
+  // is the pool having nothing to give rather than an error.
+  const key = Array.isArray(claimed) ? claimed[0] : claimed;
+  if (key?.api_key) {
+    return {
+      api_key: key.api_key as string,
+      key_id: (key.key_id as string) ?? null,
+      key_label: (key.label as string) ?? null,
+      // Document AI needs three more things, and they are not per-key:
+      // a pool is for a key that is the whole credential.
+      project_id: Deno.env.get("OCR_GOOGLE_PROJECT") ?? null,
+      location: Deno.env.get("OCR_GOOGLE_LOCATION") ?? "us",
+      processor_id: Deno.env.get("OCR_GOOGLE_PROCESSOR") ?? null,
+    };
+  }
+
   if (begin.key_source === "own") {
     const { data, error } = await db
       .from("org_ocr_credentials")
@@ -799,9 +864,13 @@ async function credentialFor(
       .eq("provider", begin.provider)
       .maybeSingle();
     if (error || !data) {
-      throw new Error("The key for this organization could not be read.");
+      throw new Error(
+        "The key for this organization could not be read: " +
+          await whyThePoolIsEmpty(db, begin.provider, orgId) +
+          ", and no single key is on file either.",
+      );
     }
-    return data as unknown as OwnCredential;
+    return { ...(data as unknown as OwnCredential), key_id: null, key_label: null };
   }
 
   // `OCR_KEY_<CODE>` by convention, so a reader added as a row in the
@@ -815,21 +884,31 @@ async function credentialFor(
     ? "OCR_ANTHROPIC_API_KEY"
     : null;
 
-  const key = Deno.env.get(generic) ??
+  const fromEnv = Deno.env.get(generic) ??
     (legacy ? Deno.env.get(legacy) : undefined);
-  if (!key) {
+  if (!fromEnv) {
     throw new Error(
-      `${begin.provider_name} is not configured on the platform: set ` +
-        `${generic} on this function, or ask the organization to supply ` +
-        "its own key.",
+      `${begin.provider_name} is not configured on the platform: its key ` +
+        `pool is unusable because ` +
+        await whyThePoolIsEmpty(db, begin.provider, null) +
+        `, and ${generic} is not set on this function either.`,
     );
   }
 
   if (begin.kind !== "google_docai") {
-    return { api_key: key, project_id: null, location: null, processor_id: null };
+    return {
+      api_key: fromEnv,
+      key_id: null,
+      key_label: null,
+      project_id: null,
+      location: null,
+      processor_id: null,
+    };
   }
   return {
-    api_key: key,
+    api_key: fromEnv,
+    key_id: null,
+    key_label: null,
     project_id: Deno.env.get("OCR_GOOGLE_PROJECT") ?? null,
     location: Deno.env.get("OCR_GOOGLE_LOCATION") ?? "us",
     processor_id: Deno.env.get("OCR_GOOGLE_PROCESSOR") ?? null,
@@ -878,6 +957,13 @@ serveFunction("ocr.failed", async (req: Request) => {
 
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
+  // Which key out of the pool ran this scan, once one has been claimed.
+  // Declared out here because both halves need it: the try spends it,
+  // and the catch is where the provider's refusal gets written against
+  // it. Null while no pool was involved -- a single `org_ocr_credentials`
+  // row, or `OCR_KEY_<CODE>` -- and there is then no row to blame.
+  let usedKey: string | null = null;
+
   // From here on every exit settles the scan, because an unsettled scan
   // is a charge nobody gave back.
   try {
@@ -905,6 +991,11 @@ serveFunction("ocr.failed", async (req: Request) => {
     }
 
     const credential = await credentialFor(db, begin, orgId);
+    // Remembered outside the try's scope below only in the sense that
+    // the catch needs it: a provider's refusal belongs against the KEY
+    // that caused it, and by the time we know it failed the credential
+    // is the only thing that says which key that was.
+    usedKey = credential.key_id;
     // On `kind`, never on the provider's name. That is what lets a
     // reader be added as a row: a new ChatGPT-shaped endpoint arrives
     // here already understood.
@@ -972,6 +1063,22 @@ serveFunction("ocr.failed", async (req: Request) => {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // Against the key, when a key from a pool is what ran. A key
+    // revoked at the provider's end has to read differently in the
+    // console from one that is merely busy, and the console has no
+    // other way to tell: it cannot see the key, so it cannot try it.
+    //
+    // Not a refusal and not a stand-down. The commonest error here is a
+    // rate limit, which is the thing the caps exist to stop us causing
+    // -- a key struck out of the pool for one of those would be a pool
+    // that empties itself the first busy afternoon.
+    if (usedKey) {
+      const { error: noted } = await db.rpc("note_ocr_key_error", {
+        p_key_id: usedKey,
+        p_error: message,
+      });
+      if (noted) console.error("could not note the key error", usedKey, noted);
+    }
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
       p_status: "failed",

@@ -23,6 +23,13 @@
 -- that returns the key. `ocr_keys_for` is asserted to return the last
 -- four characters and nothing more.
 --
+-- The claim is asserted through `public.claim_ocr_key`, which is the
+-- name the edge function can actually reach. `0675` put it in `app`,
+-- where PostgREST does not serve it, and `0676` moved it -- a test
+-- written against the `app` name would have gone on passing while
+-- every scan in production quietly fell through to the single key in
+-- the environment.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on
@@ -101,7 +108,7 @@ begin
 
   -- Never used sorts first, and `created_at` breaks the tie, so the
   -- first claim is the first key added.
-  select * into v_got from app.claim_ocr_key('gemini', null);
+  select * into v_got from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('the first claim takes the first key',
     v_got.label, 'Studio one');
   perform pg_temp.check_eq('and hands back the key itself',
@@ -110,11 +117,11 @@ begin
   -- The SECOND claim must not be the same key. This is the assertion
   -- that a pool is a pool: an implementation ordering by id, or by
   -- nothing at all, passes the line above and fails here.
-  select * into v_got from app.claim_ocr_key('gemini', null);
+  select * into v_got from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('the second claim moves on to the second key',
     v_got.label, 'Studio two');
 
-  select * into v_got from app.claim_ocr_key('gemini', null);
+  select * into v_got from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('and the third comes back round',
     v_got.label, 'Studio one');
 
@@ -125,11 +132,11 @@ begin
   -- has nowhere to go and must come back empty rather than handing out
   -- a key that is over its cap.
   -- -------------------------------------------------------------------
-  select * into v_got from app.claim_ocr_key('gemini', null);
+  select * into v_got from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('the fourth spends the last of the minute',
     v_got.label, 'Studio two');
 
-  select count(*) into v_n from app.claim_ocr_key('gemini', null);
+  select count(*) into v_n from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('a spent pool gives out nothing', v_n, 0);
 
   -- -------------------------------------------------------------------
@@ -143,7 +150,7 @@ begin
      set minute_start = minute_start - interval '5 minutes'
    where provider = 'gemini' and org_id is null;
 
-  select * into v_got from app.claim_ocr_key('gemini', null);
+  select * into v_got from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_true('a new minute is a new allowance',
     v_got.label is not null);
   select minute_count into v_n from public.ocr_provider_keys
@@ -161,7 +168,7 @@ begin
          day_count = 3
    where provider = 'gemini' and org_id is null;
 
-  select count(*) into v_n from app.claim_ocr_key('gemini', null);
+  select count(*) into v_n from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq(
     'a key with its day spent is not offered, minute or no minute', v_n, 0);
 
@@ -176,14 +183,14 @@ begin
            then array[4]::smallint[] else array[3]::smallint[] end
    where provider = 'gemini' and org_id is null;
 
-  select count(*) into v_n from app.claim_ocr_key('gemini', null);
+  select count(*) into v_n from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('out of hours is out', v_n, 0);
 
   -- A key stood down by hand is out too, and for a different reason.
   update public.ocr_provider_keys
      set hours = '{}', is_active = false
    where provider = 'gemini' and org_id is null;
-  select count(*) into v_n from app.claim_ocr_key('gemini', null);
+  select count(*) into v_n from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_eq('and so is one switched off', v_n, 0);
 
   -- -------------------------------------------------------------------
@@ -201,11 +208,11 @@ begin
     (provider, org_id, label, api_key)
   values ('gemini', v_org, 'The company''s own', 'AIza-theirs-9999');
 
-  select * into v_got from app.claim_ocr_key('gemini', v_org);
+  select * into v_got from public.claim_ocr_key('gemini', v_org);
   perform pg_temp.check_eq('a company claims from its own pool',
     v_got.label, 'The company''s own');
 
-  select * into v_got from app.claim_ocr_key('gemini', null);
+  select * into v_got from public.claim_ocr_key('gemini', null);
   perform pg_temp.check_true(
     'and the platform never reaches into it',
     v_got.label in ('Studio one', 'Studio two'));
