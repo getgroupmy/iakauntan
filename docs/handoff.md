@@ -34,13 +34,29 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | asking whether the reader opens a PDF before spending a scan on it |
-| CI | **green at the tip: run 2086 (`2106a921`)**, migrations applied, edge functions and proxy deployed. Two runs before it went red on things that were not the diff, and both are written up below: 2084 on the Android JDK, 2085 on Deno's dependency-age policy |
-| Migrations | `0697` is the highest. CI applies on green — see below |
+| Head at time of writing | Local Read on the reader list (`da043b63`, run 2092) |
+| CI | **green through run 2091 (`4522ff84`)**. Four runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), 2091 green. All four written up below |
+| Migrations | `0700` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 361 SQL assertion files, **47 Python gates (+12 gate self-tests)**, **5,852 Flutter tests**, 35 deno tests |
-| API description | 787 functions, 366 tables, version `0697` |
+| Gates | 362 SQL assertion files, **47 Python gates (+12 gate self-tests)**, **5,865 Flutter tests**, 35 deno tests |
+| API description | 787 functions, 366 tables, version `0700` |
+
+### Check the analyzer's EXIT CODE, not its output
+
+Run 2090 was red because of this and it is the cheapest lesson here.
+The local check was
+
+    flutter analyze ... | grep -E "^ +(error|warning|info)" | head
+
+which reads NO MATCHING LINES as "no issues" — so a grep that fails to
+match for any reason is indistinguishable from a clean run, and the
+pipe throws away the one thing that actually answers. Three unused
+imports sailed through it and CI refused the build.
+
+Same shape as `run_locally.sh`'s "(0 files)" comment, and as the
+`psql: error:` lower-case grep it also records. **Redirect to a file
+and test `$?`.** That goes for `flutter test` too.
 
 ### The edge job resolves supabase-js fresh on every run
 
@@ -1145,6 +1161,62 @@ only the ones that became nothing could be opened. `scan_inbox` prefers
 decoration: deleting a document deletes its attachment, and
 `ocr_scans.attachment_id` is `on delete set null`, so an orphaned scan
 has nothing but its own path left.
+
+## AI SmartScan, end to end
+
+Six commits of reports from somebody using it, and the interesting
+thing about them is how many were faults the module already had rather
+than faults in the new work.
+
+### What was asked for, and what it turned into
+
+| Asked | Built |
+| --- | --- |
+| a contact not on the system should start the add-contact flow pre-filled | `createSupplierFromScan` already did this. It never ran because the PDF was never read — so fixing the PDF is the fix |
+| "create with all the data that was extracted" | `sendScanOn` (`9b5926e4`) — the same door a fresh capture uses, entered one step in |
+| rescan, and rescan with another reader | `ocr_begin(.., p_provider)` (`0698`), and a menu with each reader's price |
+| move scanning config out of Settings | `smartscan_settings.dart` behind a "How it reads" chip (`80664d07`) |
+| SmartScan second on the phone bar | `19418ab3` |
+| "add in the reader list Local Read" | `0700` + the on-device branch of `_offerable` |
+
+### Four faults that were already there
+
+- **Every scan that WORKED pointed at a vacated storage key.**
+  `ocr_scans.storage_path` is where the object was when it was read;
+  `refileAttachment` then moves it and updates the ATTACHMENT's path.
+  So "View the image" 404'd on exactly the rows worth opening. `0697`.
+- **Payment Methods, Collect Payments, Bank Feeds and Bank Rules had
+  ONE construction site each, inside the scanning card**, drawn only
+  when the OCR key source was `platform`. A company on its own scanning
+  key could reach none of them — how it takes money was gated behind
+  who pays for OCR. `80664d07`.
+- **`set_ocr_credentials` refused every provider but `claude` and
+  `google`**, two names hardcoded in `0111` against what `0113` made a
+  table and `0675` added Gemini to. "My own key" was offered for
+  Gemini, ChatGPT and Grok and raised `23514` at the save. `0699`.
+- **The rescan menu offered a reader for a PDF it cannot open**,
+  because `attachments.mime_type` is whatever the picker supplied and a
+  browser-chosen file often supplies nothing. `scanIsPdf` asks the name
+  too. `da043b63`.
+
+### The judgement worth not re-deriving
+
+**`reads_pdf` is tri-state and the third state is load-bearing.** Null
+for `kind = 'device'` because that reader is `pdf.js` in a browser and
+ML Kit on a phone, and null for a kind added since `0697` was written.
+
+Null reads as **yes** when deciding whether to BLOCK — refusing on an
+unknown would withdraw a reader the platform just added — and as **no**
+when deciding what to OFFER, because every name on an offer list is a
+promise that pressing it will read this file. `pdfBlock` does the
+first, `pdfReaders` and `rescanChoices` do the second. A mutation sweep
+is what caught me writing "unknown means yes" in both.
+
+**Build a reader list out of what can READ the file, not out of what
+the server will accept.** `ocr_begin` refuses an on-device reader
+because there is nothing for the server to do — true, and not a reason
+to hide a reader that reads the document on the spot for free. That
+single wrong instinct is why Local Read had to be asked for.
 
 ## This session's commits
 
