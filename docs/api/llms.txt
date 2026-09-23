@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0697` (the highest applied migration).
+Schema version `0698` (the highest applied migration).
 787 functions and 366 readable tables, of which
 306 functions only read.
 
@@ -637,7 +637,7 @@ Not gated on any module.
 - `my_payslip_access(p_org_id uuid)`
 - `next_contact_code(p_org_id uuid, p_type app.contact_type)` *(writes)* — The next code in the series for a contact of this type -- C-2026-00013, S-2026-00001, P-2026-00343.
 - `next_document_number(p_org_id uuid, p_doc_type text)` *(writes)* — Allocates the next number for a document type, e.g.
-- `ocr_begin(p_org_id uuid, p_attachment_id uuid)` *(writes)* — Opens a scan and hands back what the caller needs to run it -- provider, endpoint, model, storage path -- having first charged for it.
+- `ocr_begin(p_org_id uuid, p_attachment_id uuid, p_provider text)` *(writes)* — Opens a scan: decides which reader, takes the charge, and hands the edge function everything it needs to make the call.
 - `ocr_default_provider()` — The reader a company that has never chosen one falls back to, resolved: the platform's choice if it is still usable, otherwise the first active ready reader.
 - `ocr_default_state()` — The reader an unchosen company is handed, and whether it is also the one a failed scan retries on -- which it is exactly when it is free and can run on a server.
 - `ocr_key_pool_size(p_provider text, p_org_id uuid)` — How many keys a reader's pool holds, and how many of them could run right now.
@@ -845,7 +845,7 @@ Not gated on any module.
 - `save_ocr_key(p_provider text, p_org_id uuid, p_id uuid, p_label text, p_api_key text, p_per_minute integer, p_per_day integer, p_per_month integer, p_hours smallint[], p_weekdays smallint[], p_months smallint[], p_is_active boolean)` *(writes)* — Adds a key to a reader's pool, or changes one.
 - `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.
 - `scan_extraction_targets()` — What the reader is sent with the document: every configured target, the kinds of paper that land there, and the fields each one wants filled.
-- `scan_inbox(p_org_id uuid, p_limit integer, p_only text)` — Every reading this company has taken, newest first, with the record it became resolved to something a person recognises, the reference a failed one was given, and the key the file is at NOW rather than the one it was read under.
+- `scan_inbox(p_org_id uuid, p_limit integer, p_only text)` — Every reading this company has taken, newest first, with the record it became resolved to something a person recognises, the reference a failed one was given, the key the file is at NOW rather than the one it was read under, and what kind of file it is.
 - `scan_target_columns(p_module text, p_action text)` — The real columns of the table a target writes, read out of `information_schema`, with a tick beside the ones the reader is asked for.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
 - `search_platform_users(p_query text, p_limit integer)` — Name/e-mail search across every tenant, for the platform console's user picker.

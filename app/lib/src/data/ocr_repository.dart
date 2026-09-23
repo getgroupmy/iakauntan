@@ -673,12 +673,26 @@ extension RepoOcr on Repo {
   /// The charge is taken by the database before the provider is called
   /// and given back if the call fails, so a thrown exception here means
   /// nothing was spent.
-  Future<OcrExtraction> scanAttachment(String attachmentId) async {
+  /// Reads a filed attachment on the server.
+  ///
+  /// [provider] names a reader for THIS scan only — `0698`, reading the
+  /// same file again with a different one. Null means the company's
+  /// setting, which is every caller that existed before it.
+  ///
+  /// Nothing is validated here. `ocr_begin` checks the code against the
+  /// catalog, against whether the platform still offers it, and — where
+  /// the company brings its own key — against whether it has a key for
+  /// that reader. A check in the client is a check anybody can skip.
+  Future<OcrExtraction> scanAttachment(
+    String attachmentId, {
+    String? provider,
+  }) async {
     final FunctionResponse res;
     try {
       res = await client.functions.invoke('ocr', body: {
         'org_id': orgId,
         'attachment_id': attachmentId,
+        if (provider != null) 'provider': provider,
       });
     } on FunctionException catch (e) {
       // A non-2xx throws rather than coming back as data, so the
@@ -1409,6 +1423,7 @@ class ScanInboxEntry {
     this.attachmentId,
     this.fileName,
     this.storagePath,
+    this.mimeType,
     this.provider,
     this.status,
     this.error,
@@ -1436,6 +1451,13 @@ class ScanInboxEntry {
   /// Falls back to the storage object's own name for exactly that case.
   final String? fileName;
   final String? storagePath;
+
+  /// What kind of file it is, off the attachment. `0698`.
+  ///
+  /// Null where the attachment is gone — a deleted document takes
+  /// it with it — and the offer to read it again then cannot say
+  /// which readers could open it, so it is not made.
+  final String? mimeType;
   final String? provider;
   final String? status;
   final String? error;
@@ -1469,6 +1491,7 @@ class ScanInboxEntry {
         attachmentId: j['attachment_id']?.toString(),
         fileName: j['file_name']?.toString(),
         storagePath: j['storage_path']?.toString(),
+        mimeType: j['mime_type']?.toString(),
         scannedAt: DateTime.parse(j['scanned_at'].toString()).toLocal(),
         provider: j['provider']?.toString(),
         status: j['status']?.toString(),

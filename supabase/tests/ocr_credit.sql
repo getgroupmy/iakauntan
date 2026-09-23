@@ -457,7 +457,13 @@ begin
 
   -- The anonymous role reaches none of it either.
   perform pg_temp.check_true('and anon reaches none of it',
-    not has_function_privilege('anon', 'public.ocr_begin(uuid, uuid)', 'execute')
+    -- `0698` gave it a third parameter, `p_provider`, with a default.
+    -- Named in full here on purpose: `has_function_privilege` takes a
+    -- SIGNATURE, so a stale one raises "function does not exist"
+    -- rather than quietly passing -- which is how this assertion
+    -- caught the change rather than sleeping through it.
+    not has_function_privilege(
+      'anon', 'public.ocr_begin(uuid, uuid, text)', 'execute')
     and not has_function_privilege('anon',
       'public.platform_topup_credit(uuid, numeric, text)', 'execute'));
 end $$;

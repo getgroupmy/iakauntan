@@ -104,6 +104,51 @@ Future<void> runSmartScan(BuildContext context, WidgetRef ref) async {
   await _send(context, ref, staged, destination);
 }
 
+/// The same door, entered one step in.
+///
+/// `0698`. A scan that already happened has a reading on its row and a
+/// file in the bucket, and until this there was no way to turn it into
+/// the record it describes — the figures were on screen and the only
+/// use for them was to type them in again.
+///
+/// It goes through [_send] rather than beside it, deliberately. Every
+/// rule about where a reading belongs, which contact it needs and what
+/// gets written on the scan afterwards lives in there, and a second
+/// entry point that reimplemented any of it would be a second set of
+/// answers to drift apart.
+///
+/// The destination is decided the same way a fresh capture's is, and
+/// asked for when the reading does not say — a scan that came back
+/// wrong is exactly the one whose destination is in doubt.
+Future<void> sendScanOn(
+  BuildContext context,
+  WidgetRef ref,
+  StagedReceipt staged,
+) async {
+  final kinds = ref.read(offeredScanKindsProvider).valueOrNull ?? const [];
+  var destination = destinationFor(staged.read, kinds);
+
+  if (destination == ScanDestination.unknown) {
+    final chosen = await showScanKindSheet(
+      context,
+      read: staged.read,
+      because: staged.read == null
+          ? 'It could not be read, so there is nothing to fill in. The '
+              'file is kept either way — choose where it goes and type '
+              'the figures in.'
+          : null,
+    );
+    // Abandoned. The capture is NOT deleted here, unlike the fresh
+    // path: this file has been in the bucket since it was scanned and
+    // is somebody's evidence. Backing out of building a record from it
+    // is not a decision to throw it away.
+    if (chosen == null || !context.mounted) return;
+    destination = chosen;
+  }
+
+  await _send(context, ref, staged, destination);
+}
+
 /// Hands the capture to whichever flow owns that destination.
 Future<void> _send(
   BuildContext context,

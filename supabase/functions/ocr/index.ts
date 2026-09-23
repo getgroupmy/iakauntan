@@ -4,7 +4,9 @@
  * Reads a receipt or a bill that has already been filed as an
  * attachment, and hands back the fields somebody would otherwise retype.
  *
- * POST { "org_id": "<uuid>", "attachment_id": "<uuid>" }
+ * POST { "org_id": "<uuid>", "attachment_id": "<uuid>",
+ *        "provider": "<code>"?  // 0698, read it again with this one
+ *      }
  *   -> { scan_id, provider, charged, extraction: { … } }
  *
  * Three decisions are made in the database, not here, and this function
@@ -1213,6 +1215,13 @@ serveFunction("ocr.failed", async (req: Request) => {
   const attachmentId = typeof body?.attachment_id === "string"
     ? body.attachment_id
     : null;
+  // Optional, and only ever a hint: `ocr_begin` checks it against the
+  // catalog, the company's key source and its own keys. An empty
+  // string is the same as absent -- a client clearing a picker should
+  // not be an unknown reader.
+  const provider = typeof body?.provider === "string" && body.provider.trim()
+    ? body.provider.trim()
+    : null;
   if (!orgId || !attachmentId) {
     return fail("Say which attachment, on which organization", 400);
   }
@@ -1230,6 +1239,14 @@ serveFunction("ocr.failed", async (req: Request) => {
   const started = await caller.rpc("ocr_begin", {
     p_org_id: orgId,
     p_attachment_id: attachmentId,
+    // `0698`. Reading the same file again with a reader the caller
+    // names. Sent as null rather than omitted when there is none, so
+    // there is one shape of call rather than two -- and the database,
+    // not this function, decides whether that reader is one this
+    // company may use. Nothing here validates it on purpose: a check
+    // in an edge function is a check a caller can skip by calling the
+    // RPC directly.
+    p_provider: provider,
   });
   if (started.error) {
     // These are the database's own refusals — scanning switched off, no

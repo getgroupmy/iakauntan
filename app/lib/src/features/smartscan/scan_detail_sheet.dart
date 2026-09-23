@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/scan_kinds_repository.dart';
+import 'scan_actions.dart';
 import 'scan_destination.dart';
 import 'scan_field_map.dart';
 
@@ -77,6 +78,12 @@ class _ScanDetailSheet extends ConsumerWidget {
               label: const Text('View the image'),
             ),
           ],
+
+          // `0698`. What can still be DONE with this, rather than only
+          // what was done to it. Above the fields on purpose: somebody
+          // who has scrolled the reading and found it wrong should not
+          // have to scroll back to act on that.
+          _Actions(entry: entry, reading: reading.valueOrNull),
 
           const SizedBox(height: Space.lg),
           AsyncView<OcrExtraction?>(
@@ -166,6 +173,150 @@ class _ScanDetailSheet extends ConsumerWidget {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Could not open it: $e')));
       }
+    }
+  }
+}
+
+/// Build it, read it again, or read it with somebody else.
+///
+/// `0698`. Three things that were missing from a sheet that could only
+/// describe. Each is hidden rather than disabled when it cannot apply,
+/// because a greyed-out button is a question the screen refuses to
+/// answer -- and the sentence that WOULD answer it is shown instead
+/// where there is one.
+class _Actions extends ConsumerStatefulWidget {
+  const _Actions({required this.entry, required this.reading});
+
+  final ScanInboxEntry entry;
+
+  /// Null while the reading is still loading, and also when there is
+  /// none. The difference does not matter here: neither is something
+  /// to build a record from yet.
+  final OcrExtraction? reading;
+
+  @override
+  ConsumerState<_Actions> createState() => _ActionsState();
+}
+
+class _ActionsState extends ConsumerState<_Actions> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = widget.entry;
+    final ocr = ref.watch(ocrStatusProvider).valueOrNull;
+    final refusal = rescanRefusal(entry);
+    final choices = refusal != null
+        ? const <OcrProvider>[]
+        : rescanChoices(ocr, isPdf: entry.mimeType == 'application/pdf');
+
+    // Already became something. Offering to build a second record from
+    // the same paper is how a bill gets entered twice, and `0628`'s
+    // duplicate check is a warning rather than a wall -- so the offer
+    // is simply not made.
+    final canCreate = widget.reading != null &&
+        entry.attachmentId != null &&
+        entry.postedTable == null;
+
+    if (!canCreate && refusal == null && choices.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (canCreate)
+            FilledButton.icon(
+              key: const ValueKey('scan-create-from'),
+              onPressed: _busy ? null : _create,
+              icon: const Icon(Icons.playlist_add_check, size: 18),
+              label: const Text('Create it from what was read'),
+            ),
+          if (refusal != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.sm),
+              child: Text(
+                refusal,
+                key: const ValueKey('scan-rescan-refusal'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            )
+          else ...[
+            const SizedBox(height: Space.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('scan-read-again'),
+                    onPressed: _busy ? null : () => _rescan(null),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Read it again'),
+                  ),
+                ),
+                if (choices.isNotEmpty) ...[
+                  const SizedBox(width: Space.sm),
+                  // A menu rather than a second dialog. The choice is
+                  // short, it is a list of names, and the price is the
+                  // thing somebody needs to see beside each one.
+                  PopupMenuButton<String>(
+                    key: const ValueKey('scan-read-with'),
+                    tooltip: 'Read it with another reader',
+                    enabled: !_busy,
+                    onSelected: _rescan,
+                    itemBuilder: (_) => [
+                      for (final p in choices)
+                        PopupMenuItem<String>(
+                          value: p.code,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(p.name),
+                            subtitle: Text(rescanCost(p, ocr!)),
+                          ),
+                        ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(Space.sm),
+                      child: Icon(Icons.expand_more),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _create() async {
+    setState(() => _busy = true);
+    try {
+      await createFromScan(context, ref, widget.entry, widget.reading!);
+      // The flow navigates to whatever it made, so this sheet is on
+      // the way out. Closing it is the caller's job only where it is
+      // still there to close.
+      if (mounted) Navigator.of(context).maybePop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _rescan(String? provider) async {
+    setState(() => _busy = true);
+    try {
+      final done =
+          await rescanDocument(context, ref, widget.entry, provider: provider);
+      if (done && mounted) {
+        // A new scan row, so the list behind this sheet is stale and
+        // the reading in front of it belongs to the old one.
+        ref.invalidate(scanInboxProvider);
+        Navigator.of(context).maybePop();
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 }

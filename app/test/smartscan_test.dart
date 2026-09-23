@@ -15,6 +15,7 @@ import 'package:iakauntan/src/features/smartscan/scan_supplier_picker.dart';
 import 'package:iakauntan/src/core/format.dart';
 import 'package:iakauntan/src/data/ocr_repository.dart';
 import 'package:iakauntan/src/data/scan_kinds_repository.dart';
+import 'package:iakauntan/src/features/smartscan/scan_actions.dart';
 import 'package:iakauntan/src/features/smartscan/scan_availability.dart';
 import 'package:iakauntan/src/features/smartscan/scan_blocked_dialog.dart';
 import 'package:iakauntan/src/features/smartscan/scan_destination.dart';
@@ -968,6 +969,170 @@ void main() {
       ]) {
         expect(block!.message, contains('Photographing the page'));
       }
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Reading the same file again, with a reader you name
+  //
+  // `0698`. Asked for looking at a scan that had come back wrong.
+  // `rescanChoices` is the judgement: every reader it offers is one the
+  // person can actually be sent to, and each exclusion below is a scan
+  // somebody would otherwise pay for to be told no.
+  // ------------------------------------------------------------------
+  group('which readers a scan may be sent to again', () {
+    OcrProvider reader(
+      String code,
+      String name, {
+      bool? readsPdf = true,
+      bool runsOnDevice = false,
+      bool isActive = true,
+      bool ready = true,
+      double price = 0.30,
+    }) =>
+        OcrProvider(
+          code: code,
+          name: name,
+          price: price,
+          takesKey: true,
+          runsOnDevice: runsOnDevice,
+          isActive: isActive,
+          ready: ready,
+          readsPdf: readsPdf,
+        );
+
+    OcrSettings on(
+      List<OcrProvider> all, {
+      String keySource = 'platform',
+      Set<String> keys = const {},
+    }) =>
+        OcrSettings(
+          enabled: true,
+          provider: 'claude',
+          keySource: keySource,
+          hasOwnKey: keys.isNotEmpty,
+          keys: keys,
+          balance: 10,
+          price: 0.30,
+          providers: all,
+        );
+
+    final claude = reader('claude', 'Claude');
+    final gemini = reader('gemini', 'Gemini', readsPdf: false);
+
+    test('a photograph may go to any of them', () {
+      final choices =
+          rescanChoices(on([claude, gemini]), isPdf: false);
+      expect([for (final p in choices) p.code], ['claude', 'gemini']);
+    });
+
+    // The whole reason `0697` put `reads_pdf` on the wire. Offering
+    // Gemini for a PDF is offering a refusal that costs a scan.
+    test('and a PDF only to the ones that open one', () {
+      final choices = rescanChoices(on([claude, gemini]), isPdf: true);
+      expect([for (final p in choices) p.code], ['claude']);
+    });
+
+    test('a retired reader is not offered', () {
+      final choices = rescanChoices(
+          on([reader('claude', 'Claude', isActive: false)]), isPdf: false);
+      expect(choices, isEmpty);
+    });
+
+    test('nor one the platform has not finished setting up', () {
+      final choices = rescanChoices(
+          on([reader('claude', 'Claude', ready: false)]), isPdf: false);
+      expect(choices, isEmpty);
+    });
+
+    // The on-device reader is reached by "read it again" on a company
+    // set to it, not by choosing it here — this is the server path and
+    // `ocr_begin` refuses it with `0A000`.
+    test('nor the one that runs on the device', () {
+      final choices = rescanChoices(
+          on([reader('mlkit', 'On this device', runsOnDevice: true)]),
+          isPdf: false);
+      expect(choices, isEmpty);
+    });
+
+    // `ocr_begin` refuses this and would be right to. Offering it first
+    // is the screen setting somebody up for a refusal.
+    test('and on an own key, only the readers there is a key for', () {
+      final choices = rescanChoices(
+        on([claude, gemini], keySource: 'own', keys: const {'claude'}),
+        isPdf: false,
+      );
+      expect([for (final p in choices) p.code], ['claude']);
+    });
+
+    // Not loaded. Nothing to offer, and no guess.
+    test('a status that has not loaded offers nothing', () {
+      expect(rescanChoices(null, isPdf: false), isEmpty);
+    });
+
+    // A reader nobody has answered for. It is OFFERED for a
+    // photograph, because every reader reads one — and withheld for a
+    // PDF, because this list is a promise that pressing the name will
+    // read the file, and nobody has checked that it would.
+    //
+    // The opposite of what `pdfBlock` does with the same null, and the
+    // two are not in disagreement: one decides whether to refuse, this
+    // one decides what to promise. A mutant that swapped it survived
+    // the first sweep, which is how the disagreement was found.
+    test('a reader nobody has answered for is offered only for a photo', () {
+      final unknown = reader('novel', 'Novel', readsPdf: null);
+      expect(
+        [for (final p in rescanChoices(on([unknown]), isPdf: false)) p.code],
+        ['novel'],
+      );
+      expect(rescanChoices(on([unknown]), isPdf: true), isEmpty);
+    });
+
+    // A rescan SPENDS CREDIT, and on a company whose own reader is free
+    // that is a surprise worth heading off before the press.
+    test('the price is on the choice', () {
+      expect(rescanCost(claude, on([claude])), 'RM 0.30');
+      expect(rescanCost(reader('m', 'M', price: 0), on([claude])),
+          'No charge');
+      expect(
+        rescanCost(claude, on([claude], keySource: 'own', keys: {'claude'})),
+        'No charge',
+      );
+    });
+
+    // Deleting a document deletes its attachment, and
+    // `ocr_scans.attachment_id` is `on delete set null` — so there are
+    // scans with no file left to read. Said, rather than offered and
+    // then failed.
+    test('a scan whose file is gone says so', () {
+      final gone = ScanInboxEntry(
+        scanId: 's1',
+        scannedAt: DateTime(2026, 9, 23),
+      );
+      expect(rescanRefusal(gone), contains('deleted'));
+
+      // The orphan case, which is the one a single condition gets
+      // wrong. `0697` keeps the scan's own `storage_path` when the
+      // attachment is deleted, so the path survives and the
+      // attachment id does not — and `ocr_begin` takes an ATTACHMENT.
+      // A path with nothing to hang it on is still nothing to read.
+      expect(
+        rescanRefusal(ScanInboxEntry(
+          scanId: 's3',
+          scannedAt: DateTime(2026, 9, 23),
+          storagePath: 'org/expenses/x/bil.pdf',
+        )),
+        contains('deleted'),
+      );
+      expect(
+        rescanRefusal(ScanInboxEntry(
+          scanId: 's2',
+          scannedAt: DateTime(2026, 9, 23),
+          attachmentId: 'a1',
+          storagePath: 'org/expenses/x/bil.pdf',
+        )),
+        isNull,
+      );
     });
   });
 
