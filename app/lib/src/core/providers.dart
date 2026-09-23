@@ -2550,6 +2550,31 @@ final ocrStatusProvider = FutureProvider<OcrSettings>((ref) {
   return requireRepo(ref).ocrStatus();
 });
 
+/// Every reading this company has taken, and what each became. `0694`.
+///
+/// The argument is the filter: `all`, `posted` or `unposted`. A family
+/// rather than one provider with a parameter on the widget, so that
+/// switching the filter does not re-fetch the list somebody is already
+/// looking at.
+final scanInboxProvider =
+    FutureProvider.autoDispose.family<List<ScanInboxEntry>, String>((
+      ref,
+      only,
+    ) {
+      return requireRepo(ref).scanInbox(only: only);
+    });
+
+/// The whole reading one scan produced. `0694`.
+///
+/// Separate from the inbox rather than a column on it: `extracted` is
+/// the largest thing `ocr_scans` holds — every line of a forty-line
+/// statement — and a list of a hundred rows does not want a hundred of
+/// them to draw one line each.
+final scanReadingProvider =
+    FutureProvider.autoDispose.family<OcrExtraction?, String>((ref, scanId) {
+      return requireRepo(ref).scanReading(scanId);
+    });
+
 final creditLedgerProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).creditLedger();

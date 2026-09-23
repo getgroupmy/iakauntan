@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'surface.dart';
 
 import '../features/ai/ask_screen.dart';
+import '../features/smartscan/smartscan_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/firms/practice_screen.dart';
 import '../features/auth/reset_password_screen.dart';
@@ -847,6 +848,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           // behind it refuses without one, so a typed address reaches a
           // screen that says so rather than a blank page.
           GoRoute(path: '/ask', builder: (_, __) => const AskScreen()),
+          // AI SmartScan's only door. Every scan button in the product
+          // used to be a door of its own, on the screen that owned one
+          // destination each; this is the module.
+          GoRoute(
+            path: '/smartscan',
+            builder: (_, __) => const SmartScanScreen(),
+          ),
           GoRoute(
             path: '/feedback',
             builder: (_, __) => const FeedbackScreen(),

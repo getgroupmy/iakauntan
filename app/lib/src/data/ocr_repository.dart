@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/format.dart';
 import 'attachments_repository.dart' show RepoAttachments;
 import 'repository.dart';
 
@@ -1328,4 +1329,167 @@ class OcrKeyPool {
         'p_id': id,
         'p_org_id': orgId,
       });
+}
+
+/// One sheet of paper, and what became of it.
+///
+/// `0694`. `ocr_scans` has always recorded what was read, what it cost
+/// and which provider answered; it never recorded what the photograph
+/// BECAME, so a scan that quietly produced nothing was indistinguishable
+/// from one that posted a bill.
+///
+/// [postedLabel] is resolved in SQL rather than here — see the migration
+/// header. A row whose document was deleted afterwards comes back with
+/// [postedTable] set and [postedLabel] null, which is the honest answer:
+/// this became a bill that no longer exists.
+class ScanInboxEntry {
+  const ScanInboxEntry({
+    required this.scanId,
+    required this.scannedAt,
+    this.attachmentId,
+    this.fileName,
+    this.storagePath,
+    this.provider,
+    this.status,
+    this.error,
+    this.documentKind,
+    this.kindLabel,
+    this.target,
+    this.postedTable,
+    this.postedId,
+    this.postedAt,
+    this.postedLabel,
+    this.postedDate,
+    this.reviewedAt,
+    this.corrected = false,
+  });
+
+  final String scanId;
+  final DateTime scannedAt;
+
+  /// Null once the record this was filed against has been deleted:
+  /// `delete_attachments_of_row` takes the picture with the document and
+  /// `ocr_scans.attachment_id` is `on delete set null`.
+  final String? attachmentId;
+
+  /// Falls back to the storage object's own name for exactly that case.
+  final String? fileName;
+  final String? storagePath;
+  final String? provider;
+  final String? status;
+  final String? error;
+  final String? documentKind;
+  final String? kindLabel;
+  final String? target;
+  final String? postedTable;
+  final String? postedId;
+  final DateTime? postedAt;
+  final String? postedLabel;
+  final DateTime? postedDate;
+  final DateTime? reviewedAt;
+  final bool corrected;
+
+  /// Whether anything came of this reading.
+  bool get isPosted => postedTable != null;
+
+  /// Whether the picture can still be opened. A scan whose document was
+  /// deleted keeps its row and loses its file.
+  bool get hasImage => (storagePath ?? '').isNotEmpty && attachmentId != null;
+
+  factory ScanInboxEntry.fromJson(Map<String, dynamic> j) => ScanInboxEntry(
+        scanId: j['scan_id'].toString(),
+        attachmentId: j['attachment_id']?.toString(),
+        fileName: j['file_name']?.toString(),
+        storagePath: j['storage_path']?.toString(),
+        scannedAt: DateTime.parse(j['scanned_at'].toString()).toLocal(),
+        provider: j['provider']?.toString(),
+        status: j['status']?.toString(),
+        error: j['error']?.toString(),
+        documentKind: j['document_kind']?.toString(),
+        kindLabel: j['kind_label']?.toString(),
+        target: j['target']?.toString(),
+        postedTable: j['posted_table']?.toString(),
+        postedId: j['posted_id']?.toString(),
+        postedAt: Fmt.parseDate(j['posted_at']),
+        postedLabel: j['posted_label']?.toString(),
+        postedDate: Fmt.parseDate(j['posted_date']),
+        reviewedAt: Fmt.parseDate(j['reviewed_at']),
+        corrected: j['corrected'] == true,
+      );
+}
+
+extension RepoScanInbox on Repo {
+  /// Every reading this company has taken, newest first.
+  ///
+  /// [only] is `all`, `posted` or `unposted`. The last is the one worth
+  /// looking at: a photograph that became nothing is either work left
+  /// half done or a reading that failed, and both want a person.
+  Future<List<ScanInboxEntry>> scanInbox({
+    int limit = 100,
+    String only = 'all',
+  }) async {
+    final rows = await callRpc('scan_inbox', params: {
+      'p_org_id': orgId,
+      'p_limit': limit,
+      'p_only': only,
+    });
+    return [
+      for (final r in Repo.rows(rows))
+        ScanInboxEntry.fromJson(Map<String, dynamic>.from(r)),
+    ];
+  }
+
+  /// Records what a reading became.
+  ///
+  /// With no [table] the destination is copied off the attachment, which
+  /// is where the FILE went — see `0694`. [table] and [recordId] are for
+  /// the one document that becomes many rows: a bank statement is filed
+  /// against `bank_transactions` with a placeholder id.
+  ///
+  /// Best-effort by design. A posting that happened is not undone
+  /// because the note about it failed, and the flows call this after the
+  /// document already exists.
+  Future<void> recordScanPosting({
+    required String attachmentId,
+    String? table,
+    String? recordId,
+  }) async {
+    try {
+      await callRpc('record_scan_posting', params: {
+        'p_org_id': orgId,
+        'p_attachment_id': attachmentId,
+        if (table != null) 'p_table': table,
+        if (recordId != null) 'p_id': recordId,
+      });
+    } catch (_) {
+      // Swallowed for the reason above. The inbox showing "nothing came
+      // of this" about a bill that exists is a smaller wrong than a
+      // posted bill rolled back over a note.
+    }
+  }
+}
+
+extension RepoScanReading on Repo {
+  /// The whole reading a scan produced.
+  ///
+  /// Read straight off `ocr_scans` rather than through a function:
+  /// `ocr_scans_read` already lets anybody who may write or read the
+  /// ledger see their own company's rows, which is the same audience
+  /// the inbox has. A SECURITY DEFINER wrapper would be a second copy
+  /// of that rule to keep in step.
+  ///
+  /// Null where the scan failed — there is no reading — or where the
+  /// row is not this company's, which RLS turns into no row rather than
+  /// an error.
+  Future<OcrExtraction?> scanReading(String scanId) async {
+    final rows = await client
+        .from('ocr_scans')
+        .select('extracted')
+        .eq('id', scanId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final held = rows.first['extracted'];
+    if (held is! Map) return null;
+    return OcrExtraction.fromJson(Map<String, dynamic>.from(held));
+  }
 }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0693",
+    "version": "0694",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -55284,6 +55284,73 @@
         }
       }
     },
+    "/rpc/record_scan_posting": {
+      "post": {
+        "operationId": "record_scan_posting",
+        "summary": "Records what a reading became",
+        "description": "Records what a reading became. Refuses a caller who may not write in this company; refuses an attachment that is not this company's; refuses a table no `scan_targets` row names, and an explicit table with no record id. Answers null -- not an error -- where the capture was never read and there is no scan row to write on. With no table given it copies both off the attachment, so the scan cannot claim to have become something the file is not filed against. 0694.\n\n`public.record_scan_posting(p_org_id uuid, p_attachment_id uuid, p_table text, p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_attachment_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_table": {
+                    "type": "string"
+                  },
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_attachment_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/record_statutory_remittance": {
       "post": {
         "operationId": "record_statutory_remittance",
@@ -64849,6 +64916,133 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/scan_inbox": {
+      "post": {
+        "operationId": "scan_inbox",
+        "summary": "Every reading this company has taken, newest first, with the record it became resolved to something a person\u2026",
+        "description": "Every reading this company has taken, newest first, with the record it became resolved to something a person recognises. `p_only` is all, posted or unposted. 0694.\n\n`public.scan_inbox(p_org_id uuid, p_limit integer, p_only text)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_limit": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "p_only": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "scan_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "attachment_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "file_name": {
+                        "type": "string"
+                      },
+                      "storage_path": {
+                        "type": "string"
+                      },
+                      "scanned_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "document_kind": {
+                        "type": "string"
+                      },
+                      "kind_label": {
+                        "type": "string"
+                      },
+                      "target": {
+                        "type": "string"
+                      },
+                      "posted_table": {
+                        "type": "string"
+                      },
+                      "posted_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "posted_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "posted_label": {
+                        "type": "string"
+                      },
+                      "posted_date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "reviewed_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "corrected": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -92109,7 +92303,18 @@
             "type": "string",
             "format": "uuid"
           },
-          "corrected": {}
+          "corrected": {},
+          "posted_table": {
+            "type": "string"
+          },
+          "posted_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "posted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         },
         "required": [
           "org_id",

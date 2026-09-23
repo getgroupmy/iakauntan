@@ -101,7 +101,7 @@ void main() {
                     onPressed: () {},
                     icon: const Icon(Icons.document_scanner_outlined,
                         size: 18),
-                    label: const Text('Scan expense')),
+                    label: const Text('Export')),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: FilledButton.icon(
@@ -112,7 +112,7 @@ void main() {
               if (narrow)
                 PopupMenuButton<int>(
                   itemBuilder: (_) => const [
-                    PopupMenuItem(value: 0, child: Text('Scan expense')),
+                    PopupMenuItem(value: 0, child: Text('Export')),
                   ],
                 ),
             ],

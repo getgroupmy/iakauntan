@@ -228,13 +228,18 @@ void main() {
   /// in the shape `import_bank_transactions` reads, with the running
   /// balance still on them.
   group('getting a statement in', () {
-    testWidgets('a photograph is offered beside the paste and the file',
+    // `0694` moved photographing a statement into AI SmartScan, which
+    // is the one door scanning has now. What arrives here is the
+    // READING, parked, because a route cannot carry an
+    // `OcrExtraction` — so this screen keeps the paste and the file and
+    // has no camera of its own.
+    testWidgets('the file and the paste stay, and the camera has gone',
         (tester) async {
       await show(tester, status());
       await tester.tap(find.byTooltip('Import statement'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('statement-scan')), findsOneWidget);
+      expect(find.byKey(const ValueKey('statement-scan')), findsNothing);
       expect(find.text('Open a file'), findsOneWidget);
     });
 

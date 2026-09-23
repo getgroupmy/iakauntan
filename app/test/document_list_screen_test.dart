@@ -297,25 +297,25 @@ void main() {
   });
 
   group('which cycle this is', () {
-    testWidgets('a bill can be scanned', (tester) async {
+    // `0694` took the scan button off this screen, and off the three
+    // others that had one. Scanning is a module with a door of its own
+    // now, because the button being HERE was what made the same receipt
+    // a bill on this screen and an expense on the next.
+    //
+    // Asserted as an absence, and kept rather than deleted: a button
+    // quietly coming back on one screen is exactly how four doors grew
+    // the first time.
+    testWidgets('no scan button lives on this screen any more',
+        (tester) async {
       await show(tester, docType: 'bill');
-
-      expect(find.text('Scan bill'), findsOneWidget);
+      expect(find.text('Scan bill'), findsNothing);
+      expect(find.textContaining('Scan'), findsNothing);
     });
 
-    testWidgets('and so can an invoice', (tester) async {
-      // It could not, until `0682`. The reason given was that a sales
-      // invoice is raised from what we are owed rather than read off a
-      // piece of paper — which is true of most of them and not of the
-      // ones that matter: a copy returned with a payment, and every
-      // invoice raised on somebody else's system during a migration.
-      //
-      // The real obstacle was the wording. Everything under the button
-      // asked "which supplier?", which is the wrong question about your
-      // own customer, and `ScanContactKind` carries the noun now.
+    testWidgets('and none on the sales side either', (tester) async {
       await show(tester);
-
-      expect(find.text('Scan invoice'), findsOneWidget);
+      expect(find.text('Scan invoice'), findsNothing);
+      expect(find.textContaining('Scan'), findsNothing);
     });
 
     testWidgets('invoices can be ticked for a batch', (tester) async {
@@ -623,13 +623,12 @@ void main() {
       );
 
       expect(find.text('From the group (1)'), findsNothing);
-      expect(find.text('Scan bill'), findsNothing);
+      expect(find.text('Pay supplier'), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('more-actions')));
       await tester.pumpAndSettle();
 
       expect(find.text('From the group (1)'), findsOneWidget);
-      expect(find.text('Scan bill'), findsOneWidget);
       expect(find.text('Pay supplier'), findsOneWidget);
     });
 
@@ -646,7 +645,7 @@ void main() {
       );
 
       expect(find.text('From the group (1)'), findsOneWidget);
-      expect(find.text('Scan bill'), findsOneWidget);
+      expect(find.text('Pay supplier'), findsOneWidget);
       expect(find.byKey(const ValueKey('more-actions')), findsNothing);
     });
 

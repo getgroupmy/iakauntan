@@ -963,6 +963,18 @@ final _destinations = <_Dest>[
   ),
   // The assistant. One entry, because it is one screen — the module's
   // whole surface is a question box.
+  // AI SmartScan. Beside the assistant because they are the two things
+  // here that read rather than record, and because the scan buttons it
+  // replaces were scattered across four screens that had nothing else
+  // to do with each other.
+  _Dest(
+    'AI SmartScan',
+    Icons.document_scanner_outlined,
+    Icons.document_scanner,
+    '/smartscan',
+    module: 'ai',
+    short: 'Scan',
+  ),
   _Dest(
     'Ask about your books',
     Icons.auto_awesome_outlined,

@@ -1,0 +1,153 @@
+import '../../data/ocr_repository.dart';
+import '../../data/scan_kinds_repository.dart';
+
+/// Where a reading is going, decided once and in one place.
+///
+/// Until `0694` this decision was made four times — on the Bills list,
+/// the Expenses screen, the Contacts screen and the bank reconciliation
+/// — because each of those owned its own scan button, and each knew
+/// only about its own destination. A receipt photographed on the Bills
+/// screen could become a bill or nothing; the same receipt on the
+/// Expenses screen could become an expense or nothing. The paper did
+/// not change. The button did.
+///
+/// With one door, the reading has to say where it goes, so this is
+/// where that is worked out.
+enum ScanDestination {
+  bill,
+  purchaseOrder,
+  goodsReceived,
+  invoice,
+  expense,
+  contact,
+  bankStatement,
+
+  /// Read, and nothing on it says what it is. Not a failure: a
+  /// photograph of something the platform has no destination for is a
+  /// perfectly good photograph, and the person is asked.
+  unknown;
+
+  /// The table a capture is parked against while the record it belongs
+  /// to does not exist yet.
+  ///
+  /// `attachments` takes a real table name — the storage policies read
+  /// it straight out of the object path and a trigger refuses a row
+  /// whose path disagrees with its columns — so this cannot be a
+  /// friendly name.
+  String get table => switch (this) {
+        ScanDestination.bill ||
+        ScanDestination.purchaseOrder ||
+        ScanDestination.goodsReceived =>
+          'purchase_documents',
+        ScanDestination.invoice => 'sales_documents',
+        ScanDestination.expense => 'expenses',
+        ScanDestination.contact => 'contacts',
+        ScanDestination.bankStatement => 'bank_transactions',
+        // Parked where an expense would go, because that is the
+        // destination that asks least of the paper: an amount and a
+        // date. Nothing is posted until somebody chooses, and the
+        // capture is re-pointed when they do.
+        ScanDestination.unknown => 'expenses',
+      };
+
+  /// What this is called on screen.
+  String get label => switch (this) {
+        ScanDestination.bill => 'Supplier bill',
+        ScanDestination.purchaseOrder => 'Purchase order',
+        ScanDestination.goodsReceived => 'Goods received note',
+        ScanDestination.invoice => 'Sales invoice',
+        ScanDestination.expense => 'Expense',
+        ScanDestination.contact => 'Contact',
+        ScanDestination.bankStatement => 'Bank statement',
+        ScanDestination.unknown => 'Not sure yet',
+      };
+
+  /// The `sales_documents.doc_type` / `purchase_documents.doc_type`
+  /// this becomes, or null where it is not a document at all.
+  String? get docType => switch (this) {
+        ScanDestination.bill => 'bill',
+        ScanDestination.purchaseOrder => 'purchase_order',
+        ScanDestination.goodsReceived => 'goods_received',
+        ScanDestination.invoice => 'invoice',
+        _ => null,
+      };
+
+  /// Whether this destination needs a contact before anything can be
+  /// created. A bill with no supplier is refused by the database —
+  /// `purchase_documents.contact_id` is NOT NULL — so it is asked for
+  /// in the flow rather than discovered at the save.
+  bool get needsContact => switch (this) {
+        ScanDestination.bill ||
+        ScanDestination.purchaseOrder ||
+        ScanDestination.goodsReceived ||
+        ScanDestination.invoice =>
+          true,
+        _ => false,
+      };
+}
+
+/// The destination a `module.action` names, or null for one nothing
+/// here handles.
+///
+/// `0681` had the READER choose this, with the platform's configured
+/// destinations in front of it and the page in its hand. That is a
+/// better answer than anything string matching produces afterwards,
+/// which is why it is asked first.
+ScanDestination? destinationFromTarget(String? target) =>
+    switch (target?.trim()) {
+      'purchases.bill' => ScanDestination.bill,
+      'purchases.purchase_order' => ScanDestination.purchaseOrder,
+      'purchases.goods_received' => ScanDestination.goodsReceived,
+      'sales.invoice' => ScanDestination.invoice,
+      'accounting.expense' => ScanDestination.expense,
+      'accounting.bank_statement' => ScanDestination.bankStatement,
+      'contacts.contact' => ScanDestination.contact,
+      _ => null,
+    };
+
+/// Where a reading goes, or [ScanDestination.unknown] if nothing says.
+///
+/// Two sources, in this order and deliberately:
+///
+///  1. [OcrExtraction.target] — the reader's own judgement, made while
+///     it had the page in front of it. `0681`.
+///  2. [OcrExtraction.documentKind] — what the app's own classifier
+///     made of the text afterwards, or what a person chose in the
+///     result dialog. Resolved through [kinds] because a kind carries
+///     the module and action it becomes and this file must not hold a
+///     second copy of that table.
+///
+/// A person's choice beats both, and that is not handled here: by the
+/// time somebody has picked a kind it is ON the reading, so it arrives
+/// as (2).
+ScanDestination destinationFor(OcrExtraction? read, List<ScanKind> kinds) {
+  if (read == null) return ScanDestination.unknown;
+
+  final fromReader = destinationFromTarget(read.target);
+  if (fromReader != null) return fromReader;
+
+  final kind = read.documentKind?.trim();
+  if (kind == null || kind.isEmpty) return ScanDestination.unknown;
+
+  for (final k in kinds) {
+    if (k.code == kind) {
+      return destinationFromTarget(k.targetKey) ?? ScanDestination.unknown;
+    }
+  }
+  return ScanDestination.unknown;
+}
+
+/// The destinations somebody may pick from when nothing was detected.
+///
+/// [ScanDestination.unknown] is not among them: it is an answer the
+/// machine may give and not one a person can choose, because choosing
+/// it would mean pressing a button to do nothing.
+const offerableDestinations = [
+  ScanDestination.bill,
+  ScanDestination.invoice,
+  ScanDestination.expense,
+  ScanDestination.contact,
+  ScanDestination.bankStatement,
+  ScanDestination.purchaseOrder,
+  ScanDestination.goodsReceived,
+];

@@ -23,27 +23,8 @@ import 'expense_split.dart';
 import 'expense_voucher_pdf.dart';
 import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
-import '../shared/scan_intake.dart';
 import '../shared/scan_result_dialog.dart';
 import '../settings/tax_code_dialog.dart';
-
-/// Photograph a receipt, then finish what the paper could not say.
-///
-/// The reading fills the description, the date, the reference and the
-/// amount. What is left is what no receipt carries: which expense
-/// account it belongs to, which tax code, and what it was paid from —
-/// so the form opens with those empty and everything else already in.
-Future<void> _scanExpense(BuildContext context, WidgetRef ref) async {
-  final staged = await showScanIntake(
-    context,
-    ref,
-    table: 'expenses',
-    title: 'Scan an expense',
-  );
-  if (staged == null || !context.mounted) return;
-
-  await showExpenseFromScan(context, staged);
-}
 
 /// Opens the expense form on a capture that has already been made and
 /// read. `0686`.
@@ -93,15 +74,6 @@ class ExpensesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
-          // Scan first, and before the blank form, because that is the
-          // order the work happens in: somebody is holding a receipt and
-          // has not yet decided which account it belongs to.
-          if (canPost && !narrow)
-            TextButton.icon(
-              onPressed: () => _scanExpense(context, ref),
-              icon: const Icon(Icons.document_scanner_outlined, size: 18),
-              label: const Text('Scan expense'),
-            ),
           if (canPost)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -114,14 +86,6 @@ class ExpensesScreen extends ConsumerWidget {
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(narrow ? 'Record' : 'Record expense'),
               ),
-            ),
-          if (canPost && narrow)
-            PopupMenuButton<int>(
-              key: const ValueKey('expense-overflow'),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 0, child: Text('Scan expense')),
-              ],
-              onSelected: (_) => _scanExpense(context, ref),
             ),
         ],
       ),

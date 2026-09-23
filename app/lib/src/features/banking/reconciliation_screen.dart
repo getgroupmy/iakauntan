@@ -672,6 +672,17 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
   String? _scannedFrom;
 
   @override
+  void initState() {
+    super.initState();
+    // Before the first frame, so a statement photographed in SmartScan
+    // is already on screen when the import dialog opens rather than
+    // appearing a moment later.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _takeParkedStatement();
+    });
+  }
+
+  @override
   void dispose() {
     _text.dispose();
     super.dispose();
@@ -707,44 +718,37 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
     }
   }
 
-  /// Photograph the statement and read it.
+  /// Whatever AI SmartScan photographed on the way here.
   ///
-  /// Parked against `bank_transactions` so the picture is filed where
-  /// the lines it produces will live. There is no single record to hang
-  /// it on -- a statement becomes many rows -- which is exactly why
-  /// `0682` had to give a scan target the ability to repeat.
-  Future<void> _scan() async {
-    setState(() => _reading = true);
-    try {
-      final staged = await showScanIntake(
-        context,
-        ref,
-        table: 'bank_transactions',
-        title: 'Photograph a bank statement',
-      );
-      if (staged == null || !mounted) return;
-
-      final parse = scannedStatement(staged.read);
-      if (parse.rows.isEmpty && parse.problems.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Nothing on that photograph read as statement lines. The '
-              'reader has to be asked for them, which a platform '
-              'administrator sets up under Kinds of document.',
-            ),
+  /// The button that used to sit on this screen is gone: scanning is
+  /// one door now, and a statement is one of the things that comes
+  /// through it. What arrives here is the reading, parked because a
+  /// route cannot carry an `OcrExtraction`.
+  ///
+  /// Taken exactly once, so coming back to this screen later does not
+  /// re-apply a photograph somebody has already dealt with.
+  void _takeParkedStatement() {
+    final staged = ref.read(pendingStatementProvider.notifier).take();
+    if (staged == null) return;
+    final parse = scannedStatement(staged.read);
+    if (parse.rows.isEmpty && parse.problems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nothing on that photograph read as statement lines. The '
+            'reader has to be asked for them, which a platform '
+            'administrator sets up under Kinds of document.',
           ),
-        );
-        return;
-      }
-      setState(() {
-        _scanned = parse;
-        _scannedFrom = 'photographed';
-      });
-    } finally {
-      if (mounted) setState(() => _reading = false);
+        ),
+      );
+      return;
     }
+    setState(() {
+      _scanned = parse;
+      _scannedFrom = 'photographed';
+    });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -777,20 +781,6 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
                     onPressed: _reading ? null : _openFile,
                     icon: const Icon(Icons.folder_open_outlined, size: 18),
                     label: const Text('Open a file'),
-                  ),
-                  const SizedBox(width: Space.sm),
-                  // The third source. A statement that arrives on paper
-                  // -- posted, or handed over a counter -- had no way in
-                  // here at all: the other two buttons both want a file
-                  // the bank exported.
-                  OutlinedButton.icon(
-                    key: const ValueKey('statement-scan'),
-                    onPressed: _reading ? null : _scan,
-                    icon: const Icon(
-                      Icons.document_scanner_outlined,
-                      size: 18,
-                    ),
-                    label: const Text('Photograph it'),
                   ),
                   if (_fileName != null) ...[
                     const SizedBox(width: 12),
