@@ -523,6 +523,33 @@ jobs:
         with:
           version: 2.114.0
 
+      # AND PULL THE IMAGES FROM SOMEWHERE THAT IS NOT REFUSING.
+      #
+      # `supabase/setup-cli` exports `SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io`
+      # itself -- it is not set anywhere in this file -- and ghcr.io has
+      # spent this afternoon answering every anonymous pull with
+      #
+      #     toomanyrequests: retry-after: 937.64µs, allowed: 44000/minute
+      #
+      # An Actions runner shares its address with every other runner on
+      # the host, so that budget is not ours to stay inside. Run 2100
+      # proved the backoff was not the problem: four attempts, a minute
+      # and then two and then four apart, all four refused.
+      #
+      # `public.ecr.aws` is a different bucket and Supabase mirrors the
+      # whole stack there. CHECKED, not assumed -- postgres, gotrue,
+      # realtime, postgrest, storage-api, postgres-meta, supavisor,
+      # kong, logflare and studio all answer, and the three exact tags
+      # this run asked ghcr for (postgres-meta:v0.97.0,
+      # storage-api:v1.69.0, edge-runtime:v1.74.3) return a manifest.
+      #
+      # Written to `$GITHUB_ENV` AFTER the action rather than declared
+      # as a job `env:`, because the action exports the same name and
+      # the last writer before the step wins. A job-level `env:` would
+      # be a change that reads correct and does nothing.
+      - name: Pull the images from a registry that is not refusing
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
+
       # The list below is hand-kept, and a hand-kept list of tests goes
       # stale in the one direction that is invisible: a file added to
       # `supabase/tests/` and not added here is never run, and reads
@@ -2508,6 +2535,15 @@ jobs:
         with:
           version: 2.114.0
 
+      # The registry swap the database job explains at length. Here for
+      # `db dump`, which brings up a Postgres container of its own, and
+      # for `functions deploy`, which pulls the edge runtime -- both
+      # were pulling from ghcr.io for the same reason and neither knew
+      # it.
+      - name: Pull the images from a registry that is not refusing
+        if: steps.creds.outputs.ready == 'true'
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
+
       - name: Link
         if: steps.creds.outputs.ready == 'true'
         run: scripts/ci/retry.sh supabase link --project-ref "$SUPABASE_PROJECT_REF"
@@ -2772,6 +2808,15 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         with:
           version: 2.114.0
+
+      # The registry swap the database job explains at length. Here for
+      # `db dump`, which brings up a Postgres container of its own, and
+      # for `functions deploy`, which pulls the edge runtime -- both
+      # were pulling from ghcr.io for the same reason and neither knew
+      # it.
+      - name: Pull the images from a registry that is not refusing
+        if: steps.creds.outputs.ready == 'true'
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
 
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
