@@ -27,6 +27,27 @@ import '../../data/ai_repository.dart';
 ///
 /// Whether a key is on file, and when it was set. Never the key. The
 /// row this sheet reads has no column that could carry one.
+/// When this company's own assistant key was set, as a DATE.
+///
+/// Parsed rather than passed. `own_key_set_at` is a `timestamptz` and
+/// PostgREST hands it over as a JSON string; the row is a `dynamic`
+/// map, so `Fmt.dateTime(s['own_key_set_at'])` compiled and threw
+///
+///     type 'String' is not a subtype of type 'DateTime?'
+///
+/// during BUILD — and a throw during build is an `ErrorWidget`, which a
+/// release web build draws as a plain grey rectangle filling whatever
+/// space it is given. The same fault was reported on
+/// `ai_providers_admin.dart` first, and both were only reachable once a
+/// key existed, which is why neither showed up before somebody set one.
+///
+/// `tryParse`, so a value that is not a timestamp costs the sentence
+/// rather than the sheet.
+DateTime? _ownKeySetAt(Map<String, dynamic> s) {
+  final raw = s['own_key_set_at'];
+  return raw == null ? null : DateTime.tryParse('$raw');
+}
+
 class AssistantSettingsSheet extends ConsumerStatefulWidget {
   const AssistantSettingsSheet({super.key});
 
@@ -260,7 +281,7 @@ class _AssistantSettingsSheetState
                 Text(
                   s['has_own_key'] == true
                       ? 'A key is on file, set '
-                            '${Fmt.dateTime(s['own_key_set_at'])}. It cannot '
+                            '${Fmt.dateTime(_ownKeySetAt(s))}. It cannot '
                             'be read back — replace it if you are not '
                             'sure it is the right one.'
                       : 'No key on file yet.',

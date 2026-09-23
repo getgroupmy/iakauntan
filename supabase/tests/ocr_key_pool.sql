@@ -298,9 +298,18 @@ begin
   perform pg_temp.check_true(
     'Gemini arrives switched OFF, because its pool starts empty',
     not (select is_active from public.ocr_providers where code = 'gemini'));
+  -- `0675` put Gemini on the chat-completions shape so it needed no
+  -- new handler, and that is exactly why it could not read a PDF: that
+  -- shape had no document part. `0701` gave it its own kind and its
+  -- own handler, which is the cost that buys the capability.
   perform pg_temp.check_eq(
-    'and speaks the chat-completions shape, so it needs no new handler',
-    (select kind from public.ocr_providers where code = 'gemini'), 'openai');
+    'and speaks its own API, which is what lets it read a PDF',
+    (select kind from public.ocr_providers where code = 'gemini'),
+    'google_gemini');
+  perform pg_temp.check_true(
+    'so the app is told it opens one',
+    app.provider_reads_pdf(
+      (select p from public.ocr_providers p where p.code = 'gemini')));
 end;
 $$;
 

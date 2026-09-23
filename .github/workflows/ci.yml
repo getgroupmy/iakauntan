@@ -1309,6 +1309,16 @@ jobs:
       - name: Check no dialog action asks for a flex
         run: python3 scripts/check_dialog_actions.py
 
+      # The same grey rectangle from the other direction. `Fmt.dateTime`
+      # takes a `DateTime?`; a `timestamptz` arrives from PostgREST as a
+      # JSON string, and the rows are `Map<String, dynamic>` -- so the
+      # call compiles, the analyzer says nothing, and it throws during
+      # build. Reported as "why when key added it goes grey", and both
+      # instances sat behind `if (hasKey ...)`, which is why neither had
+      # ever been seen.
+      - name: Check no date formatter is handed a row value
+        run: python3 scripts/check_date_arguments.py
+
       # A setState whose arrow body assigns a Future returns that Future,
       # and Flutter asserts against exactly that -- so the widget throws
       # on every load and every refresh in any build with asserts on.
@@ -1746,6 +1756,10 @@ jobs:
       # request against the limit that is already the problem.
       - run: deno check supabase/functions/ocr/retry_test.ts
       - run: deno test supabase/functions/ocr/retry_test.ts
+      # `0701`. The dialect Gemini's `responseSchema` reads, which
+      # differs from JSON Schema in two silent ways.
+      - run: deno check supabase/functions/ocr/gemini_schema_test.ts
+      - run: deno test supabase/functions/ocr/gemini_schema_test.ts
 
       # Reading an e-mail well enough to file what was in it.
       #

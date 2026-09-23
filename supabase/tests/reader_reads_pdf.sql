@@ -54,6 +54,14 @@ begin
     'the chat-completions shape does not',
     app.reader_reads_pdf('openai') is false);
 
+  -- `0701`. Gemini was on `openai` -- Google's compatibility endpoint
+  -- -- which is why it appeared not to read PDFs. It has its own kind
+  -- now, and `readGemini` sends `inline_data` with whatever mime type
+  -- the file carries.
+  perform pg_temp.check_true(
+    'Gemini''s own API opens one',
+    app.reader_reads_pdf('google_gemini') is true);
+
   perform pg_temp.check_true(
     'Document AI opens one',
     app.reader_reads_pdf('google_docai') is true);
@@ -94,12 +102,18 @@ begin
 
   -- And there is more than one of them, or the assertion above is
   -- about a catalog with nothing in it. Gemini, ChatGPT and Grok.
+  -- Two since `0701` moved Gemini onto its own kind: ChatGPT and Grok.
   select count(*) into v_n from public.ocr_providers where kind = 'openai';
-  if v_n < 3 then
+  if v_n < 2 then
     raise exception
       'only % readers wear the chat-completions shape; the assertion '
       'above is about an empty catalog', v_n;
   end if;
+
+  -- And Gemini is no longer one of them, which is the whole of `0701`.
+  perform pg_temp.check_eq('Gemini is on its own kind',
+    (select kind from public.ocr_providers where code = 'gemini'),
+    'google_gemini');
 
   -- -------------------------------------------------------------------
   -- 3. It reaches the app
@@ -114,7 +128,11 @@ begin
   if v_one is null then
     raise exception 'the status does not list Gemini at all';
   end if;
-  if (v_one -> 'reads_pdf') is distinct from to_jsonb(false) then
+  -- TRUE since `0701`. This assertion said `false` for four commits and
+  -- was right about the integration we had; the app read it and put
+  -- "this reader takes photographs, not PDFs" in front of everybody on
+  -- Gemini.
+  if (v_one -> 'reads_pdf') is distinct from to_jsonb(true) then
     raise exception
       'the status says Gemini reads_pdf = %', v_one -> 'reads_pdf';
   end if;

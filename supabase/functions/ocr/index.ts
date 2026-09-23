@@ -54,6 +54,7 @@
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
+import { geminiSchema } from "./gemini_schema.ts";
 import { poolProblem } from "./pool.ts";
 import { ReaderRefusal, withOneRetry } from "./retry.ts";
 import {
@@ -141,7 +142,13 @@ interface BeginResult {
   provider: string;
   provider_name: string;
   /** The protocol, which is the only thing this function switches on. */
-  kind: "anthropic" | "openai" | "google_docai" | "self_hosted" | "device";
+  kind:
+    | "anthropic"
+    | "openai"
+    | "google_gemini"
+    | "google_docai"
+    | "self_hosted"
+    | "device";
   endpoint: string | null;
   model: string | null;
   key_source: "platform" | "own" | "device";
@@ -446,15 +453,34 @@ async function readOpenAiShaped(
   schema: Record<string, unknown> = SCHEMA,
   system: string = SYSTEM,
 ): Promise<Extraction> {
-  // Chat-completions takes images, not documents. A PDF would have to go
-  // through a different endpoint on every one of these, so it is refused
-  // by name rather than sent and misread.
-  if (mime === "application/pdf") {
-    throw new Error(
-      "This reader takes photographs, not PDFs. Photograph the document, " +
-        "or switch to Claude, which reads PDFs.",
-    );
-  }
+  // A PDF goes as a FILE part and a photograph as an image part.
+  //
+  // `0701`. This used to refuse a PDF outright, on the reasoning that
+  // chat-completions carries images and nothing else. That was true
+  // when it was written and is not any more: the shape has a `file`
+  // part carrying base64, and OpenAI's own SDK types spell it
+  // `{ type: "file", file: { filename, file_data } }`.
+  //
+  // Whether the vendor BEHIND this endpoint honours it is a different
+  // question, and it is not answered here -- `ocr_providers.reads_pdf`
+  // answers it per reader, so a platform can switch one on the day its
+  // vendor ships it without waiting for a release. Sending it and
+  // letting the vendor refuse is the same bargain `readSelfHosted`
+  // makes.
+  const part = mime === "application/pdf"
+    ? {
+      type: "file",
+      file: {
+        // Named, because some vendors key their handling off the
+        // extension rather than off the data URL's mime type.
+        filename: "document.pdf",
+        file_data: `data:${mime};base64,${toBase64(bytes)}`,
+      },
+    }
+    : {
+      type: "image_url",
+      image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
+    };
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -474,10 +500,7 @@ async function readOpenAiShaped(
         {
           role: "user",
           content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
-            },
+            part,
             { type: "text", text: "Read this document." },
           ],
         },
@@ -510,6 +533,122 @@ async function readOpenAiShaped(
     throw new Error(
       choice?.message?.refusal ??
         "The reader answered with nothing.",
+    );
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("The reader answered with something that was not the schema.");
+  }
+  return normalise(parsed);
+}
+
+/**
+ * Gemini, through its own API rather than through Google's
+ * OpenAI-compatibility shim.
+ *
+ * `0701`. The shim is `/v1beta/openai/chat/completions`, and the parts
+ * a chat-completions message may carry are text and `image_url`. So
+ * `readOpenAiShaped` refused a PDF by name and every company on Gemini
+ * was told "this reader takes photographs, not PDFs" — true of the
+ * road we took, and false of the model. `generateContent` takes
+ * `inline_data` with any mime type it supports, `application/pdf`
+ * among them, and reads the document rather than a picture of it.
+ *
+ * The key goes in a HEADER and not in the query string. Both work;
+ * only one of them stays out of logs, and this one is a tenant's
+ * credential or the platform's pooled key.
+ */
+async function readGemini(
+  apiKey: string,
+  endpoint: string,
+  model: string,
+  bytes: Uint8Array,
+  mime: string,
+  schema: Record<string, unknown> = SCHEMA,
+  system: string = SYSTEM,
+): Promise<Extraction> {
+  if (!model) {
+    throw new Error(
+      "This reader has no model set. Choose one in the platform console " +
+        "before it can be asked to read anything.",
+    );
+  }
+
+  // The endpoint on the catalog is a BASE — the model and the method
+  // belong in the path, and the model is configuration. A trailing
+  // slash from whoever typed it would otherwise produce `//models/`.
+  const base = (endpoint || "https://generativelanguage.googleapis.com/v1beta")
+    .replace(/\/+$/, "");
+  const url = `${base}/models/${encodeURIComponent(model)}:generateContent`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      // `systemInstruction` rather than a first user turn: the prompt
+      // says how to read every document and the document says what to
+      // read, and folding them together is how a supplier's letterhead
+      // ends up answering a question meant for us.
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{
+        role: "user",
+        parts: [
+          { inline_data: { mime_type: mime, data: toBase64(bytes) } },
+          { text: "Read this document." },
+        ],
+      }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: geminiSchema(schema),
+        maxOutputTokens: 4000,
+      },
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ReaderRefusal(
+      `Gemini refused the document: ${
+        body?.error?.message ?? `HTTP ${response.status}`
+      }`,
+      response.status,
+    );
+  }
+
+  const candidate = body?.candidates?.[0];
+  // `MAX_TOKENS` is the same fault `finish_reason === "length"` is on
+  // the OpenAI side, and it needs the same sentence: the answer is
+  // truncated JSON and blaming the schema would send somebody looking
+  // in the wrong place.
+  if (candidate?.finishReason === "MAX_TOKENS") {
+    throw new Error(
+      "The document was too long to read in one pass. Attach the page " +
+        "with the totals on it.",
+    );
+  }
+  // A blocked answer carries no parts at all, and the reason is the
+  // only thing that says why.
+  if (candidate?.finishReason === "SAFETY" ||
+      candidate?.finishReason === "PROHIBITED_CONTENT") {
+    throw new Error(
+      "Gemini would not answer about this document. Try another reader.",
+    );
+  }
+
+  const text = candidate?.content?.parts
+    ?.map((p: { text?: string }) => p?.text ?? "")
+    .join("");
+  if (typeof text !== "string" || text.trim() === "") {
+    throw new Error(
+      body?.promptFeedback?.blockReason
+        ? `Gemini would not read it: ${body.promptFeedback.blockReason}`
+        : "The reader answered with nothing.",
     );
   }
 
@@ -1099,6 +1238,16 @@ async function runReader(
       return await readClaude(
         credential.api_key,
         reader.endpoint ?? "https://api.anthropic.com/v1/messages",
+        reader.model ?? "",
+        bytes,
+        mime,
+        schema,
+        system,
+      );
+    case "google_gemini":
+      return await readGemini(
+        credential.api_key,
+        reader.endpoint ?? "",
         reader.model ?? "",
         bytes,
         mime,
