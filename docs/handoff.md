@@ -35,12 +35,55 @@ it has to be committed.
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | asking whether the reader opens a PDF before spending a scan on it |
-| CI | green through run 2083 (`459d3716`). **Run 2084 (`2c6a456f`) is RED, and only on "Build the Android app"** — `actions/setup-java@v4` could not resolve the JetBrains JDK because a shared runner IP's anonymous GitHub API quota was spent. Nothing to do with the diff, and **every deploy job on that run was green**: migrations applied, edge functions and Vercel deployed |
+| CI | **green at the tip: run 2086 (`2106a921`)**, migrations applied, edge functions and proxy deployed. Two runs before it went red on things that were not the diff, and both are written up below: 2084 on the Android JDK, 2085 on Deno's dependency-age policy |
 | Migrations | `0697` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 361 SQL assertion files, **47 Python gates (+12 gate self-tests)**, **5,852 Flutter tests**, 35 deno tests |
 | API description | 787 functions, 366 tables, version `0697` |
+
+### The edge job resolves supabase-js fresh on every run
+
+Run 2085 went red on **"Edge function assertions"**, at `deno check
+supabase/functions/_shared/context_test.ts` -- the first file in that
+list that imports supabase-js. Deno refused the graph:
+
+    error: Could not find npm package '@supabase/auth-js' matching
+    '2.117.0'.
+    A newer matching version was found, but it was not used because it
+    was newer than the specified minimum dependency date of
+    2026-09-22 12:59:34 UTC.
+
+Every edge function imports `jsr:@supabase/supabase-js@2` -- **a
+floating major, and there is no lockfile and no `deno.json`** -- so CI
+resolves whatever 2.x is newest at the moment it runs. That was
+`2.117.0`, whose npm dependency is pinned to `@supabase/auth-js@2.117.0`,
+and Deno's minimum-dependency-age policy refuses an npm package younger
+than 24 hours.
+
+`@supabase/auth-js@2.117.0` was published at **2026-09-22T13:00:06Z**
+(checked against `registry.npmjs.org`). Run 2085 started at
+**12:59:34Z** -- **thirty-two seconds** inside the window. Run 2086
+started at 13:01:29 and passed with nothing changed.
+
+The policy is doing its job and is not the thing to weaken. The hazard
+is the floating specifier: **every Supabase release opens a 24-hour
+window in which this repository's CI fails for reasons that are not in
+the repository.** The fix is a pin or a `deno.lock`, and it was not made
+here because it changes dependency resolution across eighteen entry
+points and seventeen deno test files, which is a decision to take
+deliberately rather than as a side effect of an unrelated commit.
+
+**And it is not only a nuisance.** `migrate` declares `needs: [flutter,
+database, edge, sfu]`, so a red edge job SKIPS Apply the migrations,
+Deploy the edge functions and Deploy the workspace proxy -- while
+Vercel, which does not depend on `edge`, deploys anyway. For about
+twenty minutes on 2085 the web build was serving app code that expected
+a `reads_pdf` field the database was not yet sending. It degraded
+safely, because `readsPdf` parses to null and `pdfBlock` treats null as
+"nobody has said" -- but that was luck in the design rather than
+something the pipeline guarantees, and it is the shape to watch for
+whenever the front end lands before the schema.
 
 ### The Android job's JDK, and why its retry did nothing
 
