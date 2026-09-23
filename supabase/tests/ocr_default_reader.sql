@@ -318,7 +318,12 @@ begin
   perform pg_temp.check_refused(
     'a reader retired after the fact stops the scan',
     format('select public.ocr_begin(%L, %L)', v_org, v_file),
-    '%no longer offered. An administrator chooses another reader in Settings.%',
+    -- `0699` moved the controls onto the AI SmartScan screen, so the
+    -- sentence no longer sends anybody to Settings. Matched on the
+    -- half that is the FINDING rather than the half that is the
+    -- signpost, so moving the controls again does not break an
+    -- assertion about a retired reader.
+    '%no longer offered. An administrator chooses another reader%',
     '42501');
 
   raise notice 'ocr_default_reader: charging and pool assertions passed';

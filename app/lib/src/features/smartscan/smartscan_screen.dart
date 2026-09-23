@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ocr_repository.dart';
 import 'scan_detail_sheet.dart';
+import 'smartscan_settings.dart';
 import 'scan_flow.dart';
 
 /// AI SmartScan: the pile of paper, and what each sheet became.
@@ -32,12 +33,24 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
   /// `all`, `posted` or `unposted`. The last is the one worth looking
   /// at: a photograph that became nothing is either work left half done
   /// or a reading that failed, and both want a person.
+  ///
+  /// `setup` is the fourth, and it is not a filter — it is the whole of
+  /// how this company reads its paperwork, which used to live under
+  /// Settings. A chip beside the filters rather than a second screen,
+  /// because every refusal this module produces now names a control on
+  /// the page the person is already standing on.
   String _only = 'all';
+
+  bool get _setup => _only == 'setup';
 
   @override
   Widget build(BuildContext context) {
     final canWrite = ref.watch(canWriteProvider);
-    final scans = ref.watch(scanInboxProvider(_only));
+    // Never asked for while the setup chip is selected: `setup` is not
+    // a value `scan_inbox` knows, and sending it would be a filter the
+    // database quietly reads as `all`.
+    final scans =
+        _setup ? null : ref.watch(scanInboxProvider(_only));
 
     return Scaffold(
       appBar: AppBar(
@@ -75,6 +88,7 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
                   (value: 'all', label: 'Everything'),
                   (value: 'unposted', label: 'Became nothing yet'),
                   (value: 'posted', label: 'Filed'),
+                  (value: 'setup', label: 'How it reads'),
                 ])
                   ChoiceChip(
                     key: ValueKey('smartscan-filter-${f.value}'),
@@ -85,9 +99,20 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
               ],
             ),
           ),
-          Expanded(
+          if (_setup)
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(Space.lg),
+                child: SmartScanSettingsCard(
+                  key: const ValueKey('smartscan-setup'),
+                  canEdit: ref.watch(canAdminProvider),
+                ),
+              ),
+            )
+          else
+            Expanded(
             child: AsyncView<List<ScanInboxEntry>>(
-              value: scans,
+              value: scans!,
               onRetry: () => ref.invalidate(scanInboxProvider(_only)),
               skeleton: const ListSkeleton(rows: 6),
               builder: (rows) {

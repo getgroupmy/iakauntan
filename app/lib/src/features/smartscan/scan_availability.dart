@@ -55,9 +55,10 @@ ScanBlock? scanBlock(
   if (ocr == null) return null;
 
   // A module before it is a setting. `0682`. Not something an
-  // administrator can fix in Settings — the switch is under
-  // Subscription and it is an OWNER's — so this offers no shortcut
-  // there, which would be a door onto a control they cannot work.
+  // administrator can fix under “How it reads” either — the switch is
+  // under Subscription and it is an OWNER's — so this offers no
+  // shortcut there, which would be a door onto a control they cannot
+  // work.
   if (!ocr.hasModule) {
     return const ScanBlock(
       title: 'AI SmartScan is not switched on for this company',
@@ -87,12 +88,12 @@ ScanBlock? scanBlock(
       message: canAdmin
           ? 'Switch it on and choose which reader to use, and this '
               'document is read the moment it is photographed.$freeSentence'
-          : 'An administrator switches it on in Settings, and only an '
-              'administrator can — so nothing here will let you.'
-              '$freeSentence',
+          : 'An administrator switches it on under “How it reads” on '
+              'the AI SmartScan screen, and only an administrator can — '
+              'so nothing here will let you.$freeSentence',
       // The route only where it leads somewhere the person can act.
-      actionLabel: canAdmin ? 'Open Settings' : null,
-      route: canAdmin ? '/settings' : null,
+      actionLabel: canAdmin ? 'Open the setup' : null,
+      route: canAdmin ? '/smartscan' : null,
     );
   }
 
@@ -177,9 +178,10 @@ ScanBlock? pdfBlock(
   final others = pdfReaders(ocr,
       deviceReadsPdf: deviceReadsPdf, besides: current.code);
   final whoSwitches = canAdmin
-      ? 'Settings is where the reader is chosen.'
-      : 'An administrator chooses the reader in Settings, and only an '
-          'administrator can.';
+      ? '“How it reads” on the AI SmartScan screen is where the reader '
+          'is chosen.'
+      : 'An administrator chooses the reader under “How it reads”, '
+          'and only an administrator can.';
   final alternatives = others.isEmpty
       // No promise. A company whose platform offers nothing else is
       // told to photograph the page, which always works, rather than
@@ -202,7 +204,7 @@ ScanBlock? pdfBlock(
     // Only where there is something to switch TO, and only for
     // somebody who can switch it. A door onto a screen that will not
     // help is worse than no door — the whole of `2f012feb`.
-    actionLabel: canAdmin && others.isNotEmpty ? 'Open Settings' : null,
-    route: canAdmin && others.isNotEmpty ? '/settings' : null,
+    actionLabel: canAdmin && others.isNotEmpty ? 'Open the setup' : null,
+    route: canAdmin && others.isNotEmpty ? '/smartscan' : null,
   );
 }

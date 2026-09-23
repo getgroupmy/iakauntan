@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0698",
+    "version": "0699",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -42459,7 +42459,7 @@
       "post": {
         "operationId": "ocr_begin",
         "summary": "Opens a scan: decides which reader, takes the charge, and hands the edge function everything it needs to make\u2026",
-        "description": "Opens a scan: decides which reader, takes the charge, and hands the edge function everything it needs to make the call. `p_provider` names a reader for THIS scan only -- reading the same file again with a different one -- and is checked against the same rules the company's own reader is, plus readiness and, where the company brings its own key, a key for that reader. Null means the company's setting. 0111, 0678, 0682, 0698.\n\n`public.ocr_begin(p_org_id uuid, p_attachment_id uuid, p_provider text)` Writes. Requires a signed-in user.",
+        "description": "Opens a scan: decides which reader, takes the charge, and hands the edge function everything it needs to make the call. `p_provider` names a reader for THIS scan only. Null means the company's setting. 0111, 0678, 0682, 0698, 0699.\n\n`public.ocr_begin(p_org_id uuid, p_attachment_id uuid, p_provider text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -67210,8 +67210,8 @@
     "/rpc/set_ocr_credentials": {
       "post": {
         "operationId": "set_ocr_credentials",
-        "summary": "Stores a company's own document-scanning key for `claude` or `google`",
-        "description": "Stores a company's own document-scanning key for `claude` or `google`. The key may be omitted to keep the stored one, but is required the first time a provider is configured. For Google, a processor id is required as well: Document AI is addressed by processor, not by project alone, and a key with no processor behind it is a 404 at the first scan. Needs `can_admin`.\n\n`public.set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` Writes. Requires a signed-in user.",
+        "summary": "Stores a company's own key for a reader",
+        "description": "Stores a company's own key for a reader. Any reader on the catalog that says it takes one -- not the two names `0111` hardcoded, which left Gemini, ChatGPT and Grok unable to hold a key at all. 0111, 0699.\n\n`public.set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

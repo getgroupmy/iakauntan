@@ -508,4 +508,76 @@ begin
     '%ocr_providers_kind_check%');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A key for any reader that takes one
+--
+-- `0699`. `set_ocr_credentials` refused every provider but `claude`
+-- and `google` from `0111` until then -- two names hardcoded against
+-- what `0113` had already made a TABLE, and what `0675` later added
+-- Gemini to. So a company could pick Gemini, set its key source to
+-- "my own key" (which `set_ocr_settings` allows, because it asks the
+-- catalog) and then be refused at the save with `23514`.
+--
+-- The rule is the catalog's own now: a reader may hold a key when it
+-- says it takes one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kunci Sdn Bhd');
+
+  -- The bug, stated as the thing that must now work. `gemini` is
+  -- neither of the two names `0111` allowed.
+  perform public.set_ocr_credentials(v_org, 'gemini', 'sk-gemini');
+  perform pg_temp.check_true('a company can hold its own Gemini key',
+    exists (select 1 from public.org_ocr_credentials
+             where org_id = v_org and provider = 'gemini'));
+
+  -- And the two that always worked still do, or the fix is a swap
+  -- rather than a widening.
+  perform public.set_ocr_credentials(v_org, 'claude', 'sk-claude');
+  perform pg_temp.check_true('and its own Claude key',
+    exists (select 1 from public.org_ocr_credentials
+             where org_id = v_org and provider = 'claude'));
+
+  -- `takes_key` is false for the on-device reader, and a key for it
+  -- would be a secret stored for something that never makes a call.
+  begin
+    perform public.set_ocr_credentials(v_org, 'mlkit', 'sk-nothing');
+    raise exception 'a key was stored for the on-device reader';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like '%needs no key%' then
+        raise exception 'refused for the wrong reason: %', sqlerrm;
+      end if;
+  end;
+
+  -- A code that is not on the catalog at all. The check is the table
+  -- now, so this is the same refusal as before and not a weaker one.
+  begin
+    perform public.set_ocr_credentials(v_org, 'no-such-reader', 'sk-x');
+    raise exception 'a key was stored for a reader that does not exist';
+  exception
+    when sqlstate '23514' then null;
+  end;
+
+  -- Document AI is addressed by processor, not by project alone, and
+  -- that is keyed on the KIND rather than on the literal code -- so a
+  -- second Document AI processor added under another name is asked for
+  -- the same three things.
+  begin
+    perform public.set_ocr_credentials(v_org, 'google', '{"type":"x"}');
+    raise exception 'a Document AI key was stored with no processor';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like '%processor id%' then
+        raise exception 'refused for the wrong reason: %', sqlerrm;
+      end if;
+  end;
+
+  raise notice 'ocr keys: any reader that takes one may hold one';
+end $$;
+
 rollback;

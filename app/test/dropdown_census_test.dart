@@ -177,12 +177,20 @@ const dropdownCensus = <String, int>{
   'features/settings/document_numbering_card.dart': 1,
   'features/settings/landing_settings.dart': 1,
   'features/settings/new_account_dialog.dart': 2,
-  // Two since 0615. The second is the e-Invoice VERSION — 1.0 or 1.1,
-  // which is LHDN's list and not ours, and a third member would arrive
-  // by gazette. The choice is between two things whose whole
-  // difference has to be readable at a glance, which is what a
-  // dropdown of two labelled options is for.
-  'features/settings/settings_screen.dart': 2,
+  // One since the scanning card moved to `smartscan_settings.dart`.
+  // The one left is the e-Invoice VERSION — 1.0 or 1.1, which is
+  // LHDN's list and not ours, and a third member would arrive by
+  // gazette. The choice is between two things whose whole difference
+  // has to be readable at a glance, which is what a dropdown of two
+  // labelled options is for.
+  'features/settings/settings_screen.dart': 1,
+  // The other half of that move: which READER this company sends its
+  // documents to. A fixed set off `ocr_providers`, five today, and it
+  // grows only when a platform operator adds one in the console — so
+  // it is a list somebody reads rather than searches, which is what a
+  // dropdown is for. It was on the census under `settings_screen`
+  // until the controls moved onto the AI SmartScan screen.
+  'features/smartscan/smartscan_settings.dart': 1,
   // `0655`. One: which subtype a sub-account is filed as. A FIXED set
   // -- the subtypes of its parent's type, at most eight, straight out
   // of `accountSubtypes` -- and it cannot grow, because a new subtype

@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0698` (the highest applied migration).
+Schema version `0699` (the highest applied migration).
 787 functions and 366 readable tables, of which
 306 functions only read.
 
@@ -868,7 +868,7 @@ Not gated on any module.
 - `set_line_lots(p_line_table text, p_line_id uuid, p_lots jsonb)` *(writes)* — Records which batches or serial numbers a line is made up of, and returns how many were recorded.
 - `set_member_access_type(p_member_id uuid, p_access_type_id uuid)` *(writes)* — Puts a member on an access type -- the named bundle of permissions this company defined -- or takes them off it with null.
 - `set_module_hidden(p_org_id uuid, p_module text, p_hidden boolean)` *(writes)* — Puts a module away, or brings it back, for one company.
-- `set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` *(writes)* — Stores a company's own document-scanning key for `claude` or `google`.
+- `set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` *(writes)* — Stores a company's own key for a reader.
 - `set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` *(writes)* — Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's.
 - `set_onboarding_task_done(p_task_id uuid, p_done boolean)` *(writes)* — Ticks or unticks one task on somebody's onboarding checklist.
 - `set_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text, p_api_key text, p_collection_ref text, p_signature_key text, p_is_active boolean)` *(writes)* — Stores a company's own acquirer credentials for one gateway in one mode.

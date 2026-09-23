@@ -662,7 +662,10 @@ void main() {
       final block = scanBlock(settings(enabled: false), canAdmin: true);
       expect(block, isNotNull);
       expect(block!.hasAction, isTrue);
-      expect(block.route, '/settings');
+      // `/smartscan`, not `/settings`. The controls moved onto the
+      // SmartScan screen, and a door onto the page they USED to be on
+      // is the exact failure `2f012feb` was written to stop.
+      expect(block.route, '/smartscan');
     });
 
     // The half that matters more. `set_ocr_settings` refuses anybody
@@ -865,7 +868,7 @@ void main() {
       expect(block!.message, contains('Gemini'));
       expect(block.message, contains('Claude'));
       expect(block.hasAction, isTrue);
-      expect(block.route, '/settings');
+      expect(block.route, '/smartscan');
     });
 
     // Not loaded. The same bargain `scanBlock` makes: the edge function
