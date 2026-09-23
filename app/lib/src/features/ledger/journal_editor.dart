@@ -36,6 +36,7 @@ class JournalDraft {
     this.credit = 0,
     this.projectCode,
     this.departmentCode,
+    this.matterId,
   });
 
   String? accountId;
@@ -62,6 +63,15 @@ class JournalDraft {
   /// is the worst way for a report to be wrong.
   String? departmentCode;
 
+  /// Which matter this line belongs to, for a law firm. `0687`.
+  ///
+  /// Per line and not per journal, for the reason the two above are:
+  /// the entry that moves a cost from one matter to another is a single
+  /// journal touching both, and a header field could not express it.
+  /// That is not a corner case — it is what a transfer between client
+  /// ledgers IS.
+  String? matterId;
+
   bool get isEmpty => accountId == null && debit == 0 && credit == 0;
 
   Map<String, dynamic> toJson() => {
@@ -71,6 +81,11 @@ class JournalDraft {
         'credit': credit,
         if (projectCode != null) 'project_code': projectCode,
         if (departmentCode != null) 'department_code': departmentCode,
+        // Omitted when absent rather than sent as null or ''. `0688`
+        // reads it through `nullif(..., '')::uuid`, so an empty string
+        // would be survivable — but an absent key is what the other two
+        // dimensions do and what the posting path expects.
+        if (matterId != null) 'matter_id': matterId,
       };
 }
 
@@ -136,6 +151,14 @@ class _JournalEditorState extends ConsumerState<_JournalEditor> {
         const <Map<String, dynamic>>[];
     final projects = ref.watch(projectsProvider).valueOrNull ??
         const <Map<String, dynamic>>[];
+    // Open matters only. A journal is posted today, and a file that was
+    // closed last year is not something anybody means to post to -- the
+    // matter closing in `matter_closing.dart` exists precisely so that
+    // stops happening. `matters_screen` is where a closed one is
+    // reopened if it has to be.
+    final matters = ref.watch(mattersProvider((status: 'open', search: '')))
+            .valueOrNull ??
+        const <Matter>[];
     final problem = journalProblem(_lines);
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
@@ -196,6 +219,7 @@ class _JournalEditorState extends ConsumerState<_JournalEditor> {
                   accounts: accounts,
                   projects: projects,
                   departments: departments,
+                  matters: matters,
                   narrow: narrow,
                   onChanged: () => setState(() {}),
                   onRemove: _lines.length > 2
@@ -292,6 +316,7 @@ class _JournalLineRow extends StatefulWidget {
     required this.accounts,
     required this.projects,
     required this.departments,
+    required this.matters,
     required this.narrow,
     required this.onChanged,
     this.onRemove,
@@ -301,6 +326,7 @@ class _JournalLineRow extends StatefulWidget {
   final List<Account> accounts;
   final List<Map<String, dynamic>> projects;
   final List<Map<String, dynamic>> departments;
+  final List<Matter> matters;
   final bool narrow;
   final VoidCallback onChanged;
   final VoidCallback? onRemove;
@@ -415,6 +441,23 @@ class _JournalLineRowState extends State<_JournalLineRow> {
             },
           );
 
+    // And the matter, on the same condition as the two above. A company
+    // with no matters gets no control rather than an empty one -- which
+    // also means every company that is not a law firm never sees it,
+    // without a module check having to say so.
+    final matter = widget.matters.isEmpty
+        ? null
+        : SearchablePicker<String>(
+            options: matterPickerOptions(widget.matters),
+            value: widget.line.matterId,
+            label: 'Matter',
+            allowEmpty: true,
+            onChanged: (v) {
+              widget.line.matterId = v;
+              widget.onChanged();
+            },
+          );
+
     final debit = TextField(
       controller: _debit,
       textAlign: TextAlign.right,
@@ -453,6 +496,10 @@ class _JournalLineRowState extends State<_JournalLineRow> {
               const SizedBox(height: 8),
               department,
             ],
+            if (matter != null) ...[
+              const SizedBox(height: 8),
+              matter,
+            ],
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: debit),
@@ -474,7 +521,15 @@ class _JournalLineRowState extends State<_JournalLineRow> {
           // The narrative gives up room as dimensions appear. It is the
           // field that reads fine truncated -- a code does not.
           Expanded(
-            flex: 3 - [project, department].whereType<Widget>().length,
+            // CLAMPED. With all three dimensions on the row this was
+            // `3 - 3`, and an Expanded with a flex of zero is a
+            // description with no width at all -- not truncated, gone.
+            // The subtraction was written when two was the most there
+            // could be.
+            flex: (3 - [project, department, matter]
+                    .whereType<Widget>()
+                    .length)
+                .clamp(1, 3),
             child: description,
           ),
           if (project != null) ...[
@@ -484,6 +539,10 @@ class _JournalLineRowState extends State<_JournalLineRow> {
           if (department != null) ...[
             const SizedBox(width: 8),
             Expanded(flex: 2, child: department),
+          ],
+          if (matter != null) ...[
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: matter),
           ],
           const SizedBox(width: 8),
           SizedBox(width: 110, child: debit),

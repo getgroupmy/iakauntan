@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the matter, on every posting path at once |
+| Head at time of writing | the matter picker, on the journal first |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
 | Migrations | `0688` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 357 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,759 Flutter tests**, 34 deno tests |
+| Gates | 357 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,762 Flutter tests**, 34 deno tests |
 | API description | 784 functions, 366 tables, version `0688` |
 
 ### CI applies migrations, and this branch is the default branch
@@ -736,9 +736,8 @@ The user asked for four things. This is the foundation for two of them.
    every posting path carry it: `app.create_gl_entry_internal` is the
    only function that inserts `gl_lines`, and a caller that knows its
    matter now puts `matter_id` on the line the way `project_code`
-   already travels. What is left is the FLUTTER picker on the bill
-   editor, expense form, journal editor and bank reconciliation, beside
-   Project and Department, shown only when the legal module is on.
+   already travels. The Flutter picker is **on the journal editor**; the
+   bill editor, expense form and bank reconciliation still need it.
 2. **Client trust monies with collections and payments** — already built
    (`ClientMoneyScreen`, `/legal/receipts`, `/legal/payouts`). Asked the
    user what is missing in practice rather than rebuilding it.
@@ -787,6 +786,54 @@ entry with two different matters on it**, one credited and one debited,
 and under that mutant the whole transfer would post against the paying
 matter while the receiving one showed nothing. Pinned now, and it is the
 assertion the client-side general journal will lean on.
+
+## The matter picker, on the journal first
+
+`matterPickerOptions` beside the other list helpers, and a Matter field
+on `JournalDraft` that `toJson` omits when it is null — the same shape
+`project_code` and `department_code` already send, and the shape `0688`
+expects.
+
+**Per line, not per journal**, for the reason the other two are: the
+entry that moves a cost between matters is one journal touching both.
+That is not a corner case — it is what a transfer between client
+ledgers IS, and a header field could not express it.
+
+**Gated by emptiness, not by a module check.** `widget.matters.isEmpty
+? null : picker` is the rule this file already applies to projects and
+departments — *"a company that has never created one gets neither
+control rather than two empty ones"* — and it means every company that
+is not a law firm never sees it without anything having to ask.
+Open matters only: a journal is posted today, and a file closed last
+year is not something anybody means to post to.
+
+### A layout bug this would have shipped
+
+The wide arm sized the narrative with
+
+```dart
+flex: 3 - [project, department].whereType<Widget>().length,
+```
+
+written when two was the most there could be. A third dimension makes
+that `3 - 3`, and an `Expanded` with a flex of zero is a description
+with **no width at all** — not truncated, gone. Clamped to `(1, 3)`.
+
+### An equivalent mutant, written down
+
+A sweep mutant giving `matterId` a field initializer survives, and it is
+equivalent rather than a gap: `JournalDraft` takes `this.matterId` as a
+constructor parameter, and a parameter always wins over a field
+initializer, so the default is unreachable. Noted in
+`journal_problem_test.dart` so the next sweep does not spend an
+afternoon on it.
+
+### Still to place
+
+The bill editor, the expense form and the bank reconciliation. The
+journal was taken first because it already had two dimensions to sit
+beside, so the pattern is now established rather than invented three
+more times.
 
 ## This session's commits
 
