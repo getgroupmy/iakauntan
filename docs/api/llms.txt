@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0692` (the highest applied migration).
+Schema version `0693` (the highest applied migration).
 786 functions and 366 readable tables, of which
 305 functions only read.
 
@@ -380,7 +380,7 @@ Not gated on any module.
 - `accept_invitation(p_token text)` *(writes)* — Takes up an invitation.
 - `activate_report_layout(p_layout_id uuid)` *(writes)* — Makes one layout the one this company's report uses.
 - `add_fixed_public_holidays(p_org_id uuid, p_year integer)` *(writes)* — Adds the four fixed-date national holidays — Labour Day, National Day, Malaysia Day, Christmas — to a year's calendar, and returns how many were actually added.
-- `add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` *(writes)* — Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while the parent has nothing posted to it, no opening balance, and is not a code the ledger posts to by number.
+- `add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` *(writes)* — Adds an account under another.
 - `adjust_attendance(p_record uuid, p_clock_in timestamp with time zone, p_clock_out timestamp with time zone, p_reason text)` *(writes)* — Corrects a day's clock times, recording who changed it and why.
 - `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)* — Records that a company has adopted a constitution, on the date it did.
 - `ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` *(writes)* — Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies.

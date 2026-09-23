@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0692",
+    "version": "0693",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -19608,8 +19608,8 @@
     "/rpc/add_sub_account": {
       "post": {
         "operationId": "add_sub_account",
-        "summary": "Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while\u2026",
-        "description": "Files a new account under an existing one, promoting the parent to a heading -- which is only allowed while the parent has nothing posted to it, no opening balance, and is not a code the ledger posts to by number. See 0655.\n\n`public.add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` Writes. Requires a signed-in user.",
+        "summary": "Adds an account under another",
+        "description": "Adds an account under another. Refuses a caller who may not post, a nameless account, a code already in use and a subtype from another statement. Promotes the parent to a heading where that costs nothing; where it would cost something -- posted entries, an opening balance, or a code the ledger resolves by number -- the child still goes in and the parent goes on posting. Answers the new account with `parent_promoted`, `parent_stays_postable` and, when it stays postable, `not_promoted_because`. 0655, 0693.\n\n`public.add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

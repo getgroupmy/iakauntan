@@ -63,6 +63,34 @@ void main() {
       );
     });
 
+    // `0693`. The report this came from: a company with `1120-M001`
+    // already under `1120` was told the arrangement was impossible.
+    // The refusal is now about the PARENT being promoted, and the
+    // child goes in either way — so the note has to say the opposite
+    // thing, and say it as plainly.
+    test('and where it cannot be promoted, it says so stays postable', () {
+      final note = promotionNote(
+        account(),
+        refusal: 'Account 1120 is one the ledger finds by number when it '
+            'posts, so it has to stay postable and cannot become a heading.',
+      );
+      expect(note, isNotNull);
+      expect(note, contains('1120'));
+      expect(note!.toLowerCase(), contains('stays an account you can post'));
+      // The reassurance that matters here is the opposite one: nothing
+      // is being taken away.
+      expect(note.toLowerCase(), contains('keeps its own balance'));
+      // And it must NOT threaten the thing that is not going to happen.
+      expect(note.toLowerCase(), isNot(contains('becomes a heading')));
+    });
+
+    test('a heading is still silent, refusal or not', () {
+      // Both answers are about a change. A heading has already made
+      // it, so neither note is true of one.
+      expect(promotionNote(account(isGroup: true), refusal: 'anything'),
+          isNull);
+    });
+
     test('and the dialog says where the new account is going', () {
       expect(subAccountBlurb(account()), 'Filed under 1120 Bank accounts.');
     });

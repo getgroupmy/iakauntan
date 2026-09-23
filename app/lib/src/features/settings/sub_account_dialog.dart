@@ -23,8 +23,11 @@
 /// heading, and a heading holds no balance: `0014`, `0016` and `0100`
 /// sum leaves. `0655` refuses the promotion where it would cost
 /// something — a posted line, an opening balance, or a number the
-/// ledger posts to — and this dialog asks that question before it draws
-/// anything, so nobody fills a form in to be told no.
+/// ledger posts to. Since `0693` that is not a reason the child cannot
+/// exist: the sub-account goes in either way and the parent simply
+/// goes on posting. This dialog asks the question before it draws
+/// anything so that the note says which of the two is about to
+/// happen.
 ///
 /// Where it is allowed, [promotionNote] says plainly what is about to
 /// happen to the parent. "1120 Travel will stop being an account you
@@ -47,8 +50,20 @@ import 'new_account_dialog.dart' show accountSubtypes;
 /// Null for an account that is already a heading: it posts nothing
 /// today and taking another child changes nothing at all. A note that
 /// appeared either way would be a warning people learn to skip.
-String? promotionNote(Account parent) {
+///
+/// [refusal] is the server's answer to "may this become a heading?" —
+/// `app.sub_account_refusal`. Null means it may, and the note warns
+/// that it is about to stop being postable. Non-null means it may not,
+/// and since `0693` that no longer stops the sub-account: the child
+/// goes in and the parent goes on posting, which is the other thing
+/// worth saying before somebody presses Add.
+String? promotionNote(Account parent, {String? refusal}) {
   if (parent.isGroup) return null;
+  if (refusal != null) {
+    return '${parent.code} ${parent.name} stays an account you can post '
+        'to, and keeps its own balance. The new account is filed under '
+        'it rather than replacing it.';
+  }
   return '${parent.code} ${parent.name} becomes a heading. A heading '
       'groups the accounts under it and cannot be posted to itself, so '
       'it will stop being offered when you record anything. It has '
@@ -167,7 +182,7 @@ class _SubAccountDialogState extends ConsumerState<SubAccountDialog> {
   Widget build(BuildContext context) {
     final parent = widget.parent;
     final subtypes = accountSubtypes[parent.accountType] ?? const <String>[];
-    final note = promotionNote(parent);
+    final note = promotionNote(parent, refusal: _refusal);
 
     if (_asking) {
       return const AlertDialog(
@@ -175,21 +190,6 @@ class _SubAccountDialogState extends ConsumerState<SubAccountDialog> {
           height: 72,
           child: Center(child: CircularProgressIndicator()),
         ),
-      );
-    }
-
-    if (_refusal != null) {
-      return AlertDialog(
-        key: const ValueKey('sub-account-refused'),
-        icon: Icon(Icons.block, color: context.colors.danger),
-        title: const Text('Nothing can be filed under this'),
-        content: SingleChildScrollView(child: Text(_refusal!)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
       );
     }
 
@@ -332,13 +332,20 @@ class _SubAccountDialogState extends ConsumerState<SubAccountDialog> {
       // sub-account added from an expense form has to be choosable on
       // that form a moment later.
       ref.invalidate(accountsProvider);
+      // Three outcomes, and two of them are a change somebody should
+      // hear about once rather than discover later: the parent has
+      // stopped being postable, or — `0693` — it deliberately has not.
       final promoted = row['parent_promoted'] == true;
+      final stays = row['parent_stays_postable'] == true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             promoted
                 ? '${row['code']} added. ${widget.parent.code} is now a '
                       'heading.'
+                : stays
+                ? '${row['code']} added. ${widget.parent.code} is still '
+                      'an account you can post to.'
                 : '${row['code']} added.',
           ),
         ),
