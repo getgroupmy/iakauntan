@@ -579,7 +579,31 @@ jobs:
       # space, and a space inside a comma-separated argument makes the
       # tail of the list a second argument. That was this change's own
       # first draft.
-      - run: supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector
+      #
+      # WRAPPED IN `retry.sh`, WITH A MINUTE BETWEEN ATTEMPTS. Run 2098
+      # died here, on the pull rather than on the ports:
+      #
+      #     error pulling image configuration: download failed after
+      #     attempts=1: toomanyrequests: retry-after: 301.539µs
+      #     failed to pull docker image from all registries:
+      #     ghcr.io/supabase/postgres-meta:v0.97.0
+      #
+      # Read the retry-after: THREE HUNDRED MICROSECONDS. The CLI took
+      # it at face value and spent all three of its attempts inside a
+      # millisecond, against a quota counted per minute. Same shape as
+      # run 2097 on the edge deploy and run 2084 on the Android JDK,
+      # which is three in one month: a backoff has to outlast the thing
+      # it is backing off from, and none of these three did.
+      #
+      # `stop` on the way out of a FAILED attempt, not before the next
+      # one. That is the port race this job already knows about --
+      # Docker does not release a host port the instant the container
+      # goes -- and stopping at the point of failure puts the whole
+      # backoff between the release and the next bind, instead of no
+      # time at all.
+      - name: Start the throwaway local stack
+        run: |
+          RETRY_DELAY=60 scripts/ci/retry.sh bash -c 'supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector || { supabase stop --no-backup || true; exit 1; }'
       - name: Run the database assertions
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"

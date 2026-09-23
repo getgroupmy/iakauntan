@@ -35,7 +35,7 @@ it has to be committed.
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | Reading it here when the chosen reader will not answer (`0703`) |
-| CI | **green through run 2096 (`ce6b2ae0`)**. Five runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), 2097 (`ghcr.io` pull quota, fixed by putting a minute between the deploy's retries). All written up below |
+| CI | **green through run 2096 (`ce6b2ae0`)**. Five runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), 2097 and 2098 (`ghcr.io` pull quota, on the edge deploy and then on `supabase start`, both fixed by putting a minute between the retries). All written up below |
 | Migrations | `0703` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
