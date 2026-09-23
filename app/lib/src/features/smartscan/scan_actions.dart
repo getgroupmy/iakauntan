@@ -32,6 +32,25 @@ import 'scan_availability.dart';
 import 'scan_blocked_dialog.dart';
 import 'scan_flow.dart';
 
+/// Whether this scan's file is a PDF.
+///
+/// By the declared type, and by the NAME when there is no declared
+/// type — which there often is not. `attachments.mime_type` is
+/// whatever the picker supplied at upload, and a file chosen in a
+/// browser frequently arrives with none at all. The first report of
+/// this feature showed the menu offering Gemini for a file called
+/// `5646539013.pdf`, because the column was null and the question had
+/// only ever been asked of the column.
+///
+/// The bytes are not available here — this is a row out of
+/// `scan_inbox`, not a file in hand — so this is the weaker half of
+/// [looksLikePdf], which sniffs the first four bytes. A file with a
+/// misleading name and no type still reaches the reader and is refused
+/// there, which is the backstop either way.
+bool scanIsPdf(ScanInboxEntry entry) =>
+    entry.mimeType == 'application/pdf' ||
+    (entry.fileName ?? '').toLowerCase().trimRight().endsWith('.pdf');
+
 /// The readers this company could send this file to, right now.
 ///
 /// Not "every reader on the catalog". Four things take one off the
@@ -67,18 +86,57 @@ import 'scan_flow.dart';
 List<OcrProvider> rescanChoices(
   OcrSettings? ocr, {
   required bool isPdf,
+  required bool deviceReaderHere,
+  required bool deviceReadsPdf,
 }) {
   if (ocr == null) return const [];
   return [
     for (final p in ocr.providers)
-      if (p.isActive &&
-          p.ready &&
-          !p.runsOnDevice &&
-          (ocr.keySource != 'own' || ocr.keys.contains(p.code)) &&
-          (!isPdf || p.readsPdf == true))
+      if (_offerable(p, ocr,
+          isPdf: isPdf,
+          deviceReaderHere: deviceReaderHere,
+          deviceReadsPdf: deviceReadsPdf))
         p,
   ];
 }
+
+/// One reader, one answer. Separated from the comprehension because the
+/// two branches ask genuinely different questions and reading them
+/// nested inside a list literal is how the on-device case came to be a
+/// bare `!p.runsOnDevice` in the first place.
+bool _offerable(
+  OcrProvider p,
+  OcrSettings ocr, {
+  required bool isPdf,
+  required bool deviceReaderHere,
+  required bool deviceReadsPdf,
+}) {
+  // The platform's two answers, and they apply to every reader: one it
+  // has retired, and one it has not finished setting up.
+  if (!p.isActive || !p.ready) return false;
+
+  if (p.runsOnDevice) {
+    // `0700`. Left off this list until then, because `ocr_begin`
+    // refuses a device reader — which was building the list out of
+    // what the SERVER would accept rather than out of what can read
+    // the file. The app reads it here, with no key and no charge.
+    //
+    // Two conditions of its own, and neither is a question about the
+    // catalog, which is why both arrive as arguments. It has to have
+    // LOADED — on the web that is a script that may not have arrived —
+    // and it has to be able to open a PDF, which is `pdf.js` in a
+    // browser and not ML Kit on a phone.
+    return deviceReaderHere && (!isPdf || deviceReadsPdf);
+  }
+
+  // A server reader the company has no key for, when the company is
+  // the one holding the keys. `ocr_begin` refuses this and would be
+  // right to; offering it first is the screen setting somebody up.
+  if (ocr.keySource == 'own' && !ocr.keys.contains(p.code)) return false;
+
+  return !isPdf || p.readsPdf == true;
+}
+
 
 /// What the button for one reader says about what it will cost.
 ///
@@ -157,9 +215,8 @@ Future<bool> rescanDocument(
   ScanInboxEntry entry, {
   String? provider,
 }) async {
-  final repo = ref.read(repoProvider);
   final attachmentId = entry.attachmentId;
-  if (repo == null || attachmentId == null) return false;
+  if (ref.read(repoProvider) == null || attachmentId == null) return false;
 
   final messenger = ScaffoldMessenger.of(context);
 
@@ -181,21 +238,40 @@ Future<bool> rescanDocument(
     return false;
   }
 
+  final OcrSettings settings =
+      known ?? await ref.read(ocrStatusProvider.future);
+
+  // Whether the reader somebody picked is this machine. `0700`. Read
+  // off the catalog rather than compared against `'mlkit'`, because a
+  // platform may stand up a second on-device engine and the literal
+  // would silently send it to the server.
+  final chosen = provider == null
+      ? null
+      : settings.providers.where((p) => p.code == provider).firstOrNull;
+  final locally = provider == null ? null : chosen?.runsOnDevice ?? false;
+
   try {
-    final read = provider == null
-        // No choice made: whatever this company is set to, which is the
-        // one path that can reach the on-device reader.
-        ? await readDocument(
-            ref,
-            ocr: known ?? await ref.read(ocrStatusProvider.future),
-            attachmentId: attachmentId,
-            storagePath: entry.storagePath,
-            mimeType: entry.mimeType,
-          )
-        // A reader named for this scan only. Straight to the server,
-        // because `rescanChoices` never offers one that runs on the
-        // device.
-        : await repo.scanAttachment(attachmentId, provider: provider);
+    // One call either way. `readDocument` owns the on-device path
+    // entirely — the refusals, the PDF branch and `recordLocalScan` —
+    // so asking it to read here is a parameter rather than a second
+    // implementation of all of that.
+    //
+    // `onDevice: null` means the company's setting decides, which is
+    // what "Read it again" does and the only way an org set to Local
+    // Read reaches its own reader.
+    final read = await readDocument(
+      ref,
+      ocr: settings,
+      attachmentId: attachmentId,
+      storagePath: entry.storagePath,
+      // The name as well as the declared type: a file picked in a
+      // browser often carries no type at all, and the on-device path
+      // has to know a PDF from a photograph to choose its engine.
+      mimeType: entry.mimeType ??
+          (scanIsPdf(entry) ? 'application/pdf' : null),
+      onDevice: locally,
+      provider: locally == true ? null : provider,
+    );
 
     // The balance moved and a new scan row exists, so everything
     // drawn off either has to be asked again.

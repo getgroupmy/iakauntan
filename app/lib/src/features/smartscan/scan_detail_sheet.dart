@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/scan_kinds_repository.dart';
+import '../shared/text_reader.dart';
 import 'scan_actions.dart';
 import 'scan_destination.dart';
 import 'scan_field_map.dart';
@@ -208,7 +209,19 @@ class _ActionsState extends ConsumerState<_Actions> {
     final refusal = rescanRefusal(entry);
     final choices = refusal != null
         ? const <OcrProvider>[]
-        : rescanChoices(ocr, isPdf: entry.mimeType == 'application/pdf');
+        : rescanChoices(
+            ocr,
+            // By the name as well as the declared type: a file picked
+            // in a browser often carries no type, and the first report
+            // of this menu showed it offering Gemini for a file called
+            // `5646539013.pdf`.
+            isPdf: scanIsPdf(entry),
+            // `0700`. Whether THIS machine can read at all, and
+            // whether it can open a PDF — a browser can, a phone
+            // cannot. Neither is a question about the catalog.
+            deviceReaderHere: onDeviceReaderAvailable,
+            deviceReadsPdf: onDeviceReadsPdf,
+          );
 
     // Already became something. Offering to build a second record from
     // the same paper is how a bill gets entered twice, and `0628`'s

@@ -63,9 +63,25 @@ Future<OcrExtraction> readDocument(
   /// there is no path there, only bytes. This being absent is why the
   /// first web scan went looking in storage with an empty key.
   Uint8List? localBytes,
+
+  /// Read HERE, or on the server, whatever this company is set to.
+  /// `0700`. Null means the setting decides, which is every caller
+  /// written before "Read it with" existed.
+  bool? onDevice,
+
+  /// A server reader named for this one document. `0698`. Ignored on
+  /// the on-device path, which has exactly one engine per platform.
+  String? provider,
 }) async {
   final repo = ref.read(repoProvider)!;
-  if (!ocr.onDevice) return repo.scanAttachment(attachmentId);
+  // `0700`. The company's setting decides by default, and a caller can
+  // override it for ONE document — which is what "Read it with → Local
+  // Read" is. The override has to be here rather than at the call site,
+  // because everything below this line is the on-device path: the
+  // refusals, the PDF branch, and `recordLocalScan`.
+  if (!(onDevice ?? ocr.onDevice)) {
+    return repo.scanAttachment(attachmentId, provider: provider);
+  }
 
   if (!onDeviceReaderAvailable) {
     throw OcrException(

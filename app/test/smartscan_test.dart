@@ -1020,49 +1020,90 @@ void main() {
           providers: all,
         );
 
+    // The two answers that are about THIS MACHINE rather than about
+    // the catalog. Defaulted to "a browser": the reader has loaded and
+    // it opens a PDF, which is the case the on-device tests below then
+    // vary one at a time.
+    List<OcrProvider> offered(
+      OcrSettings? ocr, {
+      required bool isPdf,
+      bool deviceReaderHere = true,
+      bool deviceReadsPdf = true,
+    }) =>
+        rescanChoices(ocr,
+            isPdf: isPdf,
+            deviceReaderHere: deviceReaderHere,
+            deviceReadsPdf: deviceReadsPdf);
+
     final claude = reader('claude', 'Claude');
     final gemini = reader('gemini', 'Gemini', readsPdf: false);
 
     test('a photograph may go to any of them', () {
       final choices =
-          rescanChoices(on([claude, gemini]), isPdf: false);
+          offered(
+          on([claude, gemini]), isPdf: false);
       expect([for (final p in choices) p.code], ['claude', 'gemini']);
     });
 
     // The whole reason `0697` put `reads_pdf` on the wire. Offering
     // Gemini for a PDF is offering a refusal that costs a scan.
     test('and a PDF only to the ones that open one', () {
-      final choices = rescanChoices(on([claude, gemini]), isPdf: true);
+      final choices = offered(
+          on([claude, gemini]), isPdf: true);
       expect([for (final p in choices) p.code], ['claude']);
     });
 
     test('a retired reader is not offered', () {
-      final choices = rescanChoices(
+      final choices = offered(
           on([reader('claude', 'Claude', isActive: false)]), isPdf: false);
       expect(choices, isEmpty);
     });
 
     test('nor one the platform has not finished setting up', () {
-      final choices = rescanChoices(
+      final choices = offered(
           on([reader('claude', 'Claude', ready: false)]), isPdf: false);
       expect(choices, isEmpty);
     });
 
-    // The on-device reader is reached by "read it again" on a company
-    // set to it, not by choosing it here — this is the server path and
-    // `ocr_begin` refuses it with `0A000`.
-    test('nor the one that runs on the device', () {
-      final choices = rescanChoices(
-          on([reader('mlkit', 'On this device', runsOnDevice: true)]),
-          isPdf: false);
-      expect(choices, isEmpty);
+    // `0700`. It USED to be left off, because `ocr_begin` refuses a
+    // device reader — which was building this list out of what the
+    // SERVER would accept rather than out of what can read the file.
+    // Asked for as "also add in the reader list Local Read".
+    final local = reader('mlkit', 'Local Read', runsOnDevice: true,
+        readsPdf: null, price: 0);
+
+    test('the reader that is this machine is offered', () {
+      expect([for (final p in offered(on([local]), isPdf: false)) p.code],
+          ['mlkit']);
+    });
+
+    // Two conditions of its own, and neither is about the catalog. On
+    // the web the engine is a script that may not have arrived.
+    test('but not where it has not loaded', () {
+      expect(
+        offered(on([local]), isPdf: false, deviceReaderHere: false),
+        isEmpty,
+      );
+    });
+
+    // `pdf.js` in a browser opens one; ML Kit on a phone does not. Its
+    // catalog answer is null — the database declines to say, `0697` —
+    // so this is the one reader whose PDF answer comes entirely from
+    // the machine it is running on.
+    test('and for a PDF only where this machine opens one', () {
+      expect([for (final p in offered(on([local]), isPdf: true)) p.code],
+          ['mlkit']);
+      expect(
+        offered(on([local]), isPdf: true, deviceReadsPdf: false),
+        isEmpty,
+      );
     });
 
     // `ocr_begin` refuses this and would be right to. Offering it first
     // is the screen setting somebody up for a refusal.
     test('and on an own key, only the readers there is a key for', () {
-      final choices = rescanChoices(
-        on([claude, gemini], keySource: 'own', keys: const {'claude'}),
+      final choices = offered(
+          on([claude, gemini], keySource: 'own', keys: const {'claude'}),
         isPdf: false,
       );
       expect([for (final p in choices) p.code], ['claude']);
@@ -1070,7 +1111,7 @@ void main() {
 
     // Not loaded. Nothing to offer, and no guess.
     test('a status that has not loaded offers nothing', () {
-      expect(rescanChoices(null, isPdf: false), isEmpty);
+      expect(offered(null, isPdf: false), isEmpty);
     });
 
     // A reader nobody has answered for. It is OFFERED for a
@@ -1085,10 +1126,12 @@ void main() {
     test('a reader nobody has answered for is offered only for a photo', () {
       final unknown = reader('novel', 'Novel', readsPdf: null);
       expect(
-        [for (final p in rescanChoices(on([unknown]), isPdf: false)) p.code],
+        [for (final p in offered(
+          on([unknown]), isPdf: false)) p.code],
         ['novel'],
       );
-      expect(rescanChoices(on([unknown]), isPdf: true), isEmpty);
+      expect(offered(
+          on([unknown]), isPdf: true), isEmpty);
     });
 
     // A rescan SPENDS CREDIT, and on a company whose own reader is free
@@ -1101,6 +1144,27 @@ void main() {
         rescanCost(claude, on([claude], keySource: 'own', keys: {'claude'})),
         'No charge',
       );
+    });
+
+    // The reported bug, and it is about the ROW rather than the rule.
+    // `attachments.mime_type` is whatever the picker supplied, and a
+    // file chosen in a browser often carries none — so the menu
+    // offered Gemini for a file called `5646539013.pdf`, because the
+    // question had only ever been asked of the column.
+    test('a PDF is known by its name when nothing declared a type', () {
+      ScanInboxEntry named(String? mime, String? file) => ScanInboxEntry(
+            scanId: 's',
+            scannedAt: DateTime(2026, 9, 23),
+            attachmentId: 'a',
+            storagePath: 'org/expenses/x/f',
+            mimeType: mime,
+            fileName: file,
+          );
+      expect(scanIsPdf(named('application/pdf', 'bil.jpg')), isTrue);
+      expect(scanIsPdf(named(null, '5646539013.pdf')), isTrue);
+      expect(scanIsPdf(named(null, '5646539013.PDF')), isTrue);
+      expect(scanIsPdf(named(null, 'receipt.jpeg')), isFalse);
+      expect(scanIsPdf(named(null, null)), isFalse);
     });
 
     // Deleting a document deletes its attachment, and
