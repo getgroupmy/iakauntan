@@ -25,6 +25,10 @@
 --     back to the storage object.
 --   * ONE COMPANY'S PAPER ONLY. The inbox takes an org id and the
 --     function is SECURITY DEFINER, so RLS is not doing this.
+--   * AND IT POINTS AT WHERE THE FILE IS. The scan records the key it
+--     was READ under; `refileAttachment` then moves the object onto
+--     the record. Preferring the scan's key 404s on every scan that
+--     became something. `0697`.
 --   * THE REFERENCE REACHES THE SCREEN. `0680` mints one for a failed
 --     scan and tells the person to quote it; until `0695` it was on
 --     the row and nowhere a person could read it.
@@ -163,6 +167,24 @@ begin
       'the inbox says % after the file moved to PB-2000', v_label;
   end if;
 
+  -- And the inbox points at where the file IS. `0697`.
+  --
+  -- `ocr_scans.storage_path` is the key the READER was handed, and
+  -- `refileAttachment` moves the object the moment the record it
+  -- belongs to exists. So the scan's own path is vacated by every scan
+  -- that successfully became something -- which is to say by every
+  -- scan that worked -- and "View the image" answered
+  -- `StorageException(Object not found, statusCode: 404)` on exactly
+  -- the rows a person would want to open.
+  select storage_path into v_label from public.scan_inbox(v_org)
+   where attachment_id = v_att;
+  if v_label is distinct from
+     v_org || '/purchase_documents/' || v_gone || '/receipt.jpg' then
+    raise exception
+      'the inbox points at % rather than where the file was moved to',
+      v_label;
+  end if;
+
   -- -----------------------------------------------------------------
   -- 4. A document deleted afterwards
   -- -----------------------------------------------------------------
@@ -183,6 +205,20 @@ begin
    where scan_id = v_scan;
   if v_label is not null then
     raise exception 'a deleted bill still labels the scan as %', v_label;
+  end if;
+
+  -- Still nameable, and still openable at the last key anybody knew.
+  -- The attachment is gone, so both the name and the live path are
+  -- null and the scan's own record of where it read the file is all
+  -- that is left. That is why the preference above is a `coalesce` and
+  -- not a swap. `0697`.
+  select storage_path into v_label from public.scan_inbox(v_org)
+   where scan_id = v_scan;
+  if v_label is distinct from
+     v_org || '/purchase_documents/' || v_bill || '/receipt.jpg' then
+    raise exception
+      'an orphaned scan points at % rather than at its own path',
+      v_label;
   end if;
 
   -- Still nameable. The attachment is gone, so `file_name` is null and

@@ -344,11 +344,35 @@ jobs:
       # can make that quota bigger; the only cheap defence is to not
       # lose a whole run to one 403.
       #
-      # `continue-on-error` on the first attempt and a conditional
-      # second, rather than a retry action: one fewer third party in
+      # `continue-on-error` on the first attempts and conditional
+      # retries, rather than a retry action: one fewer third party in
       # the supply chain, for a step whose whole job is to fetch a JDK.
       # `scripts/ci/retry.sh` cannot help here — it wraps a shell
       # command, and this is an action.
+      #
+      # THE WAITS ARE THE POINT, and their absence is why the defence
+      # above did nothing on run 2084. Both attempts ran, both failed,
+      # and the timestamps say why:
+      #
+      #     12:31:41.0586  API rate limit exceeded for 20.112.122.53
+      #     12:31:41.2999  API rate limit exceeded for 20.112.122.53
+      #
+      # 241 milliseconds apart. A spent quota does not refill in a
+      # quarter of a second, so the second attempt was not a retry --
+      # it was the same request again, and it could only ever fail.
+      # `ECONNRESET`, the other thing this has caught, is the failure
+      # an immediate retry DOES fix, and writing the defence against
+      # that one is how it came to have no wait in it.
+      #
+      # So: minutes, not milliseconds. GitHub's unauthenticated limit
+      # is per IP and resets on the hour, and this runner shares its IP
+      # with whoever else is on it -- so the wait is a bet that the
+      # window rolls over or the neighbour finishes, and three minutes
+      # is a bet worth making inside a 40-minute job. The token IS
+      # passed and the quota is still the anonymous one: the error
+      # names an IP address rather than an account, which is GitHub's
+      # unauthenticated answer, so `setup-java` is not putting it on
+      # this request.
       #
       # The distribution itself is not negotiable; see above.
       - uses: actions/setup-java@v4
@@ -359,8 +383,29 @@ jobs:
           java-version: '21'
           token: ${{ github.token }}
 
-      - uses: actions/setup-java@v4
+      - name: Wait, rather than ask again in the same second
         if: steps.java.outcome == 'failure'
+        run: sleep 60
+
+      - uses: actions/setup-java@v4
+        id: java2
+        if: steps.java.outcome == 'failure'
+        continue-on-error: true
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
+
+      - name: Wait longer
+        if: steps.java.outcome == 'failure' && steps.java2.outcome == 'failure'
+        run: sleep 180
+
+      # The last one, and NOT `continue-on-error`: if the JDK is not
+      # here after three tries over four minutes, the Android build
+      # cannot run and the job should say so rather than fail later
+      # with a Gradle message about toolchain provisioning.
+      - uses: actions/setup-java@v4
+        if: steps.java.outcome == 'failure' && steps.java2.outcome == 'failure'
         with:
           distribution: jetbrains
           java-version: '21'
@@ -864,6 +909,7 @@ jobs:
                    supabase/tests/unregistered_bank_accounts.sql \
                    supabase/tests/matter_on_a_document.sql \
                    supabase/tests/scan_inbox.sql \
+                   supabase/tests/reader_reads_pdf.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

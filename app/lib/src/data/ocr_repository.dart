@@ -14,6 +14,7 @@ class OcrProvider {
     required this.runsOnDevice,
     required this.ready,
     this.isActive = true,
+    this.readsPdf,
     this.blurb,
   });
 
@@ -37,6 +38,23 @@ class OcrProvider {
   /// retired since you chose it, and nothing will scan until you pick
   /// another. 0678.
   final bool isActive;
+
+  /// Whether this reader opens a PDF, or null where the database
+  /// declines to say.
+  ///
+  /// `0697`, and the null is the interesting part. `app.reader_reads_pdf`
+  /// answers per KIND -- the anthropic shape and Document AI open one,
+  /// the chat-completions shape refuses it by name in
+  /// `supabase/functions/ocr/index.ts` -- and it answers null for the
+  /// on-device reader, because that is `pdf.js` in a browser and ML Kit
+  /// on a phone and only this side knows which. [pdfBlock] combines it
+  /// with `onDeviceReadsPdf`.
+  ///
+  /// Null also for a kind added to the catalog since that function was
+  /// written, and for an older database that does not send the field at
+  /// all. Both mean "nobody has said", which is why nothing here treats
+  /// it as a no.
+  final bool? readsPdf;
   final String? blurb;
 
   factory OcrProvider.fromJson(Map<String, dynamic> j) => OcrProvider(
@@ -47,6 +65,9 @@ class OcrProvider {
         runsOnDevice: j['runs_on_device'] == true,
         ready: j['ready'] != false,
         isActive: j['is_active'] != false,
+        // Tri-state, so `!= false` will not do: a missing key and a
+        // json null both have to arrive as null rather than as true.
+        readsPdf: j['reads_pdf'] is bool ? j['reads_pdf'] as bool : null,
         blurb: (j['blurb']?.toString().trim().isEmpty ?? true)
             ? null
             : j['blurb'].toString().trim(),

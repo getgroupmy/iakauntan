@@ -8,6 +8,29 @@ import '../../data/ocr_repository.dart';
 import 'text_reader.dart';
 import 'receipt_text.dart';
 
+/// Whether this is a PDF, by what it *is* as well as by what it says
+/// it is.
+///
+/// A file picked in a browser does not always carry a type, and a PDF
+/// that arrives unlabelled otherwise reaches the picture reader and
+/// comes back "Error attempting to read image" — which sends somebody
+/// looking at the photograph rather than at the format.
+///
+/// Public and shared since `0697`, because the question is now asked
+/// twice: once here, where the on-device reader refuses one, and once
+/// before the upload, where the app predicts a server reader refusing
+/// one. Two copies of a magic-number check would be two chances for
+/// the two answers to differ, and the whole point of the second is
+/// that it agrees with the first.
+bool looksLikePdf(String? mimeType, Uint8List? bytes) =>
+    mimeType == 'application/pdf' ||
+    (bytes != null &&
+        bytes.length >= 4 &&
+        bytes[0] == 0x25 && // %
+        bytes[1] == 0x50 && // P
+        bytes[2] == 0x44 && // D
+        bytes[3] == 0x46); //  F
+
 /// Reads one filed document, whichever reader the organization chose.
 ///
 /// The two paths behind this are not variations on each other. The
@@ -55,18 +78,7 @@ Future<OcrExtraction> readDocument(
   // Tesseract takes a bitmap. Refused by name rather than handed over to
   // fail as "nothing legible", which would send somebody looking at the
   // photograph instead of at the format.
-  // Recognised by what it *is* as well as by what it says it is. A file
-  // picked in a browser does not always carry a type, and a PDF that
-  // arrives unlabelled otherwise reaches the picture reader and comes
-  // back "Error attempting to read image" — which sends somebody looking
-  // at the photograph rather than at the format.
-  final isPdf = mimeType == 'application/pdf' ||
-      (localBytes != null &&
-          localBytes.length >= 4 &&
-          localBytes[0] == 0x25 && // %
-          localBytes[1] == 0x50 && // P
-          localBytes[2] == 0x44 && // D
-          localBytes[3] == 0x46); //  F
+  final isPdf = looksLikePdf(mimeType, localBytes);
 
   // A browser reads a PDF; a phone does not. Said plainly on the side
   // that cannot, because "photograph the page" is a real instruction

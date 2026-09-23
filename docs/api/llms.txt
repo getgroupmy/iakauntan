@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0696` (the highest applied migration).
+Schema version `0697` (the highest applied migration).
 787 functions and 366 readable tables, of which
 306 functions only read.
 
@@ -845,7 +845,7 @@ Not gated on any module.
 - `save_ocr_key(p_provider text, p_org_id uuid, p_id uuid, p_label text, p_api_key text, p_per_minute integer, p_per_day integer, p_per_month integer, p_hours smallint[], p_weekdays smallint[], p_months smallint[], p_is_active boolean)` *(writes)* — Adds a key to a reader's pool, or changes one.
 - `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.
 - `scan_extraction_targets()` — What the reader is sent with the document: every configured target, the kinds of paper that land there, and the fields each one wants filled.
-- `scan_inbox(p_org_id uuid, p_limit integer, p_only text)` — Every reading this company has taken, newest first, with the record it became resolved to something a person recognises and the reference a failed one was given.
+- `scan_inbox(p_org_id uuid, p_limit integer, p_only text)` — Every reading this company has taken, newest first, with the record it became resolved to something a person recognises, the reference a failed one was given, and the key the file is at NOW rather than the one it was read under.
 - `scan_target_columns(p_module text, p_action text)` — The real columns of the table a target writes, read out of `information_schema`, with a tick beside the ones the reader is asked for.
 - `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
 - `search_platform_users(p_query text, p_limit integer)` — Name/e-mail search across every tenant, for the platform console's user picker.

@@ -9,6 +9,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../smartscan/scan_availability.dart';
+import '../smartscan/scan_blocked_dialog.dart';
 import 'text_reader.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
@@ -308,15 +310,52 @@ class _FileRowState extends ConsumerState<_FileRow> {
   bool _readerHere(OcrSettings ocr) => !ocr.onDevice || onDeviceReaderAvailable;
 
   Future<void> _scan() async {
+    // Before the charge. `0697`. This button is the one on the screen
+    // that spends money, and a PDF handed to a chat-completions reader
+    // is refused by name in the edge function -- after `ocr_begin` has
+    // taken the charge and before it is refunded. Everything that
+    // question turns on is answerable here.
+    //
+    // By the declared type alone: the file is in the bucket, so there
+    // are no first bytes to sniff the way the capture path can. A PDF
+    // filed with the wrong type still reaches the edge function, which
+    // is the backstop either way.
+    //
+    // Caught, because this await now happens before the `try` below.
+    // A status call that will not answer used to reach the snackbar as
+    // "could not read it"; throwing here would be an unhandled error
+    // on a button press. Null is what `pdfBlock` treats as "nobody has
+    // said", so the scan goes on to the edge function, which is the
+    // real gate.
+    OcrSettings? known;
+    try {
+      known = await ref.read(ocrStatusProvider.future);
+    } catch (_) {
+      known = null;
+    }
+    if (!mounted) return;
+    final block = pdfBlock(
+      known,
+      isPdf: looksLikePdf(file.mimeType, null),
+      canAdmin: ref.read(canAdminProvider),
+      deviceReadsPdf: onDeviceReadsPdf,
+    );
+    if (block != null) {
+      await showScanBlocked(context, block);
+      return;
+    }
+
     setState(() => _scanning = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final read = await readDocument(
         ref,
-        // Awaited rather than read off the cache, for the same reason
-        // the capture path is: a cold provider reads as "not on the
-        // device" and sends the scan somewhere it was never meant to go.
-        ocr: await ref.read(ocrStatusProvider.future),
+        // The same answer the question above was asked of, rather than
+        // a second round trip that could disagree with it. Awaited
+        // rather than read off the cache, for the reason it always was:
+        // a cold provider reads as "not on the device" and sends the
+        // scan somewhere it was never meant to go.
+        ocr: known ?? await ref.read(ocrStatusProvider.future),
         attachmentId: file.id,
         storagePath: file.storagePath,
         mimeType: file.mimeType,

@@ -34,13 +34,31 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | a journal on the client side |
-| CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0690` is the highest. CI applies on green — see below |
+| Head at time of writing | asking whether the reader opens a PDF before spending a scan on it |
+| CI | green through run 2083 (`459d3716`). **Run 2084 (`2c6a456f`) is RED, and only on "Build the Android app"** — `actions/setup-java@v4` could not resolve the JetBrains JDK because a shared runner IP's anonymous GitHub API quota was spent. Nothing to do with the diff, and **every deploy job on that run was green**: migrations applied, edge functions and Vercel deployed |
+| Migrations | `0697` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 359 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,770 Flutter tests**, 34 deno tests |
-| API description | 786 functions, 366 tables, version `0690` |
+| Gates | 361 SQL assertion files, **47 Python gates (+12 gate self-tests)**, **5,852 Flutter tests**, 35 deno tests |
+| API description | 787 functions, 366 tables, version `0697` |
+
+### The Android job's JDK, and why its retry did nothing
+
+Worth knowing before reading a red run as a broken commit. The Android
+job needs a **JetBrains** JDK, because `android/gradle/
+gradle-daemon-jvm.properties` names `toolchainVendor=jetbrains` and
+Gradle will not start its daemon without one. `jetbrains` is not baked
+into the runner image, so it is resolved over the **GitHub API** every
+run, from a shared runner IP whose anonymous quota is spent by whoever
+else is on it. `token:` is passed and does not help — the error names an
+IP rather than an account, which is GitHub's unauthenticated answer.
+
+The job already had a second attempt. On run 2084 both attempts failed
+**241 milliseconds apart**, which is the whole story: an immediate retry
+fixes the `ECONNRESET` this defence was originally written for, and
+cannot possibly fix a spent quota. There are now waits of 60s and 180s
+between three attempts. If it still goes red there, check whether the
+failure is this before looking at the diff.
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -955,9 +973,96 @@ Seven SQL mutants, all killed, control survived.
 
 ### Still to build
 
-**The screen.** `/legal/receipts` and `/legal/payouts` exist;
-there is no page for this yet. And the matter picker still needs placing
-on the bill editor, expense form and bank reconciliation.
+**Built.** `/legal/transfers` is the third page beside `/legal/receipts`
+and `/legal/payouts` (`2c6a456f`), and building it is what found that
+`0690` had broken `0358`'s function by overloading it — see that commit
+message, and `scripts/check_ambiguous_overloads.py`, which is the
+general answer.
+
+The matter picker is now on the bill editor and the expense form. **The
+bank reconciliation is the one that is left.**
+
+## A PDF, and the reader that could not open it
+
+Reported with the PDF attached: a supplier bill was uploaded into AI
+SmartScan and the inbox came back
+
+    This reader takes photographs, not PDFs. Photograph the document,
+    or switch to Claude, which reads PDFs.
+
+Three separate faults were behind one report, and only the middle one
+was what the person actually complained about.
+
+### The refusal was right, and arrived too late
+
+The company is on **Gemini**, whose `ocr_providers.kind` is `openai` —
+Gemini, ChatGPT and Grok are three vendors wearing one chat-completions
+shape — and `readOpenAiShaped` in `supabase/functions/ocr/index.ts`
+refuses a PDF **by name**. That is correct: chat-completions takes an
+image part, a document would be a different endpoint on every one of
+them, and sending it anyway would be a misreading rather than a
+refusal. Only `anthropic` (Claude) and `google_docai` open one.
+
+What was wrong is **when** it arrives. `ocr_begin` has already taken the
+charge, the reader refuses, the charge is refunded, and the person is
+looking at a failure after doing all the work. Everything the question
+turns on was knowable before the file left the machine.
+
+So `app.reader_reads_pdf(kind)` (`0697`) answers it, `ocr_status` sends
+it per provider beside the `kind` it has carried since `0682`, and
+`pdfBlock` in `app/lib/src/features/smartscan/scan_availability.dart`
+predicts the refusal at the moment the file is chosen — the same
+argument `scanBlock` was written for, one step further in. Both doors
+go through it: the SmartScan capture path and the "Read this document"
+button on the attachments strip, which is the one control in the
+product that spends money on a press.
+
+**`reads_pdf` is tri-state and the third state is load-bearing.** It is
+`null` for `kind = 'device'`, because the on-device reader is `pdf.js`
+in a browser and ML Kit on a phone and only the app knows which — so
+`pdfBlock` takes `deviceReadsPdf` as an argument rather than reading it,
+and stays pure. It is also `null` for a kind added to the catalog since
+that function was written. Null reads as **yes** when deciding whether
+to block (refusing on an unknown would withdraw a reader the platform
+had just added) and as **no** when naming alternatives (promising "X
+opens them" and then refusing one setting later is worse than the
+sentence it replaced). That asymmetry is deliberate and both halves are
+asserted.
+
+### The supplier question then degenerated
+
+With no reading, `resolveSupplier` returns `ask`, which drops into the
+ordinary picker — an empty search box over an unfiltered list of every
+contact on file, none of them the one on the document, with nothing
+said about why. That is the screen in the report.
+
+The machinery the person was asking for **already existed**:
+`createSupplierFromScan` pre-fills a new contact from the extraction,
+and `_SupplierNotFound` offers it whenever a name was read and matched
+nothing. It never ran because there was no reading to match. Fixing the
+PDF is what makes it reachable.
+
+What the picker gained is `pickerNote`: three different situations had
+been arriving wearing one blank dialog — a name was read, nothing was
+read at all, or the page was read and genuinely names no supplier
+(`0686`'s payment voucher). The last two said nothing, which reads as a
+screen that HAS looked and found nothing.
+
+### And the picture nobody could open
+
+Reported in the same breath: "View the image" answered
+`StorageException(Object not found, statusCode: 404)`.
+
+`ocr_scans.storage_path` is where the object was **at the moment it was
+read**. `Repo.refileAttachment` then MOVES it — a capture is parked
+against a placeholder uuid and moved onto the bill once the bill has an
+id — and updates `attachments.storage_path`, not the scan's. So every
+scan that successfully became something pointed at a vacated key, and
+only the ones that became nothing could be opened. `scan_inbox` prefers
+`a.storage_path` now and falls back to `s.storage_path`, which is not
+decoration: deleting a document deletes its attachment, and
+`ocr_scans.attachment_id` is `on delete set null`, so an orphaned scan
+has nothing but its own path left.
 
 ## This session's commits
 

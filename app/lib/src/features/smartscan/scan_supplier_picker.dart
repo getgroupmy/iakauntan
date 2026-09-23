@@ -127,6 +127,39 @@ Future<bool> clearOfDuplicates(
 /// supplier anyway stays, because a bill whose letterhead was
 /// unreadable is a real thing and this dialog must not become a wall.
 
+/// What the line above the search box says.
+///
+/// Three different situations arrived here wearing one blank dialog,
+/// and the report that produced this could not tell them apart: a PDF
+/// was uploaded, the reader refused it, and the person was then shown
+/// "Which supplier?" with an empty box over an unfiltered list of every
+/// contact on file — none of them the one on the document.
+///
+/// The name, when there is one, is the useful thing and was already
+/// shown. The other two cases said nothing at all, which reads as a
+/// screen that HAS looked and found nothing:
+///
+///   * No reading. The scan failed, so nobody has looked at this page.
+///   * A reading with no name on it. Somebody has looked, and the page
+///     genuinely does not name one — `0686`'s payment voucher. That
+///     person got here by insisting this is a bill anyway, so the
+///     picker is right to be open, and it should say what it knows.
+///
+/// Pure, so the three sentences can be asserted without building a
+/// dialog.
+String pickerNote(OcrExtraction? read, ScanContactKind kind) {
+  final name = read?.supplierName?.trim();
+  if (name != null && name.isNotEmpty) {
+    return 'The document says “$name”';
+  }
+  if (read == null) {
+    return 'It could not be read, so there is nothing filled in here. '
+        'Search for the ${kind.one}, or create it without leaving the scan.';
+  }
+  return 'Nothing on this page names a ${kind.one}. Search for the one it '
+      'is from, or create it without leaving the scan.';
+}
+
 Future<String?> pickSupplier(
   BuildContext context,
   WidgetRef ref,
@@ -182,22 +215,23 @@ class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
         height: 420,
         child: Column(
           children: [
-            if (widget.readName != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Space.sm),
-                child: Row(
-                  children: [
-                    const Icon(Icons.description_outlined, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'The document says “${widget.readName}”',
-                        style: const TextStyle(fontSize: 13),
-                      ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.description_outlined, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      pickerNote(widget.read, widget.kind),
+                      key: const ValueKey('picker-note'),
+                      style: const TextStyle(fontSize: 13),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
             TextField(
               controller: _search,
               autofocus: true,

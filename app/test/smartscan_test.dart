@@ -20,6 +20,7 @@ import 'package:iakauntan/src/features/smartscan/scan_blocked_dialog.dart';
 import 'package:iakauntan/src/features/smartscan/scan_destination.dart';
 import 'package:iakauntan/src/features/smartscan/scan_field_map.dart';
 import 'package:iakauntan/src/features/smartscan/smartscan_screen.dart';
+import 'package:iakauntan/src/features/shared/supplier_from_scan.dart';
 
 /// AI SmartScan: one door, and a list saying what came through it.
 ///
@@ -779,6 +780,245 @@ void main() {
       );
       expect(block!.message, contains('Subscription'));
       expect(block.hasAction, isFalse);
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // A PDF handed to a reader that cannot open one
+  //
+  // From a report, with the PDF attached. A company on Gemini uploaded
+  // a supplier bill and the inbox came back "This reader takes
+  // photographs, not PDFs." That refusal is `readOpenAiShaped` in the
+  // edge function and it is correct -- chat-completions takes an image
+  // part -- but it arrives after an upload, after a charge and after
+  // the refund of it, for a question the app could have answered
+  // before the file was chosen.
+  //
+  // `reads_pdf` comes off `ocr_status` (`0697`), tri-state, and the
+  // tri-state is where this goes wrong if nobody watches it. So the
+  // three cases are asserted separately, and in both directions.
+  // ------------------------------------------------------------------
+  group('a PDF and a reader that cannot open one', () {
+    OcrProvider reader({
+      required String code,
+      required String name,
+      bool? readsPdf,
+      bool runsOnDevice = false,
+      bool isActive = true,
+      bool ready = true,
+    }) =>
+        OcrProvider(
+          code: code,
+          name: name,
+          price: 0.3,
+          takesKey: true,
+          runsOnDevice: runsOnDevice,
+          isActive: isActive,
+          ready: ready,
+          readsPdf: readsPdf,
+        );
+
+    final gemini = reader(code: 'gemini', name: 'Gemini', readsPdf: false);
+    final claude = reader(code: 'claude', name: 'Claude', readsPdf: true);
+    final docai = reader(code: 'google', name: 'Document AI', readsPdf: true);
+    final onDevice = reader(
+      code: 'mlkit',
+      name: 'On this device',
+      runsOnDevice: true,
+    );
+
+    OcrSettings on(String provider, List<OcrProvider> all) => OcrSettings(
+          enabled: true,
+          provider: provider,
+          keySource: 'platform',
+          hasOwnKey: false,
+          keys: const {},
+          balance: 0,
+          price: 0.3,
+          providers: all,
+        );
+
+    // The control for everything below it. Nothing here may fire on a
+    // photograph, or the module refuses the commonest capture there is.
+    test('a photograph is never blocked', () {
+      expect(
+        pdfBlock(on('gemini', [gemini, claude]),
+            isPdf: false, canAdmin: true, deviceReadsPdf: false),
+        isNull,
+      );
+    });
+
+    test('a reader that opens one is not blocked', () {
+      expect(
+        pdfBlock(on('claude', [gemini, claude]),
+            isPdf: true, canAdmin: true, deviceReadsPdf: false),
+        isNull,
+      );
+    });
+
+    // The reported case, and the whole point of the commit.
+    test('the chat-completions shape is blocked before the upload', () {
+      final block = pdfBlock(on('gemini', [gemini, claude]),
+          isPdf: true, canAdmin: true, deviceReadsPdf: false);
+      expect(block, isNotNull);
+      expect(block!.message, contains('Gemini'));
+      expect(block.message, contains('Claude'));
+      expect(block.hasAction, isTrue);
+      expect(block.route, '/settings');
+    });
+
+    // Not loaded. The same bargain `scanBlock` makes: the edge function
+    // is the real gate, and refusing on a question that has not come
+    // back would be this file inventing an outage.
+    test('a setting that has not loaded blocks nothing', () {
+      expect(
+        pdfBlock(null, isPdf: true, canAdmin: true, deviceReadsPdf: false),
+        isNull,
+      );
+    });
+
+    // Null means "nobody has said", and it has to read as a yes HERE --
+    // a false would withdraw a reader the platform had just added, for
+    // a refusal nobody has checked would happen.
+    test('a reader nobody has answered for is let through', () {
+      final unknown = reader(code: 'novel', name: 'Novel');
+      expect(
+        pdfBlock(on('novel', [unknown]),
+            isPdf: true, canAdmin: true, deviceReadsPdf: false),
+        isNull,
+      );
+    });
+
+    // And as a no when it comes to RECOMMENDING one, which is the
+    // asymmetry this pair exists to pin down. Promising "Novel opens
+    // them" and then refusing one setting later is worse than the
+    // sentence it replaced.
+    test('but is never named as the way out', () {
+      final unknown = reader(code: 'novel', name: 'Novel');
+      final block = pdfBlock(on('gemini', [gemini, unknown]),
+          isPdf: true, canAdmin: true, deviceReadsPdf: false);
+      expect(block!.message, isNot(contains('Novel')));
+      // Nothing to switch to, so no door -- the whole of `2f012feb`.
+      expect(block.hasAction, isFalse);
+      expect(block.route, isNull);
+    });
+
+    // `set_ocr_settings` refuses anybody but an administrator, so a
+    // button to Settings would take an ordinary user to a control they
+    // are about to be refused at.
+    test('anybody else is told who switches it, with no door', () {
+      final block = pdfBlock(on('gemini', [gemini, claude]),
+          isPdf: true, canAdmin: false, deviceReadsPdf: false);
+      expect(block!.hasAction, isFalse);
+      expect(block.route, isNull);
+      expect(block.message.toLowerCase(), contains('administrator'));
+    });
+
+    // A withdrawn reader, and one the platform has not finished setting
+    // up, are both on the list `ocr_status` sends -- and neither is
+    // somewhere anybody can be sent.
+    test('a retired or unready reader is not offered', () {
+      final retired = reader(
+          code: 'claude', name: 'Claude', readsPdf: true, isActive: false);
+      final unready = reader(
+          code: 'google', name: 'Document AI', readsPdf: true, ready: false);
+      final block = pdfBlock(on('gemini', [gemini, retired, unready]),
+          isPdf: true, canAdmin: true, deviceReadsPdf: false);
+      expect(block!.message, isNot(contains('Claude')));
+      expect(block.message, isNot(contains('Document AI')));
+      expect(block.hasAction, isFalse);
+    });
+
+    test('two of them are named as a list', () {
+      final block = pdfBlock(on('gemini', [gemini, claude, docai]),
+          isPdf: true, canAdmin: true, deviceReadsPdf: false);
+      expect(block!.message, contains('Claude and Document AI'));
+      expect(block.message, contains('open them'));
+    });
+
+    // The database declines to answer for the on-device reader because
+    // it is `pdf.js` in a browser and ML Kit on a phone. Both halves,
+    // because sending `true` would put the refusal in front of nobody
+    // on a phone and sending `false` would put it in front of everybody
+    // in a browser.
+    test('a browser opens one on the device', () {
+      expect(
+        pdfBlock(on('mlkit', [onDevice]),
+            isPdf: true, canAdmin: true, deviceReadsPdf: true),
+        isNull,
+      );
+    });
+
+    test('and a phone does not', () {
+      final block = pdfBlock(on('mlkit', [onDevice, claude]),
+          isPdf: true, canAdmin: true, deviceReadsPdf: false);
+      expect(block, isNotNull);
+      expect(block!.message, contains('The reader on this device'));
+      expect(block.message, contains('Claude'));
+    });
+
+    // Whatever else it says, there is always a way forward: a
+    // photograph of the page is read by every reader there is.
+    test('the way forward is stated whatever the platform offers', () {
+      for (final block in [
+        pdfBlock(on('gemini', [gemini, claude]),
+            isPdf: true, canAdmin: true, deviceReadsPdf: false),
+        pdfBlock(on('gemini', [gemini]),
+            isPdf: true, canAdmin: false, deviceReadsPdf: false),
+      ]) {
+        expect(block!.message, contains('Photographing the page'));
+      }
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // The line above the supplier search box
+  //
+  // The second half of the same report. The PDF was refused, so there
+  // was no reading -- and the flow then asked "Which supplier?" over an
+  // empty box and an unfiltered list of every contact on file, none of
+  // them the one on the document, and said nothing about why.
+  // ------------------------------------------------------------------
+  group('what the supplier picker says it knows', () {
+    test('the name, when the document gave one', () {
+      expect(
+        pickerNote(read(supplier: 'Global Components Bhd'),
+            ScanContactKind.supplier),
+        contains('Global Components Bhd'),
+      );
+    });
+
+    // Nobody has looked at this page. Saying "nothing on it names a
+    // supplier" would be a guess wearing the clothes of a finding --
+    // `0686`'s distinction, arriving on this screen.
+    test('and that nothing was read, when nothing was', () {
+      final note = pickerNote(null, ScanContactKind.supplier);
+      expect(note, contains('could not be read'));
+      expect(note, isNot(contains('names a supplier')));
+    });
+
+    // Somebody HAS looked, and the page genuinely has no supplier on
+    // it. A different sentence, because it is a different fact.
+    test('and that the page names none, when it was read', () {
+      final note = pickerNote(read(supplier: null), ScanContactKind.supplier);
+      expect(note, contains('names a supplier'));
+      expect(note, isNot(contains('could not be read')));
+    });
+
+    // `0682`. The same picker runs on the sales side, and EVERY
+    // sentence in it has to change nouns or it asks somebody which
+    // supplier their own customer is. More than one branch, because a
+    // mutant that hardcoded `supplier` into the read-but-unnamed
+    // sentence survived an assertion that only exercised the unread
+    // one.
+    test('and it says customer on the sales side, in every branch', () {
+      expect(
+        pickerNote(null, ScanContactKind.customer),
+        contains('customer'),
+      );
+      final none = pickerNote(read(supplier: null), ScanContactKind.customer);
+      expect(none, contains('names a customer'));
+      expect(none, isNot(contains('supplier')));
     });
   });
 }

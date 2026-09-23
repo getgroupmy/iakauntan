@@ -10,8 +10,11 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../smartscan/scan_availability.dart';
+import '../smartscan/scan_blocked_dialog.dart';
 import 'doc_scanner.dart';
 import 'scan_runner.dart';
+import 'text_reader.dart';
 
 /// Whether there is plausibly a camera, which is the question
 /// `defaultTargetPlatform` actually answers: on the web it reports the
@@ -171,6 +174,49 @@ Future<StagedReceipt?> captureAndRead(
   };
   if (file == null || !context.mounted) return null;
 
+  // Before the upload, not after it. `2f012feb` moved the "scanning is
+  // switched off" refusal ahead of the camera; this is the same
+  // argument one step further in, for the refusal that needs the FILE
+  // to be answerable.
+  //
+  // A PDF handed to a chat-completions reader is refused by name in
+  // `supabase/functions/ocr/index.ts` — correctly — but that refusal
+  // arrives after an upload, after a charge and after the refund of
+  // it. Everything it turns on is known here: `reads_pdf` comes off
+  // `ocr_status` (`0697`) and the first four bytes of the file are in
+  // hand.
+  //
+  // Awaited rather than read off the cache, for the reason the read
+  // below is: nothing watches this provider on some of the screens
+  // that reach here, and `valueOrNull` would come back null — which
+  // this function reads as "nobody has said", and would let the PDF
+  // through to the refusal it exists to predict.
+  //
+  // And caught, because this await now happens BEFORE the upload. A
+  // status call that will not answer used to surface as "could not
+  // read it" over a file that had been kept; throwing here would lose
+  // the capture entirely over a question that is only ever an
+  // optimisation. Null is exactly what `pdfBlock` treats as "nobody
+  // has said", so it lets the scan go on to the edge function, which
+  // is the real gate.
+  OcrSettings? known;
+  try {
+    known = await ref.read(ocrStatusProvider.future);
+  } catch (_) {
+    known = null;
+  }
+  if (!context.mounted) return null;
+  final block = pdfBlock(
+    known,
+    isPdf: looksLikePdf(file.mimeType, file.bytes),
+    canAdmin: ref.read(canAdminProvider),
+    deviceReadsPdf: onDeviceReadsPdf,
+  );
+  if (block != null) {
+    await showScanBlocked(context, block);
+    return null;
+  }
+
   final repo = ref.read(repoProvider)!;
   final placeholder = newUuid();
   final messenger = ScaffoldMessenger.of(context);
@@ -197,7 +243,12 @@ Future<StagedReceipt?> captureAndRead(
     // server correctly refused it.
     final read = await readDocument(
       ref,
-      ocr: await ref.read(ocrStatusProvider.future),
+      // The same answer the PDF question above was asked of, rather
+      // than a second round trip that could disagree with it. Asked
+      // again only where that one did not come back, and inside this
+      // try, where a refusal reaches the snackbar over a file that is
+      // already attached.
+      ocr: known ?? await ref.read(ocrStatusProvider.future),
       attachmentId: attachmentId,
       mimeType: file.mimeType,
       // Already on this device, so the on-device reader reads what is

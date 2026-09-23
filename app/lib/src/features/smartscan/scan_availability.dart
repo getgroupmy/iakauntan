@@ -98,3 +98,111 @@ ScanBlock? scanBlock(
 
   return null;
 }
+
+/// The readers on offer here that open a PDF, named for a sentence.
+///
+/// Only the ones that say so. A reader whose kind the database has not
+/// heard of answers null, and null is NOT taken as a yes here: this
+/// list becomes a promise on screen — "X reads them" — and a promise
+/// that turns into the same refusal one setting later is worse than
+/// saying nothing.
+List<OcrProvider> pdfReaders(
+  OcrSettings ocr, {
+  required bool deviceReadsPdf,
+  String? besides,
+}) =>
+    [
+      for (final p in ocr.providers)
+        if (p.isActive &&
+            p.ready &&
+            p.code != besides &&
+            (p.runsOnDevice ? deviceReadsPdf : p.readsPdf == true))
+          p,
+    ];
+
+/// "A and B", "A, B and C", or "A".
+String namesList(Iterable<String> names) {
+  final all = names.toList();
+  if (all.isEmpty) return '';
+  if (all.length == 1) return all.first;
+  return '${all.sublist(0, all.length - 1).join(', ')} and ${all.last}';
+}
+
+/// A PDF handed to a reader that cannot open one, said before the
+/// upload.
+///
+/// From a report, with the PDF attached. A supplier bill was uploaded
+/// into AI SmartScan by a company on Gemini, and the inbox came back
+///
+///     This reader takes photographs, not PDFs. Photograph the
+///     document, or switch to Claude, which reads PDFs.
+///
+/// That refusal is `supabase/functions/ocr/index.ts` inside
+/// `readOpenAiShaped`, and it is right: chat-completions takes an image
+/// part, and a PDF would be a different endpoint on every vendor
+/// wearing that shape. What is wrong is WHEN it arrives — after the
+/// upload, after the charge and after the refund, for a question that
+/// could have been answered before the file was chosen. The same
+/// argument [scanBlock] was written for, one step further in.
+///
+/// [deviceReadsPdf] is passed rather than read, because it differs by
+/// platform — `pdf.js` in a browser, ML Kit on a phone — and this
+/// function has to stay pure enough to put a table of cases through.
+/// The database declines to answer for the on-device reader for the
+/// same reason (`app.reader_reads_pdf`, `0697`).
+ScanBlock? pdfBlock(
+  OcrSettings? ocr, {
+  required bool isPdf,
+  required bool canAdmin,
+  required bool deviceReadsPdf,
+}) {
+  if (!isPdf) return null;
+
+  // Not loaded, or a reader the status does not describe. Not a block,
+  // for the reason `scanBlock` gives: the edge function is the real
+  // gate, and refusing on a question that has not come back yet would
+  // be this file inventing an outage.
+  if (ocr == null) return null;
+  final current = ocr.current;
+  if (current == null) return null;
+
+  // Unknown reads as yes HERE and as no in [pdfReaders], and the
+  // asymmetry is deliberate. Refusing on an unknown would withdraw a
+  // reader the platform had just added; recommending one would promise
+  // something nobody has checked.
+  final takesIt =
+      current.runsOnDevice ? deviceReadsPdf : current.readsPdf != false;
+  if (takesIt) return null;
+
+  final others = pdfReaders(ocr,
+      deviceReadsPdf: deviceReadsPdf, besides: current.code);
+  final whoSwitches = canAdmin
+      ? 'Settings is where the reader is chosen.'
+      : 'An administrator chooses the reader in Settings, and only an '
+          'administrator can.';
+  final alternatives = others.isEmpty
+      // No promise. A company whose platform offers nothing else is
+      // told to photograph the page, which always works, rather than
+      // sent to a screen that cannot help.
+      ? 'No other reader on offer here opens one either.'
+      : '${namesList(others.map((p) => p.name))} '
+          '${others.length == 1 ? 'opens' : 'open'} them, and $whoSwitches';
+
+  final who =
+      current.runsOnDevice ? 'The reader on this device' : current.name;
+
+  return ScanBlock(
+    title: 'This reader does not open PDFs',
+    // The last sentence is unconditional on purpose. Whatever the
+    // platform offers and whoever is asking, a photograph of the page
+    // is read by every reader there is — so nobody is left holding a
+    // document with no way forward.
+    message: '$who reads photographs, not PDFs. $alternatives '
+        'Photographing the page works whichever reader is in force.',
+    // Only where there is something to switch TO, and only for
+    // somebody who can switch it. A door onto a screen that will not
+    // help is worse than no door — the whole of `2f012feb`.
+    actionLabel: canAdmin && others.isNotEmpty ? 'Open Settings' : null,
+    route: canAdmin && others.isNotEmpty ? '/settings' : null,
+  );
+}
