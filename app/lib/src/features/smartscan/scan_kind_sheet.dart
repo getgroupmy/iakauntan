@@ -20,8 +20,14 @@ Future<ScanDestination?> showScanKindSheet(
   OcrExtraction? read,
 
   /// Why this is being asked, where there is a reason worth giving.
+  ///
   /// `0686`: "nothing on this names a supplier" is a finding, and a
   /// question asked without it reads as the app having lost its place.
+  ///
+  /// It also carries the case where there is no reading at all. The
+  /// default below says the reading "could not place this document",
+  /// which is true of a reading that came back and placed nothing and
+  /// is a lie about a scan that never reached a reader.
   String? because,
 }) {
   final named = read?.supplierName?.trim();

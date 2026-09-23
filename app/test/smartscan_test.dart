@@ -15,6 +15,8 @@ import 'package:iakauntan/src/features/smartscan/scan_supplier_picker.dart';
 import 'package:iakauntan/src/core/format.dart';
 import 'package:iakauntan/src/data/ocr_repository.dart';
 import 'package:iakauntan/src/data/scan_kinds_repository.dart';
+import 'package:iakauntan/src/features/smartscan/scan_availability.dart';
+import 'package:iakauntan/src/features/smartscan/scan_blocked_dialog.dart';
 import 'package:iakauntan/src/features/smartscan/scan_destination.dart';
 import 'package:iakauntan/src/features/smartscan/scan_field_map.dart';
 import 'package:iakauntan/src/features/smartscan/smartscan_screen.dart';
@@ -533,6 +535,186 @@ void main() {
       await tester.tap(go.last);
       await tester.pumpAndSettle();
       expect(answer, isTrue);
+    });
+  });
+
+  group('when scanning cannot run at all', () {
+    // From a report. Photographing a document in a company that had
+    // never switched scanning on produced a raw `FunctionException` in
+    // a snackbar, AFTER the photograph was taken -- and then the module
+    // asked which kind of document the scan that never happened was.
+    //
+    // The ugly string is the smaller half. Asking somebody to
+    // photograph a document in order to discover the feature is off is
+    // the failure; `settings_screen` already draws this line for the
+    // same setting.
+    OcrSettings settings({
+      bool enabled = true,
+      bool hasModule = true,
+      List<OcrProvider> providers = const [],
+    }) =>
+        OcrSettings(
+          enabled: enabled,
+          hasModule: hasModule,
+          provider: 'claude',
+          keySource: 'platform',
+          hasOwnKey: false,
+          keys: const {},
+          balance: 0,
+          price: 0.3,
+          providers: providers,
+        );
+
+    OcrProvider provider({
+      String code = 'mlkit',
+      String name = 'On this device (free)',
+      double price = 0,
+      bool isActive = true,
+    }) =>
+        OcrProvider(
+          code: code,
+          name: name,
+          price: price,
+          takesKey: false,
+          runsOnDevice: true,
+          isActive: isActive,
+          ready: true,
+        );
+
+    test('nothing blocks a company that has it on', () {
+      expect(scanBlock(settings(), canAdmin: true), isNull);
+      expect(scanBlock(settings(), canAdmin: false), isNull);
+    });
+
+    // Not a block. The question has not come back yet, and refusing on
+    // it would be this file inventing an outage.
+    test('nor does a setting that has not loaded', () {
+      expect(scanBlock(null, canAdmin: true), isNull);
+    });
+
+    test('an administrator is offered the way out', () {
+      final block = scanBlock(settings(enabled: false), canAdmin: true);
+      expect(block, isNotNull);
+      expect(block!.hasAction, isTrue);
+      expect(block.route, '/settings');
+    });
+
+    // The half that matters more. `set_ocr_settings` refuses anybody
+    // but an administrator, so a button to Settings would take an
+    // ordinary user to a control they are about to be refused at --
+    // worse than no button.
+    test('and anybody else is told who can, with no door', () {
+      final block = scanBlock(settings(enabled: false), canAdmin: false);
+      expect(block, isNotNull);
+      expect(block!.hasAction, isFalse);
+      expect(block.route, isNull);
+      expect(block.message.toLowerCase(), contains('administrator'));
+    });
+
+    // "Turn it on" reads as "start paying for something" unless the
+    // free reader is named.
+    test('the free reader is named where there is one', () {
+      final block = scanBlock(
+        settings(enabled: false, providers: [provider()]),
+        canAdmin: true,
+      );
+      expect(block!.message, contains('On this device (free)'));
+    });
+
+    test('and nothing is promised where there is not', () {
+      final block = scanBlock(
+        settings(enabled: false, providers: [provider(price: 0.3)]),
+        canAdmin: true,
+      );
+      expect(block!.message.toLowerCase(), isNot(contains('free')));
+    });
+
+    test('nor is a free reader the platform has withdrawn', () {
+      final block = scanBlock(
+        settings(enabled: false, providers: [provider(isActive: false)]),
+        canAdmin: true,
+      );
+      expect(block!.message.toLowerCase(), isNot(contains('free')));
+    });
+
+    // A module before it is a setting. `0682`. The switch is under
+    // Subscription and it is an OWNER's, so an administrator gets no
+    // shortcut to Settings -- which would be a door onto a control that
+    // will not help.
+    test('a module that is off offers no settings shortcut', () {
+      final block = scanBlock(settings(hasModule: false), canAdmin: true);
+      expect(block, isNotNull);
+      expect(block!.hasAction, isFalse);
+      expect(block.message, contains('Subscription'));
+    });
+
+    // The module is asked about FIRST. A company whose module is off
+    // and whose setting is also off must not be told to go and flip a
+    // switch that will not help.
+    testWidgets('the dialog offers the way out, and closes', (tester) async {
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showScanBlocked(
+                context,
+                scanBlock(settings(enabled: false), canAdmin: true)!,
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('scan-blocked')), findsOneWidget);
+      expect(find.text('AI SmartScan is not switched on yet'), findsOneWidget);
+      expect(find.byKey(const ValueKey('scan-blocked-go')), findsOneWidget);
+    });
+
+    testWidgets('and offers no button where there is nothing to press',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showScanBlocked(
+                context,
+                scanBlock(settings(enabled: false), canAdmin: false)!,
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('scan-blocked')), findsOneWidget);
+      expect(find.byKey(const ValueKey('scan-blocked-go')), findsNothing);
+      // And the one button there is says Close, because nothing was
+      // started and there is nothing to cancel.
+      expect(find.text('Close'), findsOneWidget);
+    });
+
+    test('and the module is the answer even when both are off', () {
+      final block = scanBlock(
+        settings(hasModule: false, enabled: false),
+        canAdmin: true,
+      );
+      expect(block!.message, contains('Subscription'));
+      expect(block.hasAction, isFalse);
     });
   });
 }

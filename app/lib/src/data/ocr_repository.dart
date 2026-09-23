@@ -653,10 +653,25 @@ extension RepoOcr on Repo {
   /// and given back if the call fails, so a thrown exception here means
   /// nothing was spent.
   Future<OcrExtraction> scanAttachment(String attachmentId) async {
-    final res = await client.functions.invoke('ocr', body: {
-      'org_id': orgId,
-      'attachment_id': attachmentId,
-    });
+    final FunctionResponse res;
+    try {
+      res = await client.functions.invoke('ocr', body: {
+        'org_id': orgId,
+        'attachment_id': attachmentId,
+      });
+    } on FunctionException catch (e) {
+      // A non-2xx throws rather than coming back as data, so the
+      // careful unwrapping below never ran on the answers that most
+      // needed it. A 403 reached a snackbar as
+      //
+      //   Could not read it: FunctionException(status: 403, details:
+      //   {error: Document scanning is switched off for this
+      //   organization...}, reasonPhrase: )
+      //
+      // with the sentence somebody could act on buried inside a Dart
+      // toString. The body is the same shape either way.
+      throw OcrException(_functionError(e));
+    }
     final data = res.data;
     if (data is Map && data['error'] != null) {
       throw OcrException(data['error'].toString());
@@ -828,6 +843,30 @@ extension RepoOcr on Repo {
       'storage_path': to,
     }).eq('id', attachmentId);
   }
+}
+
+/// The sentence inside a failed function call.
+///
+/// The edge function answers `{error: '...'}` whatever the status, so
+/// there is always something better to say than the exception's own
+/// toString. Falls back to the status only when there is not — and says
+/// what the status MEANS rather than printing the number, because "403"
+/// is not a sentence anybody can act on.
+String _functionError(FunctionException e) {
+  final details = e.details;
+  if (details is Map && details['error'] != null) {
+    final said = details['error'].toString().trim();
+    if (said.isNotEmpty) return said;
+  }
+  if (details is String && details.trim().isNotEmpty) return details.trim();
+  return switch (e.status) {
+    401 || 403 => 'This company is not allowed to read documents. An '
+        'administrator turns AI SmartScan on in Settings.',
+    402 => 'There is no scanning credit left on this company.',
+    413 => 'That file is too big to read.',
+    429 => 'The reader is busy. Try again in a moment.',
+    _ => 'The reader could not be reached. Try again in a moment.',
+  };
 }
 
 /// A scan that did not happen, with the reason the database or the

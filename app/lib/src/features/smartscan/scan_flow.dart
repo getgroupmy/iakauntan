@@ -14,6 +14,8 @@ import '../expenses/expenses_screen.dart' show showExpenseFromScan;
 import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
 import '../shared/supplier_from_scan.dart';
+import 'scan_availability.dart';
+import 'scan_blocked_dialog.dart';
 import 'scan_destination.dart';
 import 'scan_kind_sheet.dart';
 import 'scan_supplier_picker.dart';
@@ -46,6 +48,19 @@ import 'scan_supplier_picker.dart';
 Future<void> runSmartScan(BuildContext context, WidgetRef ref) async {
   final kinds = ref.read(offeredScanKindsProvider).valueOrNull ?? const [];
 
+  // Before the camera, not after it. A company that has never switched
+  // scanning on used to find out by photographing a document and
+  // getting a `FunctionException` in a snackbar — and then being asked
+  // which kind of document the scan that never happened was.
+  final block = scanBlock(
+    ref.read(ocrStatusProvider).valueOrNull,
+    canAdmin: ref.read(canAdminProvider),
+  );
+  if (block != null) {
+    await showScanBlocked(context, block);
+    return;
+  }
+
   // Parked against expenses until the destination is known: it is the
   // table that asks least of the paper, and `refileAttachment` moves
   // the object as well as the row once there is somewhere to put it.
@@ -62,7 +77,21 @@ Future<void> runSmartScan(BuildContext context, WidgetRef ref) async {
   // Nothing said what it is. Asked rather than guessed — a document
   // filed wrongly becomes a record somebody has to find and undo.
   if (destination == ScanDestination.unknown) {
-    final chosen = await showScanKindSheet(context, read: staged.read);
+    // Two different questions wearing one sheet. A reading that placed
+    // nothing is "what is this?"; a capture that was never READ is "it
+    // could not be read, and the file is kept — where do you want to
+    // type it in?". Saying the first about the second is what put "the
+    // reading could not place this document" under a scan that never
+    // reached a reader.
+    final chosen = await showScanKindSheet(
+      context,
+      read: staged.read,
+      because: staged.read == null
+          ? 'It could not be read, so there is nothing to fill in. The '
+              'file is kept either way — choose where it goes and type '
+              'the figures in.'
+          : null,
+    );
     if (chosen == null || !context.mounted) {
       // Abandoned. The capture goes with it rather than sitting in the
       // bucket attached to a record that will never exist.
