@@ -318,6 +318,32 @@ final _destinations = <_Dest>[
     '/dashboard',
     primary: true,
   ),
+  // Second, and on the bar rather than behind More. Asked for in those
+  // words: "for mobile view add AI SmartScan as second just after
+  // Dashboard which is 1st".
+  //
+  // Position is not a preference here, it is the whole feature. The
+  // ordinary way a scan happens is somebody standing up holding a
+  // receipt, on a phone, with one hand free -- and until this it took
+  // a tap on More, a scroll, and a tap. `short` has said `Scan` since
+  // this destination was written, which is a bar label for a
+  // destination that had never been on the bar.
+  //
+  // It sits HERE rather than being marked primary where it was,
+  // because `_narrowLayout` takes the primaries in the order this list
+  // gives them -- "the destination list stays the thing that decides
+  // what comes first", as `groupByModule` puts it. That also carries
+  // the AI heading up the grouped menu, which is the same judgement
+  // said twice rather than a side effect.
+  _Dest(
+    'AI SmartScan',
+    Icons.document_scanner_outlined,
+    Icons.document_scanner,
+    '/smartscan',
+    primary: true,
+    module: 'ai',
+    short: 'Scan',
+  ),
   // `0656`. The route has existed since `0526` and nothing in the menu
   // opened it -- the only ways in were the dashboard card's "see all"
   // and typing the address. Reported as "why is to do not listed".
@@ -981,14 +1007,6 @@ final _destinations = <_Dest>[
   // here that read rather than record, and because the scan buttons it
   // replaces were scattered across four screens that had nothing else
   // to do with each other.
-  _Dest(
-    'AI SmartScan',
-    Icons.document_scanner_outlined,
-    Icons.document_scanner,
-    '/smartscan',
-    module: 'ai',
-    short: 'Scan',
-  ),
   _Dest(
     'Ask about your books',
     Icons.auto_awesome_outlined,
