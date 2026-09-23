@@ -1852,6 +1852,17 @@ final clientPayoutsProvider =
     });
 
 /// What each matter holds, for the pickers on both screens.
+/// Money moved from one matter's client funds to another's. `0690`.
+///
+/// Both legs come back — a transfer is two rows and the ledger shows
+/// both — so the list reads as the client ledger does rather than
+/// hiding half of an entry that balances.
+final clientTransfersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref)
+          .clientAccountLedger(types: const ['transfer_out', 'transfer_in']);
+    });
+
 final matterClientBalancesProvider =
     FutureProvider.autoDispose<Map<String, double>>((ref) {
       return requireRepo(ref).matterClientBalances();

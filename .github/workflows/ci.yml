@@ -862,7 +862,6 @@ jobs:
                    supabase/tests/reader_failures.sql \
                    supabase/tests/matter_trial_balance.sql \
                    supabase/tests/unregistered_bank_accounts.sql \
-                   supabase/tests/transfer_between_matters.sql \
                    supabase/tests/matter_on_a_document.sql \
                    supabase/tests/scan_inbox.sql \
                    supabase/tests/scan_document_kinds.sql \
@@ -1101,6 +1100,23 @@ jobs:
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_undocumented_writes.py "$DB"
+
+      # `0690` added a second `transfer_between_matters` beside the one
+      # `0358` had carried for a year. Different signatures, so `create
+      # or replace` replaced nothing -- and because PostgREST calls by
+      # NAME and the newer one's last argument had a default, the five
+      # names the app sent fitted both. The matter screen's transfer
+      # stopped working in every client the moment it applied.
+      #
+      # `matter_transfer.sql` went on passing throughout, because it
+      # called POSITIONALLY and Postgres resolves that without
+      # complaint. A whole file of assertions, green, over a dead
+      # feature. `0696` removed the overload; this is what stops the
+      # next one.
+      - name: Check no two functions answer to one named call
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_ambiguous_overloads.py "$DB"
 
       # The seam `0618` came in through: a function whose caller cannot
       # reach it, which is invisible everywhere else. PostgREST answers

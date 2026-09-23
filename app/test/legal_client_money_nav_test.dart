@@ -15,11 +15,17 @@ import 'package:iakauntan/src/features/shell/app_shell.dart';
 /// which is what the chart-of-accounts importer taught a few commits
 /// ago — fully built, and left off its own selector.
 void main() {
-  test('the legal module offers matters, receipts and payouts', () {
+  test('the legal module offers matters, receipts, payouts and transfers',
+      () {
     expect(pathsForModule('legal'), containsAll(<String>[
       '/legal',
       '/legal/receipts',
       '/legal/payouts',
+      // `0358` built the movement and left the matter screen as the
+      // only way in — the same gap the two above it were opened to
+      // close. A page nobody can reach is the same as a page that does
+      // not exist.
+      '/legal/transfers',
     ]));
   });
 
@@ -36,12 +42,16 @@ void main() {
     }
   });
 
-  test('the two are distinct destinations', () {
-    // One path for both would be one sidebar row that highlights for
-    // the other's page.
+  test('the three are distinct destinations', () {
+    // One path for two of them would be one sidebar row that highlights
+    // for the other's page.
+    //
+    // Named rather than counted. A bare `length, 3` fails usefully when
+    // a page is added and says nothing about WHICH — and a page renamed
+    // rather than added keeps the count while breaking the row.
     expect(
-      pathsForModule('legal').where((p) => p.startsWith('/legal/')).length,
-      2,
+      pathsForModule('legal').where((p) => p.startsWith('/legal/')).toSet(),
+      {'/legal/receipts', '/legal/payouts', '/legal/transfers'},
     );
   });
 }

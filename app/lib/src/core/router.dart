@@ -48,6 +48,7 @@ import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/client_money_screen.dart';
+import '../features/legal/client_transfer_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
 import '../features/approvals/approvals_screen.dart';
@@ -829,6 +830,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/legal/payouts',
             builder: (_, __) => const ClientMoneyScreen(inbound: false),
+          ),
+          // The third client-money movement, and above `/legal/:id`
+          // for the reason the two above it are: `/legal/transfers`
+          // would otherwise read as a matter with that id.
+          GoRoute(
+            path: '/legal/transfers',
+            builder: (_, __) => const ClientTransferScreen(),
           ),
           GoRoute(
             path: '/legal',

@@ -95,8 +95,23 @@ begin
   -- ------------------------------------------------------------------
   -- Her money follows her to her other matter
   -- ------------------------------------------------------------------
+  -- BY NAME, which is how the app calls it and is the one call shape
+  -- these assertions never made. `0690` put a second signature beside
+  -- this one; five named arguments fitted both, PostgREST calls every
+  -- function by name, and the matter screen's transfer stopped working
+  -- the moment it applied -- while this file went on passing, because
+  -- a POSITIONAL call resolves without complaint.
+  --
+  -- So the call here is the app's. A test that exercises a shape
+  -- nothing in the product uses is a test that can be green over a
+  -- dead feature, which is `docs/widget-tests.md`'s argument arriving
+  -- in SQL. See `0696`.
   v_ids := public.transfer_between_matters(
-    v_sale, v_lease, 2000, date '2026-03-01', 'Balance follows the client');
+    p_from        => v_sale,
+    p_to          => v_lease,
+    p_amount      => 2000,
+    p_date        => date '2026-03-01',
+    p_description => 'Balance follows the client');
 
   perform pg_temp.check_eq('the conveyance is left holding three thousand',
     (select coalesce(sum(t.amount), 0) from public.client_account_transactions t

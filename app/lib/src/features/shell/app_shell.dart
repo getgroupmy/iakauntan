@@ -379,6 +379,20 @@ final _destinations = <_Dest>[
     '/legal/payouts',
     module: 'legal',
   ),
+  // The third movement. `0358` built it and left the matter screen as
+  // the only way in, which is the same gap `/legal/receipts` and
+  // `/legal/payouts` were opened to close: a balance left on a finished
+  // conveyance belongs to a CLIENT, and the person moving it is working
+  // from the client's name rather than from a matter they have already
+  // navigated to.
+  _Dest(
+    'Move between matters',
+    Icons.swap_horiz_outlined,
+    Icons.swap_horiz,
+    '/legal/transfers',
+    module: 'legal',
+    short: 'Move',
+  ),
   // Four doors onto one screen, under the CONTACTS heading the module
   // already gives them. All Contacts stays what it was — the same page,
   // opening on the same tab — and the three below it open it on theirs.
