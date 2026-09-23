@@ -276,7 +276,7 @@ class _ComposeDialogState extends ConsumerState<_ComposeDialog> {
       String? path;
       final file = _file;
       if (file != null && file.bytes != null) {
-        final orgId = ref.read(currentOrgIdProvider);
+        final orgId = ref.read(orgIdProvider);
         if (orgId == null) throw StateError('No company is open.');
         // Uploaded now rather than when it was chosen, so a message
         // somebody changed their mind about leaves nothing behind.

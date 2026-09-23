@@ -91,7 +91,7 @@ class _ExportCardState extends ConsumerState<ExportCard> {
   }
 
   Future<void> _run() async {
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
     final org = ref.read(currentOrgProvider).valueOrNull;
     final repo = ref.read(firmsRepoProvider);

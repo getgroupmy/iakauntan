@@ -175,7 +175,7 @@ class _HandOverDialogState extends ConsumerState<_HandOverDialog> {
           onPressed: () async {
             final email = _email.text.trim();
             if (email.isEmpty) return;
-            final orgId = ref.read(currentOrgIdProvider);
+            final orgId = ref.read(orgIdProvider);
             if (orgId == null) return;
             final ok = await confirm(
               context,

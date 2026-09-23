@@ -229,6 +229,20 @@ class CurrentOrgNotifier extends Notifier<String?> {
   void clear() => state = null;
 }
 
+/// **The org somebody PICKED from the switcher, and nothing else.**
+///
+/// Null is the normal state of this, not an edge case: it stays null
+/// for every person who has never opened the company switcher, which is
+/// everybody with one company and most people with two. The org they
+/// are actually working in comes from [currentOrgProvider], which falls
+/// back to `profiles.last_org_id` and then to the first company they
+/// belong to — and [repoProvider] is built from THAT.
+///
+/// So this is for the switcher: `select`, `clear`, and asking which one
+/// is ticked. **To scope a call to the current company, use
+/// [orgIdProvider].** Reading this one instead is a screen that works
+/// after you switch company and does nothing at all before, which is
+/// how it went wrong — see [orgIdProvider] for the report.
 final currentOrgIdProvider = NotifierProvider<CurrentOrgNotifier, String?>(
   CurrentOrgNotifier.new,
 );
@@ -283,6 +297,41 @@ final repoProvider = Provider<Repo?>((ref) {
   if (org == null) return null;
   return Repo(ref.watch(supabaseProvider), org.id);
 });
+
+/// The id of the company everything on screen is about.
+///
+/// Read off [repoProvider], deliberately, so this id and the id every
+/// RPC is already being sent with cannot differ. Null means the same
+/// thing it means there: no company has resolved yet.
+///
+/// ## Why this exists
+///
+/// Reported from a phone, of the assistant sheet: "Why can't save". It
+/// could not. `_save` opened with
+///
+///     final org = ref.read(currentOrgIdProvider);
+///     if (org == null) return;
+///
+/// and [currentOrgIdProvider] is the SWITCHER's selection, which is
+/// null until somebody switches company. So Save returned without
+/// calling anything, without an error, without a snackbar — a button
+/// that does nothing, for every company that had never used the
+/// switcher. The two key buttons on the same sheet did it too, and
+/// `aiStatusProvider` handed the screen an empty map, which is why the
+/// card above them said "Not ready to answer yet" over the word
+/// **null**.
+///
+/// It was not one sheet. Thirteen call sites read the switcher as
+/// though it were the current company: EA forms, the time terminals,
+/// the subdomain and mailboxes, the addresses card, the export card,
+/// bookkeepers, handover, mail compose and the SmartScan key card. Each
+/// of them was dead in exactly the same way and none of them said so.
+///
+/// `scripts/check_current_org.py` is the gate that keeps the next one
+/// from being written.
+final orgIdProvider = Provider<String?>(
+  (ref) => ref.watch(repoProvider)?.orgId,
+);
 
 /// Convenience accessor that throws rather than returning null, for use
 /// inside screens that are only reachable once an org exists.
@@ -1542,7 +1591,7 @@ final sstReturnLinesProvider = FutureProvider.autoDispose
 final ourPracticeProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((
   ref,
 ) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return null;
   final row = await ref
       .watch(supabaseProvider)
@@ -1557,7 +1606,7 @@ final ourPracticeProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((
 /// Who has held this company before. Owners and admins only.
 final companyTransferHistoryProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-      final orgId = ref.watch(currentOrgIdProvider);
+      final orgId = ref.watch(orgIdProvider);
       if (orgId == null) return Future.value(const []);
       return ref.watch(firmsRepoProvider).transferHistory(orgId);
     });
@@ -3388,12 +3437,16 @@ final aiModelsProvider =
 
 /// Whether this company's assistant is on, what it will call, and
 /// whether that call can be made. 0536.
+/// `requireRepo` rather than a null check that answers `{}`. An empty
+/// map is not a status: the sheet drew it as "Not ready to answer yet"
+/// over the word **null**, because the reason line interpolated two
+/// absent keys. `OrgNotReady` is what [AsyncView] waits on, which is
+/// the truthful answer while a company is still resolving.
 final aiStatusProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
   ref,
 ) async {
-  final org = ref.watch(currentOrgIdProvider);
-  if (org == null) return <String, dynamic>{};
-  return requireRepo(ref).aiStatus(org);
+  final repo = requireRepo(ref);
+  return repo.aiStatus(repo.orgId);
 });
 
 /// Every run at an outlet that has not landed yet. 0259.

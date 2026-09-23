@@ -247,7 +247,7 @@ class _DoorWordsState extends ConsumerState<_DoorWords> {
   }
 
   Future<void> _save() async {
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
     setState(() {
       _busy = true;
@@ -486,7 +486,7 @@ class _AskForState extends ConsumerState<_AskFor> {
   }
 
   Future<void> _send() async {
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
 
     final problem = checkName(

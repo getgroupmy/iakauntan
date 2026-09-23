@@ -48,6 +48,40 @@ DateTime? _ownKeySetAt(Map<String, dynamic> s) {
   return raw == null ? null : DateTime.tryParse('$raw');
 }
 
+/// The line under "Ready to answer", which is either the reason it is
+/// not or a description of what it will call.
+///
+/// Reported from a phone as the single word **null**. The line was
+///
+///     s['not_ready_reason'] as String? ??
+///         ['${s['provider_name'] ?? s['provider_code']}', ...]
+///             .where((t) => t.isNotEmpty).join(' · ')
+///
+/// and interpolating an absent key gives the four characters `n-u-l-l`,
+/// which `isNotEmpty` then keeps. `ai_status` always answers with a
+/// provider and a reason, so the only way to reach that fallback was a
+/// status map with nothing in it — which is exactly what
+/// `aiStatusProvider` used to hand over when no company had been
+/// SELECTED, which was most of the time. Both halves are fixed; this
+/// half is the one that must never print a null again whatever the map
+/// turns out to hold.
+String _statusLine(Map<String, dynamic> s) {
+  final reason = s['not_ready_reason'];
+  if (reason is String && reason.trim().isNotEmpty) return reason;
+
+  final parts = [
+    for (final v in [
+      s['provider_name'] ?? s['provider_code'],
+      s['model_name'] ?? s['model_id'],
+    ])
+      if (v != null && '$v'.trim().isNotEmpty) '$v',
+    if (s['follows_platform'] == true) 'following the platform',
+  ];
+  return parts.isEmpty
+      ? 'Nothing is set up yet. Choose a provider below.'
+      : parts.join(' · ');
+}
+
 class AssistantSettingsSheet extends ConsumerStatefulWidget {
   const AssistantSettingsSheet({super.key});
 
@@ -160,13 +194,7 @@ class _AssistantSettingsSheetState
                       ),
                       const SizedBox(height: Space.xs),
                       Text(
-                        s['not_ready_reason'] as String? ??
-                            [
-                              '${s['provider_name'] ?? s['provider_code']}',
-                              '${s['model_name'] ?? s['model_id'] ?? ''}',
-                              if (s['follows_platform'] == true)
-                                'following the platform',
-                            ].where((t) => t.isNotEmpty).join(' · '),
+                        _statusLine(s),
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
@@ -334,14 +362,25 @@ class _AssistantSettingsSheetState
   }
 
   Future<void> _save() async {
-    final org = ref.read(currentOrgIdProvider);
-    if (org == null) return;
+    // The repository, and the org id off it — one read, so the id this
+    // saves against cannot differ from the one the call is scoped to.
+    // It used to read `currentOrgIdProvider`, the SWITCHER's selection,
+    // which is null until somebody switches company: Save returned here
+    // and did nothing at all, with no error and no snackbar. That is
+    // what "why can't save" was.
+    final repo = ref.read(repoProvider);
+    if (repo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your company has not finished '
+            'loading. Try again in a moment.')),
+      );
+      return;
+    }
     await runWithFeedback(
       context,
-      action: () => ref
-          .read(repoProvider)!
+      action: () => repo
           .setAiSettings(
-            org,
+            repo.orgId,
             enabled: _enabled,
             provider: _provider,
             model: _model,
@@ -353,9 +392,18 @@ class _AssistantSettingsSheetState
   }
 
   Future<void> _keyIn() async {
-    final org = ref.read(currentOrgIdProvider);
+    final repo = ref.read(repoProvider);
     final provider = _provider;
-    if (org == null || provider == null) return;
+    // The button is already disabled without a provider, so only the
+    // repository is worth a sentence.
+    if (provider == null) return;
+    if (repo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your company has not finished '
+            'loading. Try again in a moment.')),
+      );
+      return;
+    }
     final key = TextEditingController();
     final url = TextEditingController();
     final saved = await showDialog<bool>(
@@ -408,10 +456,9 @@ class _AssistantSettingsSheetState
     if (saved != true || !mounted) return;
     await runWithFeedback(
       context,
-      action: () => ref
-          .read(repoProvider)!
+      action: () => repo
           .setAiCredentials(
-            org,
+            repo.orgId,
             provider,
             key.text,
             baseUrl: url.text.trim().isEmpty ? null : url.text.trim(),
@@ -422,13 +469,12 @@ class _AssistantSettingsSheetState
   }
 
   Future<void> _clearKey() async {
-    final org = ref.read(currentOrgIdProvider);
+    final repo = ref.read(repoProvider);
     final provider = _provider;
-    if (org == null || provider == null) return;
+    if (repo == null || provider == null) return;
     await runWithFeedback(
       context,
-      action: () =>
-          ref.read(repoProvider)!.clearAiCredentials(org, provider),
+      action: () => repo.clearAiCredentials(repo.orgId, provider),
       successMessage: 'Key removed',
     );
     ref.invalidate(aiStatusProvider);

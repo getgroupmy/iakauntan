@@ -1320,6 +1320,16 @@ jobs:
       - name: Check no date formatter is handed a row value
         run: python3 scripts/check_date_arguments.py
 
+      # And the third silent screen of the same week, with no rectangle
+      # to see at all. `currentOrgIdProvider` is the company SWITCHER's
+      # selection and is null until somebody switches company, which
+      # most people never do -- so thirteen call sites that read it as
+      # "the current company" were inert, and the Save button on the
+      # assistant sheet returned without calling anything or saying so.
+      # Reported as "Why can't save".
+      - name: Check nothing mistakes the switcher for the current company
+        run: python3 scripts/check_current_org.py
+
       # A setState whose arrow body assigns a Future returns that Future,
       # and Flutter asserts against exactly that -- so the widget throws
       # on every load and every refresh in any build with asserts on.
@@ -2254,6 +2264,9 @@ jobs:
 
       - name: The dialogs-built gate's own assertions
         run: python3 scripts/check_dialogs_built_test.py
+
+      - name: The switcher-selection gate's own assertions
+        run: python3 scripts/check_current_org_test.py
 
       - name: The nested-scrollable gate's own assertions
         run: python3 scripts/check_nested_scrollables_test.py

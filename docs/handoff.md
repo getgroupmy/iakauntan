@@ -39,8 +39,47 @@ it has to be committed.
 | Migrations | `0703` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 362 SQL assertion files, **47 Python gates (+12 gate self-tests)**, **5,865 Flutter tests**, 35 deno tests |
+| Gates | 363 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,878 Flutter tests**, 36 deno tests |
 | API description | 787 functions, 366 tables, version `0703` |
+
+### `currentOrgIdProvider` is the SWITCHER, not the current company
+
+The most expensive thing found this stretch, and it was found from
+three words on a screenshot: **"Why can't save"**.
+
+`currentOrgIdProvider` holds the org somebody PICKED out of the company
+switcher. It is null until they pick one — which they never do with one
+company, and mostly do not with two. The company they are actually
+working in is `currentOrgProvider`, which falls back to
+`profiles.last_org_id` and then to the first company they belong to, and
+**`repoProvider` is built from that one**. So the app worked everywhere
+while thirteen call sites that read the switcher were inert:
+
+    final org = ref.read(currentOrgIdProvider);
+    if (org == null) return;          // the Save button does nothing
+
+No error, no snackbar, no trace. The same sheet's status card printed
+the single word **null**, because `aiStatusProvider` had the same fault,
+answered `{}`, and the card interpolated two absent keys into a string —
+`'${s['provider_name'] ?? s['provider_code']}'` is four characters that
+`isNotEmpty` then keeps.
+
+Silently dead for anyone who had never used the switcher: EA forms, the
+time terminals, the subdomain and the mailboxes, the addresses card, the
+export card, bookkeepers, handover, mail compose, **the "More than one
+key" pool editor on the SmartScan screen we were working on all
+session**, the practice this company belongs to, and who has held the
+company before.
+
+Use **`orgIdProvider`** — `repoProvider`'s own org id, so it cannot
+disagree with the id the call is already scoped to. `.notifier` for
+selecting and clearing. `scripts/check_current_org.py` is the gate.
+
+The shape to remember: **a provider whose null is the normal case, with
+a name that reads like the opposite, next to one that does what the name
+says.** Two of the three bugs reported in a row this week were invisible
+failures of exactly that kind — this one, and `Fmt.dateTime` on a
+`dynamic` drawing a grey rectangle.
 
 ### Check the analyzer's EXIT CODE, not its output
 

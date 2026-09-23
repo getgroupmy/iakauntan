@@ -444,7 +444,7 @@ class SmartScanSettingsCardState extends ConsumerState<SmartScanSettingsCard> {
 /// the database rather than here.
 ///
 /// Drawn only once a company is resolved. It always is by the time
-/// this card is on screen, but `currentOrgIdProvider` is nullable and
+/// this card is on screen, but `orgIdProvider` is nullable and
 /// a pool asked for with a null id is the PLATFORM's pool — which this
 /// screen must never show and the database would refuse anyway.
 class _OwnKeyPool extends ConsumerWidget {
@@ -455,7 +455,7 @@ class _OwnKeyPool extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orgId = ref.watch(currentOrgIdProvider);
+    final orgId = ref.watch(orgIdProvider);
     if (orgId == null) return const SizedBox.shrink();
 
     return Column(

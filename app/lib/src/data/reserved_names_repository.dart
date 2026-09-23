@@ -268,14 +268,14 @@ final reservedNamesProvider = Provider<ReservedNames>(
 /// This company's subdomain, requested or granted, or null for neither.
 final orgSubdomainProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return null;
   return ref.watch(reservedNamesProvider).subdomainFor(orgId);
 });
 
 final orgMailboxesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return const [];
   return ref.watch(reservedNamesProvider).mailboxesFor(orgId);
 });
@@ -359,7 +359,7 @@ final workspaceHostProvider =
 /// Mail that arrived at this company's addresses, newest first.
 final inboxProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return const [];
   return Repo.rows(
     await ref
@@ -382,7 +382,7 @@ final inboxProvider =
 /// changes on one side only.
 final myMailboxesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return const [];
   return Repo.rows(
     await ref
@@ -431,7 +431,7 @@ typedef MailSearch = ({String? mailboxId, String query});
 /// somebody clears the field.
 final mailSearchProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, MailSearch>((ref, search) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null || search.query.trim().isEmpty) return const [];
   return Repo.rows(
     await ref.watch(supabaseProvider).rpc('search_mail', params: {
@@ -529,7 +529,7 @@ Future<String> inboundAttachmentUrl(
 /// it has written, and it is behind RLS.
 final orgLoginPageProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return null;
   final rows = Repo.rows(
     await ref
