@@ -979,8 +979,30 @@ and `/legal/payouts` (`2c6a456f`), and building it is what found that
 message, and `scripts/check_ambiguous_overloads.py`, which is the
 general answer.
 
-The matter picker is now on the bill editor and the expense form. **The
-bank reconciliation is the one that is left.**
+The matter picker is now on the bill editor and the expense form.
+
+**The bank reconciliation was the third one asked for, and there is
+nowhere on it to put a matter.** Worth writing down so it is not
+re-opened: that screen imports statement lines into
+`bank_transactions` and MATCHES them to records that have already
+posted — `suggest_bank_matches` (`0085`) returns receipts and
+purchase payments, and `_match` refuses with "Record the receipt or
+payment first" when nothing matches. No row in `bank_transactions`
+ever reaches `gl_lines`, so there is no line whose `matter_id` a
+picker there would set. The matter arrives with the receipt or
+payment the line is matched to, which `0691`/`0692` put on the
+document.
+
+The nearest real thing, if it is wanted, is the other direction:
+SHOW the matched document's matter on the line tile and in the
+suggestion dialog, so a firm reconciling a client account can see
+which file each cleared item belongs to. That is a display change and
+a different piece of work from a picker, so it has not been assumed.
+
+While looking: `public.suggest_bank_coding` (`0625`) and
+`Repo.suggestBankCoding` both exist and **no screen calls either**. A
+rules engine with no consumer — separate from the above, and not
+touched.
 
 ## A PDF, and the reader that could not open it
 
