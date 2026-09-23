@@ -141,6 +141,131 @@ void main() {
     });
   });
 
+  /// A voucher is the company's OWN record of money going out. `0686`.
+  ///
+  /// This one was photographed into Bills and the screen asked "which
+  /// supplier?" with an empty box. Every part of the page was a firm
+  /// recording a payment: its own letterhead, its own voucher book, the
+  /// EPF as payee. Filed as a bill it would have made a contact record
+  /// of the firm itself and a payable it owed to itself.
+  group('a voucher is not a bill', () {
+    // The real one, transcribed. Handwriting and all — the printed
+    // skeleton is what the classifier has to work from, because the
+    // blanks are filled in by hand and read badly.
+    const voucher = 'SHAHARUDIN, SHAM SUNDER & PARTNERS\n'
+        'PAYMENT VOUCHER\n'
+        'A/C Debited Office    File Ref EPF    Date 22/1/25   No 16851\n'
+        'Pay Online   To KWSP\n'
+        'being payment of September 2023 payment   1320.00\n'
+        'Prepared by      Approved by      Received by';
+
+    test('the voucher that started this is a payment voucher', () {
+      final g = classifyDocument(text: voucher, hasTotal: true);
+      expect(g.kind, 'payment_voucher');
+      expect(g.isSure, isTrue);
+    });
+
+    test('and a baucar bayaran is the same document', () {
+      final g = classifyDocument(
+        text: 'BAUCAR BAYARAN\nDisediakan oleh\nDiluluskan oleh\n'
+            'RM 1,320.00',
+        hasTotal: true,
+      );
+      expect(g.kind, 'payment_voucher');
+    });
+
+    // The two above pass on HINTS as much as on the name — a voucher
+    // book prints six of them down the right-hand side. A mutation
+    // sweep proved it: deleting "payment voucher" from the list of
+    // names left both of them passing. These two carry the name and
+    // nothing else, so they fail if it goes.
+    test('the name alone is enough, with none of the printed skeleton',
+        () {
+      final g = classifyDocument(
+        text: 'PAYMENT VOUCHER\nRM 1,320.00',
+        hasTotal: true,
+      );
+      expect(g.kind, 'payment_voucher');
+    });
+
+    test('and so is the Malay name alone', () {
+      final g = classifyDocument(
+        text: 'BAUCAR BAYARAN\nRM 1,320.00',
+        hasTotal: true,
+      );
+      expect(g.kind, 'payment_voucher');
+    });
+
+    test('a voucher that quotes the tax invoice it pays is still a voucher',
+        () {
+      // The ordinary case, not the exception: a voucher names what it
+      // is paying. The first version excluded any page saying "tax
+      // invoice" from being a voucher, which would have sent the very
+      // document this was written for straight back to Bills.
+      final g = classifyDocument(
+        text: 'PAYMENT VOUCHER\nbeing payment of TAX INVOICE INV-0041\n'
+            '1,080.00',
+        hasTotal: true,
+      );
+      expect(g.kind, 'payment_voucher');
+    });
+
+    test('and the printed skeleton alone carries it when the title is cut',
+        () {
+      // A photograph of a voucher book taken at an angle loses the
+      // heading and keeps the pre-printed lines, which is what the
+      // camera does to the top of a page held flat on a desk. Without
+      // this the hints are decoration — every other fixture here names
+      // itself, so a sweep that deletes them changes nothing.
+      final g = classifyDocument(
+        text: 'A/C Debited Office    File Ref EPF\n'
+            'being payment of September 2023 payment\n'
+            'Prepared by        Approved by',
+        hasTotal: true,
+      );
+      expect(g.kind, 'payment_voucher');
+      // Sure, and that is the existing rule rather than an accident:
+      // "several are as good as the paper saying so", asserted further
+      // down this file. Four pre-printed phrases off a voucher book is
+      // several. Asserting isFalse here was my mistake and the control
+      // caught it.
+      expect(g.isSure, isTrue);
+      expect(g.because, contains('being payment of'));
+    });
+
+    test('but a page asking to BE paid is not a voucher', () {
+      // What the `against` is actually for. No bill name here at all,
+      // so nothing else settles it — a voucher records a payment made,
+      // and a page carrying "amount due" is asking for one.
+      final g = classifyDocument(
+        text: 'Prepared by\nApproved by\nAmount due 1,080.00',
+        hasTotal: true,
+      );
+      expect(g.kind, isNot('payment_voucher'));
+    });
+
+    test('and a real tax invoice is untouched by any of this', () {
+      // The other direction, which is the one that would cost money:
+      // a supplier's bill misfiled as the company's own voucher is a
+      // payable that never gets entered.
+      final g = classifyDocument(
+        text: 'TAX INVOICE\nNo. INV-0041\nAmount due 1,080.00',
+        hasTotal: true,
+        hasLines: true,
+      );
+      expect(g.kind, 'bill');
+      expect(g.isSure, isTrue);
+    });
+
+    test('a receipt is not made a voucher by saying "received by"', () {
+      final g = classifyDocument(
+        text: 'OFFICIAL RECEIPT\nReceived by\nTerima kasih\nRM 45.00',
+        hasTotal: true,
+      );
+      expect(g.kind, 'receipt');
+    });
+  });
+
   group('the longest phrase wins, not the most of them', () {
     test('a bank statement is not outvoted by three weak words', () {
       // "invoice", "terms" and "amount due" can all appear on a

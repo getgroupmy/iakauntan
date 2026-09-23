@@ -41,11 +41,30 @@ Future<void> _scanExpense(BuildContext context, WidgetRef ref) async {
   );
   if (staged == null || !context.mounted) return;
 
-  await showDialog<void>(
-    context: context,
-    builder: (_) => _ExpenseDialog(scanned: staged),
-  );
+  await showExpenseFromScan(context, staged);
 }
+
+/// Opens the expense form on a capture that has already been made and
+/// read. `0686`.
+///
+/// Public because the Bills screen needs it: a page photographed into
+/// Bills that turns out to have no supplier on it — a payment voucher,
+/// the company's own record of money going out — is an expense, and the
+/// person should not have to go and photograph it a second time
+/// somewhere else.
+///
+/// The capture is parked against whichever table it was scanned from,
+/// and that is fine: `refileAttachment` re-points the table as well as
+/// the record when the expense posts, so nothing is re-uploaded and
+/// nothing is left behind.
+Future<void> showExpenseFromScan(
+  BuildContext context,
+  StagedReceipt staged,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => _ExpenseDialog(scanned: staged),
+    );
 
 /// Money already spent, captured and posted in one step — there is no
 /// useful draft state for an expense that has already left the bank.

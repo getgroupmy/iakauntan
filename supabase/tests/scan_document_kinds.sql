@@ -87,6 +87,60 @@ begin
 end $$;
 
 -- =====================================================================
+-- A voucher is not a bill
+--
+-- `0686`. A payment voucher was photographed into Bills and the screen
+-- asked "which supplier?" over a page whose only company name was the
+-- firm's own, on its own voucher book, paying the EPF.
+--
+-- The reader was right to name no supplier. What was missing was a name
+-- for the thing, and somewhere for it to go that is not a payable owed
+-- to nobody.
+-- =====================================================================
+do $$
+declare
+  v_row record;
+  v_n   integer;
+begin
+  select * into v_row from public.scan_document_kinds
+   where code = 'payment_voucher';
+
+  -- `found`, not `v_row is not null`: a record IS NOT NULL only when
+  -- EVERY field is non-null, so a perfectly good row with one empty
+  -- column reads as no row at all. That is what this assertion did on
+  -- its first run.
+  perform pg_temp.check_true(
+    'a payment voucher is a kind of document this knows', found);
+  perform pg_temp.check_eq(
+    'and it becomes an expense, not a bill', v_row.destination, 'expense');
+  perform pg_temp.check_true(
+    'it ships with the product rather than being somebody''s own row',
+    v_row.is_builtin);
+  perform pg_temp.check_true(
+    'and it is switched on', v_row.is_active);
+  perform pg_temp.check_true(
+    'named in Malay too, because half the voucher books here are',
+    v_row.label_my is not null);
+
+  -- Among the transaction documents rather than at the bottom with
+  -- "something else". A voucher is an ordinary thing in a Malaysian
+  -- office and somebody scanning one should not have to scroll past
+  -- the certificates to find it.
+  select count(*) into v_n from public.scan_document_kinds
+   where is_active and sort_order > v_row.sort_order;
+  perform pg_temp.check_true(
+    'and it sits among the transaction documents, not last', v_n >= 5);
+
+  -- It must NOT go where it came from. This is the assertion that would
+  -- fail if somebody "tidied" the destination to match the screen it
+  -- was scanned from: a voucher filed as a purchase document is a
+  -- payable the firm owes to itself.
+  perform pg_temp.check_true(
+    'a voucher is never a purchase document',
+    v_row.destination is distinct from 'purchase_document');
+end $$;
+
+-- =====================================================================
 -- Absent means leave it alone; empty means clear it
 --
 -- The fault this file was written for. Both halves, because either one

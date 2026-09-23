@@ -15,6 +15,7 @@ import 'bulk_plan.dart';
 import 'doc_types.dart';
 import 'duplicate_bill.dart';
 import 'late_orders_dialog.dart';
+import '../expenses/expenses_screen.dart';
 import '../shared/scan_intake.dart';
 import '../shared/supplier_from_scan.dart';
 import 'settlement_dialog.dart';
@@ -60,8 +61,39 @@ Future<void> _scanInto(
   final match = await resolveSupplier(context, ref, read, kind: kind);
   if (!context.mounted) return;
 
+  // Read, and nothing on it named a supplier. `0686`. Said plainly
+  // rather than dropped into the ordinary picker, which is a question
+  // this document cannot answer asked in a dialog indistinguishable
+  // from the one somebody gets when they press New.
+  if (match.outcome == SupplierOutcome.noSupplier) {
+    final choice = await showDialog<_NotABill>(
+      context: context,
+      builder: (_) => _NotABillDialog(read: read!, kind: kind),
+    );
+    if (!context.mounted) return;
+    switch (choice) {
+      case _NotABill.expense:
+        // Straight into the expense form on the capture already made.
+        // The attachment is re-pointed when the expense posts, so
+        // nothing here has to be undone and nothing is photographed
+        // twice.
+        await showExpenseFromScan(context, staged);
+        return;
+      case _NotABill.chooseAnyway:
+        break;
+      case _NotABill.discard:
+      case null:
+        await repo.deleteAttachmentById(staged.attachmentId);
+        return;
+    }
+  }
+
   String? contactId = match.contactId;
-  if (match.outcome == SupplierOutcome.ask) {
+  if (match.outcome == SupplierOutcome.ask ||
+      match.outcome == SupplierOutcome.noSupplier) {
+    // Re-checked: `noSupplier` reaches here only through the dialog
+    // above, which is an await the analyzer cannot see past.
+    if (!context.mounted) return;
     contactId = await _pickSupplier(context, ref, read, kind);
   }
 
@@ -221,6 +253,103 @@ Future<bool> _clearOfDuplicates(
 }
 
 /// Which supplier this is from — the one thing no scan can decide.
+/// What to do with a page that has no supplier on it. `0686`.
+enum _NotABill { expense, chooseAnyway, discard }
+
+/// Says so, rather than asking a question the paper cannot answer.
+///
+/// `0686`. A payment voucher was photographed into Bills and the screen
+/// asked "which supplier?" with an empty search box. Every part of that
+/// page was a company recording money LEAVING: its own letterhead, its
+/// own voucher book, the EPF as payee. There is no supplier, and had
+/// the reader guessed one, the letterhead would have become a contact
+/// record of the firm itself and a payable it owed to itself.
+///
+/// So the reading is shown — a person can see at a glance whether the
+/// machine read the right page — and the way out is the one the
+/// document actually wants. Recording it as an expense is offered
+/// first because for a voucher it is simply correct; choosing a
+/// supplier anyway stays, because a bill whose letterhead was
+/// unreadable is a real thing and this dialog must not become a wall.
+class _NotABillDialog extends StatelessWidget {
+  const _NotABillDialog({required this.read, required this.kind});
+
+  final OcrExtraction read;
+  final ScanContactKind kind;
+
+  /// The voucher case, named. The classifier settles the kind from what
+  /// the paper calls itself, so when it says voucher the dialog can say
+  /// something true and specific instead of the general sentence.
+  bool get _isVoucher => read.documentKind == 'payment_voucher';
+
+  @override
+  Widget build(BuildContext context) {
+    final noun = kind.one;
+    final muted = Theme.of(context).textTheme.bodySmall;
+
+    final facts = <String>[
+      if (read.documentNo != null) 'No. ${read.documentNo}',
+      if (read.documentDate != null) Fmt.date(read.documentDate!),
+      if (read.totalAmount != null) Fmt.money(read.totalAmount!),
+    ];
+
+    return AlertDialog(
+      key: const ValueKey('not-a-bill'),
+      title: Text(
+        _isVoucher
+            ? 'This is a payment voucher'
+            : "This doesn't look like a $noun bill",
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isVoucher
+                ? 'A voucher is your own record of money going out, so '
+                    'there is no $noun to owe — the only company named '
+                    'on it is usually your own.'
+                : 'The page was read, and nothing on it named a $noun.',
+          ),
+          if (facts.isNotEmpty) ...[
+            const SizedBox(height: Space.sm),
+            // What WAS read, so somebody can tell a page with no
+            // supplier from a page the reader made nothing of.
+            Text(facts.join('  ·  '), style: muted),
+          ],
+          if (read.rawText != null && facts.isEmpty) ...[
+            const SizedBox(height: Space.sm),
+            Text(
+              'Nothing else was read from it either.',
+              style: muted,
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('not-a-bill-discard'),
+          onPressed: () => Navigator.pop(context, _NotABill.discard),
+          child: const Text('Discard'),
+        ),
+        // Kept, and not buried. A bill whose letterhead was unreadable
+        // is an ordinary thing, and a dialog that only offered the
+        // expense would be a wall in front of it.
+        TextButton(
+          key: const ValueKey('not-a-bill-choose'),
+          onPressed: () => Navigator.pop(context, _NotABill.chooseAnyway),
+          child: Text('Choose a $noun anyway'),
+        ),
+        FilledButton(
+          key: const ValueKey('not-a-bill-expense'),
+          onPressed: () => Navigator.pop(context, _NotABill.expense),
+          child: const Text('Record as an expense'),
+        ),
+      ],
+    );
+  }
+}
+
 Future<String?> _pickSupplier(
   BuildContext context,
   WidgetRef ref,

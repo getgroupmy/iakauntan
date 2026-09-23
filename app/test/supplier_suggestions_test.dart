@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
+import 'package:iakauntan/src/data/ocr_repository.dart';
 import 'package:iakauntan/src/features/shared/supplier_from_scan.dart';
 
 /// The supplier a scanned bill came from, when it is not on file under
@@ -180,6 +181,55 @@ void main() {
           contact(id: '$i', name: 'Shaharudin Sunder Number $i'),
       ];
       expect(rankedLikeName(many, 'SHAHARUDIN, SUNDER', null).length, 5);
+    });
+  });
+
+  /// A finding is not the same as the absence of one. `0686`.
+  ///
+  /// A payment voucher was photographed into Bills and the screen asked
+  /// "which supplier?" with an empty search box — the same dialog
+  /// somebody gets when they press New, offering no reason and no way
+  /// forward. The page was read perfectly well; it simply has no
+  /// supplier on it, because it is the firm's own record of money going
+  /// out to the EPF.
+  ///
+  /// The trap is that both cases reach the same line as "no name", and
+  /// collapsing them is what the bug was. A scan that FAILED tells us
+  /// nothing about the paper, and announcing "this doesn't look like a
+  /// supplier bill" over a reader that broke would be a guess wearing
+  /// the clothes of a conclusion.
+  group('read and empty, or not read at all', () {
+    test('a reading with no supplier on it is a finding', () {
+      expect(
+        readingNamesNoSupplier(
+          const OcrExtraction(documentNo: '16851', totalAmount: 1320.00),
+        ),
+        isTrue,
+      );
+    });
+
+    test('and so is one whose name is only spaces', () {
+      // What a reader hands back for a field it looked for and did not
+      // find is not always null.
+      expect(
+        readingNamesNoSupplier(const OcrExtraction(supplierName: '   ')),
+        isTrue,
+      );
+    });
+
+    test('no reading at all is NOT a finding', () {
+      // The scan failed. The person has already seen that; the paper
+      // may well be a bill, and this dialog must not say otherwise.
+      expect(readingNamesNoSupplier(null), isFalse);
+    });
+
+    test('and a reading that names a supplier is neither', () {
+      expect(
+        readingNamesNoSupplier(
+          const OcrExtraction(supplierName: 'Lim Hardware Trading'),
+        ),
+        isFalse,
+      );
     });
   });
 }

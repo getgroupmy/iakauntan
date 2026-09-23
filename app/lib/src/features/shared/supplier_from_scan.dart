@@ -62,6 +62,23 @@ enum SupplierOutcome {
 
   /// Nothing decided here — the caller should ask the usual way.
   ask,
+
+  /// The page was read, and nothing on it named a supplier. `0686`.
+  ///
+  /// Not the same as [ask], and the difference is the whole of what a
+  /// payment voucher taught: [ask] means "I could not decide", and
+  /// drops into the ordinary picker, which is the right answer when
+  /// two contacts matched or the lookup failed. THIS means the document
+  /// has no supplier to find — a voucher, a statement, a page of the
+  /// company's own paper — and the ordinary picker is then a question
+  /// the document cannot answer, asked in a dialog indistinguishable
+  /// from the one somebody gets when they press New.
+  ///
+  /// Only where there IS a reading. A scan that failed leaves this
+  /// unknown: the paper may well be a bill and the reader simply broke,
+  /// and saying "this doesn't look like a supplier bill" about it would
+  /// be a guess dressed as a finding.
+  noSupplier,
 }
 
 class SupplierMatch {
@@ -70,6 +87,23 @@ class SupplierMatch {
   final SupplierOutcome outcome;
   final String? contactId;
 }
+
+/// Whether the page was READ and simply has no supplier on it.
+///
+/// `0686`. The distinction this draws is the whole of the payment
+/// voucher fix, and it is easy to collapse by accident: both cases
+/// arrive here as "no name", and treating them alike is what put an
+/// empty supplier picker in front of somebody holding a voucher.
+///
+///   * A reading with no supplier name is a FINDING. The reader saw the
+///     page and there was no supplier on it — a voucher, a statement, a
+///     sheet of the company's own paper.
+///   * No reading at all is the ABSENCE of a finding. The scan failed,
+///     the person has already been told so, and the paper may well be a
+///     bill. Saying "this doesn't look like a supplier bill" about it
+///     would be a guess wearing the clothes of a conclusion.
+bool readingNamesNoSupplier(OcrExtraction? read) =>
+    read != null && (read.supplierName?.trim().isEmpty ?? true);
 
 /// Looks the supplier up, and asks only when it has to.
 Future<SupplierMatch> resolveSupplier(
@@ -80,7 +114,13 @@ Future<SupplierMatch> resolveSupplier(
 }) async {
   final name = read?.supplierName?.trim();
   if (name == null || name.isEmpty) {
-    return const SupplierMatch(SupplierOutcome.ask);
+    // Read, and no supplier on it: the caller can say so. Not read at
+    // all: unknown, so the ordinary picker, because the person has
+    // already been told the reading failed and the paper may still be
+    // a bill. `0686`.
+    return SupplierMatch(readingNamesNoSupplier(read)
+        ? SupplierOutcome.noSupplier
+        : SupplierOutcome.ask);
   }
 
   final repo = ref.read(repoProvider);

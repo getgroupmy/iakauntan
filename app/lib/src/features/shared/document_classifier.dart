@@ -109,6 +109,44 @@ const _marks = <String, _Marks>{
     names: ['tax invoice', 'invois cukai', 'invoice', 'invois'],
     hints: ['amount due', 'jumlah perlu dibayar', 'payment due', 'terms',
             'bil'],
+    // No `against` for a payment voucher, though `0686` first wrote
+    // one. A mutation sweep proved it dead: every voucher name is
+    // longer than every bill name -- 'payment voucher' is fifteen
+    // characters and 'tax invoice' is eleven -- so the longer-phrase
+    // rule already settles a page that says both, and the extra line
+    // was the same rule written twice. The sweep could not kill it,
+    // which is what dead means here.
+  ),
+  // `0686`. A company's own record of money going out, from its own
+  // voucher book. The names are unambiguous -- nothing else in an
+  // office says PAYMENT VOUCHER at the top -- and the hints are the
+  // printed skeleton of the book rather than anything about the
+  // payment: the authorisation trail down the right-hand side and the
+  // blanks that get filled in by hand.
+  //
+  // It matters that this is separate from `bill`. A voucher scanned as
+  // a bill asks whose bill it is, and the only company name on the page
+  // is the firm's own -- so the honest answers are a contact record of
+  // itself and a payable it owes to itself.
+  'payment_voucher': _Marks(
+    names: [
+      'payment voucher', 'baucar bayaran', 'baucar pembayaran',
+      'cash voucher', 'baucar tunai',
+    ],
+    hints: [
+      'being payment of', 'a/c debited', 'file ref', 'prepared by',
+      'approved by', 'received by', 'disediakan oleh', 'diluluskan oleh',
+      'diterima oleh',
+    ],
+    // What a voucher records is a payment already made. A page that
+    // asks to BE paid is somebody else's document, whatever else it
+    // says.
+    //
+    // `tax invoice` is deliberately NOT here, though the first version
+    // had it. A voucher quotes the invoice it is paying -- that is the
+    // ordinary case, not the exception -- and excluding it would have
+    // sent the very document this was written for back to Bills.
+    against: ['amount due', 'jumlah perlu dibayar'],
   ),
   'receipt': _Marks(
     names: ['official receipt', 'resit rasmi', 'receipt', 'resit'],

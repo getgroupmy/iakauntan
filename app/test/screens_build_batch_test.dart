@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,8 @@ import 'package:iakauntan/src/features/settings/email_screen.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 import 'package:iakauntan/src/features/reports/cash_forecast_screen.dart';
 import 'package:iakauntan/src/features/landing/no_access_screen.dart';
+import 'package:iakauntan/src/data/ocr_repository.dart';
+import 'package:iakauntan/src/features/shared/receipt_capture.dart';
 import 'package:iakauntan/src/features/ledger/recurring_screen.dart';
 import 'package:iakauntan/src/data/my_profile_repository.dart';
 import 'package:iakauntan/src/features/pos/delivery_setup_screen.dart';
@@ -221,6 +224,57 @@ void main() {
         ]),
       );
       expect(find.textContaining('Parking at the client'), findsOneWidget);
+    });
+
+    /// The expense form, opened on a capture made somewhere else.
+    ///
+    /// `0686`. A payment voucher photographed into Bills has no
+    /// supplier on it — the only company named is the firm's own — so
+    /// Bills offers to record it as an expense instead, on the capture
+    /// already taken. `showExpenseFromScan` is that door, and nothing
+    /// opened it, so nothing knew it built.
+    testWidgets('opens on a capture that was made on another screen',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const ExpensesScreen(), [
+          expensesProvider.overrideWith((ref) async => []),
+          canPostProvider.overrideWithValue(true),
+          // The form reads six lists off the company. Each is stubbed
+          // empty rather than left to throw OrgNotReady — which is what
+          // it does in a test, because no organization was ever
+          // resolved.
+          accountsProvider.overrideWith((ref) async => <Account>[]),
+          bankAccountsProvider.overrideWith((ref) async => []),
+          paymentModesProvider.overrideWith((ref) async => []),
+          projectsProvider.overrideWith((ref) async => []),
+          departmentsProvider.overrideWith((ref) async => []),
+          taxCodesProvider.overrideWith((ref) async => []),
+        ]),
+      );
+
+      final context = tester.element(find.byType(ExpensesScreen));
+      // The reading off the voucher: no supplier, but a number, a date
+      // and an amount — which is exactly what an expense wants.
+      unawaited(showExpenseFromScan(
+        context,
+        StagedReceipt(
+          attachmentId: 'att-1',
+          placeholderId: 'ph-1',
+          read: OcrExtraction(
+            documentNo: '16851',
+            documentDate: DateTime(2026, 1, 22),
+            totalAmount: 1320.00,
+            documentKind: 'payment_voucher',
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Built, and carrying what the paper said. A dialog that opened
+      // empty would satisfy "it builds" and be useless.
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('1320.00'), findsWidgets);
     });
   });
 
