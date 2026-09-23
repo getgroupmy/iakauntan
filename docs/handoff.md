@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the matter picker, on the journal first |
+| Head at time of writing | a bank account on the chart, and nowhere else |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0688` is the highest. CI applies on green — see below |
+| Migrations | `0689` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 357 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,762 Flutter tests**, 34 deno tests |
-| API description | 784 functions, 366 tables, version `0688` |
+| Gates | 358 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,770 Flutter tests**, 34 deno tests |
+| API description | 785 functions, 366 tables, version `0689` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -834,6 +834,66 @@ The bill editor, the expense form and the bank reconciliation. The
 journal was taken first because it already had two dimensions to sit
 beside, so the pattern is now established rather than invented three
 more times.
+
+## A bank account on the chart, and nowhere else
+
+`0689`, from a feedback report — GESWANT & CO, 23/09/2026, "BANK
+ACCOUNT NOT SHOWING": they added a sub-account under Bank on the chart
+of accounts and went looking for it in the bank dropdown on a customer
+collection.
+
+**Nothing was broken, which is why it needed fixing.** `bankAccounts()`
+filters on `is_active` and nothing else; `bankPickerOptions` filters
+nothing at all. No filter hid it — it was never a bank account. A bank
+account here is TWO records: an `accounts` row where the money sits and
+a `bank_accounts` row that pickers list. `upsert_bank_account` makes
+both; the chart screen makes only the first.
+
+`public.unregistered_bank_accounts(org)` answers one question — which
+accounts money can sit in that no bank account points at — and
+`NewBankAccountDialog` offers them. `upsert_bank_account` has taken
+`p_account_id` since `0529` and already refuses a group or a non-bank
+account, so **nothing new is permitted**; what was missing was the
+offer.
+
+### Why it offers rather than decides
+
+A `bank_accounts` row carries the bank, the number, the kind, and
+whether it is a **client account** — which for a solicitor is a
+statutory distinction, not a label. Creating one automatically means
+inventing all four, and an account silently created as an ordinary
+current account in a law firm's chart is the mistake the Solicitors'
+Accounts Rules exist to prevent. Nor is everything under the bank
+heading a bank account: a petty cash tin reconciles against no
+statement.
+
+### Registered is registered, switched off or not
+
+The test is whether ANY `bank_accounts` row points at the account,
+including a deactivated one. Testing `is_active` instead would offer a
+switched-off account back, and registering it again puts **two bank
+accounts against one ledger account** — the same money in two pickers
+and a reconciliation that can be run twice. Asserted directly.
+
+### Two things the tests caught
+
+**A 38-pixel overflow.** The dialog's content was already near the
+height a phone gives it and had no scroll view; the new section pushed
+it over. Flutter reports that as a test failure and a release build
+simply CLIPS — taking the Save button with it. Now scrollable.
+
+**And the mutant that mattered.** Dropping `accountId` on the way to the
+save survived the first sweep, because nothing pressed Save. Without it,
+pressing Register opens a **second** chart account beside the one being
+adopted — a worse outcome than the reported bug, since the original was
+a missing entry and this would be a duplicated one.
+
+### The report itself is not replied to
+
+The Supabase project is unreachable from this container (403 at the
+egress proxy), so `set_feedback_status` cannot be called from here. The
+reply text and the recommended status (**planned**, not done) were given
+to the user to press in the console.
 
 ## This session's commits
 

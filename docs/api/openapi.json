@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0688",
+    "version": "0689",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -72855,6 +72855,109 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/unregistered_bank_accounts": {
+      "post": {
+        "operationId": "unregistered_bank_accounts",
+        "summary": "Chart accounts money can sit in that no bank account points at -- the ones somebody added under Bank on the\u2026",
+        "description": "Chart accounts money can sit in that no bank account points at -- the ones somebody added under Bank on the chart and then went looking for in a bank dropdown. Answers the question; decides nothing. Registering one is `upsert_bank_account` with its `p_account_id`, which has accepted an existing account since 0529. A deactivated bank account still counts as registered, because offering it again would make a second bank account against one ledger account. 0689.\n\n`public.unregistered_bank_accounts(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "account_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "account_subtype": {
+                        "type": "string",
+                        "enum": [
+                          "current_asset",
+                          "bank",
+                          "cash",
+                          "accounts_receivable",
+                          "inventory",
+                          "fixed_asset",
+                          "accumulated_depreciation",
+                          "other_asset",
+                          "current_liability",
+                          "accounts_payable",
+                          "tax_payable",
+                          "long_term_liability",
+                          "other_liability",
+                          "share_capital",
+                          "retained_earnings",
+                          "reserves",
+                          "drawings",
+                          "sales",
+                          "other_income",
+                          "cost_of_sales",
+                          "operating_expense",
+                          "payroll_expense",
+                          "depreciation_expense",
+                          "finance_cost",
+                          "tax_expense",
+                          "other_expense"
+                        ]
+                      },
+                      "balance": {
+                        "type": "number"
+                      }
+                    }
+                  }
                 }
               }
             }

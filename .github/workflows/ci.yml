@@ -861,6 +861,7 @@ jobs:
                    supabase/tests/scan_corrections.sql \
                    supabase/tests/reader_failures.sql \
                    supabase/tests/matter_trial_balance.sql \
+                   supabase/tests/unregistered_bank_accounts.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

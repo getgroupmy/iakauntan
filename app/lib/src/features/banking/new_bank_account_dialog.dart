@@ -66,6 +66,17 @@ class _NewBankAccountDialogState
   bool _saving = false;
   String? _error;
 
+  /// The chart account this is being registered against, when somebody
+  /// picked one off the list below. `0689`.
+  ///
+  /// Null means the ordinary path: `upsert_bank_account` opens an
+  /// account in the bank range and numbers it. Set means the account
+  /// already exists and is being adopted, which is what the report
+  /// this came from needed — a sub-account added on the chart and then
+  /// looked for in a bank dropdown.
+  String? _accountId;
+  String? _accountCode;
+
   @override
   void initState() {
     super.initState();
@@ -85,23 +96,49 @@ class _NewBankAccountDialogState
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('New bank account'),
+      // SCROLLABLE, since `0689`. The form was already close to the
+      // height a dialog gets on a phone, and the section offering the
+      // accounts already on the chart pushed it 38 pixels over — which
+      // Flutter reports as a test failure and a release build simply
+      // CLIPS, taking the Save button with it.
+      //
+      // An `AlertDialog`'s content is not a scroll view of its own, so
+      // this is not a viewport nested inside one.
       content: SizedBox(
         width: 460,
-        child: Form(
+        child: SingleChildScrollView(
+          child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Not on file yet. Fill this in and it will be used. An '
-                'account on the chart is opened for it automatically, in '
-                'the bank range. Petty cash and e-wallets belong here '
-                'too — set the kind below and leave the bank and number '
-                'empty.',
+                _accountId == null
+                    ? 'Not on file yet. Fill this in and it will be used. '
+                        'An account on the chart is opened for it '
+                        'automatically, in the bank range. Petty cash and '
+                        'e-wallets belong here too — set the kind below '
+                        'and leave the bank and number empty.'
+                    : 'Registering $_accountCode, which is already on '
+                        'your chart. No new chart account is opened, and '
+                        'whatever is already posted to it stays where it '
+                        'is.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
+              _AlreadyOnTheChart(
+                chosen: _accountId,
+                onChoose: (id, code, name) => setState(() {
+                  _accountId = id;
+                  _accountCode = code;
+                  if (_name.text.trim().isEmpty) _name.text = name;
+                }),
+                onClear: () => setState(() {
+                  _accountId = null;
+                  _accountCode = null;
+                }),
+              ),
               TextFormField(
                 controller: _name,
                 autofocus: widget.seedName == null,
@@ -180,6 +217,7 @@ class _NewBankAccountDialogState
             ],
           ),
         ),
+        ),
       ),
       actions: [
         TextButton(
@@ -213,11 +251,18 @@ class _NewBankAccountDialogState
         accountNumber: _blank(_number),
         accountType: _type,
         currency: _currency.text.trim().toUpperCase(),
+        // Null on the ordinary path, which is what makes
+        // `upsert_bank_account` open one. `0689`.
+        accountId: _accountId,
       );
       // Every bank picker reads this, and the chart gained an account,
       // so both lists are re-read.
       ref.invalidate(bankAccountsProvider);
       ref.invalidate(accountsProvider);
+      // One fewer waiting to be registered, whichever path was taken —
+      // the ordinary one opens a chart account that is immediately
+      // registered, so it must not appear on the list either.
+      ref.invalidate(unregisteredBankAccountsProvider);
       if (mounted) Navigator.pop(context, id);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -235,3 +280,90 @@ Future<String?> createBankAccountFromPicker(
   context: context,
   builder: (_) => NewBankAccountDialog(seedName: typed),
 );
+
+/// The accounts somebody already added on the chart, offered here.
+///
+/// `0689`. This is the whole of the fix for a report that read "BANK
+/// ACCOUNT NOT SHOWING": a bank account in this product is two records,
+/// the chart of accounts screen makes one of them, and until now
+/// nothing anywhere connected the two. Somebody adds a sub-account
+/// under Bank, goes to record a collection, and the dropdown does not
+/// mention it — correctly, and with no way to find out why.
+///
+/// It OFFERS rather than decides. A `bank_accounts` row carries things
+/// a chart account knows nothing about — the bank, the number, whether
+/// it is a current account or a credit card, whether it is a CLIENT
+/// account, which for a solicitor is a statutory distinction and not a
+/// label. Creating one automatically would mean inventing those, and an
+/// account silently created as an ordinary current account in a law
+/// firm's chart is the mistake the Solicitors' Accounts Rules exist to
+/// prevent.
+///
+/// Draws nothing when there is nothing waiting, which is the ordinary
+/// case and should not cost a heading.
+class _AlreadyOnTheChart extends ConsumerWidget {
+  const _AlreadyOnTheChart({
+    required this.chosen,
+    required this.onChoose,
+    required this.onClear,
+  });
+
+  final String? chosen;
+  final void Function(String id, String code, String name) onChoose;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // One chosen already: the sentence above says which, and a list
+    // offering the rest would invite changing it mid-form.
+    if (chosen != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          key: const ValueKey('chart-account-clear'),
+          onPressed: onClear,
+          child: const Text('Open a new chart account instead'),
+        ),
+      );
+    }
+
+    // `valueOrNull`, not `.value`. An error here is a list that could
+    // not be read, and this section is an OFFER -- the form underneath
+    // works perfectly well without it, so a failed read should draw
+    // nothing rather than throw into a dialog somebody is typing in.
+    final waiting =
+        ref.watch(unregisteredBankAccountsProvider).valueOrNull ?? const [];
+    if (waiting.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Already on your chart',
+            style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          'These can hold money but no bank account points at them yet, '
+          'so nothing lists them. Register one instead of opening '
+          'another.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 4),
+        for (final a in waiting)
+          ListTile(
+            key: ValueKey('chart-account-${a['code']}'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text('${a['code']} — ${a['name']}'),
+            trailing: TextButton(
+              onPressed: () => onChoose(
+                '${a['account_id']}',
+                '${a['code']}',
+                '${a['name']}',
+              ),
+              child: const Text('Register'),
+            ),
+          ),
+        const Divider(height: 24),
+      ],
+    );
+  }
+}

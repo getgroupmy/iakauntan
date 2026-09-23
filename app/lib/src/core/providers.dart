@@ -501,6 +501,16 @@ final bankAccountsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).bankAccounts();
 });
 
+/// Chart accounts that look like bank accounts and are registered as
+/// none. `0689`.
+///
+/// autoDispose, unlike the list above: this is read by one dialog while
+/// it is open, and it changes the moment somebody registers one.
+final unregisteredBankAccountsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).unregisteredBankAccounts(),
+);
+
 /// The feed on one bank account, or null where there is none.
 ///
 /// `0567`. Never the credential: `bank_feed_status` answers with

@@ -4867,6 +4867,17 @@ class Repo {
   /// GL account the ledger posts to. The function makes the GL account
   /// itself unless one is named, so a company with three banks gets
   /// three lines on its balance sheet rather than one.
+  /// Chart accounts money can sit in that no bank account points at.
+  ///
+  /// `0689`, from a report: somebody added a sub-account under Bank on
+  /// the chart and went looking for it in a bank dropdown. A bank
+  /// account here is TWO records and the chart screen makes one of
+  /// them, so the account existed and the picker was right not to list
+  /// it. This is the list that offers to finish the job.
+  Future<List<Map<String, dynamic>>> unregisteredBankAccounts() async =>
+      _rows(await callRpc('unregistered_bank_accounts',
+          params: {'p_org_id': orgId}));
+
   Future<String> upsertBankAccount({
     required String name,
     String? bankName,
