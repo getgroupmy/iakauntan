@@ -53,6 +53,7 @@ import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { poolProblem } from "./pool.ts";
+import { ReaderRefusal, withOneRetry } from "./retry.ts";
 import {
   type ScanTarget,
   requiredWith,
@@ -384,10 +385,11 @@ async function readClaude(
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(
+    throw new ReaderRefusal(
       `Claude refused the document: ${
         body?.error?.message ?? `HTTP ${response.status}`
       }`,
+      response.status,
     );
   }
   // A safety decline is a 200 with no usable content, so the stop
@@ -483,10 +485,11 @@ async function readOpenAiShaped(
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(
+    throw new ReaderRefusal(
       `The reader refused the document: ${
         body?.error?.message ?? `HTTP ${response.status}`
       }`,
+      response.status,
     );
   }
 
@@ -596,9 +599,10 @@ async function readSelfHosted(
 
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 300);
-    throw new Error(
+    throw new ReaderRefusal(
       `The reader at ${new URL(endpoint).host} answered ${res.status}. ` +
         (detail || "It sent no explanation."),
+      res.status,
     );
   }
 
@@ -792,10 +796,11 @@ async function readGoogle(
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(
+    throw new ReaderRefusal(
       `Document AI refused the document: ${
         body?.error?.message ?? `HTTP ${response.status}`
       }`,
+      response.status,
     );
   }
 
@@ -1302,19 +1307,42 @@ serveFunction("ocr.failed", async (req: Request) => {
     // Configuration rather than a secret -- `scan_extraction_targets`
     // is granted to `authenticated` too -- but asking for it twice on
     // a fallback would be a second round trip to learn the same thing.
-    const extraction = await runReader(
-      begin,
-      credential,
-      bytes,
-      mime,
-      targets,
+    //
+    // Asked twice where the reader said "not now". A 503 is a model at
+    // capacity and the same request a second later usually works;
+    // before this, an overloaded vendor and an unreadable file were
+    // written off identically. `retry.ts` has which statuses count.
+    //
+    // Inside the same invocation, so `ocr_begin` has already taken the
+    // charge once and a second attempt cannot take another.
+    // Collected rather than assigned: a `let` written only inside a
+    // callback narrows to `never` here, and the compiler is right that
+    // it cannot see the write.
+    const blips: ReaderRefusal[] = [];
+    const extraction = await withOneRetry(
+      () => runReader(begin, credential, bytes as Uint8Array, mime, targets),
+      { onRetry: (failure) => blips.push(failure) },
     );
+    const firstFailure = blips.length > 0 ? blips[0] : null;
 
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
       p_status: "ok",
       p_extracted: extraction,
-      p_error: null,
+      // Kept ON the successful row, the way a rescued scan keeps the
+      // reader that failed it. A blip nobody saw is still a vendor
+      // having a bad afternoon, and this row is the only place that
+      // would record it -- the day the retry stops being enough is the
+      // day somebody wants to know how long it had been shaky.
+      //
+      // The KEY is not blamed for it. `note_ocr_key_error` is about a
+      // refusal the key caused, and a model at capacity is not the
+      // key's doing; noting it would walk a pool towards standing keys
+      // down over somebody else's outage.
+      p_error: firstFailure === null
+        ? null
+        : `${begin.provider_name} answered ${firstFailure.status} and ` +
+          `was asked again: ${firstFailure.message}`,
     });
     if (error) console.error("could not settle scan", begin.scan_id, error);
 

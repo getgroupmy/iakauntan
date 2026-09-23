@@ -1669,6 +1669,21 @@ jobs:
       - run: deno check supabase/functions/ocr/targets_test.ts
       - run: deno test supabase/functions/ocr/targets_test.ts
 
+      # From a report: a scan came back "the reader refused the
+      # document: HTTP 503" -- a model at capacity, nothing to do with
+      # the document -- and was written off and refunded, because
+      # nothing in the scan path retried anything. An overloaded vendor
+      # and an unreadable file were handled identically.
+      #
+      # The line these draw is the whole of the fix: ask again about
+      # what will be different a second later, and nothing else. A 400
+      # is a malformed schema and a 401 is a dead key, and both will be
+      # just as true on a second call -- so retrying them spends a
+      # second to be told the same thing, and on a 429 it is one more
+      # request against the limit that is already the problem.
+      - run: deno check supabase/functions/ocr/retry_test.ts
+      - run: deno test supabase/functions/ocr/retry_test.ts
+
       # Reading an e-mail well enough to file what was in it.
       #
       # `0354`'s reason for existing: the router dropped every MIME part

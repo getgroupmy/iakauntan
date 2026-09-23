@@ -25,6 +25,9 @@
 --     back to the storage object.
 --   * ONE COMPANY'S PAPER ONLY. The inbox takes an org id and the
 --     function is SECURITY DEFINER, so RLS is not doing this.
+--   * THE REFERENCE REACHES THE SCREEN. `0680` mints one for a failed
+--     scan and tells the person to quote it; until `0695` it was on
+--     the row and nowhere a person could read it.
 --   * AND THE GUARD IS WHAT REFUSES, not the check constraint behind
 --     it. Both raise `23514`, so asserting the code alone passes with
 --     the guard gone -- a mutant proved exactly that.
@@ -255,6 +258,36 @@ begin
   select count(*) into v_n from public.scan_inbox(v_org, 100, 'posted');
   if v_n <> 2 then
     raise exception '% scans read as posted, wanted 2', v_n;
+  end if;
+
+  -- -----------------------------------------------------------------
+  -- 7. The reference a failed scan was given
+  --
+  -- `0680` mints it, writes it on the row, and tells the person to
+  -- quote it. `0695` is it reaching the screen: until then the one
+  -- identifier the arrangement exists to hand over was readable only
+  -- by somebody with SQL, which is the trip `0680` was written to
+  -- save.
+  -- -----------------------------------------------------------------
+  insert into public.ocr_scans
+    (org_id, storage_path, provider, key_source, status, error, log_ref)
+  values (v_org, v_org || '/expenses/x/broken.jpg', 'gemini', 'platform',
+          'failed', 'The reader refused the document: HTTP 503',
+          'ocr.failed-7f3a')
+  returning id into v_scan;
+
+  select log_ref into v_label from public.scan_inbox(v_org)
+   where scan_id = v_scan;
+  if v_label is distinct from 'ocr.failed-7f3a' then
+    raise exception 'the inbox gave the reference as %', v_label;
+  end if;
+
+  -- And a scan that did not fail has none, rather than an empty string
+  -- somebody would try to quote.
+  select log_ref into v_label from public.scan_inbox(v_org)
+   where attachment_id = v_att2;
+  if v_label is not null then
+    raise exception 'a scan that worked carries the reference %', v_label;
   end if;
 
   -- The file name, because that is what the list shows first and it

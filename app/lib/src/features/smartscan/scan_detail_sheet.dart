@@ -59,6 +59,15 @@ class _ScanDetailSheet extends ConsumerWidget {
 
           _WhatItBecame(entry: entry),
 
+          // `0680` mints this when a scan fails and tells the person to
+          // quote it. Shown only where there is one, and only on a
+          // failure — a reference beside a scan that worked is an
+          // identifier somebody would quote about nothing.
+          if ((entry.logRef ?? '').isNotEmpty) ...[
+            const SizedBox(height: Space.sm),
+            _LogReference(reference: entry.logRef!),
+          ],
+
           if (entry.hasImage) ...[
             const SizedBox(height: Space.md),
             OutlinedButton.icon(
@@ -199,6 +208,52 @@ class _WhatItBecame extends StatelessWidget {
             ? null
             : Text('Taken to be a ${entry.kindLabel!.toLowerCase()}'),
       ),
+    );
+  }
+}
+
+/// The reference to quote when asking what went wrong.
+///
+/// Selectable, which is the entire point: it exists to be copied into a
+/// message to somebody who can look it up, and a code you have to
+/// retype off a screen is a code that arrives with a digit wrong.
+class _LogReference extends StatelessWidget {
+  const _LogReference({required this.reference});
+
+  final String reference;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.tag,
+          size: 16,
+          color: theme.textTheme.bodySmall?.color,
+        ),
+        const SizedBox(width: Space.sm),
+        Expanded(
+          child: SelectableText.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: 'Quote this if you ask about it: ',
+                  style: theme.textTheme.bodySmall,
+                ),
+                TextSpan(
+                  text: reference,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

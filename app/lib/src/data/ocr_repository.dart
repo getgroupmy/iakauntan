@@ -1391,6 +1391,7 @@ class ScanInboxEntry {
     this.provider,
     this.status,
     this.error,
+    this.logRef,
     this.documentKind,
     this.kindLabel,
     this.target,
@@ -1417,6 +1418,13 @@ class ScanInboxEntry {
   final String? provider;
   final String? status;
   final String? error;
+
+  /// The reference `0680` mints when a scan fails, and tells the person
+  /// to quote. Null on a scan that did not fail — an empty one would be
+  /// something somebody tries to quote. `0695` is this reaching a
+  /// screen: until then it was on the row, in the logs, and nowhere a
+  /// person could read it.
+  final String? logRef;
   final String? documentKind;
   final String? kindLabel;
   final String? target;
@@ -1444,6 +1452,7 @@ class ScanInboxEntry {
         provider: j['provider']?.toString(),
         status: j['status']?.toString(),
         error: j['error']?.toString(),
+        logRef: j['log_ref']?.toString(),
         documentKind: j['document_kind']?.toString(),
         kindLabel: j['kind_label']?.toString(),
         target: j['target']?.toString(),

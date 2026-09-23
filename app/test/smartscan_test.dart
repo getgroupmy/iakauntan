@@ -406,6 +406,70 @@ void main() {
       expect(find.text('Nothing scanned yet'), findsOneWidget);
     });
 
+    ScanInboxEntry failed() => ScanInboxEntry(
+          scanId: 's-2',
+          scannedAt: DateTime(2026, 9, 23),
+          attachmentId: 'att-2',
+          fileName: '1790159599336-IMG_6156.jpeg',
+          storagePath: 'org/expenses/p-1/IMG_6156.jpeg',
+          provider: 'gemini',
+          status: 'failed',
+          error: 'The reader refused the document: HTTP 503',
+          logRef: 'ocr.failed-7f3a',
+        );
+
+    // `0680` mints this and tells the person to quote it; `0694` built
+    // the screen they would quote it from and did not show it. So the
+    // one identifier the whole arrangement exists to hand over was on
+    // the row, in the logs, and nowhere a person could read it.
+    testWidgets('a failed scan shows the reference to quote', (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const SmartScanScreen(), [
+          canWriteProvider.overrideWithValue(true),
+          scanInboxProvider.overrideWith((ref, only) async => [failed()]),
+          scanReadingProvider.overrideWith((ref, id) async => null),
+          offeredScanKindsProvider.overrideWith((ref) async => <ScanKind>[]),
+        ]),
+      );
+
+      unawaited(showScanDetail(
+        tester.element(find.byType(SmartScanScreen)),
+        failed(),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('ocr.failed-7f3a'), findsOneWidget);
+      // And the reason, which is the other half of what somebody needs
+      // before they ask anybody anything. `findsWidgets`, not
+      // `findsOneWidget`: the row behind the sheet carries it too, and
+      // it should — the list is where somebody notices, the sheet is
+      // where they read it.
+      expect(find.textContaining('HTTP 503'), findsWidgets);
+    });
+
+    testWidgets('and a scan that worked shows none', (tester) async {
+      // A reference beside a scan that worked is an identifier somebody
+      // would quote about nothing.
+      await onAPhone(
+        tester,
+        wrap(const SmartScanScreen(), [
+          canWriteProvider.overrideWithValue(true),
+          scanInboxProvider.overrideWith((ref, only) async => [filed()]),
+          scanReadingProvider.overrideWith((ref, id) async => read()),
+          offeredScanKindsProvider.overrideWith((ref) async => <ScanKind>[]),
+        ]),
+      );
+
+      unawaited(showScanDetail(
+        tester.element(find.byType(SmartScanScreen)),
+        filed(),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Quote this'), findsNothing);
+    });
+
     testWidgets('the detail sheet opens on a scan', (tester) async {
       await onAPhone(
         tester,
