@@ -32,7 +32,7 @@
  * instead, which changes `iat` and is the real mechanism anyway.
  */
 import { assert, assertEquals, assertRejects, assertThrows } from
-  "jsr:@std/assert@1";
+  "jsr:@std/assert@1.0.19";
 import {
   apnsAuthorization,
   apnsFromEnv,

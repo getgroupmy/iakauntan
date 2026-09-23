@@ -56,23 +56,50 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # list is frozen, so adding a dependency -- or letting one float --
 # fails here by name rather than being noticed a year later.
 #
-# Both entries below are MAJOR RANGES rather than pins, which is a
-# finding and not an endorsement: `jsr:@supabase/supabase-js@2` resolves
-# to whatever 2.x jsr serves on the day a function is deployed, so a
-# minor release changes what runs in production with no commit in this
-# repository. `supabase/functions/_local_check/check_locally.sh` stubs
-# this package precisely because it cannot see it, which means the type
-# error a minor release introduces is found by CI at the earliest.
+# Both entries are EXACT VERSIONS, and `check_deno` refuses anything
+# else. This is the separate commit the previous version of this comment
+# said was needed; what follows is the argument, because the cost of a
+# pin is real and somebody will want to undo it.
 #
-# They are recorded as they are rather than tightened here because
-# pinning them is a change to sixteen files that has to be type-checked
-# against the real package, which is a separate commit. What this census
-# guarantees today is that the set cannot GROW, or float further,
-# without somebody saying so here.
+# A major range resolves to whatever jsr serves on the day a function is
+# deployed OR CHECKED, so a minor release changes what runs in
+# production with no commit in this repository. Two things follow, and
+# the second is what forced the issue:
+#
+#   * The type error a minor release introduces is found by CI at the
+#     earliest, because `check_locally.sh` stubs this package precisely
+#     because it cannot see it.
+#   * AND A RELEASE BREAKS THE BUILD OUTRIGHT FOR 24 HOURS. Deno refuses
+#     an npm package younger than a day -- a supply-chain guard worth
+#     having -- and supabase-js pins its own npm dependencies to its own
+#     version. So the hour Supabase publishes, every `deno check` in
+#     this repository starts failing on a package nobody here asked for.
+#     Run 2085 died that way, thirty-two seconds inside the window:
+#
+#         error: Could not find npm package '@supabase/auth-js'
+#         matching '2.117.0'. A newer matching version was found, but it
+#         was not used because it was newer than the specified minimum
+#         dependency date of 2026-09-22 12:59:34 UTC.
+#
+#     `migrate` needs the edge job, so that skipped applying the
+#     migrations and deploying the functions, while Vercel -- which does
+#     not need it -- shipped the front end anyway.
+#
+# Upgrading is now a commit: change the version here and in the eighteen
+# functions, and in the three files under `_local_check` that name it
+# (`check_locally.sh` fails loudly if they disagree). PICK A VERSION
+# WHOSE NPM DEPENDENCIES ARE MORE THAN 24 HOURS OLD, or the pin
+# reproduces the outage it exists to prevent -- 2.117.1 was published
+# the day this was written and would have done exactly that.
 DENO_CENSUS = {
-    'jsr:@supabase/supabase-js@2': 'the client every function uses',
-    'jsr:@std/assert@1': 'the assertion library, test files only',
+    'jsr:@supabase/supabase-js@2.117.0': 'the client every function uses',
+    'jsr:@std/assert@1.0.19': 'the assertion library, test files only',
 }
+
+# `1.2.3`, and nothing looser. A bare major (`2`), a minor (`2.117`), a
+# caret or a tilde all resolve at check time rather than at commit time,
+# which is the whole thing the census exists to stop.
+_EXACT = re.compile(r'^\d+\.\d+\.\d+$')
 
 # Schemes a specifier may use. `https:` is absent deliberately: remote
 # code from an arbitrary host, resolved at deploy time, is the supply
@@ -145,6 +172,14 @@ def check_deno(root: str = ROOT) -> list[str]:
                 f'{where}: imports {spec!r} with no version. It would '
                 f'resolve to whatever is published on the day it is '
                 f'deployed.')
+        elif m and m.group('version') and not _EXACT.match(m.group('version')):
+            problems.append(
+                f'{where}: imports {spec!r}, which is a RANGE and not a '
+                f'pin. It resolves at check time, so a release nobody '
+                f'here made changes what runs -- and, where it drags in '
+                f'an npm package less than a day old, fails every '
+                f'`deno check` until that package ages out. See '
+                f'DENO_CENSUS for how to move the pin.')
         if spec not in DENO_CENSUS:
             problems.append(
                 f'{where}: {spec!r} is not in DENO_CENSUS. A new '

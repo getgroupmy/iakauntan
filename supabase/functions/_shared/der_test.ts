@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assertEquals, assertThrows } from "jsr:@std/assert@1.0.19";
 import { pemToDer, readCertificate, toBase64 } from "./der.ts";
 
 /**

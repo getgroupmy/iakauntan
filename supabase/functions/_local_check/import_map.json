@@ -1,5 +1,5 @@
 {
   "imports": {
-    "jsr:@supabase/supabase-js@2": "./supabase_js_stub.ts"
+    "jsr:@supabase/supabase-js@2.117.0": "./supabase_js_stub.ts"
   }
 }

@@ -527,14 +527,30 @@ Two things it says out loud rather than counting as clean: a Dart
 package that does not come from pub.dev, and `jsr:@std/*`, which is
 published to JSR only and which no OSV ecosystem covers.
 
-What it does **not** yet do is force a pin. Both edge-function imports
-are major ranges — `jsr:@supabase/supabase-js@2` resolves to whatever
-2.x jsr serves on the day a function is deployed, so a minor release
-changes what runs in production with no commit here, and
-`_local_check` stubs that package precisely because it cannot see it.
-The census freezes the set so it cannot grow or float further; tightening
-those two to exact versions is a change to sixteen files that has to be
-type-checked against the real package, and it is its own commit.
+It **forces a pin**. Both edge-function imports are exact versions —
+`jsr:@supabase/supabase-js@2.117.0`, `jsr:@std/assert@1.0.19` — and a
+range is refused by name, so the set can neither grow nor float.
+
+That started as a supply-chain argument: a major range resolves to
+whatever jsr serves on the day a function is deployed, so a minor
+release changes what runs in production with no commit here, and
+`_local_check` stubs that package precisely because it cannot see it —
+which means a type error a minor release introduces is found by CI at
+the earliest.
+
+What forced it was the availability half. Deno refuses an npm package
+younger than 24 hours, and supabase-js pins its own npm dependencies to
+its own version, so the hour Supabase publishes, every `deno check`
+here starts failing on a package nobody in this repository asked for.
+Run 2085 died that way thirty-two seconds inside the window, and
+because `migrate` needs the edge job, it skipped applying the
+migrations and deploying the functions while Vercel — which does not
+need it — shipped the front end regardless.
+
+Moving a pin is a commit: the version here, in the eighteen functions,
+and in the three files under `_local_check` that name it, which fail
+loudly if they disagree. Pick a version whose npm dependencies are more
+than a day old, or the pin reproduces the outage it exists to prevent.
 
 `scripts/dependency_audit.py --offline` runs the pins half alone, and
 says in as many words that it checked nothing about published

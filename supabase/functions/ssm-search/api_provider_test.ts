@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import { SsmSearchClient } from "../_shared/ssm-search-client.ts";
 import { SsmError } from "./provider.ts";
 import {

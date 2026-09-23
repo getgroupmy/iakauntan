@@ -40,7 +40,7 @@
  * None of it is decided here, because a rule enforced only in
  * TypeScript is not enforced.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { verifyBillplzSignature } from "../_shared/billplz.ts";

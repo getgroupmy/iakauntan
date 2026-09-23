@@ -24,7 +24,7 @@
  *
  * Called on a schedule. See docs/exchange-rate-feed.md.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { isSchedulerCall } from "../_shared/scheduler.ts";
 

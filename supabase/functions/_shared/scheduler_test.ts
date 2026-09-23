@@ -10,7 +10,7 @@
  * all the unconfigured cases: a function deployed without a secret must
  * refuse everybody rather than match "" against a missing header.
  */
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import { isSchedulerCall } from "./scheduler.ts";
 
 const SECRET = "s3cr3t-value-from-the-dashboard";

@@ -83,7 +83,7 @@
  * directory offline with `--no-remote` against a stub for supabase-js
  * alone. It matters more now than it did with one provider, not less.
  */
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import {
   anthropicTools,

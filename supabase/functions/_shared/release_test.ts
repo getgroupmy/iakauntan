@@ -6,7 +6,7 @@
  * this company's name. Everything it takes from a browser is checked
  * against a list, and these are the assertions that say so.
  */
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.19";
 import {
   ANDROID,
   choiceOf,

@@ -36,7 +36,7 @@
  * or one company's credentials having expired, must not stop the other
  * nine filing on the last day they can.
  */
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { requireEnv } from "../_shared/env.ts";
 import {
   MyInvoisClient,

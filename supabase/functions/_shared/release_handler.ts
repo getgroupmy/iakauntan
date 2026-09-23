@@ -37,7 +37,7 @@
  *                         GitHub for the repository's OWN default
  *                         branch rather than assuming one.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json } from "./cors.ts";
 import { requireEnv } from "./env.ts";
 import {

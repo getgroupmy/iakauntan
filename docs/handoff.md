@@ -54,36 +54,53 @@ list that imports supabase-js. Deno refused the graph:
     was newer than the specified minimum dependency date of
     2026-09-22 12:59:34 UTC.
 
-Every edge function imports `jsr:@supabase/supabase-js@2` -- **a
-floating major, and there is no lockfile and no `deno.json`** -- so CI
-resolves whatever 2.x is newest at the moment it runs. That was
-`2.117.0`, whose npm dependency is pinned to `@supabase/auth-js@2.117.0`,
-and Deno's minimum-dependency-age policy refuses an npm package younger
-than 24 hours.
+Every edge function imported `jsr:@supabase/supabase-js@2` -- a
+floating major, with no lockfile and no `deno.json` -- so CI resolved
+whatever 2.x was newest at the moment it ran. That was `2.117.0`, whose
+npm dependency is pinned to `@supabase/auth-js@2.117.0`, and Deno's
+minimum-dependency-age policy refuses an npm package younger than 24
+hours.
 
 `@supabase/auth-js@2.117.0` was published at **2026-09-22T13:00:06Z**
 (checked against `registry.npmjs.org`). Run 2085 started at
 **12:59:34Z** -- **thirty-two seconds** inside the window. Run 2086
 started at 13:01:29 and passed with nothing changed.
 
-The policy is doing its job and is not the thing to weaken. The hazard
-is the floating specifier: **every Supabase release opens a 24-hour
-window in which this repository's CI fails for reasons that are not in
-the repository.** The fix is a pin or a `deno.lock`, and it was not made
-here because it changes dependency resolution across eighteen entry
-points and seventeen deno test files, which is a decision to take
-deliberately rather than as a side effect of an unrelated commit.
+**Both specifiers are now pinned** to exact versions --
+`jsr:@supabase/supabase-js@2.117.0` and `jsr:@std/assert@1.0.19` -- and
+`scripts/dependency_audit.py` refuses a range by name, proved by
+reverting one file to `@2` and watching it fail. `@std/assert` went too
+because leaving one specifier floating under a rule that forbids
+floating is not a rule.
 
-**And it is not only a nuisance.** `migrate` declares `needs: [flutter,
-database, edge, sfu]`, so a red edge job SKIPS Apply the migrations,
-Deploy the edge functions and Deploy the workspace proxy -- while
-Vercel, which does not depend on `edge`, deploys anyway. For about
-twenty minutes on 2085 the web build was serving app code that expected
-a `reads_pdf` field the database was not yet sending. It degraded
-safely, because `readsPdf` parses to null and `pdfBlock` treats null as
-"nobody has said" -- but that was luck in the design rather than
-something the pipeline guarantees, and it is the shape to watch for
-whenever the front end lands before the schema.
+**Moving a pin is a commit, and there is one way to get it wrong.**
+Change the version in `DENO_CENSUS`, in the eighteen functions, and in
+the three files under `_local_check` that name it
+(`check_locally.sh` fails loudly if they disagree) -- and **pick a
+version whose npm dependencies are more than 24 hours old**, or the pin
+reproduces the outage it exists to prevent. `2.117.1` was published the
+day this was written and would have done exactly that.
+
+Verified here rather than left to CI, which is what the old census
+comment said this commit owed: a real `deno check` of all eighteen
+entry points against the REAL package -- not the `_local_check` stub --
+plus the 35 deno tests on the pinned `@std/assert`.
+
+### A red edge job ships the front end without the schema
+
+The part of run 2085 that is more than a nuisance, and it is not fixed.
+
+`migrate` declares `needs: [flutter, database, edge, sfu]`, so a red
+edge job SKIPS Apply the migrations, Deploy the edge functions and
+Deploy the workspace proxy -- while **Build and deploy to Vercel, which
+does not depend on `edge`, deploys anyway**. For about twenty minutes
+the web build was serving app code that expected a `reads_pdf` field
+the database was not yet sending.
+
+It degraded safely, because `readsPdf` parses to null and `pdfBlock`
+treats null as "nobody has said". That was the design being lucky
+rather than the pipeline being safe, and it is the shape to watch for
+whenever the front end can land before the schema.
 
 ### The Android job's JDK, and why its retry did nothing
 

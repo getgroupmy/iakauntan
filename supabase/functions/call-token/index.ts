@@ -34,7 +34,7 @@
  * `docs/call-signalling.md`. mediasoup is a library, not a server, so
  * that document is the contract rather than a description of one.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
 

@@ -1,5 +1,5 @@
 /**
- * `jsr:@std/assert@1`, for the test files that import it.
+ * `jsr:@std/assert`, for the test files that import it.
  *
  * Only the assertions this repository uses, and each with the real
  * arity — the point of the fallback is to catch an argument of the

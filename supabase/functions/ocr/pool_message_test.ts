@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.19";
 import { poolProblem } from "./pool.ts";
 
 // A pool with nothing to give looks the same from the scan's side —

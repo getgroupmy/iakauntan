@@ -30,7 +30,7 @@
  *   MAIL_FROM        the verified sender, e.g. "billing@iakauntan.com"
  *   SCHEDULER_SECRET any random string, shared with the workflow
  */
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { isSchedulerCall } from "../_shared/scheduler.ts";
 

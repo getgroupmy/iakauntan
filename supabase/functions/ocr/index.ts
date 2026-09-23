@@ -49,7 +49,7 @@
  * `OCR_ANTHROPIC_API_KEY` from before the catalog existed is still read
  * as a fallback for Claude.
  */
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { poolProblem } from "./pool.ts";
