@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0702",
+    "version": "0703",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -42868,8 +42868,8 @@
     "/rpc/ocr_record_local": {
       "post": {
         "operationId": "ocr_record_local",
-        "summary": "Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is\u2026",
-        "description": "Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is `device` and `amount_charged` is zero. The row is written either way -- pass `p_error` and it is filed as failed -- so the history of what was read is complete even where no money moved. The mirror of `ocr_begin`: this one refuses when the company's reader does NOT run on the device, so a server-side reader cannot be billed as a free local one. Needs `can_write`.\n\n`public.ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` Writes. Requires a signed-in user.",
+        "summary": "Records a reading that happened in the app: no key, no charge, and the file never left the machine",
+        "description": "Records a reading that happened in the app: no key, no charge, and the file never left the machine. The row names the DEVICE reader, not the company's setting, because a company on a server reader may read one document here -- \"Read it with \u2192 Local Read\", or the app falling back when its reader will not answer. Needs can_write, the module, and scanning switched on. 0112, 0113, 0682, 0699, 0703.\n\n`public.ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

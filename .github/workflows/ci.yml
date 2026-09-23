@@ -911,6 +911,7 @@ jobs:
                    supabase/tests/scan_inbox.sql \
                    supabase/tests/reader_reads_pdf.sql \
                    supabase/tests/ocr_rescan.sql \
+                   supabase/tests/local_rescue.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

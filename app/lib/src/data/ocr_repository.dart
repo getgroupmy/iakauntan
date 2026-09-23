@@ -705,7 +705,10 @@ extension RepoOcr on Repo {
       //
       // with the sentence somebody could act on buried inside a Dart
       // toString. The body is the same shape either way.
-      throw OcrException(_functionError(e));
+      // The status as well as the sentence. `0703`: whether this is
+      // worth re-reading on the device is a question about the CODE,
+      // and until now the code was thrown away here.
+      throw OcrException(_functionError(e), status: e.status);
     }
     final data = res.data;
     if (data is Map && data['error'] != null) {
@@ -950,9 +953,23 @@ String _functionError(FunctionException e) {
 /// A scan that did not happen, with the reason the database or the
 /// provider gave. Nothing was charged.
 class OcrException implements Exception {
-  OcrException(this.message);
+  OcrException(this.message, {this.status});
 
   final String message;
+
+  /// The HTTP status the edge function answered with, where there was
+  /// one.
+  ///
+  /// Carried since `0703`, because "read it here instead" has to be
+  /// decided on a CODE. The message is the sentence a person reads and
+  /// it gets reworded; a caller that decided by looking for "busy" in
+  /// it would stop falling back the day somebody improved the wording,
+  /// silently, and the only symptom would be scans failing that used
+  /// to be rescued.
+  ///
+  /// Null where nothing answered with a status at all — a refusal the
+  /// function returned in a 200 body, or one raised in the app.
+  final int? status;
 
   @override
   String toString() => message;

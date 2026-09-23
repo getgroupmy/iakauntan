@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0702` (the highest applied migration).
+Schema version `0703` (the highest applied migration).
 787 functions and 366 readable tables, of which
 306 functions only read.
 
@@ -643,7 +643,7 @@ Not gated on any module.
 - `ocr_key_pool_size(p_provider text, p_org_id uuid)` — How many keys a reader's pool holds, and how many of them could run right now.
 - `ocr_keys_for(p_provider text, p_org_id uuid)` — A pool as the console sees it: everything about each key except the key.
 - `ocr_note_correction(p_org_id uuid, p_attachment_id uuid, p_accepted jsonb)` *(writes)* — Records that a person accepted the most recent scan of an attachment, and what they changed on the way.
-- `ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` *(writes)* — Records a scan that was read ON THE DEVICE and charges nothing, because it cost nothing: `key_source` is `device` and `amount_charged` is zero.
+- `ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` *(writes)* — Records a reading that happened in the app: no key, no charge, and the file never left the machine.
 - `ocr_status(p_org_id uuid)`
 - `open_appraisal_cycle(p_cycle uuid)` *(writes)* — Creates an appraisal for everybody the cycle covers and returns how many were made.
 - `open_customer_portal(p_token text)` *(writes)* — What one customer owes, for somebody holding their portal token and no account.

@@ -377,15 +377,22 @@ begin
     raise notice 'ok   the server will not start an on-device scan';
   end;
 
-  -- The reverse: the local log refuses a reading the organization did
-  -- not choose to make locally.
+  -- The reverse USED to be refused: a company on a server reader could
+  -- not file a reading made on the device. `0703` allows it, because
+  -- `0700` made reading here a per-document choice and the refusal was
+  -- landing after the file had already been read. What the row must
+  -- never say is that the server reader read it -- the money guard is
+  -- that a device reading is filed at zero against the DEVICE reader,
+  -- and that is asserted here rather than in the sentence that used to
+  -- refuse it. `local_rescue.sql` has the rest of it.
   perform public.set_ocr_settings(v_org, true, 'claude', 'platform');
-  begin
-    perform public.ocr_record_local(v_org, v_file, '{}'::jsonb);
-    raise exception 'FAIL: logged a local scan for a server reader';
-  exception when sqlstate '23514' then
-    raise notice 'ok   nor log a local scan against a server reader';
-  end;
+  perform public.ocr_record_local(v_org, v_file, '{}'::jsonb);
+  perform pg_temp.check_eq('a device reading is not filed against claude',
+    (select provider from public.ocr_scans
+      where org_id = v_org order by created_at desc limit 1), 'mlkit');
+  perform pg_temp.check_eq('and claude is not paid for it',
+    (select amount_charged from public.ocr_scans
+      where org_id = v_org order by created_at desc limit 1), 0);
 
   -- A local reading costs nothing and still leaves a row, because
   -- "where did this figure come from" is asked about free readings too.

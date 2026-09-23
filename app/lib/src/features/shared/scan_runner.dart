@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show StorageException;
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/repository.dart';
 import 'text_reader.dart';
 import 'receipt_text.dart';
 
@@ -32,6 +33,61 @@ bool looksLikePdf(String? mimeType, Uint8List? bytes) =>
         bytes[2] == 0x44 && // D
         bytes[3] == 0x46); //  F
 
+/// Whether a server reading that failed is worth trying HERE instead.
+///
+/// Asked for in one sentence: "when the ai model is not reachable it
+/// should read with local". `0679` already retries a failed scan on the
+/// platform's free reader, and `ocr_fallback` deliberately excludes the
+/// on-device one — `and not p.runs_on_device` — because the edge
+/// function cannot run it: the file would have to travel back to the
+/// machine that sent it. So this decision is the app's, and only the
+/// app's.
+///
+/// ## Why a status and not a sentence
+///
+/// The rule is `retry.ts`'s, and it is the one both vendors document:
+/// 408, 409, 429 and any 5xx are the reader saying "not now". A 502 is
+/// what the edge function answers when the vendor would not read the
+/// document at all, which is the case this was asked for.
+///
+/// Everything else is a statement about THIS request that reading it
+/// here would circumvent rather than rescue: a 402 is no credit left,
+/// a 403 is scanning switched off or the module lapsed, a 413 is a file
+/// too big. A company that has switched scanning off has switched it
+/// off, and a free reader on the phone is not the exception to that —
+/// `ocr_record_local` refuses it anyway, which is the backstop, but
+/// asking is the thing that would be wrong.
+///
+/// [failure] with no status at all is treated as unreachable, and that
+/// is the deliberate half. Nothing answered: no `FunctionException`, so
+/// no code — a dead connection, a DNS failure, a request that never
+/// left an aeroplane. That is the plainest reading of "not reachable"
+/// there is. The one exception is an [OcrException] the function
+/// returned in a 200 body, which DID answer and is carrying a refusal.
+bool readerUnreachable(Object failure) {
+  if (failure is! OcrException) return true;
+  final status = failure.status;
+  if (status == null) return false;
+  if (status == 408 || status == 409 || status == 429) return true;
+  return status >= 500 && status <= 599;
+}
+
+/// Whether this machine could read the file, if it were asked to.
+///
+/// The same three questions [readDocument] asks on its way into the
+/// on-device path, asked BEFORE the fallback rather than inside it —
+/// because failing in there writes a scan row saying the phone cannot
+/// open a PDF, against a document nobody asked the phone to read.
+bool canReadHere({
+  required bool isPdf,
+  required bool haveFile,
+  bool? readerHere,
+  bool? readsPdf,
+}) =>
+    (readerHere ?? onDeviceReaderAvailable) &&
+    haveFile &&
+    (!isPdf || (readsPdf ?? onDeviceReadsPdf));
+
 /// Reads one filed document, whichever reader the organization chose.
 ///
 /// The two paths behind this are not variations on each other. The
@@ -44,6 +100,14 @@ bool looksLikePdf(String? mimeType, Uint8List? bytes) =>
 ///
 /// Both callers go through this, so neither has to know which reader is
 /// in force and the on-device path cannot quietly stop logging.
+///
+/// Since `0703` the server path falls through to the local one when the
+/// reader would not answer and this machine could have read it — see
+/// [readerUnreachable] for what counts. Silently, and on purpose: the
+/// person gets the reading they asked for, and the SCAN ROW says which
+/// reader produced it, which is where that belongs. The server's own
+/// failed row is written and refunded by the edge function before this
+/// ever sees the error.
 Future<OcrExtraction> readDocument(
   WidgetRef ref, {
   required OcrSettings ocr,
@@ -81,9 +145,64 @@ Future<OcrExtraction> readDocument(
   // because everything below this line is the on-device path: the
   // refusals, the PDF branch, and `recordLocalScan`.
   if (!(onDevice ?? ocr.onDevice)) {
-    return repo.scanAttachment(attachmentId, provider: provider);
+    try {
+      return await repo.scanAttachment(attachmentId, provider: provider);
+    } catch (e) {
+      if (!readerUnreachable(e) ||
+          !canReadHere(
+            isPdf: looksLikePdf(mimeType, localBytes),
+            haveFile: localPath != null ||
+                localBytes != null ||
+                (storagePath ?? '').isNotEmpty,
+          )) {
+        rethrow;
+      }
+      try {
+        return await _readHere(
+          repo,
+          attachmentId: attachmentId,
+          mimeType: mimeType,
+          storagePath: storagePath,
+          localPath: localPath,
+          localBytes: localBytes,
+        );
+      } catch (_) {
+        // The rescue failed too. What the person is told is what they
+        // ASKED for — the reader they chose, and the reference the
+        // edge function minted for it, which is the one somebody can
+        // quote. The local failure is on its own scan row, written by
+        // `_readHere` on its way out.
+        // ignore: use_rethrow_when_possible
+        throw e;
+      }
+    }
   }
 
+  return _readHere(
+    repo,
+    attachmentId: attachmentId,
+    mimeType: mimeType,
+    storagePath: storagePath,
+    localPath: localPath,
+    localBytes: localBytes,
+  );
+}
+
+/// The reading that happens on this machine, and the row it leaves.
+///
+/// Split out of [readDocument] by `0703` so the fallback is the same
+/// code as the deliberate choice rather than a second copy of it. Every
+/// refusal in here is about THIS MACHINE — no reader loaded, a PDF on a
+/// phone, no file to read — which is why the fallback asks
+/// [canReadHere] first and never reaches them.
+Future<OcrExtraction> _readHere(
+  Repo repo, {
+  required String attachmentId,
+  String? mimeType,
+  String? storagePath,
+  String? localPath,
+  Uint8List? localBytes,
+}) async {
   if (!onDeviceReaderAvailable) {
     throw OcrException(
       'The on-device reader did not load. Reload the page, or switch to '

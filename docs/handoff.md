@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Local Read on the reader list (`da043b63`, run 2092) |
-| CI | **green through run 2091 (`4522ff84`)**. Four runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), 2091 green. All four written up below |
-| Migrations | `0700` is the highest. CI applies on green — see below |
+| Head at time of writing | Reading it here when the chosen reader will not answer (`0703`) |
+| CI | **green through run 2096 (`ce6b2ae0`)**. Five runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), 2097 (`ghcr.io` pull quota, fixed by putting a minute between the deploy's retries). All written up below |
+| Migrations | `0703` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 362 SQL assertion files, **47 Python gates (+12 gate self-tests)**, **5,865 Flutter tests**, 35 deno tests |
-| API description | 787 functions, 366 tables, version `0700` |
+| API description | 787 functions, 366 tables, version `0703` |
 
 ### Check the analyzer's EXIT CODE, not its output
 
@@ -1178,6 +1178,8 @@ than faults in the new work.
 | move scanning config out of Settings | `smartscan_settings.dart` behind a "How it reads" chip (`80664d07`) |
 | SmartScan second on the phone bar | `19418ab3` |
 | "add in the reader list Local Read" | `0700` + the on-device branch of `_offerable` |
+| "why csnt read with local" | `0703` — it read, and the RECORDING was refused |
+| "when the ai model is not reachable it should read with local" | `readerUnreachable` + `canReadHere` in `scan_runner.dart` |
 
 ### Four faults that were already there
 
@@ -1217,6 +1219,41 @@ the server will accept.** `ocr_begin` refuses an on-device reader
 because there is nothing for the server to do — true, and not a reason
 to hide a reader that reads the document on the spot for free. That
 single wrong instinct is why Local Read had to be asked for.
+
+**A guard written for one way in goes on answering the old question.**
+`ocr_record_local` asked "is this COMPANY set to a device reader"
+since `0113`, which was the whole truth while the only way to read
+locally was to be set to one. `0700` made it a per-document choice and
+the guard stayed — so Local Read read the file, and then
+
+    PostgrestException(message: This organization reads documents with
+    Gemini, not on the device, code: 23514)
+
+refused to record it. The reading was thrown away AFTER it had
+happened. `0703` asks "is there a device reader to file this against"
+instead, and files it against that reader rather than against the
+company's setting — a company on Gemini that read one bill here had a
+scan row saying Gemini, which is the inbox stating as fact something
+that did not happen.
+
+What was protecting the platform was never that guard: it is
+`app.require_smartscan`, the company's own switch, `can_write` and the
+tenancy of the attachment. `local_rescue.sql` asserts all four next to
+the new behaviour, because the way a change like this goes wrong is a
+guard leaving with the one that was in the way.
+
+**Falling back to the local reader is the APP's decision, and it is made
+on a status.** `0679`'s `ocr_fallback` excludes device readers on
+purpose — `and not p.runs_on_device` — because the edge function cannot
+run one: the file would have to travel back to the machine that sent
+it. So `readDocument` does it, on `retry.ts`'s rule (408, 409, 429, any
+5xx, and anything that answered with no status at all), never on the
+wording of a message. A 402 is no credit, a 403 is scanning switched
+off, a 413 is a file too big — reading those here anyway would be the
+app routing around a policy with a reader that happens to be free.
+`OcrException` carries `status` since `0703` for exactly this; deciding
+by looking for "busy" in the sentence would stop working silently the
+day somebody improved the sentence.
 
 ## This session's commits
 

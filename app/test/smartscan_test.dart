@@ -22,6 +22,7 @@ import 'package:iakauntan/src/features/smartscan/scan_blocked_dialog.dart';
 import 'package:iakauntan/src/features/smartscan/scan_destination.dart';
 import 'package:iakauntan/src/features/smartscan/scan_field_map.dart';
 import 'package:iakauntan/src/features/smartscan/smartscan_screen.dart';
+import 'package:iakauntan/src/features/shared/scan_runner.dart';
 import 'package:iakauntan/src/features/shared/supplier_from_scan.dart';
 
 /// AI SmartScan: one door, and a list saying what came through it.
@@ -1213,6 +1214,107 @@ void main() {
   // nested in an exception whose own statusCode disagreed with the one
   // inside it.
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // Reading it here when the reader you chose will not answer
+  //
+  // Asked for in one sentence: "when the ai model is not reachable it
+  // should read with local". `0679` already retries a failed scan on
+  // the platform's free reader and deliberately excludes the on-device
+  // one, because the edge function cannot run it -- so this decision is
+  // the app's, and it is made on a STATUS. The line these draw is the
+  // whole of it: a reader having a bad afternoon is rescued, and a
+  // company that has switched scanning off, or run out of credit, is
+  // not quietly given a free reader instead.
+  // ------------------------------------------------------------------
+  group('when to read it here instead', () {
+    test('the reader having a bad afternoon is worth rescuing', () {
+      // What the edge function answers when the vendor would not read
+      // the document at all, which is the case this was asked for.
+      expect(readerUnreachable(OcrException('unread', status: 502)), isTrue);
+      expect(readerUnreachable(OcrException('down', status: 500)), isTrue);
+      expect(readerUnreachable(OcrException('capacity', status: 503)), isTrue);
+      expect(readerUnreachable(OcrException('odd', status: 599)), isTrue);
+      expect(readerUnreachable(OcrException('busy', status: 429)), isTrue);
+      expect(readerUnreachable(OcrException('slow', status: 408)), isTrue);
+      expect(readerUnreachable(OcrException('clash', status: 409)), isTrue);
+    });
+
+    // The half that matters more. Each of these is a policy the company
+    // or the platform set, and reading the document here anyway would
+    // be the app routing around it with a reader that happens to be
+    // free.
+    test('and a refusal is not', () {
+      expect(readerUnreachable(OcrException('no credit', status: 402)),
+          isFalse);
+      expect(readerUnreachable(OcrException('switched off', status: 403)),
+          isFalse);
+      expect(readerUnreachable(OcrException('no', status: 401)), isFalse);
+      expect(readerUnreachable(OcrException('too big', status: 413)), isFalse);
+      expect(readerUnreachable(OcrException('malformed', status: 400)),
+          isFalse);
+    });
+
+    // A refusal the function returned inside a 200 body. It answered,
+    // and what it answered was no.
+    test('nor a refusal that arrived without a status', () {
+      expect(readerUnreachable(OcrException('scanning is off')), isFalse);
+    });
+
+    // Nothing answered at all: no FunctionException, so no code. That
+    // is the plainest reading of "not reachable" there is.
+    test('but nothing answering at all is exactly the case', () {
+      expect(readerUnreachable(Exception('SocketException: failed host')),
+          isTrue);
+      expect(
+          readerUnreachable(
+              StorageException('no route to host', statusCode: '0')),
+          isTrue);
+    });
+
+    // Asked BEFORE the fallback rather than inside it, because failing
+    // in there writes a scan row saying the phone cannot open a PDF
+    // against a document nobody asked the phone to read.
+    test('and only where this machine could have read it', () {
+      expect(
+        canReadHere(
+            isPdf: false, haveFile: true, readerHere: true, readsPdf: true),
+        isTrue,
+      );
+      // A browser where the Tesseract script never arrived.
+      expect(
+        canReadHere(
+            isPdf: false, haveFile: true, readerHere: false, readsPdf: true),
+        isFalse,
+      );
+      // Nothing to read: no bytes, no path, and no storage key either.
+      expect(
+        canReadHere(
+            isPdf: false, haveFile: false, readerHere: true, readsPdf: true),
+        isFalse,
+      );
+      // A PDF on a phone. ML Kit takes a photograph.
+      expect(
+        canReadHere(
+            isPdf: true, haveFile: true, readerHere: true, readsPdf: false),
+        isFalse,
+      );
+      // A PDF in a browser, which is `pdf.js` and does.
+      expect(
+        canReadHere(
+            isPdf: true, haveFile: true, readerHere: true, readsPdf: true),
+        isTrue,
+      );
+      // And a photograph on the phone that cannot open a PDF, which is
+      // the commonest case of all and must not be caught by the PDF
+      // question.
+      expect(
+        canReadHere(
+            isPdf: false, haveFile: true, readerHere: true, readsPdf: false),
+        isTrue,
+      );
+    });
+  });
+
   group('when the file behind a scan has gone', () {
     // The exact body from the report. `statusCode: 400` on the
     // exception, `"statusCode":"404"` in the message — which is why
