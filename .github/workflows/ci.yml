@@ -2765,9 +2765,27 @@ jobs:
           # command line — the CLI takes it from supabase/config.toml,
           # which is where it should be read and reviewed.
           echo "### Edge functions" >> "$GITHUB_STEP_SUMMARY"
+          #
+          # Wrapped in `retry.sh`, and with a MINUTE between attempts
+          # rather than the default ten seconds. Run 2097 died here:
+          #
+          #     failed to pull ghcr.io/supabase/edge-runtime:v1.74.3:
+          #     toomanyrequests
+          #
+          # The CLI does retry that itself -- 4 seconds, then 8 -- and
+          # ghcr.io's anonymous pull quota is counted per minute, so
+          # three attempts inside twelve seconds are three attempts
+          # against the same exhausted window. It is the same shape as
+          # the Android JDK failure in run 2084, where the existing
+          # retry fired 241 milliseconds after the first attempt: a
+          # backoff has to outlast the thing it is backing off from.
+          #
+          # Safe to retry: deploying a function is an upload of a
+          # bundle, and the second one replaces whatever the first left.
           for name in "${names[@]}"; do
             echo "== $name"
-            supabase functions deploy "$name" \
+            RETRY_DELAY=60 scripts/ci/retry.sh \
+              supabase functions deploy "$name" \
               --project-ref "$SUPABASE_PROJECT_REF"
             echo "- \`$name\`" >> "$GITHUB_STEP_SUMMARY"
           done
