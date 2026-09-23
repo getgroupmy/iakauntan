@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | which matter this line belongs to |
+| Head at time of writing | the matter, on every posting path at once |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0687` is the highest. CI applies on green — see below |
+| Migrations | `0688` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 357 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,759 Flutter tests**, 34 deno tests |
-| API description | 784 functions, 366 tables, version `0687` |
+| API description | 784 functions, 366 tables, version `0688` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -732,10 +732,13 @@ postings. `app.today()`.
 
 The user asked for four things. This is the foundation for two of them.
 
-1. **Matter on all transactions** — the column exists; the picker still
-   has to go onto the bill editor, expense form, journal editor and bank
-   reconciliation, beside Project and Department, shown only when the
-   legal module is on.
+1. **Matter on all transactions** — the column exists and `0688` makes
+   every posting path carry it: `app.create_gl_entry_internal` is the
+   only function that inserts `gl_lines`, and a caller that knows its
+   matter now puts `matter_id` on the line the way `project_code`
+   already travels. What is left is the FLUTTER picker on the bill
+   editor, expense form, journal editor and bank reconciliation, beside
+   Project and Department, shown only when the legal module is on.
 2. **Client trust monies with collections and payments** — already built
    (`ClientMoneyScreen`, `/legal/receipts`, `/legal/payouts`). Asked the
    user what is missing in practice rather than rebuilding it.
@@ -753,6 +756,37 @@ not client-money-only. A Rule 8 client account reconciliation —
 restricted to the designated client bank accounts, which
 `bank_accounts.is_client_account` already marks — is a separate report
 against a separate question and was deliberately not folded in.
+
+## The matter, on every posting path at once
+
+`0688`. `0687` put `matter_id` on `gl_lines` and built the reports that
+read it; nothing wrote it. This is one line in one function.
+
+`app.create_gl_entry_internal` is the only thing in this product that
+inserts into `gl_lines`. A bill, an expense, a manual journal, a bank
+charge, a payroll run, a client account movement — every one builds its
+lines as jsonb and hands them there. `0160` made the same observation
+for a different reason: it is where a change reaches every caller at
+once, and where reading the callers would never catch the next one.
+
+So the matter travels the way `project_code` and `department_code`
+already do, and **no caller had to be changed to keep working**.
+
+`nullif` before the cast, for `0640`'s reason inverted: `0640` found the
+two text dimensions stored `''` as a nameless dimension. The uuids have
+the louder failure — `''::uuid` raises, so a form that sends an empty
+string when the picker was opened and closed would refuse the entire
+journal rather than post an untagged line. That is asserted directly.
+
+### The mutant that mattered
+
+"Every line takes the first line's matter" survived the first sweep,
+because every fixture tagged both lines with the same matter. That is
+not a hypothetical shape: **a transfer between client ledgers is one
+entry with two different matters on it**, one credited and one debited,
+and under that mutant the whole transfer would post against the paying
+matter while the receiving one showed nothing. Pinned now, and it is the
+assertion the client-side general journal will lean on.
 
 ## This session's commits
 

@@ -300,4 +300,135 @@ begin
     '%gl_lines_matter_same_org%');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The matter arrives through the real posting path
+--
+-- `0688`. Everything above posts by inserting `gl_lines` directly,
+-- which proves the reports read the column and nothing about whether
+-- anything WRITES it. `app.create_gl_entry_internal` is the only
+-- function in this product that inserts into `gl_lines` -- every bill,
+-- expense, journal and client movement builds its lines as jsonb and
+-- hands them there -- so this is the one seam that decides whether the
+-- matter ever reaches a real transaction.
+--
+-- Three things, and the third is the one a form will hit first.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_c     uuid;
+  v_m     uuid;
+  v_cash  uuid;
+  v_fees  uuid;
+  v_entry uuid;
+  v_n     integer;
+  v_dr    numeric;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Posting Path Sdn Bhd');
+  perform public.setup_legal_module(v_org);
+  -- The real posting path checks the period; the direct inserts above
+  -- do not, which is one more reason this block is worth having.
+  perform public.create_fiscal_year(v_org, date_trunc('year', app.today())::date);
+
+  select id into v_cash from public.accounts
+   where org_id = v_org and code = '1120';
+  select id into v_fees from public.accounts
+   where org_id = v_org and account_type = 'revenue' limit 1;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CL1', 'A client', 'customer') returning id into v_c;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-7', 'A conveyance', v_c, v_owner) returning id into v_m;
+
+  -- A line that names its matter keeps it.
+  v_entry := app.create_gl_entry_internal(
+    v_org, app.today(), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_cash, 'debit', 250,
+                         'matter_id', v_m),
+      jsonb_build_object('account_id', v_fees, 'credit', 250,
+                         'matter_id', v_m)),
+    'A matter-tagged journal');
+
+  select count(*) into v_n from public.gl_lines
+   where entry_id = v_entry and matter_id = v_m;
+  perform pg_temp.check_eq(
+    'a line posted with a matter keeps it', v_n, 2);
+
+  select sum(debit) into v_dr
+    from public.report_matter_trial_balance(v_org, v_m);
+  perform pg_temp.check_eq(
+    'and the report built on that column sees it', v_dr, 250.00);
+
+  -- TWO MATTERS ON ONE ENTRY, which every fixture above misses because
+  -- they all tag both lines the same. A mutation sweep found it: making
+  -- every line take the FIRST line's matter passed everything.
+  --
+  -- It is not a hypothetical shape. A transfer between client ledgers
+  -- is exactly this entry -- one matter credited, another debited, no
+  -- bank movement -- and under that mutant the whole transfer would
+  -- post against the paying matter and the receiving one would show
+  -- nothing.
+  declare v_m2 uuid;
+  begin
+    insert into public.matters
+      (org_id, matter_no, name, client_id, fee_earner)
+    values (v_org, 'M-8', 'Another conveyance', v_c, v_owner)
+    returning id into v_m2;
+
+    v_entry := app.create_gl_entry_internal(
+      v_org, app.today(), 'manual',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_cash, 'debit', 75,
+                           'matter_id', v_m),
+        jsonb_build_object('account_id', v_fees, 'credit', 75,
+                           'matter_id', v_m2)),
+      'One entry, two matters');
+
+    select count(*) into v_n from public.gl_lines
+     where entry_id = v_entry and matter_id = v_m;
+    perform pg_temp.check_eq(
+      'each line keeps its OWN matter, not the first line''s', v_n, 1);
+    select count(*) into v_n from public.gl_lines
+     where entry_id = v_entry and matter_id = v_m2;
+    perform pg_temp.check_eq(
+      'and the other matter gets the other line', v_n, 1);
+  end;
+
+  -- A line that names none is the firm's own, not an error.
+  v_entry := app.create_gl_entry_internal(
+    v_org, app.today(), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_cash, 'debit', 900),
+      jsonb_build_object('account_id', v_fees, 'credit', 900)),
+    'The rent');
+
+  select count(*) into v_n from public.gl_lines
+   where entry_id = v_entry and matter_id is null;
+  perform pg_temp.check_eq(
+    'a line with no matter posts as the firm''s own', v_n, 2);
+
+  -- AND THE ONE A FORM HITS FIRST. A picker that was opened and closed
+  -- again sends an empty string, not an absent key. Without the
+  -- `nullif`, `''::uuid` raises and the whole journal is refused --
+  -- which is a screen that will not post rather than a line that is
+  -- untagged.
+  v_entry := app.create_gl_entry_internal(
+    v_org, app.today(), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_cash, 'debit', 10,
+                         'matter_id', ''),
+      jsonb_build_object('account_id', v_fees, 'credit', 10,
+                         'matter_id', '')),
+    'Matter picker opened and closed');
+
+  select count(*) into v_n from public.gl_lines
+   where entry_id = v_entry and matter_id is null;
+  perform pg_temp.check_eq(
+    'an empty matter is no matter, and does not refuse the posting',
+    v_n, 2);
+end $$;
+
 rollback;
