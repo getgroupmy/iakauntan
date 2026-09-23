@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | what a reader keeps saying |
+| Head at time of writing | which matter this line belongs to |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0685` is the highest. CI applies on green — see below |
+| Migrations | `0687` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 356 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,745 Flutter tests**, 34 deno tests |
-| API description | 782 functions, 366 tables, version `0685` |
+| Gates | 357 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,759 Flutter tests**, 34 deno tests |
+| API description | 784 functions, 366 tables, version `0687` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -666,6 +666,93 @@ A mutation run also caught a real gap on the Dart side: the screen
 tests built `ReaderFault` directly, so nothing read `fromJson`, and
 swapping `read` and `failed` on the way in passed every test while
 inverting the one claim the section exists to make.
+
+## The matter the rest of the ledger could not see
+
+`0687`. A law firm keeps the firm's books and one set per matter, and
+the second is a statutory obligation rather than a view over the first.
+
+`0021` built the client side properly — `matters`,
+`client_account_transactions` with its four movements, and
+`app.assert_client_funds()`, the rule that matters most: **a matter may
+not spend money it does not hold**. What it never did was put the matter
+anywhere the rest of the ledger could see it.
+
+`matter_id` reached exactly four tables: `client_account_transactions`,
+`disbursements`, `sales_documents`, `time_entries`. Everything else
+posts through `gl_lines`, which carries `contact_id`, `item_id`,
+`project_code` and `department_code` — every dimension except the one a
+solicitor files by. So a bill from a searcher, an expense for a courier,
+a journal correcting last month: none could be told which matter it
+belonged to. And because `report_trial_balance` is built on `gl_lines`,
+a per-matter trial balance could not be written at all.
+
+### What went in
+
+- **`gl_lines.matter_id`**, nullable and staying that way. Most of what a
+  firm posts — rent, salaries, its own bank charges — belongs to no
+  matter, and a mandatory one would put a fictitious matter on every
+  such line.
+- **`report_matter_trial_balance(org, matter, from, to)`** — the summary.
+- **`report_matter_ledger(org, matter, from, to)`** — the pull an
+  internal audit wants: every posted line, oldest first, with a running
+  balance and what created each entry. This is what the user asked for
+  in those words.
+
+### Three things that would have been wrong and still balanced
+
+- **The composite foreign key.** `(org_id, matter_id)` references
+  `matters (org_id, id)`, per `0160` — RLS scopes a row by its own
+  `org_id` and says nothing about the ids it carries, so a simple
+  reference would accept another firm's matter onto this firm's ledger.
+- **No opening balance off `accounts`.** `report_trial_balance` adds
+  `accounts.opening_balance`, which is what the **firm** brought forward.
+  Carried onto a matter it puts the firm's whole opening position under
+  a client's name — and the report still adds up.
+- **`line_no` is returned by the pull.** The running balance is only
+  meaningful in the report's own order, and without the line number a
+  caller that re-sorts cannot reproduce it. My own first assertion
+  sorted by date alone and got an arbitrary one of two lines sharing a
+  date — which is how the gap was found.
+
+### Two gates caught real faults
+
+`tenant_foreign_keys.sql` refused a bare `on delete set null` on a
+composite key — it nulls **every** column in the key, and `org_id` is NOT
+NULL, so deleting a matter would raise rather than detach the line. The
+fix is naming the column: `on delete set null (matter_id)`. `0681` hit
+exactly this once already.
+
+`utc_is_not_today.sql` refused `p_to date default current_date` —
+a Malaysian business day starts eight hours before UTC does, so a report
+run at 7am local would stop at yesterday and omit the morning's
+postings. `app.today()`.
+
+### Still open on the legal work
+
+The user asked for four things. This is the foundation for two of them.
+
+1. **Matter on all transactions** — the column exists; the picker still
+   has to go onto the bill editor, expense form, journal editor and bank
+   reconciliation, beside Project and Department, shown only when the
+   legal module is on.
+2. **Client trust monies with collections and payments** — already built
+   (`ClientMoneyScreen`, `/legal/receipts`, `/legal/payouts`). Asked the
+   user what is missing in practice rather than rebuilding it.
+3. **General entry with inter-account transfers** — three of the four
+   readings already exist (`transfer_to_office`, the banking transfer
+   dialog, `matter_transfer.dart`). The one with no home is a general
+   journal on the client side: a correcting entry against a matter with
+   no bank movement, which under the Rules needs the tightest audit
+   trail because there is no statement to check it against. **Confirm
+   this is what was meant before building it.**
+4. **Per-matter trial balance** — done, plus the audit pull.
+
+The user settled the scope question: everything tagged to the matter,
+not client-money-only. A Rule 8 client account reconciliation —
+restricted to the designated client bank accounts, which
+`bank_accounts.is_client_account` already marks — is a separate report
+against a separate question and was deliberately not folded in.
 
 ## This session's commits
 
