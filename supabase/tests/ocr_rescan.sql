@@ -223,6 +223,35 @@ begin
     raise exception '% gemini scans were recorded for a refused call', v_n;
   end if;
 
+  -- `0702`. The attachment deleted after a screen read its id, which
+  -- is the ordinary way somebody reaches this refusal -- and it used to
+  -- answer "That attachment is not on this organization", a sentence
+  -- about TENANCY that sends them to check which company they are in.
+  --
+  -- The composite key is what makes the old wording almost always
+  -- false: a non-null `attachment_id` HAD a row on this organization,
+  -- and deleting the attachment nulls the column. So the id in a
+  -- client's hand naming nothing means it went stale, not that it
+  -- belongs to somebody else.
+  declare
+    v_stale uuid := gen_random_uuid();
+  begin
+    begin
+      perform public.ocr_begin(v_org, v_stale);
+      raise exception 'a scan was opened against an attachment that is gone';
+    exception
+      when sqlstate '42704' then
+        if sqlerrm like '%not on this organization%' then
+          raise exception
+            'a deleted file is still described as a tenancy problem: %',
+            sqlerrm;
+        end if;
+        if sqlerrm not like '%no longer on file%' then
+          raise exception 'refused for the wrong reason: %', sqlerrm;
+        end if;
+    end;
+  end;
+
   raise notice 'ocr rescan: own key means own reader';
 end $$;
 

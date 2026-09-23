@@ -887,6 +887,49 @@ extension RepoOcr on Repo {
 /// toString. Falls back to the status only when there is not — and says
 /// what the status MEANS rather than printing the number, because "403"
 /// is not a sentence anybody can act on.
+/// A storage failure, in words rather than in JSON.
+///
+/// Reported from a phone, twice on one scan, and the second was this:
+///
+///     Could not read it on this device: StorageException(message:
+///     {"statusCode":"404","error":"not_found","message":"Object not
+///     found","code":"NoSuchKey"}, statusCode: 400, error: null)
+///
+/// Which is a Dart `toString` of a JSON body nested inside an exception
+/// whose own `statusCode` disagrees with the one inside it. The same
+/// fault `_functionError` was written for, on the other client.
+///
+/// A missing object is not a fault the person can act on by trying
+/// again, so the sentence says what is true: the reading is kept and
+/// the FILE is gone. Everything else falls through to a plain message
+/// rather than the raw object.
+///
+/// Public, because the on-device reader, the image opener and the
+/// rescan all reach storage and all three were printing the exception.
+String storageProblem(Object error) {
+  final code = error is StorageException ? error.statusCode : null;
+  final said = error is StorageException ? error.message : '$error';
+
+  // `404` arrives in two places and they disagree: `StorageException`
+  // carries `statusCode: 400` while the BODY it wrapped says 404 and
+  // `NoSuchKey`. Both are checked, because relying on either alone is
+  // relying on the one that happens to be wrong today.
+  final missing = code == '404' ||
+      said.contains('NoSuchKey') ||
+      said.contains('not_found') ||
+      said.contains('Object not found');
+
+  if (missing) {
+    return 'The file for this scan is no longer in storage, so there is '
+        'nothing left to open or read again. What was read off it is '
+        'kept.';
+  }
+  if (code == '403' || said.contains('Unauthorized')) {
+    return 'You do not have access to that file.';
+  }
+  return 'The file could not be fetched: $said';
+}
+
 String _functionError(FunctionException e) {
   final details = e.details;
   if (details is Map && details['error'] != null) {

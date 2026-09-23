@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show StorageException;
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
@@ -1200,6 +1201,64 @@ void main() {
         )),
         isNull,
       );
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // A file that is no longer in storage
+  //
+  // Reported from a phone, twice on one scan of `inv-2026-00001.pdf`:
+  // the rescan came back "That attachment is not on this organization"
+  // and the on-device read came back a Dart toString of a JSON body
+  // nested in an exception whose own statusCode disagreed with the one
+  // inside it.
+  // ------------------------------------------------------------------
+  group('when the file behind a scan has gone', () {
+    // The exact body from the report. `statusCode: 400` on the
+    // exception, `"statusCode":"404"` in the message — which is why
+    // this reads both rather than trusting either.
+    final gone = StorageException(
+      '{"statusCode":"404","error":"not_found","message":"Object not '
+      'found","code":"NoSuchKey"}',
+      statusCode: '400',
+    );
+
+    test('says the file is gone and the reading is kept', () {
+      final said = storageProblem(gone);
+      expect(said, contains('no longer in storage'));
+      expect(said, contains('kept'));
+      // The thing the report was actually about: none of the JSON, and
+      // none of the class name, reaches a person.
+      expect(said, isNot(contains('StorageException')));
+      expect(said, isNot(contains('NoSuchKey')));
+      expect(said, isNot(contains('statusCode')));
+    });
+
+    // A 404 that arrives with the code on the exception rather than
+    // buried in the body. Both spellings are real and this is the one
+    // the two-place check exists for.
+    test('and recognises it from the code alone', () {
+      expect(
+        storageProblem(StorageException('Object not found', statusCode: '404')),
+        contains('no longer in storage'),
+      );
+    });
+
+    test('a refusal is not described as a missing file', () {
+      final said = storageProblem(
+          StorageException('Unauthorized', statusCode: '403'));
+      expect(said, contains('access'));
+      expect(said, isNot(contains('no longer in storage')));
+    });
+
+    // Anything else still says something, and still does not print the
+    // object. A sentence nobody anticipated is better than a toString.
+    test('and anything else is still a sentence', () {
+      final said =
+          storageProblem(StorageException('the bucket is on fire',
+              statusCode: '500'));
+      expect(said, contains('the bucket is on fire'));
+      expect(said, isNot(contains('StorageException')));
     });
   });
 

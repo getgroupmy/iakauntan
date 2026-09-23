@@ -172,7 +172,7 @@ class _ScanDetailSheet extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not open it: $e')));
+            .showSnackBar(SnackBar(content: Text(storageProblem(e))));
       }
     }
   }

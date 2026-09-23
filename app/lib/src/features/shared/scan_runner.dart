@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show StorageException;
 
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
@@ -144,6 +145,10 @@ Future<OcrExtraction> readDocument(
           attachmentId: attachmentId, error: e.toString());
     } catch (_) {}
     if (e is OcrException) rethrow;
+    // A missing object is the commonest of these and the least
+    // actionable, and it used to arrive as a Dart toString of a JSON
+    // body. `storageProblem` says what is true instead.
+    if (e is StorageException) throw OcrException(storageProblem(e));
     throw OcrException('Could not read it on this device: $e');
   }
 }
