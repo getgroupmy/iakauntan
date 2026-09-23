@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0689` (the highest applied migration).
-785 functions and 366 readable tables, of which
+Schema version `0690` (the highest applied migration).
+786 functions and 366 readable tables, of which
 305 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**643 of 785 functions carry a `comment on
+**644 of 786 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (573)
+### general (574)
 
 Not gated on any module.
 
@@ -922,6 +922,7 @@ Not gated on any module.
 - `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
 - `trace_lot(p_org_id uuid, p_lot_id uuid)`
 - `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` *(writes)* — Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together.
+- `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_description text, p_date date, p_reference text)` *(writes)* — Moves client money already held from one matter to another.
 - `transfer_company(p_org_id uuid, p_to_email text, p_note text)` *(writes)* — Hand a company to another person in one transaction: they become owner, the caller steps down to admin, any firm's borrowed access ends, and the handover is recorded.
 - `transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` *(writes)* — The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion.
 - `transfer_outstanding(p_source_id uuid, p_target_type text)`

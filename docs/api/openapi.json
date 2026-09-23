@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0689",
+    "version": "0690",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -72314,8 +72314,8 @@
     "/rpc/transfer_between_matters": {
       "post": {
         "operationId": "transfer_between_matters",
-        "summary": "Moves client money from one matter to another matter of the same client, as a paired transfer_out and\u2026",
-        "description": "Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together. Refuses a transfer between different clients, and one the source matter does not hold.\n\n`public.transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` Writes. Requires a signed-in user.",
+        "summary": "Moves client money already held from one matter to another",
+        "description": "Moves client money already held from one matter to another. No bank movement: it is in the same client account before and after, and only which matter the firm holds it for changes -- so the ledger entry is one debit and one credit against 2300, on two matters, netting to zero. Written as two `client_account_transactions` rows so `app.assert_client_funds` still refuses to overdraw the paying matter, which a journal straight to `gl_lines` would have bypassed. Uses `transfer_out` and `transfer_in`, which 0021 defined and nothing has written until now. 0690.\n\n`public.transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_description text, p_date date, p_reference text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_from uuid, p_to uuid, p_amount numeric, p_description text, p_date date, p_reference text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -72341,18 +72341,22 @@
                   "p_amount": {
                     "type": "number"
                   },
+                  "p_description": {
+                    "type": "string"
+                  },
                   "p_date": {
                     "type": "string",
                     "format": "date"
                   },
-                  "p_description": {
+                  "p_reference": {
                     "type": "string"
                   }
                 },
                 "required": [
                   "p_from",
                   "p_to",
-                  "p_amount"
+                  "p_amount",
+                  "p_description"
                 ]
               }
             }
@@ -72364,11 +72368,8 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -72382,7 +72383,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_from uuid, p_to uuid, p_amount numeric, p_description text, p_date date, p_reference text"
+        ]
       }
     },
     "/rpc/transfer_company": {

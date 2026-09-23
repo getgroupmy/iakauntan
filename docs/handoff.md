@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | a bank account on the chart, and nowhere else |
+| Head at time of writing | a journal on the client side |
 | CI | green through run 2061 (`ac64d902`); 2060 failed and was fixed by `0677`; run for `f138f338` and this one not yet read |
-| Migrations | `0689` is the highest. CI applies on green — see below |
+| Migrations | `0690` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 358 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,770 Flutter tests**, 34 deno tests |
-| API description | 785 functions, 366 tables, version `0689` |
+| Gates | 359 SQL assertion files, **46 Python gates (+12 gate self-tests)**, **5,770 Flutter tests**, 34 deno tests |
+| API description | 786 functions, 366 tables, version `0690` |
 
 ### CI applies migrations, and this branch is the default branch
 
@@ -741,13 +741,9 @@ The user asked for four things. This is the foundation for two of them.
 2. **Client trust monies with collections and payments** — already built
    (`ClientMoneyScreen`, `/legal/receipts`, `/legal/payouts`). Asked the
    user what is missing in practice rather than rebuilding it.
-3. **General entry with inter-account transfers** — three of the four
-   readings already exist (`transfer_to_office`, the banking transfer
-   dialog, `matter_transfer.dart`). The one with no home is a general
-   journal on the client side: a correcting entry against a matter with
-   no bank movement, which under the Rules needs the tightest audit
-   trail because there is no statement to check it against. **Confirm
-   this is what was meant before building it.**
+3. ~~**General entry with inter-account transfers**~~ — the missing
+   reading was a general journal on the client side, and `0690` is it.
+   The SQL is done; **the screen is not**.
 4. **Per-matter trial balance** — done, plus the audit pull.
 
 The user settled the scope question: everything tagged to the matter,
@@ -894,6 +890,74 @@ The Supabase project is unreachable from this container (403 at the
 egress proxy), so `set_feedback_status` cannot be called from here. The
 reply text and the recommended status (**planned**, not done) were given
 to the user to press in the console.
+
+## A journal on the client side
+
+`0690`. Money already held for one matter becomes money held for
+another: a deposit paid into the wrong file, a related matter opened and
+the balance carried across, a correction.
+
+`0021` saw it coming. `app.client_txn_type` has carried `transfer_in` —
+commented *"moved from another matter"* — and `transfer_out` since the
+module was written, and **nothing has ever written either**. There was
+no way to make the entry the enum was built for.
+
+### Why it is two client rows and not a journal
+
+The tempting shape is a general journal against `gl_lines`: `0687` put
+the matter there and `0688` made every posting path carry it, so it
+would work.
+
+It would also route client money around the one control that matters.
+`app.assert_client_funds` is a deferred constraint trigger on
+`client_account_transactions` — *a matter may not spend money it does
+not hold* — and a journal written straight to the ledger is not such a
+row, so the trigger never fires. **The first thing this feature would be
+used for, moving money between two clients, is exactly what the trigger
+exists to refuse.**
+
+So the transfer is written as the two rows it actually is, and the
+statutory guard applies because it was never avoided. Deferred means
+both rows land before it looks, so emptying a matter exactly is fine and
+overdrawing it is refused whole. Both asserted.
+
+### What posts, and what does not
+
+Not `post_client_transaction` on each leg. That debits the client bank
+and credits client monies held for money in, and the reverse for money
+out — right for a receipt, wrong here twice over, because **no money
+moves**. It is in the same client bank account before and after.
+
+So one entry, two lines, both on 2300:
+
+```
+debit  2300, matter FROM   -- we owe that client less
+credit 2300, matter TO     -- and that one more
+```
+
+The account nets to zero, which is right — the firm owes its clients the
+same total. Each *matter's* ledger shows the movement, because `0687`
+put the matter on the line. This is the one entry with two different
+matters on it that `0688`'s assertion was written for.
+
+### Three refusals worth naming
+
+- **A description is required.** Every other movement here takes one or
+  defaults. This one does not: a transfer between two clients' money
+  with no explanation is the first thing an auditor asks about and the
+  hardest to reconstruct a year later.
+- **The same matter twice is refused**, rather than posting two
+  cancelling rows that read as a completed transfer.
+- **Two firms' matters cannot be transferred between.** The function
+  takes two ids from a caller and nothing else would compare them.
+
+Seven SQL mutants, all killed, control survived.
+
+### Still to build
+
+**The screen.** `/legal/receipts` and `/legal/payouts` exist;
+there is no page for this yet. And the matter picker still needs placing
+on the bill editor, expense form and bank reconciliation.
 
 ## This session's commits
 
