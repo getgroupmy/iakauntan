@@ -498,7 +498,8 @@ declare
     'discount_amount', 'discount_percent', 'tax_code_id', 'tax_rate',
     'is_tax_inclusive', 'line_subtotal', 'tax_amount', 'line_total',
     'account_id', 'warehouse_id', 'cost_amount',
-    'service_start', 'service_end', 'project_code', 'department_code'];
+    'service_start', 'service_end', 'project_code', 'department_code',
+    'matter_id'];
   -- Still writable on the line of a posted document, and why:
   --   progress ......... quantity_invoiced, quantity_fulfilled,
   --     quantity_billed, quantity_received. `app.refresh_sales_progress`

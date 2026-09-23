@@ -5001,6 +5001,7 @@ class Repo {
     String? reference,
     String? projectCode,
     String? departmentCode,
+    String? matterId,
     List<Map<String, dynamic>>? split,
   }) async {
     final row = await client
@@ -5019,12 +5020,14 @@ class Repo {
           'tax_code_id': taxCodeId,
           'tax_amount': taxAmount,
           'total_amount': amount + taxAmount,
-          // The two analysis dimensions. `project_code` has been on
+          // The three analysis dimensions. `project_code` has been on
           // this table since the dimensions went in and nothing ever
-          // sent it; `department_code` arrived with 0639. Both null is
-          // the ordinary case and posts exactly as it always has.
+          // sent it; `department_code` arrived with 0639 and `matter_id`
+          // with 0692. All three null is the ordinary case and posts
+          // exactly as it always has.
           'project_code': projectCode,
           'department_code': departmentCode,
+          'matter_id': matterId,
         })
         .select()
         .single();

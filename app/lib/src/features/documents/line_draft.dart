@@ -19,6 +19,7 @@ class LineDraft {
     this.sourceLineId,
     this.projectCode,
     this.departmentCode,
+    this.matterId,
     this.serviceStart,
     this.serviceEnd,
     this.lots = const [],
@@ -63,6 +64,13 @@ class LineDraft {
   /// that column is the entire input to the by-department P&L.
   String? departmentCode;
 
+  /// Which matter this line is billed for or bought for, on a law firm's
+  /// books. Set from the document like the two above, and written per
+  /// line because `app.post_sales_document_internal` and its purchase
+  /// twin read it off the line to put on `gl_lines.matter_id` — which is
+  /// the entire input to a matter's own trial balance. 0691.
+  String? matterId;
+
   /// The period this line is earned over. Null on both means earned on
   /// the invoice date, which is what almost every line is. Set, and 0309
   /// credits deferred revenue instead and releases it month by month.
@@ -98,6 +106,7 @@ class LineDraft {
     'source_line_id': sourceLineId,
     'project_code': projectCode,
     'department_code': departmentCode,
+    'matter_id': matterId,
     'custom_fields': customFields,
     // Only when set, and only then. `saveDocument` inserts this map
     // straight into `sales_document_lines` or `purchase_document_lines`,
@@ -127,6 +136,7 @@ class LineDraft {
     sourceLineId: l.sourceLineId,
     projectCode: l.projectCode,
     departmentCode: l.departmentCode,
+    matterId: l.matterId,
     serviceStart: l.serviceStart,
     serviceEnd: l.serviceEnd,
   );

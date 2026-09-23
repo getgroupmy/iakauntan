@@ -10,6 +10,7 @@ import '../../core/layout.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../../core/picker_options.dart';
 import '../../core/widgets.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
@@ -122,6 +123,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// report reading a column nothing fills is a report that says every
   /// department earned nothing.
   String? _departmentCode;
+
+  /// Which matter this whole document belongs to, on a law firm's books,
+  /// stamped onto every line at save time exactly as the two above are.
+  ///
+  /// Per document rather than per line, which is a real limit and not an
+  /// oversight: `sales_document_lines.matter_id` is per line and a fee
+  /// note covering two files is ordinary, so a firm that needs to split
+  /// one note between matters has to raise two. The journal editor is
+  /// where a per-line matter already exists, and it is what a transfer
+  /// between two files is written as. 0691.
+  String? _matterId;
   String? _salespersonId;
   Map<String, dynamic> _customFields = const {};
   String _status = 'draft';
@@ -222,6 +234,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _departmentCode = doc.lines
             .map((l) => l.departmentCode)
             .firstWhere((c) => c != null, orElse: () => null);
+        // The document's first, the lines' second. A fee note raised
+        // by `bill_matter_time` carries the matter on the header and
+        // on no line, and reading the lines alone would open it with
+        // the box empty — then save it with the matter cleared.
+        _matterId =
+            doc.matterId ??
+            doc.lines
+                .map((l) => l.matterId)
+                .firstWhere((c) => c != null, orElse: () => null);
         _salespersonId = doc.salespersonId;
         _customFields = doc.customFields;
         _reference.text = doc.reference ?? '';
@@ -538,11 +559,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           // Sales only. The column is on `sales_documents` alone,
           // and a bill has no salesperson by definition.
           if (_kind.isSales) 'salesperson_id': _salespersonId,
+          // Also sales only, and for the same reason: `0021` put the
+          // matter on `sales_documents` and there is no such column on
+          // `purchase_documents`, so sending the key would have
+          // PostgREST reject every bill. Written as well as the lines
+          // because `bill_matter_time` and the matter screens read the
+          // header, and a document whose header said one file while
+          // its lines said another would be right in the ledger and
+          // wrong in every list.
+          if (_kind.isSales) 'matter_id': _matterId,
           'custom_fields': _customFields,
         },
         lines: validLines.map((l) {
           l.projectCode = _projectCode;
           l.departmentCode = _departmentCode;
+          l.matterId = _matterId;
           return l.toJson();
         }).toList(),
       );
@@ -1440,6 +1471,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         },
                         projectCode: _projectCode,
                         departmentCode: _departmentCode,
+                        matterId: _matterId,
+                        onMatterChanged: (id) {
+                          setState(() => _matterId = id);
+                          _markDirty();
+                        },
                         onDepartmentChanged: (code) {
                           setState(() => _departmentCode = code);
                           _markDirty();
@@ -1951,10 +1987,12 @@ class _HeaderCard extends ConsumerWidget {
     required this.exchangeRate,
     required this.projectCode,
     required this.departmentCode,
+    required this.matterId,
     required this.salespersonId,
     required this.onSalespersonChanged,
     required this.onProjectChanged,
     required this.onDepartmentChanged,
+    required this.onMatterChanged,
     required this.onCurrencyChanged,
     required this.onRateChanged,
     required this.onStoreRate,
@@ -1990,10 +2028,12 @@ class _HeaderCard extends ConsumerWidget {
   final double? exchangeRate;
   final String? projectCode;
   final String? departmentCode;
+  final String? matterId;
   final String? salespersonId;
   final ValueChanged<String?> onSalespersonChanged;
   final ValueChanged<String?> onProjectChanged;
   final ValueChanged<String?> onDepartmentChanged;
+  final ValueChanged<String?> onMatterChanged;
   final ValueChanged<String> onCurrencyChanged;
   final ValueChanged<String> onRateChanged;
   final VoidCallback onStoreRate;
@@ -2210,6 +2250,34 @@ class _HeaderCard extends ConsumerWidget {
             allowEmpty: true,
             label: 'Department',
             onChanged: onDepartmentChanged,
+          ),
+          flex: 1,
+        ),
+      // And the matter, on the same condition as the two above: a
+      // company that has never opened one gets no control rather than an
+      // empty one. That is also what keeps this off every other
+      // company's invoice without anything having to ask whether the
+      // legal module is switched on.
+      //
+      // Open matters only, for the reason `matter_closing.dart` exists:
+      // a file closed last year is not something anybody means to bill
+      // to today.
+      if (ref
+              .watch(mattersProvider((status: 'open', search: '')))
+              .valueOrNull
+              ?.isNotEmpty ??
+          false)
+        (
+          child: SearchablePicker<String>(
+            options: matterPickerOptions(
+              ref.watch(mattersProvider((status: 'open', search: ''))).valueOrNull ??
+                  const [],
+            ),
+            value: matterId,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Matter',
+            onChanged: onMatterChanged,
           ),
           flex: 1,
         ),

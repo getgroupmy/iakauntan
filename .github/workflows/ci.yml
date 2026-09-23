@@ -863,6 +863,7 @@ jobs:
                    supabase/tests/matter_trial_balance.sql \
                    supabase/tests/unregistered_bank_accounts.sql \
                    supabase/tests/transfer_between_matters.sql \
+                   supabase/tests/matter_on_a_document.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

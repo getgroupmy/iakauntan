@@ -710,4 +710,169 @@ begin
     'JOB-7/MKT');
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- 0692: the matter a claimed cost belongs to
+--
+-- `0691` put the matter on what a firm bills and buys. The third way a
+-- cost reaches the ledger is a claim, and on a solicitor's books it is
+-- the commonest: a fee earner pays a filing fee at the counter and
+-- claims it back.
+--
+-- A disbursement that never reaches the matter is not only a reporting
+-- hole. It is a disbursement that never gets billed to the client, and
+-- the firm absorbs it.
+--
+-- The same shape as the `0639` section above, because it is the same
+-- machinery -- header, line, the line winning, and the two legs that
+-- must NOT carry it -- with two things `department_code` cannot be
+-- asked: a matter is a row rather than a code, so another firm's id has
+-- to be refused, and deleting a matter has to detach the claim rather
+-- than take it down.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org     uuid := pg_temp.split_org('Guaman Kos Sdn Bhd');
+  v_other   uuid := pg_temp.split_org('Guaman Lain Sdn Bhd');
+  v_bank    uuid;
+  v_exp     uuid;
+  v_entry   uuid;
+  v_client  uuid;
+  v_m1      uuid;
+  v_m2      uuid;
+  v_their_m uuid;
+  v_tax     uuid;
+  v_n       integer;
+begin
+  perform public.setup_legal_module(v_org);
+  perform public.setup_legal_module(v_other);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CL1', 'Puan Aminah', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-1', 'Sale of a house', v_client, auth.uid())
+  returning id into v_m1;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-2', 'A tenancy dispute', v_client, auth.uid())
+  returning id into v_m2;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'CL9', 'Their client', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_other, 'M-9', 'Their matter', v_client, auth.uid())
+  returning id into v_their_m;
+
+  v_bank := pg_temp.a_bank(v_org, '1131', 'Office Current', 5000.00);
+
+  -- A whole claim for one file: a day at court.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M1', '6100', 100, 0, 100, v_bank);
+  update public.expenses set matter_id = v_m1 where id = v_exp;
+  v_entry := public.post_expense(v_exp);
+
+  perform pg_temp.check_eq('the claimed cost carries its matter',
+    (select matter_id from public.gl_lines
+      where entry_id = v_entry
+        and account_id = (select id from public.accounts
+                           where org_id = v_org and code = '6100')),
+    v_m1);
+
+  -- The bank leg does not. Money left the FIRM'S office account; it is
+  -- not what the file cost, and carrying it would double every matter's
+  -- disbursements.
+  perform pg_temp.check_true('but the bank leg does not',
+    (select matter_id is null from public.gl_lines
+      where entry_id = v_entry and credit > 0));
+
+  -- A split claim. The line wins over the header, exactly as the
+  -- project and the department already do.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M2', '6100', 300, 0, 300, v_bank);
+  update public.expenses set matter_id = v_m1 where id = v_exp;
+  perform public.set_expense_split(v_exp, jsonb_build_array(
+    jsonb_build_object(
+      'account_id', (select id from public.accounts
+                      where org_id = v_org and code = '6100'),
+      'amount', 200, 'matter_id', v_m2),
+    jsonb_build_object(
+      'account_id', (select id from public.accounts
+                      where org_id = v_org and code = '6200'),
+      'amount', 100)));
+  v_entry := public.post_expense(v_exp);
+
+  perform pg_temp.check_eq('a split line overrides the header',
+    (select matter_id from public.gl_lines
+      where entry_id = v_entry and debit = 200),
+    v_m2);
+
+  perform pg_temp.check_eq('and a line that names none falls back to it',
+    (select matter_id from public.gl_lines
+      where entry_id = v_entry and debit = 100),
+    v_m1);
+
+  -- One claim reaching two files, which is why the column is on the
+  -- line as well as the header: a fee earner in court all morning on
+  -- two matters files one claim.
+  perform pg_temp.check_eq('one claim, two matters',
+    (select count(distinct matter_id)::int from public.gl_lines
+      where entry_id = v_entry and debit > 0), 2);
+
+  -- Reclaimed tax is the firm's account with the Customs Department.
+  -- Asserted apart from the bank leg because it is a DEBIT, so a rule
+  -- written as "only debits carry a matter" would pass above and still
+  -- double-count here.
+  select id into v_tax from public.accounts
+   where org_id = v_org and code = '1410';
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M3', '6100', 100, 6, 106, v_bank);
+  update public.expenses set matter_id = v_m1 where id = v_exp;
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_true('and reclaimed tax carries no matter',
+    (select matter_id is null from public.gl_lines
+      where entry_id = v_entry and account_id = v_tax));
+
+  -- Null stays null: the firm's own rent and stationery belong to no
+  -- file, and a mandatory matter is a matter people invent.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M4', '6100', 40, 0, 40, v_bank);
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_eq('a claim may name no matter at all',
+    (select count(*)::int from public.gl_lines
+      where entry_id = v_entry and matter_id is not null), 0);
+
+  -- All three dimensions are independent.
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-9', 'Job nine');
+  insert into public.departments (org_id, code, name)
+  values (v_org, 'LIT', 'Litigation');
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M5', '6100', 70, 0, 70, v_bank);
+  update public.expenses
+     set department_code = 'LIT', project_code = 'JOB-9', matter_id = v_m1
+   where id = v_exp;
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_true('and carries all three dimensions at once',
+    (select project_code = 'JOB-9' and department_code = 'LIT'
+        and matter_id = v_m1
+       from public.gl_lines where entry_id = v_entry and debit = 70));
+
+  -- Another firm's matter, on this firm's claim. RLS scopes a row by
+  -- its own `org_id` and says nothing about the ids it carries; only
+  -- the composite key refuses this.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M6', '6100', 10, 0, 10, v_bank);
+  begin
+    update public.expenses set matter_id = v_their_m where id = v_exp;
+    raise exception 'another firm''s matter went onto my claim';
+  exception
+    when foreign_key_violation then null;
+  end;
+
+  -- And deleting a matter detaches the claim rather than deleting it,
+  -- and leaves `org_id` where it was. A bare `on delete set null` on
+  -- the composite key would have tried to null `org_id` and raised.
+  v_exp := pg_temp.an_expense(v_org, 'EXP-M7', '6100', 20, 0, 20, v_bank);
+  update public.expenses set matter_id = v_m2 where id = v_exp;
+  delete from public.matters where id = v_m2;
+  perform pg_temp.check_eq('deleting a matter keeps the claim',
+    (select count(*)::int from public.expenses
+      where id = v_exp and org_id = v_org), 1);
+  perform pg_temp.check_true('and detaches it',
+    (select matter_id is null from public.expenses where id = v_exp));
+end $$;
+
 rollback;

@@ -1068,6 +1068,7 @@ class BusinessDocument {
     this.termsConditions,
     this.paymentTermId,
     this.salespersonId,
+    this.matterId,
     this.lines = const [],
     this.customFields = const {},
   });
@@ -1138,6 +1139,14 @@ class BusinessDocument {
   /// businesses never attribute a sale to anyone, and the report says so
   /// out loud rather than quietly dropping what nobody was credited with.
   final String? salespersonId;
+
+  /// Which matter this document belongs to, on a law firm's books.
+  /// `sales_documents` has carried one since `0021` and
+  /// `bill_matter_time` sets it on every fee note raised from a
+  /// matter's time entries; `purchase_documents` has none, so this is
+  /// always null on the buying side. The LINE's is what reaches the
+  /// ledger, and `0691` falls back to this where the line has none.
+  final String? matterId;
   final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
@@ -1209,6 +1218,7 @@ class BusinessDocument {
       termsConditions: j['terms_conditions'] as String?,
       paymentTermId: j['payment_term_id'] as String?,
       salespersonId: j['salesperson_id'] as String?,
+      matterId: j['matter_id'] as String?,
       lines:
           (rawLines ?? const [])
               .map((e) => DocumentLine.fromJson(e as Map<String, dynamic>))
@@ -1240,6 +1250,7 @@ class DocumentLine {
     this.sourceLineId,
     this.projectCode,
     this.departmentCode,
+    this.matterId,
     this.serviceStart,
     this.serviceEnd,
     this.customFields = const {},
@@ -1275,6 +1286,13 @@ class DocumentLine {
   /// by-dimension P&L reads, and it can only hold what the document line
   /// put there.
   final String? departmentCode;
+
+  /// Which matter this line was billed for or bought for, on a law
+  /// firm's books, or null for work that belongs to no file. Carried
+  /// for the same reason as the two above: `gl_lines.matter_id` is what
+  /// a matter's own trial balance reads, and it can only hold what the
+  /// document line put there. 0691.
+  final String? matterId;
 
   /// The period this line is earned over, or null for a line earned on
   /// the invoice date. 0309 defers a line that carries one: it credits
@@ -1315,6 +1333,7 @@ class DocumentLine {
     sourceLineId: j['source_line_id'] as String?,
     projectCode: j['project_code'] as String?,
     departmentCode: j['department_code'] as String?,
+    matterId: j['matter_id'] as String?,
     serviceStart: Fmt.parseDate(j['service_start']),
     serviceEnd: Fmt.parseDate(j['service_end']),
   );

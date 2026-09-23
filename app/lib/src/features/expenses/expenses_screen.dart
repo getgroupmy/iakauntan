@@ -7,6 +7,7 @@ import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart';
 import '../../core/providers.dart';
+import '../../core/picker_options.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -281,6 +282,12 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   String? _projectCode;
   String? _departmentCode;
 
+  /// And which matter, on a law firm's books. `0692`, and the reason is
+  /// sharper than a reporting hole: a disbursement that never reaches
+  /// the file is a disbursement that never gets billed to the client,
+  /// so the firm pays the land office and absorbs it.
+  String? _matterId;
+
   String _paymentMode = '03';
   DateTime _date = DateTime.now();
   bool _saving = false;
@@ -469,6 +476,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
           taxAmount: _tax,
           projectCode: _projectCode,
           departmentCode: _departmentCode,
+          matterId: _matterId,
           reference: _reference.text.trim().isEmpty
               ? null
               : _reference.text.trim(),
@@ -529,6 +537,11 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
     final departments =
         ref.watch(departmentsProvider).valueOrNull ?? const [];
+    // Open matters only, for the reason `matter_closing.dart` exists: a
+    // file closed last year is not one anybody means to spend on today.
+    final matters =
+        ref.watch(mattersProvider((status: 'open', search: ''))).valueOrNull ??
+            const <Matter>[];
     // Suppliers, because that is what a payee is: the same list the
     // purchase side picks from, so a bill and the cash paid for it end
     // up against one contact rather than two spellings of one.
@@ -837,6 +850,26 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                         'the cost is in the company total and in no '
                         'department.',
                     onChanged: (v) => setState(() => _departmentCode = v),
+                  ),
+                ],
+                // Shown only once a matter exists, the same rule the two
+                // above follow. That is also what keeps it off every
+                // company that is not a law firm without anything having
+                // to ask whether the module is switched on.
+                if (matters.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SearchablePicker<String>(
+                    key: const ValueKey('expense-matter'),
+                    options: matterPickerOptions(matters),
+                    value: _matterId,
+                    allowEmpty: true,
+                    emptyLabel: 'No matter',
+                    label: 'Matter',
+                    helperText:
+                        'Which file this cost is on. Leave blank for the '
+                        "firm's own costs — rent, salaries, its own bank "
+                        'charges.',
+                    onChanged: (v) => setState(() => _matterId = v),
                   ),
                 ],
                 const SizedBox(height: 12),
