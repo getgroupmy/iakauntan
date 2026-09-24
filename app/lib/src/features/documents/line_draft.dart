@@ -165,6 +165,41 @@ void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
   if (tax != null) applyTaxCodeToLine(line, tax);
 }
 
+/// Whether filling this line from an item would throw away something a
+/// PERSON wrote in the description.
+///
+/// Asked for from a bill scanned off a supplier's PDF: the reading had
+/// put "Google Workspace Business Starter Usage" on four lines, an item
+/// was assigned afterwards, and [applyItemToLine] replaced all four with
+/// the item master's name without a word. The supplier's own wording is
+/// often the more useful of the two — it is what the paper says, and it
+/// is what somebody reconciling the bill will look for.
+///
+/// Three cases are deliberately NOT worth a prompt, and each of them
+/// would make this a nuisance rather than a safeguard:
+///
+///   * an EMPTY box. There is nothing to lose and the item's name is
+///     exactly what is wanted;
+///   * the SAME text, ignoring case and surrounding space. A dialog
+///     asking whether to replace a thing with itself is a dialog people
+///     learn to dismiss without reading;
+///   * the name of the item the line is ALREADY bound to. That text got
+///     there because this function's caller put it there a moment ago,
+///     so changing item A for item B is not overriding anybody's work.
+///     Without this, correcting a mis-picked item asks twice.
+bool descriptionIsWorthKeeping({
+  required String current,
+  required String suggested,
+  String? boundItemName,
+}) {
+  String tidy(String s) => s.trim().toLowerCase();
+  final now = tidy(current);
+  if (now.isEmpty) return false;
+  if (now == tidy(suggested)) return false;
+  if (boundItemName != null && now == tidy(boundItemName)) return false;
+  return true;
+}
+
 /// Everything a line takes from the tax code it is charged at.
 ///
 /// One function because there are two places that choose a code — the

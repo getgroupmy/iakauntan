@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../items/new_item_dialog.dart';
+import 'description_override_dialog.dart';
 import 'line_draft.dart';
 import '../stock/lot_dialog.dart';
 
@@ -309,10 +310,31 @@ class _WideLineState extends State<_WideLine> {
       if (created == null || !mounted) return;
       return _applyItem(created);
     }
+    // Ask before throwing away a description somebody wrote. Reported
+    // from a bill scanned off a supplier's PDF: the reading had filled
+    // four lines, an item was assigned afterwards, and every one of
+    // them was replaced by the item master's name without a word.
+    //
+    // Only the DESCRIPTION is in question. The price, the unit, the tax
+    // code and the classification come from the item whichever way it
+    // is answered, because those are what binding a line to an item is
+    // for.
+    final description = await descriptionAfterApplying(
+      context,
+      current: _description.text,
+      item: item,
+      boundItemName: _nameOf(widget.line.itemId),
+    );
+    if (!mounted || description == null) return;
+
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
       _code.text = item.code;
-      _description.text = item.name;
+      // After `applyItemToLine`, which sets the description itself:
+      // keeping the old one means putting it back in BOTH places, on
+      // the draft that gets saved as well as in the box on screen.
+      widget.line.description = description;
+      _description.text = description;
       _price.text = item.unitPrice.toString();
     });
     widget.onChanged();
@@ -341,6 +363,21 @@ class _WideLineState extends State<_WideLine> {
       if (item.id == itemId) return item.code;
     }
     return '';
+  }
+
+  /// The NAME of the item this line is already bound to, or null where
+  /// there is none.
+  ///
+  /// Not cosmetic: it is how the prompt tells text this editor put
+  /// there from text a person typed. Changing item A for item B leaves
+  /// A's name in the box, and asking whether to keep it would ask twice
+  /// for one correction.
+  String? _nameOf(String? itemId) {
+    if (itemId == null) return null;
+    for (final item in widget.items) {
+      if (item.id == itemId) return item.name;
+    }
+    return null;
   }
 
   /// The item's own unit — what the shelf is counted in, and what the
@@ -588,10 +625,31 @@ class _NarrowLineState extends State<_NarrowLine> {
       if (created == null || !mounted) return;
       return _applyItem(created);
     }
+    // Ask before throwing away a description somebody wrote. Reported
+    // from a bill scanned off a supplier's PDF: the reading had filled
+    // four lines, an item was assigned afterwards, and every one of
+    // them was replaced by the item master's name without a word.
+    //
+    // Only the DESCRIPTION is in question. The price, the unit, the tax
+    // code and the classification come from the item whichever way it
+    // is answered, because those are what binding a line to an item is
+    // for.
+    final description = await descriptionAfterApplying(
+      context,
+      current: _description.text,
+      item: item,
+      boundItemName: _nameOf(widget.line.itemId),
+    );
+    if (!mounted || description == null) return;
+
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
       _code.text = item.code;
-      _description.text = item.name;
+      // After `applyItemToLine`, which sets the description itself:
+      // keeping the old one means putting it back in BOTH places, on
+      // the draft that gets saved as well as in the box on screen.
+      widget.line.description = description;
+      _description.text = description;
       _price.text = item.unitPrice.toString();
     });
     widget.onChanged();
@@ -620,6 +678,21 @@ class _NarrowLineState extends State<_NarrowLine> {
       if (item.id == itemId) return item.code;
     }
     return '';
+  }
+
+  /// The NAME of the item this line is already bound to, or null where
+  /// there is none.
+  ///
+  /// Not cosmetic: it is how the prompt tells text this editor put
+  /// there from text a person typed. Changing item A for item B leaves
+  /// A's name in the box, and asking whether to keep it would ask twice
+  /// for one correction.
+  String? _nameOf(String? itemId) {
+    if (itemId == null) return null;
+    for (final item in widget.items) {
+      if (item.id == itemId) return item.name;
+    }
+    return null;
   }
 
   /// The item's own unit — what the shelf is counted in, and what the
