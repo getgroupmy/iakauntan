@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | What the machine read, and what a person typed |
-| CI | **green through run 2106 (`114f1199`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0707` is the highest. CI applies on green — see below |
+| Head at time of writing | The paper behind a posting is not a file to tidy |
+| CI | **green through run 2107 (`425761f1`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| Migrations | `0708` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 367 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,988 Flutter tests**, 37 deno tests |
-| API description | 789 functions, 366 tables, version `0707` |
+| Gates | 368 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **6,000 Flutter tests**, 38 deno tests |
+| API description | 790 functions, 366 tables, version `0708` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -1226,6 +1226,9 @@ than faults in the new work.
 | "in some cases the tax is calculated in total instead of in single item" | `0705` + `ScanTotalsBanner` — tax stays per line, and the paper's own three figures are now shown beside what the lines come to when they disagree |
 | "scanned in with no round up or round down, make it automatic but not for all cases" | `0706` — `documents.rounding_method`, decided from the paper's own stated total. Bank Negara rounds CASH; the company-wide switch was restating every supplier bill |
 | "all entry created with AI SmartScan tagged 'AI Scan', beside posted/draft/overdue/complete" | `0707` — `entry_source` on the four tables a reading becomes one record of, written beside `ocr_scans.posted_id` in the same statement; `EntrySourceChip` beside every status |
+| "all uploaded documents saved in record; if used it can't be deleted, if not it can" | `0708` — `app.attachment_is_evidence` plus a `before delete` trigger; the card draws a lock instead of a button |
+| "when the file is uploaded it should also add date and time in the filename" | `stampedFileName` — `bil_20260924-1710.pdf`, the extension left last |
+| "all document may be handwritten" | the reader's prompt, now its own module with `prompt_test.ts` asserting it still says so |
 
 ### Four faults that were already there
 

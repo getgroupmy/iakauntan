@@ -1829,6 +1829,8 @@ jobs:
       - run: deno test supabase/functions/ocr/gemini_schema_test.ts
       - run: deno check supabase/functions/ocr/exchange_test.ts
       - run: deno test supabase/functions/ocr/exchange_test.ts
+      - run: deno check supabase/functions/ocr/prompt_test.ts
+      - run: deno test supabase/functions/ocr/prompt_test.ts
 
       # Reading an e-mail well enough to file what was in it.
       #

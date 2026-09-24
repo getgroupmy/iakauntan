@@ -196,7 +196,10 @@ const SCHEMA = {
   properties: {
     supplier_name: {
       type: ["string", "null"],
-      description: "The business issuing the document, as printed.",
+      description: "The business issuing the document, as it appears on the page. On " +
+        "a document a business wrote about its OWN payment — a payment " +
+        "voucher, a petty cash slip — that is the business itself, and " +
+        "the party being PAID is not this field; put the payee in `note`.",
     },
     supplier_tax_id: {
       type: ["string", "null"],
@@ -215,20 +218,20 @@ const SCHEMA = {
     supplier_email: {
       type: ["string", "null"],
       description:
-        "The supplier's email address as printed. Null unless one is " +
+        "The supplier's email address as it appears. Null unless one is " +
         "plainly there — a wrong address is where a remittance goes.",
     },
     supplier_phone: {
       type: ["string", "null"],
       description:
-        "The supplier's telephone number as printed. Not an approval " +
+        "The supplier's telephone number as it appears. Not an approval " +
         "code, a terminal id or a customer service number for somebody " +
         "else's product.",
     },
     supplier_address: {
       type: ["string", "null"],
       description:
-        "The supplier's full address as printed, newlines preserved. Do " +
+        "The supplier's full address as it appears, newlines preserved. Do " +
         "not split it into fields and do not reorder it.",
     },
     document_no: {
@@ -243,9 +246,13 @@ const SCHEMA = {
     document_date: {
       type: ["string", "null"],
       description:
-        "The document date as YYYY-MM-DD. Malaysian receipts are usually " +
-        "DD/MM/YYYY; read them that way unless the day exceeds 12 and " +
-        "resolves the order for you.",
+        "The document date as YYYY-MM-DD. Malaysian documents are " +
+        "usually DD/MM/YYYY; read them that way unless the day exceeds " +
+        "12 and resolves the order for you. Handwritten dates are often " +
+        "DD/MM/YY with a two-digit year — 28/1/25 is 2025-01-28, not " +
+        "2025-01-28 in some other order and not 1925. If the date on " +
+        "the document is unreadable this is null: a period named in the " +
+        "description is what the payment is FOR, not when it was made.",
     },
     currency: {
       type: ["string", "null"],
@@ -304,27 +311,8 @@ const SCHEMA = {
   },
 } as const;
 
-const SYSTEM = [
-  "You are reading a purchase document for a Malaysian bookkeeper: a",
-  "receipt, a supplier invoice, a bill or a payment slip.",
-  "",
-  "Transcribe what is printed. Do not compute a missing figure and",
-  "present it as read — if the subtotal is not on the document, that",
-  "field is null, and if the arithmetic on the document does not foot,",
-  "say so in `note` and report the printed figures unchanged.",
-  "",
-  "A charge often takes more than one printed line: the item on the",
-  "first, the detail on the second — a part number, a period covered, a",
-  "site address, a serial. That is one entry, and the second line goes",
-  "in its description after a newline. Splitting it into a second entry",
-  "with no price puts a phantom line on somebody's bill; dropping it",
-  "loses what they are actually being charged for.",
-  "",
-  "Malaysian documents worth knowing: amounts are prefixed RM; service",
-  "tax appears as SST, and older documents show GST; a tax-inclusive",
-  "total is often printed as 'Total Inclusive of SST'. Thermal receipts",
-  "fade — an amount you cannot read is null and a note, never a guess.",
-].join("\n");
+export { SYSTEM } from "./prompt.ts";
+import { SYSTEM } from "./prompt.ts";
 
 /** The base64 an API body wants, without blowing the stack on a big file. */
 function toBase64(bytes: Uint8Array): string {
