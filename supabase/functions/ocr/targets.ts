@@ -254,3 +254,88 @@ export function requiredWith(
 ): string[] {
   return [...new Set([...base, ...Object.keys(extra ?? {})])];
 }
+
+/**
+ * How many output tokens to allow for one reading.
+ *
+ * ## Why this is not a constant
+ *
+ * It was 4000 at all three readers, and 4000 is right for what this
+ * function was built to read: a receipt has fourteen fields and a
+ * handful of lines, and a bigger budget on it buys nothing but a longer
+ * wait if the model rambles.
+ *
+ * A BANK STATEMENT is not that. It is one record per printed line, and
+ * a line of this JSON — a date, a narration a bank wrote, a reference,
+ * an amount and a running balance — costs somewhere around fifty-five
+ * tokens. So 4000 tokens is about SEVENTY LINES, and a one-month
+ * business current account routinely runs to two or three hundred.
+ *
+ * What happened then was not a partial answer. It was
+ * `stop_reason: max_tokens`, which this function turns into "The
+ * document was too long to read in one pass" — reported to somebody who
+ * had just photographed their statement as the scan having failed, with
+ * advice ("attach the page with the totals on it") that means nothing
+ * for a statement.
+ *
+ * ## Read off the schema rather than passed down
+ *
+ * `rows` is in the schema exactly when some target repeats, which is
+ * exactly when the answer is many records instead of one. So the budget
+ * follows the question without a flag to set, and a destination marked
+ * `repeats` in the console gets the room it needs on the next scan.
+ *
+ * The cap is the VENDOR'S, because exceeding it is a 400 rather than a
+ * truncation: Gemini 2.0 Flash tops out at 8192 output tokens where
+ * Claude and the OpenAI-shaped endpoints go far higher. Asking for more
+ * than the model can give turns a long statement into a refusal, which
+ * is the failure this exists to remove.
+ *
+ * ## It looks under `properties`, and that is the whole of the bug it
+ * ## was written with
+ *
+ * `targetSchema` returns `{ target, fields, rows }` — `rows` at the top.
+ * What the READERS are handed is not that. `index.ts` spreads it into
+ * the base schema's properties:
+ *
+ *     { ...SCHEMA, properties: { ...SCHEMA.properties, ...extra } }
+ *
+ * so by the time a reader sees it, `rows` is at `schema.properties.rows`
+ * and `"rows" in schema` is FALSE. Written the obvious way, this
+ * returned 4000 for every statement in production while its test —
+ * which asked `targetSchema` directly — passed.
+ *
+ * Both shapes are accepted because both are real: the assembled one is
+ * what ships, and the bare one is what a caller building a schema by
+ * hand has. The test asserts the ASSEMBLED shape, because that is the
+ * one that was wrong.
+ */
+export function outputBudget(
+  schema: Record<string, unknown>,
+  cap: number,
+): number {
+  const props = (schema.properties ?? schema) as Record<string, unknown>;
+  const wanted = "rows" in props ? 16000 : 4000;
+  return Math.min(wanted, cap);
+}
+
+/**
+ * What to say when the reader ran out of room.
+ *
+ * Two different sentences because they are two different situations
+ * with two different remedies. "Attach the page with the totals on it"
+ * is sound advice about a forty-page lease and useless about a bank
+ * statement, where every page is the point and the totals page is the
+ * one part nobody needs.
+ */
+export function tooLongMessage(schema: Record<string, unknown>): string {
+  const props = (schema.properties ?? schema) as Record<string, unknown>;
+  if ("rows" in props) {
+    return "The statement was too long to read in one pass. Send it a " +
+      "few pages at a time, or export it as CSV or MT940 from online " +
+      "banking — those are read here rather than by a model, and have " +
+      "no length limit.";
+  }
+  return "The document was too long to read in one pass. Attach the page " +
+    "with the totals on it.";
+}

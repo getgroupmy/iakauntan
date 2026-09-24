@@ -60,9 +60,11 @@ import { Exchange, record } from "./exchange.ts";
 import { ReaderRefusal, withOneRetry } from "./retry.ts";
 import {
   type ScanTarget,
+  outputBudget,
   requiredWith,
   targetPrompt,
   targetSchema,
+  tooLongMessage,
   usableTargets,
 } from "./targets.ts";
 
@@ -366,7 +368,10 @@ async function readClaude(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4000,
+      // Claude and the OpenAI-shaped endpoints allow far more than a
+      // statement needs; 16000 is chosen for the answer rather than
+      // for the ceiling. See `outputBudget`.
+      max_tokens: outputBudget(schema, 16000),
       system,
       // No extended thinking. This is a bounded transcription with a
       // fixed output shape, and the tenant is paying per scan for an
@@ -397,10 +402,7 @@ async function readClaude(
     throw new Error("Claude declined to read this document.");
   }
   if (body?.stop_reason === "max_tokens") {
-    throw new Error(
-      "The document was too long to read in one pass. Attach the page " +
-        "with the totals on it.",
-    );
+    throw new Error(tooLongMessage(schema));
   }
 
   const text = (body?.content ?? [])
@@ -481,7 +483,7 @@ async function readOpenAiShaped(
     },
     body: JSON.stringify({
       model,
-      max_completion_tokens: 4000,
+      max_completion_tokens: outputBudget(schema, 16000),
       response_format: {
         type: "json_schema",
         json_schema: { name: "purchase_document", strict: true, schema },
@@ -511,10 +513,7 @@ async function readOpenAiShaped(
 
   const choice = body?.choices?.[0];
   if (choice?.finish_reason === "length") {
-    throw new Error(
-      "The document was too long to read in one pass. Attach the page " +
-        "with the totals on it.",
-    );
+    throw new Error(tooLongMessage(schema));
   }
   const text = choice?.message?.content;
   if (typeof text !== "string" || text.trim() === "") {
@@ -598,7 +597,11 @@ async function readGemini(
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: geminiSchema(schema),
-        maxOutputTokens: 4000,
+        // 8192 is Gemini 2.0 Flash's ceiling, and asking for more is a
+        // 400 rather than a truncation -- which would turn a long
+        // statement into a refusal, the failure `outputBudget` exists
+        // to remove.
+        maxOutputTokens: outputBudget(schema, 8192),
       },
     }),
   });
@@ -619,10 +622,7 @@ async function readGemini(
   // truncated JSON and blaming the schema would send somebody looking
   // in the wrong place.
   if (candidate?.finishReason === "MAX_TOKENS") {
-    throw new Error(
-      "The document was too long to read in one pass. Attach the page " +
-        "with the totals on it.",
-    );
+    throw new Error(tooLongMessage(schema));
   }
   // A blocked answer carries no parts at all, and the reason is the
   // only thing that says why.

@@ -1,8 +1,14 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.19";
 import {
+  assert,
+  assertEquals,
+  assertStringIncludes,
+} from "jsr:@std/assert@1.0.19";
+import {
+  outputBudget,
   requiredWith,
   targetPrompt,
   targetSchema,
+  tooLongMessage,
   usableTargets,
 } from "./targets.ts";
 
@@ -297,4 +303,119 @@ Deno.test("the nested objects name their properties too", () => {
   };
   assertEquals(rows.items.required.sort(), ["amount", "transaction_date"]);
   assertEquals(rows.items.required.length, Object.keys(rows.items.properties).length);
+});
+
+/**
+ * How much room the reader is given, and why it is not a constant.
+ *
+ * It was 4000 at all three readers. That is right for a receipt —
+ * fourteen fields and a handful of lines — and it is about SEVENTY
+ * LINES of a bank statement, where each line of JSON costs roughly
+ * fifty-five tokens. A one-month business current account runs to two
+ * or three hundred.
+ *
+ * What a statement got was not a partial answer. It was
+ * `stop_reason: max_tokens`, reported to somebody who had just
+ * photographed their statement as the scan having failed.
+ */
+/// Exactly what `index.ts` hands a reader.
+///
+/// This is the shape that matters and the shape the first version of
+/// `outputBudget` got wrong: `targetSchema` puts `rows` at the top, and
+/// `index.ts` then spreads the whole thing into `properties`. Asking
+/// `"rows" in schema` of the assembled object is false, so every
+/// statement in production would have kept the 4000-token budget while
+/// a test that asked `targetSchema` directly went green.
+function assembled(extra: Record<string, unknown> | null) {
+  const base = {
+    type: "object",
+    additionalProperties: false,
+    required: ["supplier_name", "total_amount"],
+    properties: {
+      supplier_name: { type: ["string", "null"] },
+      total_amount: { type: ["number", "null"] },
+    },
+  };
+  if (extra === null) return base;
+  return {
+    ...base,
+    properties: { ...base.properties, ...extra },
+    required: requiredWith(base.required, extra),
+  };
+}
+
+const statementTarget = {
+  key: "accounting.bank_statement",
+  label: "A bank statement",
+  repeats: true,
+  fields: [{ name: "transaction_date" }, { name: "amount" }],
+};
+
+const receiptTarget = {
+  key: "accounting.expense",
+  label: "An expense",
+  fields: [{ name: "expense_date" }, { name: "total_amount" }],
+};
+
+Deno.test("a statement is given room for a statement", () => {
+  const schema = assembled(targetSchema([statementTarget]));
+  assertEquals(outputBudget(schema, 16000), 16000);
+});
+
+Deno.test("and a receipt is not, because it cannot use it", () => {
+  const schema = assembled(targetSchema([receiptTarget]));
+  assertEquals(outputBudget(schema, 16000), 4000);
+});
+
+Deno.test("a deployment with no targets keeps exactly what it had", () => {
+  // `targetSchema` answers null and `index.ts` leaves the base schema
+  // untouched. Nothing about this change may move that.
+  assertEquals(targetSchema([]), null);
+  assertEquals(outputBudget(assembled(null), 16000), 4000);
+});
+
+Deno.test("the vendor's ceiling wins, because exceeding it is a 400", () => {
+  // Gemini 2.0 Flash tops out at 8192 output tokens. Asking for more is
+  // refused outright rather than truncated -- which would turn a long
+  // statement into an error, the exact failure this removes.
+  assertEquals(outputBudget(assembled(targetSchema([statementTarget])), 8192),
+    8192);
+  // And a receipt under a low ceiling is still the receipt's budget,
+  // not the ceiling.
+  assertEquals(outputBudget(assembled(targetSchema([receiptTarget])), 8192),
+    4000);
+});
+
+Deno.test("the bare schema works too, since both shapes are real", () => {
+  // A caller holding `targetSchema`'s own output rather than the
+  // assembled one. Accepted, and asserted so that accepting it is a
+  // decision rather than an accident.
+  assertEquals(outputBudget(targetSchema([statementTarget])!, 16000), 16000);
+});
+
+/**
+ * What is said when the room runs out.
+ *
+ * Two sentences because they are two situations with two remedies.
+ * "Attach the page with the totals on it" is sound about a forty-page
+ * lease and useless about a statement, where every page is the point
+ * and the totals page is the one part nobody needs.
+ */
+Deno.test("a statement that overflows is told what to do about it", () => {
+  const said = tooLongMessage(assembled(targetSchema([statementTarget])));
+  assertStringIncludes(said, "statement");
+  // The way out with no length limit at all, because it is not read by
+  // a model.
+  assertStringIncludes(said, "CSV");
+  assert(
+    !said.includes("page with the totals"),
+    "that advice is for a long document, not for a statement",
+  );
+});
+
+Deno.test("and a long document still gets the advice that suits it", () => {
+  assertStringIncludes(
+    tooLongMessage(assembled(targetSchema([receiptTarget]))),
+    "page with the totals",
+  );
 });

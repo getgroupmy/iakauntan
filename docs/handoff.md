@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The prompt's first sentence said every document was a purchase |
+| Head at time of writing | Seventy lines, which is not a bank statement |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,139 Flutter tests**, 45 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,139 Flutter tests**, 53 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1881,6 +1881,61 @@ A paragraph in a prompt has no callers, no types and no compiler, and
 dropping one here silently disarms code in
 `statement_import.dart` — so the test says which paragraph holds up
 what.
+
+## Seventy lines, which is not a bank statement
+
+The likeliest reason a real statement "did not scan", and the plainest
+number in this whole stretch.
+
+All three readers sent `max_tokens: 4000`. That is right for what the
+function was built to read — a receipt has fourteen fields and a handful
+of lines. A bank statement is one record per printed line, and a line of
+this JSON (a date, a narration the bank wrote, a reference, an amount
+and a running balance) costs somewhere around **fifty-five tokens**.
+
+    4000 / 55  ≈  70 lines
+
+A one-month business current account runs to two or three hundred. What
+came back was not a partial answer — it was `stop_reason: max_tokens`,
+which this function turns into *"The document was too long to read in
+one pass. Attach the page with the totals on it."* Reported to somebody
+who had just photographed their statement as the scan having failed,
+with advice that means nothing for a statement: every page is the point
+and the totals page is the one part nobody needs.
+
+`outputBudget(schema, cap)` reads the need **off the schema**: `rows` is
+present exactly when some target repeats, which is exactly when the
+answer is many records rather than one. No flag to set, and a
+destination marked `repeats` in the console gets the room on its next
+scan. `tooLongMessage(schema)` picks the sentence the same way, and for
+a statement it names the way out with no length limit at all — a CSV or
+MT940 export, which is read here rather than by a model.
+
+**The cap is the vendor's**, because exceeding it is a 400 rather than a
+truncation: Gemini 2.0 Flash tops out at 8192 output tokens where Claude
+and the OpenAI-shaped endpoints go far higher. Asking for more than the
+model can give would turn a long statement into a refusal, which is the
+failure being removed.
+
+### And the bug I wrote on the way
+
+`targetSchema` returns `{ target, fields, rows }` with `rows` at the
+top. **That is not what a reader is handed.** `index.ts` spreads it into
+the base schema's properties:
+
+    { ...SCHEMA, properties: { ...SCHEMA.properties, ...extra } }
+
+so by the time a reader sees it, `rows` is at `schema.properties.rows`
+and `"rows" in schema` is **false**. Written the obvious way, this
+returned 4000 for every statement in production — and its test passed,
+because the test asked `targetSchema` directly.
+
+Caught by reading the call site rather than by the test. Both functions
+now look under `properties` first, the tests are built from the
+**assembled** schema exactly as `index.ts` assembles it, and both were
+checked by putting the bug back and watching each fail. There is no
+mutation harness for Deno here, so that check was done by hand and is
+worth doing by hand again on anything in this file.
 
 ## This session's commits
 
