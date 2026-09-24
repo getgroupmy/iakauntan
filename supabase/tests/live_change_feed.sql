@@ -95,7 +95,19 @@ language sql immutable as $fn$ select array[
     -- neither is written often enough for anybody to have noticed. That
     -- is not a precedent to follow, and it is written down here rather
     -- than quietly diverged from.
-    'ocr_provider_keys'] $fn$;
+    'ocr_provider_keys',
+    -- 0704, and the sixth. `ocr_exchanges` is what each reader actually
+    -- answered, kept raw for the console: RLS on with no policy and no
+    -- door but a platform-admin function, so the first half of the
+    -- `ssm_api_log` argument applies unchanged -- a notice would wake
+    -- every client watching that company to say a table they cannot
+    -- select from has moved.
+    --
+    -- And the second half is `ocr_provider_keys`'s, one step worse:
+    -- every scan writes between one and three rows here, so with the
+    -- trigger attached EVERY SCAN would append that many change notices
+    -- about replies nobody but the platform may read.
+    'ocr_exchanges'] $fn$;
 
 do $$
 declare

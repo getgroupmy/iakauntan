@@ -523,4 +523,202 @@ void main() {
       expect(find.text('never worked'), findsNothing);
     });
   });
+
+  // The row as the database hands it over. Built by hand everywhere
+  // else in this file, so without these the parsing had no test at all
+  // -- and a mutant that dropped the body on the way out survived the
+  // first sweep without a single assertion noticing.
+  group('one call, as it arrives', () {
+    test('every field comes across', () {
+      final e = ScanExchange.fromJson({
+        'id': 'ex-1',
+        'at': '2026-09-24T03:22:00+00:00',
+        'attempt': 2,
+        'provider': 'gemini',
+        'endpoint': 'https://generativelanguage.googleapis.com/v1beta',
+        'http_status': 503,
+        'ms': 812,
+        'ok': false,
+        'body': '{"error":{"message":"high demand"}}',
+        'truncated': true,
+      });
+
+      expect(e.attempt, 2);
+      expect(e.provider, 'gemini');
+      expect(e.httpStatus, 503);
+      expect(e.ms, 812);
+      expect(e.ok, isFalse);
+      expect(e.truncated, isTrue);
+      expect(e.body, contains('high demand'));
+      expect(e.noAnswer, isFalse);
+    });
+
+    // The case the console draws differently, and the one the column
+    // cannot express except as absence: nothing answered at all. Null
+    // and zero are the same answer here, and a check written `== 0`
+    // alone would call a null row an answer.
+    test('a status that is absent is no answer, and so is zero', () {
+      expect(
+        ScanExchange.fromJson({
+          'id': 'a',
+          'at': '2026-09-24T03:22:00+00:00',
+          'attempt': 1,
+          'http_status': null,
+          'body': 'TypeError: error sending request',
+        }).noAnswer,
+        isTrue,
+      );
+      expect(
+        ScanExchange.fromJson({
+          'id': 'b',
+          'at': '2026-09-24T03:22:00+00:00',
+          'attempt': 1,
+          'http_status': 0,
+        }).noAnswer,
+        isTrue,
+      );
+    });
+
+    test('and a reply that was not cut says so', () {
+      final e = ScanExchange.fromJson({
+        'id': 'c',
+        'at': '2026-09-24T03:22:00+00:00',
+        'attempt': 1,
+        'http_status': 200,
+        'ok': true,
+        'body': '{"content":[]}',
+        'truncated': false,
+      });
+      expect(e.truncated, isFalse);
+      expect(e.ok, isTrue);
+      expect(e.body, '{"content":[]}');
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // What the reader actually said
+  //
+  // `0704`. Asked for from the console: "all error or reply by models
+  // should be logged in raw as this is to be used for troubleshooting".
+  // What the row above carries is `ocr_scans.error` -- ONE SENTENCE,
+  // written by us out of whichever field of the vendor's JSON the edge
+  // function reached for. The day a reader answers something the code
+  // did not anticipate, that sentence is `HTTP 400` and the body that
+  // would have explained it is gone.
+  // ------------------------------------------------------------------
+  group('the raw replies', () {
+    ScanExchange call({
+      String id = 'ex-1',
+      int attempt = 1,
+      String? provider = 'gemini',
+      String? endpoint = 'https://generativelanguage.googleapis.com/v1beta',
+      int? httpStatus = 503,
+      int? ms = 812,
+      bool ok = false,
+      bool truncated = false,
+      String? body =
+          '{"error":{"message":"This model is currently experiencing high '
+          'demand."}}',
+    }) =>
+        ScanExchange(
+          id: id,
+          at: DateTime(2026, 9, 24, 11, 22),
+          attempt: attempt,
+          ok: ok,
+          truncated: truncated,
+          provider: provider,
+          endpoint: endpoint,
+          httpStatus: httpStatus,
+          ms: ms,
+          body: body,
+        );
+
+    Future<void> open(WidgetTester tester, List<ScanExchange> calls) async {
+      tester.view.physicalSize = const Size(1200, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          scanLogProvider.overrideWith((ref, q) async => [scan()]),
+          scanHealthProvider.overrideWith((ref) async => ScanHealth.none),
+          readerFailuresProvider.overrideWith((ref) async => const []),
+          scanExchangesProvider.overrideWith((ref, id) async => calls),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(body: ScanLogAdminTab()),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ExpansionTile));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the vendor own words, verbatim', (tester) async {
+      await open(tester, [call()]);
+
+      expect(
+        find.textContaining('This model is currently experiencing high demand'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('HTTP 503'), findsOneWidget);
+      expect(find.textContaining('812 ms'), findsOneWidget);
+    });
+
+    // One scan can be three requests to two vendors -- the attempt,
+    // `459d3716`'s retry and `0679`'s fallback -- and which of them said
+    // what was the unanswerable question.
+    testWidgets('every call, in the order they happened', (tester) async {
+      await open(tester, [
+        call(id: 'a', attempt: 1),
+        call(id: 'b', attempt: 2),
+        call(
+          id: 'c',
+          attempt: 3,
+          provider: 'claude',
+          httpStatus: 200,
+          ok: true,
+          body: '{"content":[{"type":"text","text":"99 Speedmart"}]}',
+        ),
+      ]);
+
+      expect(find.text('#1'), findsOneWidget);
+      expect(find.text('#3'), findsOneWidget);
+      expect(find.text('claude'), findsOneWidget);
+      // The successful one is kept too, which is the half somebody
+      // would be tempted to drop: a reading that came back WRONG is
+      // where the raw reply matters most, and it did not fail.
+      expect(find.textContaining('99 Speedmart'), findsOneWidget);
+    });
+
+    // Zero is not a status. It is what a status reads as when nothing
+    // answered at all, which is a different fault from being refused.
+    testWidgets('nothing answering is not drawn as HTTP 0', (tester) async {
+      await open(tester, [
+        call(httpStatus: 0, body: 'TypeError: error sending request'),
+      ]);
+
+      expect(find.text('no answer'), findsOneWidget);
+      expect(find.textContaining('HTTP 0'), findsNothing);
+      expect(find.textContaining('error sending request'), findsOneWidget);
+    });
+
+    testWidgets('a cut reply says it was cut', (tester) async {
+      await open(tester, [call(truncated: true)]);
+      expect(find.textContaining('Cut at 16k'), findsOneWidget);
+    });
+
+    // Two different nothings, and a screen that said only "no replies"
+    // would leave somebody looking for a bug in the logging.
+    testWidgets('and nothing kept says which nothing it is', (tester) async {
+      await open(tester, const []);
+
+      expect(find.textContaining('never reached a reader'), findsOneWidget);
+      expect(
+        find.textContaining('before replies were being kept'),
+        findsOneWidget,
+      );
+    });
+  });
 }

@@ -963,6 +963,7 @@ jobs:
                    supabase/tests/reader_reads_pdf.sql \
                    supabase/tests/ocr_rescan.sql \
                    supabase/tests/local_rescue.sql \
+                   supabase/tests/scan_exchanges.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
@@ -1822,6 +1823,8 @@ jobs:
       # differs from JSON Schema in two silent ways.
       - run: deno check supabase/functions/ocr/gemini_schema_test.ts
       - run: deno test supabase/functions/ocr/gemini_schema_test.ts
+      - run: deno check supabase/functions/ocr/exchange_test.ts
+      - run: deno test supabase/functions/ocr/exchange_test.ts
 
       # Reading an e-mail well enough to file what was in it.
       #

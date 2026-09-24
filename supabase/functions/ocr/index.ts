@@ -56,6 +56,7 @@ import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { geminiSchema } from "./gemini_schema.ts";
 import { poolProblem } from "./pool.ts";
+import { Exchange, record } from "./exchange.ts";
 import { ReaderRefusal, withOneRetry } from "./retry.ts";
 import {
   type ScanTarget,
@@ -345,6 +346,7 @@ function toNumber(v: unknown): number | null {
 }
 
 async function readClaude(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
@@ -367,7 +369,7 @@ async function readClaude(
     data: toBase64(bytes),
   };
 
-  const response = await fetch(endpoint, {
+  const response = await record(rec, endpoint, {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -441,6 +443,7 @@ async function readClaude(
  * happens to parse rather than a hard failure.
  */
 async function readOpenAiShaped(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
@@ -482,7 +485,7 @@ async function readOpenAiShaped(
       image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
     };
 
-  const response = await fetch(endpoint, {
+  const response = await record(rec, endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -562,6 +565,7 @@ async function readOpenAiShaped(
  * credential or the platform's pooled key.
  */
 async function readGemini(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
@@ -584,7 +588,7 @@ async function readGemini(
     .replace(/\/+$/, "");
   const url = `${base}/models/${encodeURIComponent(model)}:generateContent`;
 
-  const response = await fetch(url, {
+  const response = await record(rec, url, {
     method: "POST",
     headers: {
       "x-goog-api-key": apiKey,
@@ -691,6 +695,7 @@ async function readGemini(
  * certainly does, and the catalog row says which by `takes_key`.
  */
 async function readSelfHosted(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
@@ -727,7 +732,7 @@ async function readSelfHosted(
   const headers: Record<string, string> = { accept: "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
-  const res = await fetch(endpoint, {
+  const res = await record(rec, endpoint, {
     method: "POST",
     headers,
     body: form,
@@ -901,6 +906,7 @@ function numberFrom(v: unknown): number | null {
 }
 
 async function readGoogle(
+  rec: Exchange[],
   credential: string,
   project: string,
   location: string,
@@ -925,7 +931,7 @@ async function readGoogle(
   const endpoint = `https://${location}-documentai.googleapis.com/v1/` +
     `projects/${project}/locations/${location}/processors/${processor}:process`;
 
-  const response = await fetch(endpoint, {
+  const response = await record(rec, endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -1201,7 +1207,12 @@ async function credentialFor(
  * newly added `kind` to be half-supported.
  */
 async function runReader(
-  reader: Pick<BeginResult, "kind" | "endpoint" | "model">,
+  // Where each call to the vendor is written down, in order. `0704`:
+  // one scan can be three requests to two vendors -- the first
+  // attempt, `459d3716`'s retry and `0679`'s fallback -- and which of
+  // them said what was unanswerable until this was kept.
+  rec: Exchange[],
+  reader: Pick<BeginResult, "kind" | "endpoint" | "model" | "provider">,
   credential: ResolvedKey,
   bytes: Uint8Array,
   mime: string,
@@ -1233,9 +1244,33 @@ async function runReader(
   };
   const system = extra === null ? SYSTEM : SYSTEM + "\n" + targetPrompt(targets);
 
+  // Which reader made the calls this run is about to add. Stamped
+  // here, once, rather than passed down into five readers that have no
+  // other use for it: `record` knows the endpoint and the answer, and
+  // this is the only place that knows whose they were.
+  const from = rec.length;
+  try {
+    return await callReader(rec, reader, credential, bytes, mime, schema, system);
+  } finally {
+    for (let i = from; i < rec.length; i++) {
+      rec[i].provider ??= reader.provider;
+    }
+  }
+}
+
+async function callReader(
+  rec: Exchange[],
+  reader: Pick<BeginResult, "kind" | "endpoint" | "model" | "provider">,
+  credential: ResolvedKey,
+  bytes: Uint8Array,
+  mime: string,
+  schema: Record<string, unknown>,
+  system: string,
+): Promise<Extraction> {
   switch (reader.kind) {
     case "anthropic":
       return await readClaude(
+        rec,
         credential.api_key,
         reader.endpoint ?? "https://api.anthropic.com/v1/messages",
         reader.model ?? "",
@@ -1246,6 +1281,7 @@ async function runReader(
       );
     case "google_gemini":
       return await readGemini(
+        rec,
         credential.api_key,
         reader.endpoint ?? "",
         reader.model ?? "",
@@ -1256,6 +1292,7 @@ async function runReader(
       );
     case "openai":
       return await readOpenAiShaped(
+        rec,
         credential.api_key,
         reader.endpoint ?? "",
         reader.model ?? "",
@@ -1266,6 +1303,7 @@ async function runReader(
       );
     case "self_hosted":
       return await readSelfHosted(
+        rec,
         credential.api_key,
         reader.endpoint ?? "",
         reader.model ?? "",
@@ -1274,6 +1312,7 @@ async function runReader(
       );
     case "google_docai":
       return await readGoogle(
+        rec,
         credential.api_key,
         credential.project_id ?? "",
         credential.location ?? "us",
@@ -1319,6 +1358,7 @@ interface FallbackReader {
  *   message with the second one's.
  */
 async function tryFallback(
+  rec: Exchange[],
   db: SupabaseClient,
   scanId: string,
   orgId: string,
@@ -1340,7 +1380,8 @@ async function tryFallback(
       charged: 0,
     }, orgId);
     return {
-      extraction: await runReader(reader, credential, bytes, mime, targets),
+      extraction: await runReader(
+        rec, reader, credential, bytes, mime, targets),
       reader,
     };
   } catch (e) {
@@ -1348,6 +1389,32 @@ async function tryFallback(
     // scan's `error` column is about the reader the company chose.
     console.error("the fallback reader failed too", scanId, e);
     return null;
+  }
+}
+
+/**
+ * Files what the readers said, and never lets that cost a scan.
+ *
+ * Best effort, twice over: nothing is awaited for its result beyond the
+ * error, and a failure here is logged and dropped. This is a note about
+ * work that has already happened -- the reading is done, the charge is
+ * settled, the caller is holding an answer -- and losing the note must
+ * not turn any of that into a failure.
+ */
+async function keepExchanges(
+  db: SupabaseClient,
+  scanId: string,
+  exchanges: Exchange[],
+): Promise<void> {
+  if (exchanges.length === 0) return;
+  try {
+    const { error } = await db.rpc("ocr_record_exchanges", {
+      p_scan_id: scanId,
+      p_exchanges: exchanges,
+    });
+    if (error) console.error("could not keep the exchanges", scanId, error);
+  } catch (e) {
+    console.error("could not keep the exchanges", scanId, e);
   }
 }
 
@@ -1437,6 +1504,12 @@ serveFunction("ocr.failed", async (req: Request) => {
     }
   }
 
+  // Every call this scan makes to a vendor, in order, kept raw for the
+  // console. `0704`. Declared out here rather than inside the `try`
+  // because the CATCH needs it too -- a scan that failed is the one
+  // somebody is troubleshooting, and its exchanges are the answer.
+  const exchanges: Exchange[] = [];
+
   // From here on every exit settles the scan, because an unsettled scan
   // is a charge nobody gave back.
   try {
@@ -1486,7 +1559,9 @@ serveFunction("ocr.failed", async (req: Request) => {
     // it cannot see the write.
     const blips: ReaderRefusal[] = [];
     const extraction = await withOneRetry(
-      () => runReader(begin, credential, bytes as Uint8Array, mime, targets),
+      () =>
+        runReader(exchanges, begin, credential, bytes as Uint8Array, mime,
+          targets),
       { onRetry: (failure) => blips.push(failure) },
     );
     const firstFailure = blips.length > 0 ? blips[0] : null;
@@ -1511,6 +1586,12 @@ serveFunction("ocr.failed", async (req: Request) => {
           `was asked again: ${firstFailure.message}`,
     });
     if (error) console.error("could not settle scan", begin.scan_id, error);
+
+    // The successful ones too, which is the half somebody will be
+    // tempted to drop. A reading that came back WRONG is the case
+    // where the raw reply matters most, and by definition it did not
+    // fail.
+    await keepExchanges(db, begin.scan_id, exchanges);
 
     return json({
       scan_id: begin.scan_id,
@@ -1567,7 +1648,7 @@ serveFunction("ocr.failed", async (req: Request) => {
     // succeed is one more place the document has been.
     if (bytes) {
       const rescued = await tryFallback(
-        db, begin.scan_id, orgId, bytes, mime, targets,
+        exchanges, db, begin.scan_id, orgId, bytes, mime, targets,
       );
       if (rescued) {
         const { error: settled } = await db.rpc("ocr_finish", {
@@ -1585,6 +1666,9 @@ serveFunction("ocr.failed", async (req: Request) => {
         if (settled) {
           console.error("could not settle a rescued scan", begin.scan_id, settled);
         }
+        // Both readers' answers: the one that refused and the one that
+        // read it. That pair is the whole of "why did this cost twice".
+        await keepExchanges(db, begin.scan_id, exchanges);
         return json({
           scan_id: begin.scan_id,
           provider: begin.provider,
@@ -1610,6 +1694,10 @@ serveFunction("ocr.failed", async (req: Request) => {
     if (error) {
       console.error("scan failed and was not refunded", begin.scan_id, error);
     }
+
+    // The failure is the one somebody is troubleshooting, so this is
+    // the path that must not miss.
+    await keepExchanges(db, begin.scan_id, exchanges);
     // The provider's message goes to the log and to `ocr_scans.error`,
     // which is the organization's own row behind RLS, and to the
     // console's scan log. It does not go in the response: a Document

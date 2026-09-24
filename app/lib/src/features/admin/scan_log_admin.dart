@@ -365,6 +365,12 @@ class _Stat extends StatelessWidget {
   }
 }
 
+/// One scan, and — opened — everything the readers actually said.
+///
+/// An `ExpansionTile` and not a `ListTile` since `0704`. The raw bodies
+/// are up to 16k each and a list of fifty scans would be carrying most
+/// of a megabyte nobody has asked to see, so they are fetched when a
+/// row is opened and not before.
 class _ScanRow extends StatelessWidget {
   const _ScanRow({required this.scan});
 
@@ -372,8 +378,11 @@ class _ScanRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      isThreeLine: scan.error != null,
+    return ExpansionTile(
+      key: ValueKey('scan-row-${scan.id}'),
+      childrenPadding: const EdgeInsets.fromLTRB(
+          Space.md, 0, Space.md, Space.md),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
       // A Wrap and not a Row: the company's name, a status chip and
       // "RM 0.30 not refunded" do not fit across a phone, and the
       // third of them is the one that would have gone off the edge.
@@ -398,6 +407,20 @@ class _ScanRow extends StatelessWidget {
                 color: context.colors.danger,
               ),
             ),
+          // In the title rather than as `trailing`, which an
+          // `ExpansionTile` spends on its own arrow.
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Copy the scan id',
+            icon: const Icon(Icons.copy_all_outlined, size: 18),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: scan.id));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan id copied')),
+              );
+            },
+          ),
         ],
       ),
       subtitle: Column(
@@ -431,16 +454,146 @@ class _ScanRow extends StatelessWidget {
           ],
         ],
       ),
-      trailing: IconButton(
-        tooltip: 'Copy the scan id',
-        icon: const Icon(Icons.copy_all_outlined, size: 18),
-        onPressed: () async {
-          await Clipboard.setData(ClipboardData(text: scan.id));
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Scan id copied')),
+      children: [_Exchanges(scanId: scan.id)],
+    );
+  }
+}
+
+/// What each reader answered, raw, in the order they were called.
+///
+/// `0704`. The row above carries `ocr_scans.error` — ONE SENTENCE,
+/// written by us out of whichever field of the vendor's JSON the edge
+/// function reached for. This is the reply itself, which is the only
+/// thing that helps the day a reader answers something the code did
+/// not anticipate.
+class _Exchanges extends ConsumerWidget {
+  const _Exchanges({required this.scanId});
+
+  final String scanId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final calls = ref.watch(scanExchangesProvider(scanId));
+    return AsyncView<List<ScanExchange>>(
+      value: calls,
+      onRetry: () => ref.invalidate(scanExchangesProvider(scanId)),
+      skeleton: const ListSkeleton(rows: 2, leading: false),
+      builder: (rows) {
+        if (rows.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: Space.sm),
+            child: Text(
+              // Two different nothings, and the difference matters:
+              // scans from before `0704` have none because nothing was
+              // keeping them, and a scan refused by the database never
+              // reached a reader at all.
+              'Nothing was kept for this scan. Either it never reached a '
+              'reader, or it ran before replies were being kept.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           );
-        },
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [for (final e in rows) _ExchangeRow(call: e)],
+        );
+      },
+    );
+  }
+}
+
+class _ExchangeRow extends StatelessWidget {
+  const _ExchangeRow({required this.call});
+
+  final ScanExchange call;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colour = call.ok
+        ? context.colors.success
+        : call.noAnswer
+            ? context.colors.warning
+            : context.colors.danger;
+
+    return Padding(
+      key: ValueKey('scan-exchange-${call.id}'),
+      padding: const EdgeInsets.only(bottom: Space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Wrap and not Row: five facts about one call do not fit
+          // across a phone, and the console is read on one.
+          Wrap(
+            spacing: Space.sm,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('#${call.attempt}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 12)),
+              if (call.provider != null)
+                Text(call.provider!,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 12)),
+              Text(
+                // Zero is not a status. It is what a status reads as
+                // when NOTHING ANSWERED, which is a different fault
+                // from being refused.
+                call.noAnswer ? 'no answer' : 'HTTP ${call.httpStatus}',
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: colour),
+              ),
+              if (call.ms != null)
+                Text('${call.ms} ms', style: theme.textTheme.bodySmall),
+              Text(Fmt.dateTime(call.at), style: theme.textTheme.bodySmall),
+            ],
+          ),
+          if (call.endpoint != null)
+            Text(call.endpoint!,
+                style: theme.textTheme.bodySmall, maxLines: 2),
+          const SizedBox(height: 4),
+          // The raw reply. Selectable rather than only copyable: the
+          // useful part of a vendor's JSON is usually one field in the
+          // middle of it.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(Space.sm),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SelectableText(
+              call.body?.trim().isNotEmpty == true
+                  ? call.body!
+                  : '(the reply had no body)',
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+          ),
+          if (call.truncated)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Cut at 16k — the rest was not kept.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(
+                    ClipboardData(text: call.body ?? ''));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Reply copied')),
+                );
+              },
+              icon: const Icon(Icons.copy_all_outlined, size: 16),
+              label: const Text('Copy the reply'),
+            ),
+          ),
+        ],
       ),
     );
   }

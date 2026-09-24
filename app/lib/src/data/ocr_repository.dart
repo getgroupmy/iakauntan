@@ -1089,12 +1089,83 @@ extension PlatformOcrCatalog on PlatformRepo {
     );
   }
 
+  /// Everything the readers actually said on one scan, raw.
+  ///
+  /// `0704`. `ScanLogEntry.error` is one sentence, written by us out of
+  /// whichever field of the vendor's JSON the edge function reached
+  /// for. This is the reply itself — and one row per CALL, so a retry
+  /// and a fallback are two more rows on the same scan.
+  ///
+  /// Platform administrators only, and the guard is in the database: a
+  /// caller who is not one gets an empty list rather than an error.
+  Future<List<ScanExchange>> scanExchanges(String scanId) async => Repo.rows(
+    await client
+        .rpc('platform_scan_exchanges', params: {'p_scan_id': scanId}),
+  ).map(ScanExchange.fromJson).toList();
+
   /// Per reader and distinct fault, worst first. `0685`.
   Future<List<ReaderFault>> readerFailures({int days = 30}) async =>
       Repo.rows(await client
               .rpc('platform_reader_failures', params: {'p_days': days}))
           .map(ReaderFault.fromJson)
           .toList();
+}
+
+/// One call to a reader, as it happened.
+///
+/// `0704`. The request is deliberately not here — no headers, no body,
+/// and the endpoint arrives with its query string already stripped by
+/// the database, because that is where Gemini's key travels.
+class ScanExchange {
+  const ScanExchange({
+    required this.id,
+    required this.at,
+    required this.attempt,
+    required this.ok,
+    required this.truncated,
+    this.provider,
+    this.endpoint,
+    this.httpStatus,
+    this.ms,
+    this.body,
+  });
+
+  final String id;
+  final DateTime at;
+
+  /// 1 is the first attempt, 2 the retry, 3 the fallback. The order is
+  /// the point: which reader said what, and in which order.
+  final int attempt;
+  final bool ok;
+
+  /// Whether the reply was longer than the 16k that is kept.
+  final bool truncated;
+
+  final String? provider;
+  final String? endpoint;
+
+  /// Null or 0 means NOTHING ANSWERED — a different fault from being
+  /// refused, and the one the log could not tell apart before.
+  final int? httpStatus;
+  final int? ms;
+
+  /// The reply, verbatim.
+  final String? body;
+
+  bool get noAnswer => (httpStatus ?? 0) == 0;
+
+  factory ScanExchange.fromJson(Map<String, dynamic> j) => ScanExchange(
+        id: j['id'].toString(),
+        at: DateTime.tryParse('${j['at']}')?.toLocal() ?? DateTime.now(),
+        attempt: int.tryParse('${j['attempt']}') ?? 1,
+        ok: j['ok'] == true,
+        truncated: j['truncated'] == true,
+        provider: j['provider']?.toString(),
+        endpoint: j['endpoint']?.toString(),
+        httpStatus: int.tryParse('${j['http_status']}'),
+        ms: int.tryParse('${j['ms']}'),
+        body: j['body']?.toString(),
+      );
 }
 
 /// One reader, one thing it keeps saying.

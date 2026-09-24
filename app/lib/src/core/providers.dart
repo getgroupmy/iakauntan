@@ -3367,6 +3367,16 @@ final ocrDefaultProviderProvider = FutureProvider.autoDispose<OcrDefaultState>(
 /// Keyed on the filter, because a status and a search are the two
 /// questions an operator arrives with — "what is failing" and "what
 /// happened to THIS one" — and they are different lists. 0680.
+/// Everything the readers said on one scan, raw. `0704`.
+///
+/// Family rather than a field on the log row: the bodies are up to 16k
+/// each and a list of fifty scans would be carrying most of a megabyte
+/// nobody has asked to see. Fetched when a row is opened.
+final scanExchangesProvider =
+    FutureProvider.autoDispose.family<List<ScanExchange>, String>(
+  (ref, scanId) => ref.watch(platformRepoProvider).scanExchanges(scanId),
+);
+
 final scanLogProvider = FutureProvider.autoDispose
     .family<List<ScanLogEntry>, ({String? status, String? search})>(
       (ref, q) => ref
