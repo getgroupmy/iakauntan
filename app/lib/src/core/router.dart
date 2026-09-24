@@ -23,6 +23,7 @@ import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
 import '../features/mail/inbox_screen.dart';
 import '../features/assets/assets_screen.dart';
+import '../features/banking/bank_statements_screen.dart';
 import '../features/banking/reconciliation_screen.dart';
 import '../features/stock/lots_screen.dart';
 import '../features/stock/stock_take_screen.dart';
@@ -1208,9 +1209,19 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          // `?account=` and `?import=1` come from the Bank statements
+          // screen, so "Upload a statement" lands on the right account
+          // with the import already open.
           GoRoute(
             path: '/reconcile',
-            builder: (_, __) => const ReconciliationScreen(),
+            builder: (_, state) => ReconciliationScreen(
+              openAccountId: state.uri.queryParameters['account'],
+              openImport: state.uri.queryParameters['import'] == '1',
+            ),
+          ),
+          GoRoute(
+            path: '/bank-statements',
+            builder: (_, __) => const BankStatementsScreen(),
           ),
           GoRoute(
             path: '/secretarial',

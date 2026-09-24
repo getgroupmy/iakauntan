@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The columns each destination actually wants |
+| Head at time of writing | Bank statements: a door on a room that had no door |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,060 Flutter tests**, 38 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,080 Flutter tests**, 38 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1504,6 +1504,89 @@ mean nothing within a week.
 Seven mutants, all killed, controls survived — five of them on
 `document_editor.dart`, because a chip has three separate ways to be
 missing (never read back, never shown, never sent back).
+
+## Bank statements: a door on a room that had no door
+
+> add a sub module to general ledger module known as "Bank Statement"
+> where here user can upload bank statement
+
+Importing a bank statement has worked since `0157` and picked up MT940,
+file opening and photographs since. **Nothing said so.** It was an
+unlabelled `upload_file_outlined` in the Reconcile screen's app bar,
+disabled until an account was picked, sitting between five other
+unlabelled icons — so a person who had not found it had no way to learn
+the product could take a statement at all.
+
+`accounting` is the module code whose display name is **General
+Ledger**, so that is where the new screen hangs: `/bank-statements`,
+above Reconcile in the rail, because a statement arrives before it is
+reconciled.
+
+**It imports nothing.** The parse, the balance chain, the duplicate
+skip, the closing-balance write and the three sources (paste, file,
+photograph) all live on the Reconcile screen and all work. A second copy
+would be a second set of answers to drift apart. What the new screen
+does is name the thing, list the accounts, show what has already been
+read, and hand over:
+
+    /reconcile?account=<id>&import=1
+
+`ReconciliationScreen` gained `openAccountId` and `openImport` for that
+one link.
+
+### Both halves of that link fail silently
+
+This is the part worth not re-deriving.
+
+- **Drop `?account=`** and the import still opens, still parses, still
+  reports success — into whichever bank account sorts first. A statement
+  in the wrong account, reported as a win, found weeks later when
+  neither side reconciles.
+- **Drop `&import=1`** and somebody who pressed "Upload" lands on a
+  reconciliation screen and has to find the unlabelled icon after all,
+  which is the exact thing this screen exists to stop.
+
+Both are asserted, and both mutants were killed. A **stale** id — a
+bookmark, or an account closed since — falls back to the first account
+rather than to an empty screen, and that fallback is asserted too, with
+its own mutant.
+
+### The once-only guard, and a latch that was not one
+
+`openImport` opens the dialog from a post-frame callback inside the
+seeding block in `build`. `build` runs again on every rebuild and
+`_refresh` calls `setState` twice, so "once" is not free.
+
+It was first written with a `bool _openedImport` latch. **The mutation
+sweep showed the latch survived being removed** — because the seeding
+block is already guarded by `_bankAccountId == null` and sets it in the
+same statement, so the block cannot run twice. The latch was dead
+defensive state, and it is gone; the comment now names the condition
+that actually does the work.
+
+The mutant that *would* prove it — widening the guard to
+`if (banks.isNotEmpty)` — puts the screen into an unbounded
+rebuild/refresh loop and was abandoned after twenty minutes of one
+`flutter test` invocation. It is killed by the plain
+`findsOneWidget` on the open dialog, which a reopening loop turns into
+`findsNWidgets(n)`. **Killing `mutate.py` mid-run leaves the mutant in
+the source file** — check the file before doing anything else.
+
+### The list beneath
+
+`_Read` reads the **scan inbox** rather than a table of its own: a
+photographed statement IS a scan, and `0694` already records what each
+one became. Filtered by `isBankStatementScan`, which is deliberately two
+conditions —
+
+    entry.postedTable == 'bank_transactions' || entry.documentKind == 'bank_statement'
+
+— because the second half is the half worth showing. A statement read
+and **never imported** was invisible everywhere in this product until
+now, and that is the one somebody needs to see. It asks the inbox for
+`all`; `posted` would hide exactly that row.
+
+Twelve mutants across the two files, all killed, both controls survived.
 
 ## This session's commits
 

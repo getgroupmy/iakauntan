@@ -879,6 +879,17 @@ final _destinations = <_Dest>[
     '/receipts',
     module: 'accounting',
   ),
+  // Before Reconcile, because a statement arrives before it is
+  // reconciled — and because importing one had only ever been an
+  // unlabelled icon on the screen below, which is not somewhere
+  // anybody looks for "where do I put the bank statement".
+  _Dest(
+    'Bank statements',
+    Icons.description_outlined,
+    Icons.description,
+    '/bank-statements',
+    module: 'accounting',
+  ),
   _Dest(
     'Reconcile',
     Icons.account_balance_outlined,

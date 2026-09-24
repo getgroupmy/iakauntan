@@ -48,20 +48,29 @@ void main() {
     'unmatched_lines': unmatched,
   };
 
-  Widget wrap(Map<String, dynamic> st, {String role = 'owner', Repo? repo}) =>
-      ProviderScope(
+  const oneBank = [
+    {'id': 'b1', 'name': 'Maybank Current', 'account_no': '5140 1234'},
+  ];
+
+  Widget wrap(
+    Map<String, dynamic> st, {
+    String role = 'owner',
+    Repo? repo,
+    List<Map<String, dynamic>> banks = oneBank,
+    String? openAccountId,
+    bool openImport = false,
+  }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(repo ?? _FakeRepo(st)),
-      bankAccountsProvider.overrideWith(
-        (ref) async => const [
-          {'id': 'b1', 'name': 'Maybank Current', 'account_no': '5140 1234'},
-        ],
-      ),
+      bankAccountsProvider.overrideWith((ref) async => banks),
       memberRoleProvider.overrideWith((ref) async => role),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
-      home: const ReconciliationScreen(),
+      home: ReconciliationScreen(
+        openAccountId: openAccountId,
+        openImport: openImport,
+      ),
     ),
   );
 
@@ -70,6 +79,10 @@ void main() {
     Map<String, dynamic> st, {
     String role = 'owner',
     double? width,
+    Repo? repo,
+    List<Map<String, dynamic>> banks = oneBank,
+    String? openAccountId,
+    bool openImport = false,
   }) async {
     if (width != null) {
       // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
@@ -79,7 +92,14 @@ void main() {
       tester.view.physicalSize = Size(width, 900);
       addTearDown(tester.view.reset);
     }
-    await tester.pumpWidget(wrap(st, role: role));
+    await tester.pumpWidget(wrap(
+      st,
+      role: role,
+      repo: repo,
+      banks: banks,
+      openAccountId: openAccountId,
+      openImport: openImport,
+    ));
     await tester.pumpAndSettle();
   }
 
@@ -330,6 +350,103 @@ void main() {
     }
   });
 
+  /// What the Bank statements screen hands over, and what happens to it.
+  ///
+  /// `/reconcile?account=<id>&import=1`. Both halves are load-bearing
+  /// and both fail SILENTLY: drop the account and a statement is
+  /// imported, successfully, into whichever bank sorts first; drop the
+  /// import and somebody who pressed "Upload" arrives at a screen with
+  /// an unlabelled icon, which is the thing the new screen exists to
+  /// stop happening.
+  group('arriving from Bank statements', () {
+    const twoBanks = [
+      {'id': 'b1', 'name': 'Maybank Current'},
+      {'id': 'b2', 'name': 'CIMB Savings'},
+    ];
+
+    testWidgets('opens on the account that was asked for', (tester) async {
+      final repo = _FakeRepo(status());
+      await show(
+        tester,
+        status(),
+        repo: repo,
+        banks: twoBanks,
+        openAccountId: 'b2',
+      );
+
+      // Not `b1`, which is what both the old code and an alphabetical
+      // list would have given.
+      expect(repo.about, ['b2']);
+      expect(find.text('CIMB Savings'), findsOneWidget);
+    });
+
+    testWidgets('and on the first one when nothing was asked for',
+        (tester) async {
+      final repo = _FakeRepo(status());
+      await show(tester, status(), repo: repo, banks: twoBanks);
+
+      expect(repo.about, ['b1']);
+    });
+
+    testWidgets('a stale id opens the first account, not an empty screen',
+        (tester) async {
+      // A bookmarked link, or an account closed since. Falling through
+      // to nothing would leave the figures blank with no way to say
+      // why.
+      final repo = _FakeRepo(status());
+      await show(
+        tester,
+        status(),
+        repo: repo,
+        banks: twoBanks,
+        openAccountId: 'b-gone',
+      );
+
+      expect(repo.about, ['b1']);
+    });
+
+    testWidgets('import=1 opens the import straight away', (tester) async {
+      await show(
+        tester,
+        status(),
+        banks: twoBanks,
+        openAccountId: 'b2',
+        openImport: true,
+      );
+
+      expect(find.text('Import statement'), findsOneWidget);
+    });
+
+    testWidgets('and only once', (tester) async {
+      // The seeding block is inside `build`, which runs again on every
+      // rebuild -- and `_refresh` calls `setState` twice, so it runs
+      // several times before this settles. What makes it once is the
+      // `_bankAccountId == null` the block is guarded by. Widen that
+      // guard and the dialog reopens behind itself; closing one
+      // reveals the next.
+      await show(
+        tester,
+        status(),
+        banks: twoBanks,
+        openAccountId: 'b2',
+        openImport: true,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Import statement'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Import statement'), findsNothing);
+    });
+
+    testWidgets('without it the screen is just the screen', (tester) async {
+      await show(tester, status(), banks: twoBanks, openAccountId: 'b2');
+
+      expect(find.text('Import statement'), findsNothing);
+    });
+  });
 }
 
 /// Only what the screen asks for. Anything else throws, so a screen that
@@ -340,13 +457,22 @@ class _FakeRepo implements Repo {
 
   final Map<String, dynamic> status;
 
+  /// Which account the screen actually reconciled, in order.
+  ///
+  /// The only honest way to ask which one it settled on: the dropdown
+  /// shows a name, but the figures — and, for an import, the rows —
+  /// go to an id.
+  final List<String> about = [];
+
   @override
   Future<Map<String, dynamic>> bankReconciliationStatus({
     required String bankAccountId,
     required DateTime asAt,
     required double statementBalance,
-  }) async =>
-      status;
+  }) async {
+    about.add(bankAccountId);
+    return status;
+  }
 
   @override
   Future<List<Map<String, dynamic>>> bankStatementLines(

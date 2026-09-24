@@ -121,6 +121,7 @@ final List<ScreenModule> appScreenCatalogue = [
       AppScreen('Cash flow', '/cash-flow'),
     ]),
     ScreenArea('Banking', [
+      AppScreen('Bank statements', '/bank-statements'),
       AppScreen('Reconcile', '/reconcile'),
       AppScreen('Transfers between accounts', '/transfers'),
       AppScreen('Exchange rates', '/exchange-rates'),

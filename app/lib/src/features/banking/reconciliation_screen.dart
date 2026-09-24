@@ -24,7 +24,27 @@ import 'transfers_history_dialog.dart';
 /// left over is the number that matters, and it is the one shown
 /// largest.
 class ReconciliationScreen extends ConsumerStatefulWidget {
-  const ReconciliationScreen({super.key});
+  const ReconciliationScreen({
+    super.key,
+    this.openAccountId,
+    this.openImport = false,
+  });
+
+  /// Which account to open on, where the caller knows. `0710`-era.
+  ///
+  /// The Bank statements screen sends it: somebody who pressed Upload
+  /// beside Maybank means Maybank, and landing on whichever account
+  /// sorts first is a statement imported into the wrong one.
+  final String? openAccountId;
+
+  /// Open the import straight away.
+  ///
+  /// So "Upload a statement" is one press rather than a press, a
+  /// screen, and an unlabelled icon. The import itself stays here --
+  /// the parse, the balance chain, the duplicate skip and the closing
+  /// balance are all on this screen and a second copy of them would be
+  /// a second set of answers to drift.
+  final bool openImport;
 
   @override
   ConsumerState<ReconciliationScreen> createState() =>
@@ -85,8 +105,22 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     // Seed the account once the list arrives, so the screen is useful
     // without a first click.
     if (_bankAccountId == null && banks.isNotEmpty) {
-      _bankAccountId = banks.first['id'] as String;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+      // The one the caller asked for, where it is still a real account
+      // of this company's. A stale id in a link opens the first one
+      // rather than an empty screen.
+      final asked = widget.openAccountId;
+      _bankAccountId = banks.any((b) => b['id'] == asked)
+          ? asked
+          : banks.first['id'] as String;
+      // Once, and only because `_bankAccountId` was just set: this
+      // whole block is inside `build`, which runs again on every
+      // rebuild, and the condition above is the only thing stopping
+      // the import dialog from reopening behind itself.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _refresh();
+        if (!mounted || !widget.openImport) return;
+        await _import();
+      });
     }
 
     return Scaffold(
