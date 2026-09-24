@@ -137,6 +137,17 @@ Future<OcrExtraction> readDocument(
   /// A server reader named for this one document. `0698`. Ignored on
   /// the on-device path, which has exactly one engine per platform.
   String? provider,
+
+  /// Called when the server reader would not answer and this machine
+  /// is about to have a go instead.
+  ///
+  /// For the progress dialog, and for nothing else: the fallback is
+  /// silent as far as the RESULT is concerned — what came back is a
+  /// reading either way, and which reader made it is on the scan row.
+  /// What this is for is the wait, which just got longer, and a modal
+  /// that goes on saying "Reading the document" through it is a modal
+  /// that looks stuck.
+  void Function()? onLocalFallback,
 }) async {
   final repo = ref.read(repoProvider)!;
   // `0700`. The company's setting decides by default, and a caller can
@@ -157,6 +168,7 @@ Future<OcrExtraction> readDocument(
           )) {
         rethrow;
       }
+      onLocalFallback?.call();
       try {
         return await _readHere(
           repo,

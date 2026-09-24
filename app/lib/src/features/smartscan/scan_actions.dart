@@ -27,6 +27,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../data/ocr_repository.dart';
 import '../shared/receipt_capture.dart';
+import '../shared/scan_progress.dart';
 import '../shared/scan_runner.dart';
 import 'scan_availability.dart';
 import 'scan_blocked_dialog.dart';
@@ -240,6 +241,10 @@ Future<bool> rescanDocument(
 
   final OcrSettings settings =
       known ?? await ref.read(ocrStatusProvider.future);
+  // That `??` hides an await, and the modal below is opened on this
+  // context. A screen that went away while the status was being asked
+  // for is a screen with no navigator to open a dialog on.
+  if (!context.mounted) return false;
 
   // Whether the reader somebody picked is this machine. `0700`. Read
   // off the catalog rather than compared against `'mlkit'`, because a
@@ -259,18 +264,28 @@ Future<bool> rescanDocument(
     // `onDevice: null` means the company's setting decides, which is
     // what "Read it again" does and the only way an org set to Local
     // Read reaches its own reader.
-    final read = await readDocument(
-      ref,
-      ocr: settings,
-      attachmentId: attachmentId,
-      storagePath: entry.storagePath,
-      // The name as well as the declared type: a file picked in a
-      // browser often carries no type at all, and the on-device path
-      // has to know a PDF from a photograph to choose its engine.
-      mimeType: entry.mimeType ??
-          (scanIsPdf(entry) ? 'application/pdf' : null),
-      onDevice: locally,
-      provider: locally == true ? null : provider,
+    // Behind the same modal a fresh capture gets, starting at the
+    // reading step because there is nothing to upload — the file has
+    // been in the bucket since the first scan. What it blocks here is
+    // a second "Read it again" landing on top of the first, which is
+    // two charges for one document.
+    final read = await whileScanning<OcrExtraction>(
+      context,
+      from: ScanStage.reading,
+      action: (report) => readDocument(
+        ref,
+        ocr: settings,
+        attachmentId: attachmentId,
+        storagePath: entry.storagePath,
+        // The name as well as the declared type: a file picked in a
+        // browser often carries no type at all, and the on-device path
+        // has to know a PDF from a photograph to choose its engine.
+        mimeType: entry.mimeType ??
+            (scanIsPdf(entry) ? 'application/pdf' : null),
+        onDevice: locally,
+        provider: locally == true ? null : provider,
+        onLocalFallback: () => report(ScanStage.readingHere),
+      ),
     );
 
     // The balance moved and a new scan row exists, so everything

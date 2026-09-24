@@ -35,11 +35,11 @@ it has to be committed.
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | Reading it here when the chosen reader will not answer (`0703`) |
-| CI | **green through run 2096 (`ce6b2ae0`)**. Five runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), 2097, 2098, 2099 and 2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| CI | **green through run 2101 (`650379c1`)**, which applied `0703` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0703` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 363 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,878 Flutter tests**, 36 deno tests |
+| Gates | 363 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,885 Flutter tests**, 36 deno tests |
 | API description | 787 functions, 366 tables, version `0703` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1219,6 +1219,7 @@ than faults in the new work.
 | "add in the reader list Local Read" | `0700` + the on-device branch of `_offerable` |
 | "why csnt read with local" | `0703` — it read, and the RECORDING was refused |
 | "when the ai model is not reachable it should read with local" | `readerUnreachable` + `canReadHere` in `scan_runner.dart` |
+| "a progress popup and block all activity till its 100% completed" | `whileScanning` in `scan_progress.dart`, around the capture, the rescan and the attachments card |
 
 ### Four faults that were already there
 

@@ -13,6 +13,7 @@ import '../../data/ocr_repository.dart';
 import '../smartscan/scan_availability.dart';
 import '../smartscan/scan_blocked_dialog.dart';
 import 'doc_scanner.dart';
+import 'scan_progress.dart';
 import 'scan_runner.dart';
 import 'text_reader.dart';
 
@@ -221,63 +222,109 @@ Future<StagedReceipt?> captureAndRead(
   final placeholder = newUuid();
   final messenger = ScaffoldMessenger.of(context);
 
-  String attachmentId;
-  try {
-    attachmentId = await repo.uploadAttachment(
-      table: table,
-      recordId: placeholder,
-      fileName: file.name,
-      bytes: file.bytes,
-      mimeType: file.mimeType,
-    );
-  } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Could not attach it: $e')));
+  // Both halves inside one modal. Asked for as "once a document is
+  // uploaded for scanning it should have a progress popup and block all
+  // activity till its 100% completed".
+  //
+  // Between the two there was NOTHING on screen. The upload and the
+  // read are one press and a wait of several seconds — longer when the
+  // chosen reader is having a bad afternoon and `0703`'s fallback gets
+  // a turn — and the whole of it looked like a button that had not
+  // worked. Which invites the second press, and the second press is a
+  // second upload and a second charge.
+  //
+  // Nothing is SAID from inside the modal. A snackbar raised under a
+  // barrier is a sentence nobody reads, so the outcome comes back as a
+  // value and every message happens below, once the dialog has gone.
+  final outcome = await whileScanning<_Capture>(
+    context,
+    action: (report) async {
+      final String attachmentId;
+      try {
+        attachmentId = await repo.uploadAttachment(
+          table: table,
+          recordId: placeholder,
+          fileName: file.name,
+          bytes: file.bytes,
+          mimeType: file.mimeType,
+        );
+      } catch (e) {
+        return (attachmentId: null, read: null, error: e);
+      }
+
+      report(ScanStage.reading);
+      try {
+        // Awaited, not read off the cache. On the expenses screen
+        // something watches this provider so it is warm; on the
+        // document list nothing does, and `valueOrNull` came back null
+        // there — which read as "not on the device" and sent a browser
+        // scan to the server, where the server correctly refused it.
+        final read = await readDocument(
+          ref,
+          // The same answer the PDF question above was asked of, rather
+          // than a second round trip that could disagree with it. Asked
+          // again only where that one did not come back, and inside
+          // this try, where a refusal reaches the snackbar over a file
+          // that is already attached.
+          ocr: known ?? await ref.read(ocrStatusProvider.future),
+          attachmentId: attachmentId,
+          mimeType: file.mimeType,
+          // Already on this device, so the on-device reader reads what
+          // is here rather than fetching back the copy just uploaded. A
+          // phone capture has a path; a browser capture has only bytes,
+          // and passing both means neither platform falls back to
+          // storage.
+          localPath: file.path,
+          localBytes: file.bytes,
+          onLocalFallback: () => report(ScanStage.readingHere),
+        );
+        return (attachmentId: attachmentId, read: read, error: null);
+      } catch (e) {
+        return (attachmentId: attachmentId, read: null, error: e);
+      }
+    },
+  );
+
+  final attachmentId = outcome.attachmentId;
+  if (attachmentId == null) {
+    messenger.showSnackBar(
+        SnackBar(content: Text('Could not attach it: ${outcome.error}')));
     return null;
   }
 
-  try {
-    // Awaited, not read off the cache. On the expenses screen something
-    // watches this provider so it is warm; on the document list nothing
-    // does, and `valueOrNull` came back null there — which read as "not
-    // on the device" and sent a browser scan to the server, where the
-    // server correctly refused it.
-    final read = await readDocument(
-      ref,
-      // The same answer the PDF question above was asked of, rather
-      // than a second round trip that could disagree with it. Asked
-      // again only where that one did not come back, and inside this
-      // try, where a refusal reaches the snackbar over a file that is
-      // already attached.
-      ocr: known ?? await ref.read(ocrStatusProvider.future),
-      attachmentId: attachmentId,
-      mimeType: file.mimeType,
-      // Already on this device, so the on-device reader reads what is
-      // here rather than fetching back the copy just uploaded. A phone
-      // capture has a path; a browser capture has only bytes, and
-      // passing both means neither platform falls back to storage.
-      localPath: file.path,
-      localBytes: file.bytes,
-    );
-    ref.invalidate(ocrStatusProvider);
-    return StagedReceipt(
-      attachmentId: attachmentId,
-      placeholderId: placeholder,
-      read: read,
-    );
-  } catch (e) {
-    ref.invalidate(ocrStatusProvider);
+  // A scan row exists and the balance may have moved whichever way the
+  // reading went, so what is drawn off those has to be asked again. Not
+  // on the upload failure above, where nothing was read and nothing was
+  // spent.
+  ref.invalidate(ocrStatusProvider);
+
+  final failure = outcome.error;
+  if (failure != null) {
     messenger.showSnackBar(SnackBar(
-      content: Text(e is OcrException
-          ? '${e.message} The file is attached; type the figures in.'
-          : 'Could not read it: $e'),
+      content: Text(failure is OcrException
+          ? '${failure.message} The file is attached; type the figures in.'
+          : 'Could not read it: $failure'),
     ));
-    return StagedReceipt(
-      attachmentId: attachmentId,
-      placeholderId: placeholder,
-      read: null,
-    );
   }
+  return StagedReceipt(
+    attachmentId: attachmentId,
+    placeholderId: placeholder,
+    read: outcome.read,
+  );
 }
+
+/// What one capture came to, carried out of the modal rather than acted
+/// on inside it.
+///
+/// A null [attachmentId] is an upload that failed, which is the one
+/// outcome with no file to keep. An error WITH an id is a file that is
+/// attached and was not read — still handed back, because the paper is
+/// worth keeping whatever the reader made of it.
+typedef _Capture = ({
+  String? attachmentId,
+  OcrExtraction? read,
+  Object? error,
+});
 
 /// A version 4 UUID, for parking an attachment against a record that
 /// does not exist yet. `entity_id` is a uuid column, so this cannot be

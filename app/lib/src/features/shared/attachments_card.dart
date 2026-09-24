@@ -14,6 +14,7 @@ import '../smartscan/scan_blocked_dialog.dart';
 import 'text_reader.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
+import 'scan_progress.dart';
 import 'scan_runner.dart';
 import 'scan_result_dialog.dart';
 
@@ -348,17 +349,30 @@ class _FileRowState extends ConsumerState<_FileRow> {
     setState(() => _scanning = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final read = await readDocument(
-        ref,
-        // The same answer the question above was asked of, rather than
-        // a second round trip that could disagree with it. Awaited
-        // rather than read off the cache, for the reason it always was:
-        // a cold provider reads as "not on the device" and sends the
-        // scan somewhere it was never meant to go.
-        ocr: known ?? await ref.read(ocrStatusProvider.future),
-        attachmentId: file.id,
-        storagePath: file.storagePath,
-        mimeType: file.mimeType,
+      // Behind the same modal the capture flow and the rescan menu
+      // use. `_scanning` still greys THIS row's button; what the modal
+      // adds is the rest of the screen, so a second attachment cannot
+      // be sent to the reader while this one is in flight. One rule —
+      // scanning blocks — rather than one surface where it does not.
+      final read = await whileScanning<OcrExtraction>(
+        context,
+        from: ScanStage.reading,
+        // `async =>`, because the `ocr:` argument below still resolves
+        // the status inside this try — a refusal there belongs in the
+        // snackbar, not on the button press.
+        action: (report) async => readDocument(
+          ref,
+          // The same answer the question above was asked of, rather
+          // than a second round trip that could disagree with it.
+          // Awaited rather than read off the cache, for the reason it
+          // always was: a cold provider reads as "not on the device"
+          // and sends the scan somewhere it was never meant to go.
+          ocr: known ?? await ref.read(ocrStatusProvider.future),
+          attachmentId: file.id,
+          storagePath: file.storagePath,
+          mimeType: file.mimeType,
+          onLocalFallback: () => report(ScanStage.readingHere),
+        ),
       );
       if (!mounted) return;
       // The balance moved, so what the next tooltip says about it should
