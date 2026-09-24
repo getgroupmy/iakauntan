@@ -9,7 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../items/new_item_dialog.dart';
-import 'description_override_dialog.dart';
+import 'item_apply_dialog.dart';
 import 'line_draft.dart';
 import '../stock/lot_dialog.dart';
 
@@ -310,35 +310,45 @@ class _WideLineState extends State<_WideLine> {
       if (created == null || !mounted) return;
       return _applyItem(created);
     }
-    // Ask before throwing away a description somebody wrote. Reported
-    // from a bill scanned off a supplier's PDF: the reading had filled
-    // four lines, an item was assigned afterwards, and every one of
-    // them was replaced by the item master's name without a word.
+    // Ask before writing over anything somebody put on this line.
+    // Reported twice from the same scanned bill: first the description,
+    // then "why when the item number is keyed in replace the unit price
+    // disc% tax and amount" — the price read off the paper was
+    // 23.3332258 and the item's was zero, so the line went to RM 0.00.
     //
-    // Only the DESCRIPTION is in question. The price, the unit, the tax
-    // code and the classification come from the item whichever way it
-    // is answered, because those are what binding a line to an item is
-    // for.
-    final description = await descriptionAfterApplying(
+    // The line is bound to the item either way. What is in question is
+    // which of its VALUES to copy.
+    //
+    // The description box is read off the CONTROLLER rather than off the
+    // draft: `onChanged` writes through on every keystroke, but a line
+    // whose text has not been committed yet would otherwise be judged
+    // on what it used to say.
+    widget.line.description = _description.text;
+    final take = await whatToTakeFrom(
       context,
-      current: _description.text,
+      line: widget.line,
       item: item,
-      boundItemName: _nameOf(widget.line.itemId),
+      taxCodes: widget.taxCodes,
+      previous: _itemOf(widget.line.itemId),
     );
-    if (!mounted || description == null) return;
+    if (!mounted || take == null) return;
 
     setState(() {
-      applyItemToLine(widget.line, item, widget.taxCodes);
+      applyItemKeeping(widget.line, item, widget.taxCodes, take);
       _code.text = item.code;
-      // After `applyItemToLine`, which sets the description itself:
-      // keeping the old one means putting it back in BOTH places, on
-      // the draft that gets saved as well as in the box on screen.
-      widget.line.description = description;
-      _description.text = description;
-      _price.text = item.unitPrice.toString();
+      // Read back off the draft rather than off the item: which of the
+      // two won is `applyItemKeeping`'s answer, and a box filled from
+      // the item would contradict it.
+      _description.text = widget.line.description;
+      _price.text = widget.line.unitPrice.toString();
     });
     widget.onChanged();
 
+    // What this customer actually pays, which is a different question
+    // from what the item lists at — but only where the item's price was
+    // wanted at all. Somebody who kept the figure off the paper must
+    // not have it replaced a second later by the price list.
+    if (!take.contains(LinePart.unitPrice)) return;
     final resolved =
         await widget.priceFor?.call(item.id, widget.line.quantity);
     if (!mounted || resolved == null || resolved == widget.line.unitPrice) {
@@ -365,17 +375,17 @@ class _WideLineState extends State<_WideLine> {
     return '';
   }
 
-  /// The NAME of the item this line is already bound to, or null where
-  /// there is none.
+  /// The item this line is already bound to, or null where there is
+  /// none or it has since been deleted.
   ///
-  /// Not cosmetic: it is how the prompt tells text this editor put
-  /// there from text a person typed. Changing item A for item B leaves
-  /// A's name in the box, and asking whether to keep it would ask twice
-  /// for one correction.
-  String? _nameOf(String? itemId) {
+  /// Not cosmetic: it is how the prompt tells values this editor put
+  /// there from values a person typed. Changing item A for item B
+  /// leaves A's name, price and tax on the line, and asking about every
+  /// one of them would ask four times for one correction.
+  Item? _itemOf(String? itemId) {
     if (itemId == null) return null;
     for (final item in widget.items) {
-      if (item.id == itemId) return item.name;
+      if (item.id == itemId) return item;
     }
     return null;
   }
@@ -625,35 +635,45 @@ class _NarrowLineState extends State<_NarrowLine> {
       if (created == null || !mounted) return;
       return _applyItem(created);
     }
-    // Ask before throwing away a description somebody wrote. Reported
-    // from a bill scanned off a supplier's PDF: the reading had filled
-    // four lines, an item was assigned afterwards, and every one of
-    // them was replaced by the item master's name without a word.
+    // Ask before writing over anything somebody put on this line.
+    // Reported twice from the same scanned bill: first the description,
+    // then "why when the item number is keyed in replace the unit price
+    // disc% tax and amount" — the price read off the paper was
+    // 23.3332258 and the item's was zero, so the line went to RM 0.00.
     //
-    // Only the DESCRIPTION is in question. The price, the unit, the tax
-    // code and the classification come from the item whichever way it
-    // is answered, because those are what binding a line to an item is
-    // for.
-    final description = await descriptionAfterApplying(
+    // The line is bound to the item either way. What is in question is
+    // which of its VALUES to copy.
+    //
+    // The description box is read off the CONTROLLER rather than off the
+    // draft: `onChanged` writes through on every keystroke, but a line
+    // whose text has not been committed yet would otherwise be judged
+    // on what it used to say.
+    widget.line.description = _description.text;
+    final take = await whatToTakeFrom(
       context,
-      current: _description.text,
+      line: widget.line,
       item: item,
-      boundItemName: _nameOf(widget.line.itemId),
+      taxCodes: widget.taxCodes,
+      previous: _itemOf(widget.line.itemId),
     );
-    if (!mounted || description == null) return;
+    if (!mounted || take == null) return;
 
     setState(() {
-      applyItemToLine(widget.line, item, widget.taxCodes);
+      applyItemKeeping(widget.line, item, widget.taxCodes, take);
       _code.text = item.code;
-      // After `applyItemToLine`, which sets the description itself:
-      // keeping the old one means putting it back in BOTH places, on
-      // the draft that gets saved as well as in the box on screen.
-      widget.line.description = description;
-      _description.text = description;
-      _price.text = item.unitPrice.toString();
+      // Read back off the draft rather than off the item: which of the
+      // two won is `applyItemKeeping`'s answer, and a box filled from
+      // the item would contradict it.
+      _description.text = widget.line.description;
+      _price.text = widget.line.unitPrice.toString();
     });
     widget.onChanged();
 
+    // What this customer actually pays, which is a different question
+    // from what the item lists at — but only where the item's price was
+    // wanted at all. Somebody who kept the figure off the paper must
+    // not have it replaced a second later by the price list.
+    if (!take.contains(LinePart.unitPrice)) return;
     final resolved =
         await widget.priceFor?.call(item.id, widget.line.quantity);
     if (!mounted || resolved == null || resolved == widget.line.unitPrice) {
@@ -680,17 +700,17 @@ class _NarrowLineState extends State<_NarrowLine> {
     return '';
   }
 
-  /// The NAME of the item this line is already bound to, or null where
-  /// there is none.
+  /// The item this line is already bound to, or null where there is
+  /// none or it has since been deleted.
   ///
-  /// Not cosmetic: it is how the prompt tells text this editor put
-  /// there from text a person typed. Changing item A for item B leaves
-  /// A's name in the box, and asking whether to keep it would ask twice
-  /// for one correction.
-  String? _nameOf(String? itemId) {
+  /// Not cosmetic: it is how the prompt tells values this editor put
+  /// there from values a person typed. Changing item A for item B
+  /// leaves A's name, price and tax on the line, and asking about every
+  /// one of them would ask four times for one correction.
+  Item? _itemOf(String? itemId) {
     if (itemId == null) return null;
     for (final item in widget.items) {
-      if (item.id == itemId) return item.name;
+      if (item.id == itemId) return item;
     }
     return null;
   }

@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Assigning an item asks before replacing a description |
-| CI | **green through run 2103 (`48ed40e7`)**, which applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| Head at time of writing | Assigning an item asks, field by field, before replacing anything |
+| CI | **green through run 2104 (`d475dd65`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0704` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 364 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,911 Flutter tests**, 37 deno tests |
+| Gates | 364 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,923 Flutter tests**, 37 deno tests |
 | API description | 788 functions, 366 tables, version `0704` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1221,7 +1221,8 @@ than faults in the new work.
 | "when the ai model is not reachable it should read with local" | `readerUnreachable` + `canReadHere` in `scan_runner.dart` |
 | "a progress popup and block all activity till its 100% completed" | `whileScanning` in `scan_progress.dart`, around the capture, the rescan and the attachments card |
 | "all scanning activities logged, all replies logged in raw" | `0704` — `ocr_exchanges`, one row per CALL, opened from the console's scan log |
-| "prompt if to override the description" | `descriptionAfterApplying`, both texts side by side, keep is what a dismissal does |
+| "prompt if to override the description" | `whatToTakeFrom`, both values side by side, keep is what a dismissal does |
+| "why does keying the item no. replace the price, tax and amount" | the same prompt, one row per field — so the item's tax can be taken while the figure off the paper stays |
 
 ### Four faults that were already there
 

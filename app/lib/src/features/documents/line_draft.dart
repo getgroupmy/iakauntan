@@ -157,12 +157,196 @@ void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
     ..uomCode = item.uomCode
     ..classificationCode = item.classificationCode;
 
-  final tax =
-      taxCodes.where((t) => t.id == item.salesTaxCodeId).firstOrNull ??
-      taxCodes.where((t) => t.isDefault).firstOrNull;
+  final tax = taxForItem(item, taxCodes);
   // Null is not "no tax" here — see the test. An item that names no
   // code in a company that has no default leaves the line as it was.
   if (tax != null) applyTaxCodeToLine(line, tax);
+}
+
+/// The tax code an item would put on a line: its own, or the company's
+/// default where it names none.
+///
+/// Its own function since `0704`'s successor, because two things now
+/// need the same answer — [applyItemToLine], which applies it, and
+/// [itemWouldOverwrite], which has to say what it would replace. Asking
+/// the question twice in two places is how they come to disagree.
+TaxCode? taxForItem(Item item, List<TaxCode> taxCodes) =>
+    taxCodes.where((t) => t.id == item.salesTaxCodeId).firstOrNull ??
+    taxCodes.where((t) => t.isDefault).firstOrNull;
+
+/// One thing on a line that an item would write over.
+enum LinePart { description, unitPrice, taxCode, unit }
+
+/// What [LinePart] would change, in words somebody can judge.
+class ItemChange {
+  const ItemChange({
+    required this.part,
+    required this.label,
+    required this.current,
+    required this.suggested,
+  });
+
+  final LinePart part;
+
+  /// The field's name as the line editor labels it.
+  final String label;
+
+  /// What the line says now, and what the item would put there. Both
+  /// already formatted: the dialog shows them and judges nothing.
+  final String current;
+  final String suggested;
+}
+
+/// Everything applying [item] would overwrite that somebody would miss.
+///
+/// Empty when nothing worth asking about would change, which is the
+/// ordinary case: a blank line takes the item's everything without a
+/// word.
+///
+/// Reported twice from the same scanned bill. First the description --
+/// four lines of the supplier's own wording replaced by the item
+/// master's name. Then, once that was asked about, the rest of it: "why
+/// when the item number is keyed in replace the unit price disc% tax and
+/// amount". The price read off the paper was 23.3332258 and the item's
+/// was zero, so the line went to RM 0.00 and the amount with it.
+///
+/// The three exemptions are the description's three, generalised,
+/// because each of them is about the same thing -- whether the value on
+/// the line came from a PERSON or from us:
+///
+///   * EMPTY, which for a price means zero. Nothing to lose;
+///   * the SAME value. A dialog asking whether to replace a thing with
+///     itself is one people learn to dismiss without reading;
+///   * what the PREVIOUSLY BOUND item put there. Correcting a mis-picked
+///     item would otherwise ask about every field it had filled in.
+///
+/// [previous] is the item the line is bound to now, where it is still on
+/// the list. Null for a line that is bound to nothing, or whose item has
+/// since been deleted -- and then every non-empty value counts as
+/// somebody's.
+List<ItemChange> itemWouldOverwrite(
+  LineDraft line,
+  Item item,
+  List<TaxCode> taxCodes, {
+  Item? previous,
+}) {
+  final out = <ItemChange>[];
+
+  if (descriptionIsWorthKeeping(
+    current: line.description,
+    suggested: item.name,
+    boundItemName: previous?.name,
+  )) {
+    out.add(ItemChange(
+      part: LinePart.description,
+      label: 'Description',
+      current: line.description,
+      suggested: item.name,
+    ));
+  }
+
+  // Zero is this field's empty. A line nobody has priced reads zero,
+  // and asking about it would put a dialog in front of the commonest
+  // path there is.
+  if (line.unitPrice != 0 &&
+      line.unitPrice != item.unitPrice &&
+      line.unitPrice != previous?.unitPrice) {
+    out.add(ItemChange(
+      part: LinePart.unitPrice,
+      label: 'Unit price',
+      current: _number(line.unitPrice),
+      suggested: _number(item.unitPrice),
+    ));
+  }
+
+  final tax = taxForItem(item, taxCodes);
+  // A company with no default and an item that names no code leaves the
+  // line's tax alone, so there is nothing to ask about.
+  if (tax != null &&
+      line.taxCodeId != null &&
+      line.taxCodeId != tax.id &&
+      line.taxCodeId != (previous == null
+          ? null
+          : taxForItem(previous, taxCodes)?.id)) {
+    out.add(ItemChange(
+      part: LinePart.taxCode,
+      label: 'Tax',
+      current: _taxLabel(line.taxCodeId, taxCodes),
+      suggested: '${tax.code} (${_number(tax.rate)}%)',
+    ));
+  }
+
+  // The unit is the same class of silent loss as the rest: a line that
+  // says the supplier billed in `MON` becomes whatever the item is
+  // counted in, and the quantity beside it then means something else.
+  //
+  // `Item.uomCode` is not nullable -- it defaults to `C62`, the UN/CEFACT
+  // code for "one" -- so there is no case here where the item would
+  // blank the line's unit, only one where it changes it.
+  final lineUom = line.uomCode ?? '';
+  if (lineUom.isNotEmpty &&
+      lineUom != item.uomCode &&
+      lineUom != previous?.uomCode) {
+    out.add(ItemChange(
+      part: LinePart.unit,
+      label: 'Unit',
+      current: lineUom,
+      suggested: item.uomCode,
+    ));
+  }
+
+  return out;
+}
+
+/// Applies [item] to [line], keeping the parts that were not chosen.
+///
+/// Written as "apply, then put back" rather than as a per-field apply,
+/// so that [applyItemToLine] stays the ONE description of what an item
+/// gives a line. A second copy that set four fields conditionally would
+/// be a second copy to drift -- which is exactly the fault this file's
+/// header already records.
+void applyItemKeeping(
+  LineDraft line,
+  Item item,
+  List<TaxCode> taxCodes,
+  Set<LinePart> take,
+) {
+  final description = line.description;
+  final unitPrice = line.unitPrice;
+  final taxCodeId = line.taxCodeId;
+  final taxRate = line.taxRate;
+  final inclusive = line.isTaxInclusive;
+  final uom = line.uomCode;
+
+  applyItemToLine(line, item, taxCodes);
+
+  if (!take.contains(LinePart.description)) line.description = description;
+  if (!take.contains(LinePart.unitPrice)) line.unitPrice = unitPrice;
+  if (!take.contains(LinePart.unit)) line.uomCode = uom;
+  if (!take.contains(LinePart.taxCode)) {
+    // All three together. The rate and the inclusive flag are what the
+    // code MEANS -- `0641`'s header has what a line that took one and
+    // not the other costs: RM 108 quoted and RM 116.64 charged.
+    line
+      ..taxCodeId = taxCodeId
+      ..taxRate = taxRate
+      ..isTaxInclusive = inclusive;
+  }
+}
+
+/// A number as somebody typed it, not rounded to look tidy.
+///
+/// A scanned unit price of 23.3332258 shown as 23.33 is a dialog asking
+/// about a number that is not the one on the line.
+String _number(double v) {
+  final s = v.toString();
+  return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
+}
+
+String _taxLabel(String? id, List<TaxCode> taxCodes) {
+  final t = taxCodes.where((t) => t.id == id).firstOrNull;
+  if (t == null) return '';
+  return '${t.code} (${_number(t.rate)}%)';
 }
 
 /// Whether filling this line from an item would throw away something a
