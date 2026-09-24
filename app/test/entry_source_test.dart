@@ -184,10 +184,21 @@ void main() {
       expect(repo.savedHeader['entry_source'], 'ai_smartscan');
     });
 
+    testWidgets('and offers to check it against the paper again',
+        (tester) async {
+      // The recheck sits beside the tag, so it is only ever on a
+      // document a reader filled in — there is nothing to check a typed
+      // one against.
+      await open(tester, _FakeRepo(source: 'ai_smartscan'));
+      expect(find.byKey(const Key('scan-recheck')), findsOneWidget);
+    });
+
     testWidgets('a bill somebody typed shows nothing', (tester) async {
       final repo = _FakeRepo();
       await open(tester, repo);
       expect(find.text('AI Scan'), findsNothing);
+      // And no recheck: there is no reading to check it against.
+      expect(find.byKey(const Key('scan-recheck')), findsNothing);
 
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();

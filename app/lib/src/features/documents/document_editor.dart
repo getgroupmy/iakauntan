@@ -16,6 +16,7 @@ import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../contacts/new_contact_dialog.dart';
+import 'scan_recheck.dart';
 import 'scan_totals_check.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
@@ -107,6 +108,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// Where this document's contents came from. `0707`. Null is typed by
   /// a person, which is nearly everything.
   String? _entrySource;
+
+  /// A recheck in flight, so the button cannot be pressed twice.
+  bool _rechecking = false;
 
   /// Null means no rate is known. Distinct from 1, which is a rate — and
   /// on a foreign document, the wrong one.
@@ -336,6 +340,73 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _dirty = true;
         _reconsiderRounding();
       });
+
+  /// Compares this document with the page it was read from.
+  ///
+  /// Asked for beside the "AI Scan" tag: a rescan that says what went
+  /// different or missing, and lets each one be put back on its own or
+  /// left alone. Nothing changes unless somebody ticks it.
+  ///
+  /// It does not read the page AGAIN — the reading is on `ocr_scans`
+  /// and re-reading would charge for it, and would compare against a
+  /// second opinion rather than against what this document was built
+  /// from. "Read it again" is its own button, in the scan inbox.
+  Future<void> _recheck() async {
+    setState(() => _rechecking = true);
+    try {
+      final paperRow = await ref.read(
+        documentScanTotalsProvider((
+          table: _kind.isSales ? 'sales_documents' : 'purchase_documents',
+          recordId: widget.documentId!,
+        )).future,
+      );
+      if (!mounted) return;
+      if (paperRow == null) {
+        _toast('Nothing was read off this document, so there is nothing '
+            'to check it against.');
+        return;
+      }
+
+      final paper = await ref.read(repoProvider)!.scanReading(paperRow.scanId);
+      if (!mounted) return;
+      if (paper == null) {
+        _toast('The reading for ${paperRow.fileName} is no longer there.');
+        return;
+      }
+
+      final found = differencesFromPaper(
+        paper: paper,
+        lines: _lines,
+        supplierDocNo: _supplierDocNo.text,
+        documentDate: _docDate,
+        currency: _currency,
+        setSupplierDocNo: (v) => _supplierDocNo.text = v,
+        setDocumentDate: (v) => _docDate = v,
+        setCurrency: (v) => _currency = v,
+        addLine: _lines.add,
+      );
+      if (found.isEmpty) {
+        _toast('This still matches ${paperRow.fileName}.');
+        return;
+      }
+
+      final take = await askWhatToRestore(
+        context,
+        differences: found,
+        fileName: paperRow.fileName,
+      );
+      if (!mounted || take == null || take.isEmpty) return;
+
+      setState(() {
+        for (final d in found) {
+          if (take.contains(d.id)) d.restore();
+        }
+      });
+      _markDirty();
+    } finally {
+      if (mounted) setState(() => _rechecking = false);
+    }
+  }
 
   /// What the scanned paper says about rounding, asked again from
   /// wherever the lines have got to. `0706`.
@@ -1273,6 +1344,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // repeated anywhere. `0707`.
       if (!_isNew && _entrySource != null) ...[
         EntrySourceChip(_entrySource),
+        // Check it against the page again. A document filled in from a
+        // reading and edited since — by a person, by assigning an item,
+        // by a rounding rule — was never compared with the page again.
+        // `0705`'s banner says the totals disagree; this says where.
+        IconButton(
+          key: const Key('scan-recheck'),
+          icon: const Icon(Icons.fact_check_outlined, size: 18),
+          tooltip: 'Check this against the paper again',
+          onPressed: _rechecking ? null : _recheck,
+        ),
         const SizedBox(width: 12),
       ],
 
