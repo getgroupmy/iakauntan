@@ -200,12 +200,17 @@ class Contact {
     this.customFields = const {},
     this.isActive = true,
     this.entityType = 'sdn_bhd',
+    this.entrySource,
   });
 
   final String id;
   final String code;
   final String name;
   final String contactType;
+
+  /// Where this contact came from. `0707`. Null is a person typed it;
+  /// `'ai_smartscan'` is a reader made it from a letterhead.
+  final String? entrySource;
   final String? legalName;
   final String? tin;
   final String? registrationNo;
@@ -288,6 +293,7 @@ class Contact {
     code: j['code']?.toString() ?? '',
     name: j['name'] as String,
     contactType: j['contact_type']?.toString() ?? 'customer',
+    entrySource: j['entry_source']?.toString(),
     legalName: j['legal_name'] as String?,
     tin: j['tin'] as String?,
     registrationNo: j['registration_no'] as String?,
@@ -327,6 +333,7 @@ class Contact {
     code: value,
     name: name,
     contactType: contactType,
+    entrySource: entrySource,
     legalName: legalName,
     tin: tin,
     registrationNo: registrationNo,
@@ -1056,6 +1063,7 @@ class BusinessDocument {
     this.serviceChargeAmount = 0,
     this.roundingAmount = 0,
     this.roundingMethod,
+    this.entrySource,
     this.totalAmount = 0,
     this.paidAmount = 0,
     this.balanceAmount = 0,
@@ -1120,6 +1128,14 @@ class BusinessDocument {
   /// rounds CASH, and a supplier's invoice settled by transfer is paid
   /// to the sen.
   final String? roundingMethod;
+
+  /// Where this document's contents came from. `0707`.
+  ///
+  /// Null is a person typed it, which is nearly everything.
+  /// `'ai_smartscan'` is a model read it off a supplier's paperwork —
+  /// shown as "AI Scan" beside the status, because a figure nobody
+  /// keyed is the one worth looking at twice.
+  final String? entrySource;
   final double totalAmount;
   final double paidAmount;
   final double balanceAmount;
@@ -1216,6 +1232,7 @@ class BusinessDocument {
       serviceChargeAmount: Fmt.toDouble(j['service_charge_amount']),
       roundingAmount: Fmt.toDouble(j['rounding_amount']),
       roundingMethod: j['rounding_method'] as String?,
+      entrySource: j['entry_source'] as String?,
       totalAmount: Fmt.toDouble(j['total_amount']),
       paidAmount: Fmt.toDouble(j['paid_amount']),
       balanceAmount: Fmt.toDouble(j['balance_amount']),

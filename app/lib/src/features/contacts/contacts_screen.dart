@@ -220,6 +220,14 @@ class _ContactTile extends ConsumerWidget {
               child: StatusChip(contact.contactType, compact: true),
             ),
           ),
+          // `0707`. A contact a reader made from a letterhead, rather
+          // than one somebody typed. Outside the InkWell above: tapping
+          // it must not open the records sheet.
+          if (contact.entrySource != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: EntrySourceChip(contact.entrySource, compact: true),
+            ),
           // `0654`. At the right end of the row, as asked for. It
           // asks before it does anything, and where the contact has
           // documents or ledger entries behind it the server refuses

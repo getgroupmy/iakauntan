@@ -420,7 +420,12 @@ declare
   --   bookkeeping ...................... created_at, created_by,
   --     updated_at, deleted_at
   --   where the row came from .......... import_source, import_ref,
-  --     import_batch_id, imported_at. `0610`. Open rather than frozen,
+  --     import_batch_id, imported_at, and `0707`'s entry_source. The
+  --     last one on the same reasoning as the four before it: the
+  --     journal was not built from "a model read this off a PDF", and
+  --     a document whose paperwork is scanned after it posts is
+  --     telling the truth by saying so late. `0610`, `0707`. Open
+  --     rather than frozen,
   --     and the test's own question decides it: the journal was not
   --     built from any of them. They are bookkeeping ABOUT the row
   --     rather than a figure inside it, and `import_batch_id` is
@@ -434,6 +439,7 @@ declare
   --     expects. That path moves the receivable line's contact with it,
   --     which is asserted below.
   v_open text[] := array[
+    'entry_source',
     'contact_id', 'paid_amount', 'applied_amount', 'balance_amount', 'status',
     'einvoice_id', 'einvoice_status', 'is_consolidated',
     'requires_self_billed', 'fulfilment_status', 'parent_id',

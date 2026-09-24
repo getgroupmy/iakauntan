@@ -266,6 +266,11 @@ declare
     -- `0441` as a limit rather than guessed at.
     -- Ours, not the customer's, and not part of what is billed.
     'internal_notes', 'attachments',
+    -- `0707`. Nor did a model read it off a PDF. A schedule replaying
+    -- a snapshot is this product writing the document, and carrying
+    -- `entry_source` would put "AI Scan" on twelve invoices nobody
+    -- scanned -- which is exactly the tag being worth nothing.
+    'entry_source',
     -- Where the row came from. `0610`. A recurring raise is this
     -- product writing a new document this morning; it did not come out
     -- of anybody's old system. Carrying the provenance would claim a
@@ -293,6 +298,11 @@ declare
     'approved_by', 'approved_at',
     'einvoice_id', 'einvoice_status',
     'internal_notes', 'attachments',
+    -- `0707`. Nor did a model read it off a PDF. A schedule replaying
+    -- a snapshot is this product writing the document, and carrying
+    -- `entry_source` would put "AI Scan" on twelve invoices nobody
+    -- scanned -- which is exactly the tag being worth nothing.
+    'entry_source',
     -- Where the row came from. `0610`. A recurring raise is this
     -- product writing a new document this morning; it did not come out
     -- of anybody's old system. Carrying the provenance would claim a

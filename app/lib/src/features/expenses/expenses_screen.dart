@@ -161,6 +161,10 @@ class ExpensesScreen extends ConsumerWidget {
                         const SizedBox(width: 10),
                         StatusChip(e['status']?.toString() ?? 'draft',
                             compact: true),
+                        // `0707`. An expense a reader filled in off a
+                        // receipt, beside the state it is in.
+                        EntrySourceChip(e['entry_source']?.toString(),
+                            compact: true),
                       ]),
                       subtitle: Text(
                         [
@@ -1118,6 +1122,7 @@ class _ExpenseDetail extends ConsumerWidget {
       title: Row(children: [
         Expanded(child: Text(no)),
         StatusChip(expense['status']?.toString() ?? 'draft', compact: true),
+        EntrySourceChip(expense['entry_source']?.toString(), compact: true),
       ]),
       content: SizedBox(
         width: 620,

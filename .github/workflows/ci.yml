@@ -966,6 +966,7 @@ jobs:
                    supabase/tests/scan_exchanges.sql \
                    supabase/tests/scan_totals.sql \
                    supabase/tests/document_rounding.sql \
+                   supabase/tests/entry_source.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

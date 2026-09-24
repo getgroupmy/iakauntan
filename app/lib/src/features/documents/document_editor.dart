@@ -104,6 +104,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// is paid to the sen.
   String? _roundingMethod;
 
+  /// Where this document's contents came from. `0707`. Null is typed by
+  /// a person, which is nearly everything.
+  String? _entrySource;
+
   /// Null means no rate is known. Distinct from 1, which is a rate — and
   /// on a foreign document, the wrong one.
   double? _exchangeRate = 1;
@@ -227,6 +231,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _deliveryDate = doc.deliveryDate;
         _currency = doc.currency;
         _roundingMethod = doc.roundingMethod;
+        _entrySource = doc.entrySource;
         // The stored rate, not today's. This is the figure the ledger
         // posted at and the figure the gain on settlement is measured
         // from; re-resolving it here would rewrite history.
@@ -441,6 +446,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // Only where the paper can tell them apart — see
       // `roundingThePaperApplied`, which answers nothing at all when two
       // methods produce the same figure or none of them does.
+      _entrySource = 'ai_smartscan';
+
       _roundingMethod = roundingForLines(
         paperTotal: read.totalAmount,
         lines: lines,
@@ -623,6 +630,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           // Null is a value here, not an omission: clearing it is how a
           // document goes back to the company's own rule.
           'rounding_method': _roundingMethod,
+          // `record_scan_posting` stamps this where a reading BECOMES a
+          // record. This is the other path: a document that already
+          // existed, whose lines a reading filled in. `0707`.
+          'entry_source': _entrySource,
           'exchange_rate': _exchangeRate ?? 1,
           // Sales only. The column is on `sales_documents` alone,
           // and a bill has no salesperson by definition.
@@ -1253,6 +1264,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // the first thing to go when space is short.
       if (!_isNew && !narrow) ...[
         StatusChip(_status),
+        const SizedBox(width: 12),
+      ],
+
+      // Where the contents came from, beside what state they are in.
+      // On the narrow layout too, unlike the status chip above: the
+      // status is repeated by the posted banner and this is not
+      // repeated anywhere. `0707`.
+      if (!_isNew && _entrySource != null) ...[
+        EntrySourceChip(_entrySource),
         const SizedBox(width: 12),
       ],
 

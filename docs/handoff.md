@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The supplier's total is the amount owed |
+| Head at time of writing | What the machine read, and what a person typed |
 | CI | **green through run 2106 (`114f1199`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0706` is the highest. CI applies on green — see below |
+| Migrations | `0707` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 366 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,977 Flutter tests**, 37 deno tests |
-| API description | 789 functions, 366 tables, version `0706` |
+| Gates | 367 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,988 Flutter tests**, 37 deno tests |
+| API description | 789 functions, 366 tables, version `0707` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -1225,6 +1225,7 @@ than faults in the new work.
 | "why does keying the item no. replace the price, tax and amount" | the same prompt, one row per field — so the item's tax can be taken while the figure off the paper stays |
 | "in some cases the tax is calculated in total instead of in single item" | `0705` + `ScanTotalsBanner` — tax stays per line, and the paper's own three figures are now shown beside what the lines come to when they disagree |
 | "scanned in with no round up or round down, make it automatic but not for all cases" | `0706` — `documents.rounding_method`, decided from the paper's own stated total. Bank Negara rounds CASH; the company-wide switch was restating every supplier bill |
+| "all entry created with AI SmartScan tagged 'AI Scan', beside posted/draft/overdue/complete" | `0707` — `entry_source` on the four tables a reading becomes one record of, written beside `ocr_scans.posted_id` in the same statement; `EntrySourceChip` beside every status |
 
 ### Four faults that were already there
 
@@ -1448,6 +1449,53 @@ killed, controls survived. Two survived a first sweep and each was a real
 hole: nothing compared against a paper with more decimal places than the
 sen, and nothing proved a half-typed document keeps the answer already
 reached.
+
+## What the machine read, and what a person typed
+
+> all entry which are created with AI SmartScan will be tagged as "AI
+> Scan" in the background database and in any where that shows posted
+> draft overdue complete it should show "Ai Scan" beside it also
+
+`ocr_scans.posted_table` / `posted_id` have known what a reading became
+since `0694`. What they could not do is be READ: every list in this
+product selects the document table and nothing else, and a join per list
+— bills, invoices, orders, receipts, expenses, aging, the taxman's queue
+— is a join to forget in the next list somebody adds.
+
+So `0707` puts `entry_source` on the record as well, **written in the
+same statement as the link** inside `record_scan_posting`, which is what
+stops the two from drifting.
+
+- **Four tables**, the ones from `scan_targets` that are a single record
+  somebody opens: `sales_documents`, `purchase_documents`, `expenses`,
+  `contacts`.
+- **`bank_transactions` is deliberately excluded.** One statement is one
+  reading and a hundred rows — `scan_targets.repeats` is true for that
+  reason and `record_scan_posting` files it against a placeholder id —
+  so there is no single record to tag.
+- **Null means a person typed it**, which is every existing row and the
+  overwhelming majority of every row after this. Text, not a boolean,
+  because the question is WHERE FROM and a bank import is the same
+  question with a different answer.
+
+Two paths create a scanned record and only one was ever recorded:
+
+1. a reading BECOMES a record — `record_scan_posting`, stamped in SQL;
+2. a record that already existed, whose lines a reading filled in. This
+   is the reported case and nothing calls that function on it, because
+   the file was already filed. The editor stamps it, and the migration
+   backfills it from "a successful scan exists against an attachment on
+   this row".
+
+`EntrySourceChip` sits beside the status in the document list, the
+expenses list, the contacts list and the document editor's header. The
+assertion that matters most is the **silence**: it appears on nearly
+every screen in the product, so a chip that showed on a typed row would
+mean nothing within a week.
+
+Seven mutants, all killed, controls survived — five of them on
+`document_editor.dart`, because a chip has three separate ways to be
+missing (never read back, never shown, never sent back).
 
 ## This session's commits
 

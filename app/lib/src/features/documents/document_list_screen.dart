@@ -600,6 +600,9 @@ class _DocumentTile extends StatelessWidget {
         children: [
           Text(doc.docNo, style: const TextStyle(fontWeight: FontWeight.w600)),
           StatusChip(doc.isOverdue ? 'overdue' : doc.status, compact: true),
+          // Beside the status, because that is where somebody's eye
+          // already is when they scan the list. `0707`.
+          EntrySourceChip(doc.entrySource, compact: true),
           if (doc.einvoiceStatus != 'not_applicable')
             Tooltip(
               message: 'e-Invoice: ${Fmt.label(doc.einvoiceStatus)}',

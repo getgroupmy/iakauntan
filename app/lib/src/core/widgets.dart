@@ -288,6 +288,70 @@ class StatusChip extends StatelessWidget {
   }
 }
 
+/// "AI Scan", beside the status, on a record a model filled in.
+///
+/// `0707`. A bill somebody typed off a PDF and a bill a model read off
+/// the same PDF are the same row in every list in this product, and the
+/// second is the one worth a second look: a reader that mistakes
+/// 1,086.12 for 1,086.72 produces a document that balances, posts and
+/// reconciles to nothing.
+///
+/// Silent on everything else, which is nearly every record — [source]
+/// null means a person typed it. Written as a lookup rather than a
+/// boolean because the column answers WHERE FROM, and a bank import is
+/// the same question with a different answer.
+class EntrySourceChip extends StatelessWidget {
+  const EntrySourceChip(this.source, {super.key, this.compact = false});
+
+  final String? source;
+  final bool compact;
+
+  /// What each source is called where somebody reads it.
+  static String? labelFor(String? source) => switch (source) {
+        'ai_smartscan' => 'AI Scan',
+        _ => null,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final label = labelFor(source);
+    if (label == null) return const SizedBox.shrink();
+
+    final color = context.colors.info;
+    return Tooltip(
+      message: 'Read off a document by AI SmartScan rather than typed. '
+          'Worth checking against the paper.',
+      child: Container(
+        key: const Key('entry-source-chip'),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 6 : 10,
+          vertical: compact ? 2 : 4,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome, size: compact ? 11 : 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: compact ? 11 : 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A single series drawn small enough to sit inside a metric tile: the
 /// shape of the last twelve months, with the latest point called out.
 /// No axes — this answers "which way is it going", not "by how much".
