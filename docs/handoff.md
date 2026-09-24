@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The two things every Malaysian statement has |
+| Head at time of writing | The prompt's first sentence said every document was a purchase |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,139 Flutter tests**, 38 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,139 Flutter tests**, 45 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1831,6 +1831,56 @@ survivors on the first pass were real gaps, each a case the tests did
 not yet have: a foot marker that nothing depended on, a chain that
 never reached past the last row, and a statement printing both b/f and
 c/f.
+
+## The prompt's first sentence said every document was a purchase
+
+The likeliest single reason a bank statement scanned badly, and it had
+been there since the prompt was written.
+
+    "You are reading a purchase document for a Malaysian bookkeeper: a
+     receipt, a supplier invoice, a bill, a payment voucher or a
+     payment slip."
+
+Then, several paragraphs later, `targetPrompt` appends the destination
+list — which includes `accounting.bank_statement`. **The framing comes
+first.** A statement is emphatically not a purchase document, it has no
+supplier and no total, and the whole body of the prompt was about
+suppliers, totals and line items.
+
+The opening now names what actually arrives — purchase documents, an
+invoice this company issued, a bank statement, a letterhead or name
+card — and says plainly that a document which is not a purchase leaves
+those fields null.
+
+### Four paragraphs that each hold up code in Dart
+
+Added, and each one is a way a Malaysian statement is read wrongly:
+
+- **It prints no sign.** Debit and Credit are two columns and which one
+  a figure sits in is the only thing that says which way the money
+  went.
+- **The running balance is the most valuable figure on the line**, for
+  every line that prints one. `balancesDecideTheSigns` settles every
+  sign from it and settles nothing at all without it.
+- **The date is often a day and a month**, with the year in the header
+  once — given exactly as printed, with no year added.
+  `parsePartialStatementDate` and `resolveStatementYear` put it in the
+  right year, **including the December that belongs to the year before
+  the header's**. A reader that helpfully added the header year would
+  take that decision away and get it wrong across new year.
+- **The brought-forward row is not a transaction** — given with its
+  balance and NO AMOUNT, which is exactly the shape `scannedStatement`
+  recognises as an anchor.
+
+`OcrExtraction.fromJson` drops null values from a row, so "no amount"
+arrives as an absent key rather than an empty string. That is what
+makes the shape test work, and it was already true.
+
+Seven new assertions in `prompt_test.ts`, which runs in CI and locally.
+A paragraph in a prompt has no callers, no types and no compiler, and
+dropping one here silently disarms code in
+`statement_import.dart` — so the test says which paragraph holds up
+what.
 
 ## This session's commits
 
