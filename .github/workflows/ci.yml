@@ -1447,6 +1447,17 @@ jobs:
       - name: Check every dialog and sheet is opened by a test
         run: python3 scripts/check_dialogs_built.py
 
+      # A document somebody photographed and then thought about was
+      # deleted out from under them: backing out of the "what is this?"
+      # sheet called `deleteAttachmentById` on the capture, leaving a
+      # scan row with figures on it and no page they came off. The
+      # reading is already paid for and stays; the file must stay with
+      # it until somebody asks for it to go.
+      - name: Check a capture is kept until somebody asks for it to go
+        run: |
+          python3 scripts/check_capture_is_kept_test.py
+          python3 scripts/check_capture_is_kept.py
+
       # And the fault that gate found the moment it was obeyed. A
       # ListView expands along the axis it scrolls, so one inside a
       # scroll view on that axis is offered infinity and asserts in

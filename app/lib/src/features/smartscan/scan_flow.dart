@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
-import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/scan_kinds_repository.dart';
@@ -93,9 +92,19 @@ Future<void> runSmartScan(BuildContext context, WidgetRef ref) async {
           : null,
     );
     if (chosen == null || !context.mounted) {
-      // Abandoned. The capture goes with it rather than sitting in the
-      // bucket attached to a record that will never exist.
-      await ref.read(repoProvider)?.deleteAttachmentById(staged.attachmentId);
+      // Backed out. THE FILE STAYS.
+      //
+      // It used to be deleted here, on the reasoning that a capture
+      // nobody filed should not sit in the bucket attached to a record
+      // that will never exist. That was the wrong end of the stick:
+      // somebody who photographs a document and then closes a sheet has
+      // not said "destroy this", and the reading was already paid for.
+      // The inbox has a "Became nothing yet" filter for exactly these,
+      // so it comes back with its image, its figures and "Create it
+      // from what was read" still on it.
+      //
+      // Removing it is a deliberate act now, from the sheet that shows
+      // it — and `0708` refuses once something has been built from it.
       return;
     }
     destination = chosen;
@@ -261,7 +270,9 @@ Future<void> _startDocument(
             'not a ${meta.singular.toLowerCase()}.',
       );
       if (again == null || !context.mounted) {
-        await repo.deleteAttachmentById(staged.attachmentId);
+        // The file stays, for the reason above. A document nothing on
+        // it names a supplier for is exactly the one somebody wants to
+        // come back to.
         return;
       }
       if (again == destination) {

@@ -247,6 +247,26 @@ class _ActionsState extends ConsumerState<_Actions> {
               icon: const Icon(Icons.playlist_add_check, size: 18),
               label: const Text('Create it from what was read'),
             ),
+          // Removing the file, deliberately.
+          //
+          // It used to happen by itself: backing out of "what is this?"
+          // deleted the capture, so a document somebody photographed and
+          // then thought about was gone, with the reading it had already
+          // paid for pointing at nothing. Now the file stays until
+          // somebody says otherwise, and this is where they say it.
+          //
+          // Offered only where nothing was built from the scan. `0708`
+          // refuses the delete outright once something was, so this is
+          // about not drawing a button that cannot work.
+          if (entry.fileCanBeRemoved) ...[
+            const SizedBox(height: Space.sm),
+            OutlinedButton.icon(
+              key: const ValueKey('scan-remove-file'),
+              onPressed: _busy ? null : _removeFile,
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Remove the file'),
+            ),
+          ],
           if (refusal != null)
             Padding(
               padding: const EdgeInsets.only(top: Space.sm),
@@ -312,6 +332,39 @@ class _ActionsState extends ConsumerState<_Actions> {
       // the way out. Closing it is the caller's job only where it is
       // still there to close.
       if (mounted) Navigator.of(context).maybePop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Throws the file away, once somebody asks for that.
+  ///
+  /// The READING stays. It is on `ocr_scans` and it was paid for, and
+  /// the inbox is readable through a missing file already — `0697` made
+  /// it so. What goes is the object and its attachment row.
+  Future<void> _removeFile() async {
+    final ok = await confirm(
+      context,
+      title: 'Remove ${widget.entry.fileName ?? 'this file'}?',
+      message: 'The image is deleted from storage. What was read off it '
+          'is kept, so the figures stay on this scan — but there will be '
+          'nothing left to open or to read again.',
+      confirmLabel: 'Remove',
+    );
+    if (!ok || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final id = widget.entry.attachmentId;
+      if (id == null) return;
+      await runWithFeedback(
+        context,
+        action: () => ref.read(repoProvider)!.deleteAttachmentById(id),
+        successMessage: 'Removed',
+      );
+      if (!mounted) return;
+      ref.invalidate(scanInboxProvider);
+      Navigator.of(context).maybePop();
     } finally {
       if (mounted) setState(() => _busy = false);
     }

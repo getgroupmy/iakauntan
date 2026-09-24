@@ -1617,6 +1617,17 @@ class ScanInboxEntry {
   /// deleted keeps its row and loses its file.
   bool get hasImage => (storagePath ?? '').isNotEmpty && attachmentId != null;
 
+  /// Whether a record was ever made from this reading.
+  ///
+  /// `0694` records it. What it decides here is whether the file may be
+  /// removed: a capture nothing was built from is somebody's spare
+  /// photograph, and one that became a bill is the evidence behind it —
+  /// which `0708` refuses to delete whatever this says.
+  bool get becameSomething => postedId != null;
+
+  /// Whether there is a file to remove and nothing was built from it.
+  bool get fileCanBeRemoved => hasImage && !becameSomething;
+
   factory ScanInboxEntry.fromJson(Map<String, dynamic> j) => ScanInboxEntry(
         scanId: j['scan_id'].toString(),
         attachmentId: j['attachment_id']?.toString(),

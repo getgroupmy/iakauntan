@@ -150,8 +150,14 @@ extension RepoAttachments on Repo {
   Future<Uint8List> attachmentBytes(String storagePath) =>
       client.storage.from(bucket).download(storagePath);
 
-  /// For a file whose row was never displayed — a receipt captured for a
-  /// record that was then abandoned.
+  /// Removes one file by id.
+  ///
+  /// Used to be called automatically when somebody backed out of the
+  /// capture flow. It is not any more: a person who photographs a
+  /// document and then closes a sheet has not said "destroy this", and
+  /// the reading was already paid for. `0708` refuses this outright
+  /// once a posting or a reading was built from the file, so what
+  /// reaches here is a capture nothing was made from.
   Future<void> deleteAttachmentById(String id) async {
     final row = await client
         .from('attachments')
