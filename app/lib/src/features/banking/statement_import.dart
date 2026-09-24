@@ -364,6 +364,95 @@ DateTime? parseStatementDate(String raw) {
   return null;
 }
 
+/// A day and a month with NO YEAR, which is what most statement lines
+/// actually print.
+///
+/// Maybank, CIMB and Public Bank all print `03/09` or `03 SEP` on each
+/// line and put the period in the header once. `parseStatementDate`
+/// returns null for all of them, so a photographed statement in that
+/// format came back as forty lines of "no date could be read" — every
+/// single line of it, on the commonest layout there is.
+///
+/// Returned as a day and a month rather than a date, because a date it
+/// is not: the year has to come from somewhere else on the page, and
+/// guessing one here is how a December transaction gets filed in the
+/// wrong financial year.
+({int day, int month})? parsePartialStatementDate(String raw) {
+  final s = raw.trim();
+  if (s.isEmpty) return null;
+
+  // 03/09, 3-9. Exactly two fields: `6-3-26` is a whole date and is
+  // read by `parseStatementDate` before this is ever asked.
+  final dm = RegExp(r'^(\d{1,2})[/-](\d{1,2})$').firstMatch(s);
+  if (dm != null) {
+    final day = int.parse(dm.group(1)!);
+    final month = int.parse(dm.group(2)!);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return (day: day, month: month);
+  }
+
+  // 03 SEP, 3-Sep, 03 September
+  final named = RegExp(r'^(\d{1,2})[\s-]([A-Za-z]{3,})$').firstMatch(s);
+  if (named != null) {
+    final month = _monthNumber(named.group(2)!);
+    if (month == null) return null;
+    final day = int.parse(named.group(1)!);
+    if (day < 1 || day > 31) return null;
+    return (day: day, month: month);
+  }
+
+  return null;
+}
+
+/// Which year a day and a month belong to, given a date on the same
+/// statement.
+///
+/// THE NEAREST OCCURRENCE, which is the only rule that survives a
+/// statement crossing new year. A statement dated 5 January 2027 with a
+/// line reading `28/12` means December 2026, and one reading `03/01`
+/// means January 2027 — and taking the header's year for both would
+/// file a December transaction twelve months out, into a financial year
+/// that may already be closed.
+///
+/// Six months is the cut because it is the half-way point: beyond it
+/// the other year is nearer, and no statement covers more than a year
+/// without printing years on its lines.
+DateTime resolveStatementYear({
+  required int day,
+  required int month,
+  required DateTime near,
+}) {
+  final candidates = [
+    _date(near.year - 1, month, day),
+    _date(near.year, month, day),
+    _date(near.year + 1, month, day),
+  ].whereType<DateTime>();
+
+  DateTime? best;
+  var bestGap = 1 << 30;
+  for (final c in candidates) {
+    final gap = c.difference(near).inDays.abs();
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = c;
+    }
+  }
+  // 29 February in a year that has none leaves nothing to pick, and a
+  // date invented to fill the gap is worse than the line being
+  // reported. The caller treats null as "no date could be read".
+  return best ?? _date(near.year, month, day) ?? near;
+}
+
+int? _monthNumber(String name) {
+  const months = [
+    'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+    'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+  ];
+  if (name.length < 3) return null;
+  final at = months.indexOf(name.toLowerCase().substring(0, 3));
+  return at < 0 ? null : at + 1;
+}
+
 /// Rejects the impossible rather than letting DateTime roll it over —
 /// 31/02 becoming 3 March would reconcile against the wrong day.
 DateTime? _date(int year, int month, int day) {
@@ -636,6 +725,18 @@ StatementParse scannedStatement(OcrExtraction? read) {
   final rows = <StatementRow>[];
   final problems = <String>[];
 
+  // The balance printed BEFORE the first line and AFTER the last, where
+  // the statement prints one.
+  double? leading;
+  double? trailing;
+
+  // The first line that carried a whole date, for the lines that carry
+  // only a day and a month. Used only where the statement's own date is
+  // missing -- the header is the better anchor because it is printed
+  // once and read once, where a line's year is one more thing to have
+  // been misread.
+  DateTime? anchorDate;
+
   final source = read?.rows ?? const <Map<String, String>>[];
   for (var i = 0; i < source.length; i++) {
     final row = source[i];
@@ -646,9 +747,59 @@ StatementParse scannedStatement(OcrExtraction? read) {
     final rawDate = _first(row, const ['transaction_date', 'value_date']);
     final rawAmount = _first(row, const ['amount']);
 
+    // BAKI DIBAWA KE HADAPAN, B/F, BALANCE BROUGHT FORWARD, OPENING
+    // BALANCE. Nearly every Malaysian statement opens with one and many
+    // close with one, and it is NOT a transaction: a balance, a
+    // description, and no amount at all.
+    //
+    // It used to be reported as "Line 1: no amount could be read",
+    // which is a complaint about the one line on the page that has
+    // nothing wrong with it — on the first line, where it is the first
+    // thing anybody reads about their own statement.
+    //
+    // And the balance on it was thrown away, which is the more
+    // expensive half: it is the anchor the whole chain hangs from, and
+    // without it the FIRST real line is the one line whose sign nothing
+    // can settle.
+    //
+    // Recognised by SHAPE AND POSITION rather than by its words. The
+    // wording is different at every bank and in two languages, and a
+    // keyword list is a list that is missing the one this statement
+    // used. A balance with no amount in the MIDDLE of a statement is a
+    // different thing entirely — a line whose amount was unreadable —
+    // and is still reported.
+    if (rawAmount == null && (i == 0 || i == source.length - 1)) {
+      final marker = _numberOrNull(_first(row, const ['running_balance']));
+      if (marker != null) {
+        if (i == 0) {
+          leading = marker;
+        } else {
+          trailing = marker;
+        }
+        continue;
+      }
+    }
+
     if (rawDate == null && rawAmount == null) continue;
 
-    final date = rawDate == null ? null : parseStatementDate(rawDate);
+    var date = rawDate == null ? null : parseStatementDate(rawDate);
+
+    // A line printing only a day and a month, which is most of them.
+    // The year comes off the statement's own date, or off another line
+    // that carried one -- never off today, which would file last
+    // December's transactions into this year.
+    if (date == null && rawDate != null) {
+      final partial = parsePartialStatementDate(rawDate);
+      final anchor = read?.documentDate ?? anchorDate;
+      if (partial != null && anchor != null) {
+        date = resolveStatementYear(
+          day: partial.day,
+          month: partial.month,
+          near: anchor,
+        );
+      }
+    }
+
     if (date == null) {
       problems.add(
         'Line $at: no date could be read'
@@ -656,6 +807,7 @@ StatementParse scannedStatement(OcrExtraction? read) {
       );
       continue;
     }
+    anchorDate ??= date;
 
     final amount = rawAmount == null ? null : _number(rawAmount);
     if (amount == null) {
@@ -678,7 +830,7 @@ StatementParse scannedStatement(OcrExtraction? read) {
     ));
   }
 
-  final put = balancesDecideTheSigns(rows);
+  final put = balancesDecideTheSigns(rows, leading: leading, trailing: trailing);
   return StatementParse(put.rows, [...problems, ...put.problems], put.notices);
 }
 
@@ -721,27 +873,52 @@ StatementParse scannedStatement(OcrExtraction? read) {
 /// what line 13 is compared against. The balances are read values and
 /// are never rewritten.
 ({List<StatementRow> rows, List<String> problems, List<String> notices})
-    balancesDecideTheSigns(List<StatementRow> rows) {
+    balancesDecideTheSigns(
+  List<StatementRow> rows, {
+  /// The balance printed above the first line — a brought-forward row
+  /// on a statement that runs oldest-first.
+  ///
+  /// It matters out of proportion to its size: without it the FIRST
+  /// line is the one line with no pair of balances either side of it,
+  /// so it is the one line whose sign nothing can settle. With it,
+  /// every line on the page is provable.
+  double? leading,
+
+  /// The balance printed below the last line, which is the same
+  /// anchor for a statement that runs newest-first.
+  double? trailing,
+}) {
   final out = [...rows];
   final problems = <String>[];
   final notices = <String>[];
-  if (rows.length < 2) return (rows: out, problems: problems, notices: notices);
+  if (rows.isEmpty) return (rows: out, problems: problems, notices: notices);
 
   // Which way the statement runs, off its own dates -- the same
   // question `import_bank_transactions` asks, answered the same way, so
   // the two cannot disagree about which line a pair of balances
   // describes.
-  final newestFirst = rows.last.date.isBefore(rows.first.date);
+  final newestFirst = rows.length > 1 && rows.last.date.isBefore(rows.first.date);
 
-  for (var i = 1; i < rows.length; i++) {
-    final before = rows[i - 1].balance;
-    final after = rows[i].balance;
+  // The chain in printed order, with the markers at each end. Index -1
+  // is the leading marker and index `rows.length` the trailing one, so
+  // one loop covers the ordinary pairs and both anchors without a
+  // special case for either.
+  double? balanceAt(int i) {
+    if (i < 0) return leading;
+    if (i >= rows.length) return trailing;
+    return rows[i].balance;
+  }
+
+  for (var i = 0; i <= rows.length; i++) {
+    final before = balanceAt(i - 1);
+    final after = balanceAt(i);
     if (before == null || after == null) continue;
 
     // Forwards, a pair of balances describes the LATER line; backwards
     // it describes the earlier one, because going backwards is undoing
     // the movement that got you there.
     final at = newestFirst ? i - 1 : i;
+    if (at < 0 || at >= rows.length) continue;
     final delta = newestFirst ? before - after : after - before;
     final was = out[at].amount;
 

@@ -396,6 +396,239 @@ void main() {
     });
   });
 
+  /// Lines that print a day and a month and no year, which is most of
+  /// them.
+  ///
+  /// Maybank, CIMB and Public Bank all print `03/09` or `03 SEP` on
+  /// each line and put the period in the header once. `parseStatement
+  /// Date` returns null for every one of those, so a photographed
+  /// statement in the commonest layout there is came back as forty
+  /// lines of "no date could be read" — the whole statement, unusable,
+  /// with nothing on screen to say why.
+  group('a line with no year on it', () {
+    OcrExtraction dated(String on, List<Map<String, String>> rows) =>
+        OcrExtraction.fromJson({'document_date': on, 'rows': rows});
+
+    test('takes its year from the statement header', () {
+      final parse = scannedStatement(dated('2026-09-30', [
+        {'transaction_date': '03/09', 'amount': '-250.00'},
+      ]));
+
+      expect(parse.problems, isEmpty);
+      expect(parse.rows.single.date, DateTime(2026, 9, 3));
+    });
+
+    test('and reads the named-month form too', () {
+      final parse = scannedStatement(dated('2026-09-30', [
+        {'transaction_date': '03 SEP', 'amount': '-250.00'},
+        {'transaction_date': '5-Sep', 'amount': '-10.00'},
+      ]));
+
+      expect(parse.problems, isEmpty);
+      expect(parse.rows[0].date, DateTime(2026, 9, 3));
+      expect(parse.rows[1].date, DateTime(2026, 9, 5));
+    });
+
+    /// The case that makes this worth doing carefully rather than
+    /// taking the header's year for everything.
+    test('a statement crossing new year puts December in the right one',
+        () {
+      // Dated 5 January 2027. `28/12` is December 2026 and `03/01` is
+      // January 2027. Taking the header year for both would file a
+      // December transaction twelve months out, into a financial year
+      // that may already be closed.
+      final parse = scannedStatement(dated('2027-01-05', [
+        {'transaction_date': '28/12', 'amount': '-250.00'},
+        {'transaction_date': '03/01', 'amount': '-100.00'},
+      ]));
+
+      expect(parse.rows[0].date, DateTime(2026, 12, 28));
+      expect(parse.rows[1].date, DateTime(2027, 1, 3));
+    });
+
+    test('and the other way, for a statement dated just before new year',
+        () {
+      // Dated 28 December 2026, and a line reading `02/01` is the
+      // January after, not eleven months earlier.
+      final parse = scannedStatement(dated('2026-12-28', [
+        {'transaction_date': '02/01', 'amount': '-250.00'},
+      ]));
+
+      expect(parse.rows.single.date, DateTime(2027, 1, 2));
+    });
+
+    test('with no header date, another line on the page answers for it',
+        () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00'},
+        {'transaction_date': '03/09', 'amount': '-250.00'},
+      ]));
+
+      expect(parse.problems, isEmpty);
+      expect(parse.rows[1].date, DateTime(2026, 9, 3));
+    });
+
+    test('but with nothing to anchor to, it is still reported', () {
+      // Never today's year. A statement photographed in January whose
+      // lines are last December would be filed a year out, silently,
+      // and the only sign would be a reconciliation that never closes.
+      final parse = scannedStatement(read([
+        {'transaction_date': '03/09', 'amount': '-250.00'},
+      ]));
+
+      expect(parse.rows, isEmpty);
+      expect(parse.problems.single, contains('no date'));
+    });
+
+    test('a month that is not a month is not a date', () {
+      expect(parsePartialStatementDate('03/13'), isNull);
+      expect(parsePartialStatementDate('00/09'), isNull);
+      expect(parsePartialStatementDate('03 Smudge'), isNull);
+      expect(parsePartialStatementDate(''), isNull);
+    });
+
+    test('and a whole date is not read as a partial one', () {
+      // `6-3-26` has three fields and belongs to `parseStatementDate`.
+      expect(parsePartialStatementDate('6-3-26'), isNull);
+      expect(parsePartialStatementDate('2026-03-06'), isNull);
+    });
+  });
+
+  /// The brought-forward row, which nearly every Malaysian statement
+  /// opens with.
+  ///
+  /// BAKI DIBAWA KE HADAPAN, B/F, BALANCE BROUGHT FORWARD, OPENING
+  /// BALANCE. It is not a transaction: a balance, a description, and no
+  /// amount at all — and it used to be reported as "Line 1: no amount
+  /// could be read", which is a complaint about the one line on the
+  /// page that has nothing wrong with it, on the first line, where it
+  /// is the first thing anybody reads about their own statement.
+  ///
+  /// The balance on it is the more expensive half. It anchors the
+  /// chain, and without it the FIRST real line is the one line with no
+  /// pair of balances either side of it — so it was the one line whose
+  /// sign nothing could settle.
+  group('the balance brought forward', () {
+    test('is not a line, and is not complained about', () {
+      final parse = scannedStatement(read([
+        {'description': 'BAKI DIBAWA KE HADAPAN', 'running_balance': '5000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '-250.00',
+         'running_balance': '4750.00'},
+      ]));
+
+      expect(parse.rows, hasLength(1));
+      expect(parse.problems, isEmpty);
+    });
+
+    test('and it settles the sign of the first real line', () {
+      // Without the anchor, line 1 has no pair either side of it and
+      // its sign is whatever the reader guessed. With it, the movement
+      // from 5000 to 4750 is arithmetic.
+      final parse = scannedStatement(read([
+        {'description': 'BALANCE B/F', 'running_balance': '5000.00'},
+        {'transaction_date': '02/09/2026', 'description': 'CHEQUE',
+         'amount': '250.00', 'running_balance': '4750.00'},
+      ]));
+
+      expect(parse.rows.single.amount, -250.00);
+      expect(parse.notices.single, contains('Line 1'));
+    });
+
+    test('a dated brought-forward row is recognised too', () {
+      // Some banks print a date on it. Shape and position decide, not
+      // the presence of a date.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'description': 'OPENING BALANCE',
+         'running_balance': '5000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '250.00',
+         'running_balance': '4750.00'},
+      ]));
+
+      expect(parse.rows, hasLength(1));
+      expect(parse.rows.single.amount, -250.00);
+      expect(parse.problems, isEmpty);
+    });
+
+    test('a brought-forward row at the foot anchors a newest-first '
+        'statement', () {
+      // Printed newest at the top, so the brought-forward row is at the
+      // BOTTOM — and it is the ONLY thing that can settle the oldest
+      // line, which is the one with no pair below it. Both signs here
+      // are read wrong and both are provable.
+      final parse = scannedStatement(read([
+        {'transaction_date': '02/09/2026', 'amount': '250.00',
+         'running_balance': '4750.00'},
+        {'transaction_date': '01/09/2026', 'amount': '-1000.00',
+         'running_balance': '5000.00'},
+        {'description': 'BAKI B/F', 'running_balance': '4000.00'},
+      ]));
+
+      expect(parse.rows, hasLength(2));
+      // 5000 -> 4750 is the newer line's -250.
+      expect(parse.rows[0].amount, -250.00);
+      // 4000 -> 5000 going up the page is the older line's +1000, and
+      // ONLY the foot marker proves it: drop it and this line has no
+      // pair of balances either side of it at all.
+      expect(parse.rows[1].amount, 1000.00);
+      expect(parse.notices, hasLength(2));
+      expect(parse.problems, isEmpty);
+    });
+
+    test('a statement with BOTH a b/f and a c/f row uses both', () {
+      // Which is how most of them are printed. The closing row sits
+      // one past the last line, so the chain walk has to reach a step
+      // beyond the rows it is walking -- and must not then try to
+      // repair a line that is not there.
+      final parse = scannedStatement(read([
+        {'description': 'BAKI DIBAWA KE HADAPAN', 'running_balance': '5000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '250.00',
+         'running_balance': '4750.00'},
+        {'transaction_date': '03/09/2026', 'amount': '600.00',
+         'running_balance': '4150.00'},
+        {'description': 'BAKI AKHIR', 'running_balance': '4150.00'},
+      ]));
+
+      expect(parse.rows, hasLength(2));
+      expect(parse.rows.map((r) => r.amount).toList(), [-250.00, -600.00]);
+      expect(parse.notices, hasLength(2));
+      expect(parse.problems, isEmpty);
+    });
+
+    // ---------------------------------------------------------------
+    // What is NOT a brought-forward row
+    // ---------------------------------------------------------------
+
+    test('a balance with no amount in the MIDDLE is still a problem', () {
+      // That is a line whose amount was unreadable, and it is exactly
+      // the case the reader has to be told about: the chain will break
+      // on the line after the hole.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00',
+         'running_balance': '1000.00'},
+        {'transaction_date': '02/09/2026', 'description': 'SMUDGED',
+         'running_balance': '700.00'},
+        {'transaction_date': '03/09/2026', 'amount': '100.00',
+         'running_balance': '600.00'},
+      ]));
+
+      expect(parse.rows, hasLength(2));
+      expect(parse.problems.any((p) => p.contains('no amount')), isTrue);
+    });
+
+    test('a first row with neither an amount nor a balance is untouched',
+        () {
+      // A heading. Nothing to anchor with and nothing to complain
+      // about.
+      final parse = scannedStatement(read([
+        {'description': 'PENYATA AKAUN'},
+        {'transaction_date': '02/09/2026', 'amount': '-250.00'},
+      ]));
+
+      expect(parse.rows, hasLength(1));
+      expect(parse.problems, isEmpty);
+    });
+  });
+
   /// Which source the dialog previews and imports.
   ///
   /// Not merged, and not "the last one touched". A photograph and a

@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Three ways a scan was quietly wrong |
+| Head at time of writing | The two things every Malaysian statement has |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,124 Flutter tests**, 38 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,139 Flutter tests**, 38 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1768,6 +1768,69 @@ it.
 Twenty-eight mutants across the four files, all killed, every control
 survived. One survivor found a real gap on the way: a paper line
 carrying no figures at all was treated as a price of zero.
+
+## The two things every Malaysian statement has that this could not read
+
+Still under "keep solving scanning issue". Both are on the commonest
+statement layout there is, and both made a photographed statement
+useless rather than imperfect.
+
+### The brought-forward row
+
+BAKI DIBAWA KE HADAPAN, B/F, BALANCE BROUGHT FORWARD, OPENING BALANCE.
+Nearly every statement opens with one and many close with one. It is
+not a transaction: a balance, a description, and no amount.
+
+It was reported as **"Line 1: no amount could be read"** — a complaint
+about the one line on the page with nothing wrong with it, on the first
+line, where it is the first thing anybody reads about their own
+statement.
+
+The balance on it was the more expensive half. **It anchors the
+chain**, and without it the first real line is the one line with no
+pair of balances either side of it — so it was the one line whose sign
+nothing could settle.
+
+Recognised by **shape and position**, never by its words: the wording
+differs at every bank and in two languages, and a keyword list is a
+list that is missing the one this statement used. A balance with no
+amount in the MIDDLE is a different thing — a line whose amount was
+unreadable — and is still reported.
+
+`balancesDecideTheSigns` now takes `leading` and `trailing`, and the
+chain walk runs from −1 to `rows.length` so one loop covers the
+ordinary pairs and both anchors. A statement printing both a b/f and a
+c/f row is the ordinary case, and the walk reaching one step past the
+last row is why the "is this index a real line" guard exists.
+
+### Lines with no year on them
+
+Maybank, CIMB and Public Bank all print `03/09` or `03 SEP` on each
+line and put the period in the header **once**. `parseStatementDate`
+returned null for every one of those, so a photographed statement in
+that format came back as **forty lines of "no date could be read"** —
+the whole statement, unusable, with nothing on screen to say why.
+
+`parsePartialStatementDate` returns a day and a month rather than a
+date, because a date it is not. `resolveStatementYear` picks the
+**nearest occurrence** to an anchor: the statement's own document date,
+or the first line that carried a whole year.
+
+Nearest, not the header's year, because of one case: a statement dated
+5 January 2027 with a line reading `28/12` means December **2026**.
+Taking the header's year would file it twelve months out, into a
+financial year that may already be closed, and the only sign would be a
+reconciliation that never closes.
+
+**Never today's year.** With nothing on the page to anchor to, the line
+is still reported. A statement photographed in January whose lines are
+last December would otherwise be filed a year out, silently.
+
+Seventeen mutants across the two, all killed, controls survived. Three
+survivors on the first pass were real gaps, each a case the tests did
+not yet have: a foot marker that nothing depended on, a chain that
+never reached past the last row, and a statement printing both b/f and
+c/f.
 
 ## This session's commits
 
