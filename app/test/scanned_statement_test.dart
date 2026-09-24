@@ -13,13 +13,28 @@ import 'package:iakauntan/src/features/banking/statement_import.dart';
 /// PRINTED, so a date arrives as `03/09/2026` and an amount as
 /// `1,900.00` or `(250.00)`.
 ///
-/// The assertion that matters most is about what this deliberately does
-/// NOT do. A statement with separate Debit and Credit columns gives the
-/// reader no sign, and a wrong sign turns a withdrawal into a deposit —
-/// the most expensive mistake available here. Nothing in Dart can tell.
-/// What can tell is the running balance, which `0369` checks line by
-/// line inside the RPC, so the balance is passed through whenever the
-/// reader gave one. Dropping it would disarm the only check there is.
+/// The assertion that matters most is about THE SIGN. A statement with
+/// separate Debit and Credit columns gives the reader no sign, and a
+/// wrong sign turns a withdrawal into a deposit — the most expensive
+/// mistake available here.
+///
+/// This used to be left entirely to `import_bank_transactions`, which
+/// walks the running balance (`0369`) and refuses the whole import
+/// naming one line. That is the right check and the wrong remedy:
+/// somebody who photographed forty lines got an error about line 12 and
+/// no way forward but to type all forty in.
+///
+/// So the balance now DECIDES, before the rows ever leave Dart, because
+/// it is arithmetic rather than opinion:
+///
+///     oldest-first:  amount[i]   = balance[i] - balance[i-1]
+///     newest-first:  amount[i-1] = balance[i-1] - balance[i]
+///
+/// Agreeing in magnitude and disagreeing in sign is repaired and said
+/// so. Disagreeing in MAGNITUDE is not touched — that is a missing line
+/// or a misread figure, and it must still reach the refusal, because
+/// rewriting an amount to make a chain close is how a statement comes
+/// to reconcile against a number nobody printed.
 void main() {
   OcrExtraction read(List<Map<String, String>> rows) =>
       OcrExtraction.fromJson({'rows': rows});
@@ -67,8 +82,7 @@ void main() {
       expect(parse.rows.single.amount, 1900.00);
     });
 
-    // The one field that can check the others. Dropping it would leave
-    // the sign of every line unverifiable.
+    // The one field that can check the others -- and now settle them.
     test('the running balance is carried through, never dropped', () {
       final parse = scannedStatement(read([
         {
@@ -148,6 +162,237 @@ void main() {
       );
       expect(parse.rows, isEmpty);
       expect(parse.problems, isEmpty);
+    });
+  });
+
+  /// The running balance settling the sign of the line beside it.
+  ///
+  /// This is where a photographed statement stops being a guess. Every
+  /// case below is one a Malaysian retail statement actually produces,
+  /// and the two that must NOT be repaired are as important as the
+  /// three that must.
+  group('the balance decides the sign', () {
+    test('a withdrawal read as positive is put right', () {
+      // Debit and Credit columns, no sign printed. The reader reads
+      // magnitudes and the balance says which way each one went.
+      final parse = scannedStatement(read([
+        {
+          'transaction_date': '01/09/2026',
+          'amount': '10000.00',
+          'running_balance': '10000.00',
+        },
+        {
+          'transaction_date': '02/09/2026',
+          'description': 'CHEQUE 100123',
+          'amount': '250.00',
+          'running_balance': '9750.00',
+        },
+      ]));
+
+      expect(parse.rows[1].amount, -250.00);
+      expect(parse.problems, isEmpty);
+      // And said out loud. A correction nobody is told about is a
+      // correction nobody can disagree with.
+      expect(parse.notices.single, contains('Line 2'));
+      expect(parse.notices.single, contains('money out'));
+    });
+
+    test('a deposit read as negative is put right too', () {
+      final parse = scannedStatement(read([
+        {
+          'transaction_date': '01/09/2026',
+          'amount': '1000.00',
+          'running_balance': '1000.00',
+        },
+        {
+          'transaction_date': '02/09/2026',
+          'amount': '-400.00',
+          'running_balance': '1400.00',
+        },
+      ]));
+
+      expect(parse.rows[1].amount, 400.00);
+      expect(parse.notices.single, contains('money in'));
+    });
+
+    test('a sign that was already right is left alone and said nothing '
+        'about', () {
+      final parse = scannedStatement(read([
+        {
+          'transaction_date': '01/09/2026',
+          'amount': '1000.00',
+          'running_balance': '1000.00',
+        },
+        {
+          'transaction_date': '02/09/2026',
+          'amount': '-250.00',
+          'running_balance': '750.00',
+        },
+      ]));
+
+      expect(parse.rows[1].amount, -250.00);
+      expect(parse.notices, isEmpty);
+      expect(parse.problems, isEmpty);
+    });
+
+    // A statement printed newest at the top. Both orders are ordinary
+    // exports and `import_bank_transactions` reads the direction off
+    // the dates -- so this must read it the same way, or a pair of
+    // balances gets attributed to the wrong line and the "repair"
+    // breaks a chain that was sound.
+    test('newest-first: the pair describes the EARLIER line', () {
+      final parse = scannedStatement(read([
+        {
+          'transaction_date': '02/09/2026',
+          'description': 'CHEQUE',
+          'amount': '250.00',
+          'running_balance': '9750.00',
+        },
+        {
+          'transaction_date': '01/09/2026',
+          'amount': '10000.00',
+          'running_balance': '10000.00',
+        },
+      ]));
+
+      // Line 1 is the later date, so the movement between the two
+      // balances is line 1's, undone: 10000 -> 9750 is -250.
+      expect(parse.rows[0].amount, -250.00);
+      expect(parse.rows[1].amount, 10000.00);
+      expect(parse.notices.single, contains('Line 1'));
+    });
+
+    test('a whole statement of unsigned magnitudes comes out right', () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '5000.00',
+         'running_balance': '5000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '1200.00',
+         'running_balance': '3800.00'},
+        {'transaction_date': '03/09/2026', 'amount': '450.50',
+         'running_balance': '3349.50'},
+        {'transaction_date': '04/09/2026', 'amount': '2000.00',
+         'running_balance': '5349.50'},
+      ]));
+
+      expect(parse.rows.map((r) => r.amount).toList(),
+          [5000.00, -1200.00, -450.50, 2000.00]);
+      expect(parse.notices, hasLength(2));
+      expect(parse.problems, isEmpty);
+    });
+
+    // ---------------------------------------------------------------
+    // The two that must NOT be repaired
+    // ---------------------------------------------------------------
+
+    test('a magnitude that disagrees is NOT rewritten to make it close',
+        () {
+      // 1000 -> 700 is a movement of 300, and the line says 250. That
+      // is a missing line or a misread figure. Rewriting it to -300
+      // would make the chain close against a number nobody printed,
+      // and the statement would then reconcile perfectly to the wrong
+      // total.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00',
+         'running_balance': '1000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '250.00',
+         'running_balance': '700.00'},
+      ]));
+
+      expect(parse.rows[1].amount, 250.00);
+      expect(parse.notices, isEmpty);
+      // Said BEFORE the import is attempted rather than after it is
+      // refused, which is the whole difference for somebody holding
+      // forty lines.
+      expect(parse.problems.single, contains('Line 2'));
+      expect(parse.problems.single, contains('missing'));
+    });
+
+    test('a line with no balance beside it is left exactly as read', () {
+      // No balance column at all is an ordinary statement. Nothing can
+      // be proved about it and nothing is claimed.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '250.00'},
+      ]));
+
+      expect(parse.rows.map((r) => r.amount).toList(), [1000.00, 250.00]);
+      expect(parse.notices, isEmpty);
+      expect(parse.problems, isEmpty);
+    });
+
+    test('and a gap in the balance column breaks the pair, not the run',
+        () {
+      // Middle line has no balance, so neither pair spanning it can be
+      // used -- but the pair that does not span it still can.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00',
+         'running_balance': '1000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '100.00'},
+        {'transaction_date': '03/09/2026', 'amount': '50.00',
+         'running_balance': '850.00'},
+      ]));
+
+      expect(parse.rows[1].amount, 100.00); // untouched
+      expect(parse.rows[2].amount, 50.00); // untouched: no pair reaches it
+      expect(parse.notices, isEmpty);
+    });
+
+    test('one line proves nothing', () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '250.00',
+         'running_balance': '9750.00'},
+      ]));
+      expect(parse.rows.single.amount, 250.00);
+      expect(parse.notices, isEmpty);
+      expect(parse.problems, isEmpty);
+    });
+
+    // Every delta comes off the ORIGINAL balances, so a repair on one
+    // line cannot move what the next line is compared against.
+    test('repairs do not cascade', () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00',
+         'running_balance': '1000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '300.00',
+         'running_balance': '700.00'},
+        {'transaction_date': '03/09/2026', 'amount': '200.00',
+         'running_balance': '500.00'},
+      ]));
+
+      expect(parse.rows.map((r) => r.amount).toList(),
+          [1000.00, -300.00, -200.00]);
+      expect(parse.notices, hasLength(2));
+    });
+
+    test('half a sen of float noise is not a disagreement', () {
+      // 0.1 + 0.2 arithmetic. Without any tolerance this would report
+      // an ordinary statement as broken.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '0.30',
+         'running_balance': '0.30'},
+        {'transaction_date': '02/09/2026', 'amount': '-0.10',
+         'running_balance': '0.20'},
+      ]));
+      expect(parse.notices, isEmpty);
+      expect(parse.problems, isEmpty);
+    });
+
+    test('but ONE SEN out is a disagreement, not a sign to flip', () {
+      // The balance moves by 250.00 and the line reads 250.01. That is
+      // a misread digit, and it is the exact case a sloppier tolerance
+      // swallows: widen this to a ringgit and the line is silently
+      // "corrected" to -250.00, the chain closes, and a statement
+      // reconciles perfectly against a figure the bank never printed.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '1000.00',
+         'running_balance': '1000.00'},
+        {'transaction_date': '02/09/2026', 'amount': '250.01',
+         'running_balance': '750.00'},
+      ]));
+
+      expect(parse.rows[1].amount, 250.01); // untouched
+      expect(parse.notices, isEmpty);
+      expect(parse.problems.single, contains('Line 2'));
     });
   });
 

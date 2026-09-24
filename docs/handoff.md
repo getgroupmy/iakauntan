@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | A statement is a PDF more often than it is a CSV |
+| Head at time of writing | Three ways a scan was quietly wrong |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,092 Flutter tests**, 38 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,124 Flutter tests**, 38 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1672,6 +1672,102 @@ Eleven mutants on the classifier, all killed, control survived. The
 `_openFile` routing itself is not widget-tested: it opens a real file
 dialog and there is no seam. The rule it applies is the pure function
 above, which is.
+
+## Three ways a scan was quietly wrong, and the arithmetic that says so
+
+Asked for as "keep solving scanning issue for both ai smartscan and
+bank statements". Three defects, all of the same shape: **a figure the
+reader gives that can be CHECKED against another figure the reader
+gives, and was not.**
+
+### 1. A statement's sign was a guess, and a wrong guess refused everything
+
+A Malaysian retail statement prints Debit and Credit columns and **no
+sign**. So a reader looking at a photograph infers it from column
+position and gets it wrong often enough to matter.
+
+The only thing catching that was `import_bank_transactions`, which
+walks the running balance (`0369`) and **refuses the whole import**
+naming one line. Right check, wrong remedy: somebody who photographed
+forty lines got an error about line 12 and no way forward but to type
+all forty in.
+
+The balance is not an opinion. Where two consecutive lines carry one,
+the amount between them is arithmetic:
+
+    oldest-first:  amount[i]   = balance[i] - balance[i-1]
+    newest-first:  amount[i-1] = balance[i-1] - balance[i]
+
+`balancesDecideTheSigns` does that before the rows leave Dart. Agreeing
+in magnitude and disagreeing in sign is **repaired and said so**.
+Disagreeing in MAGNITUDE is **not touched** — that is a missing line or
+a misread figure, and it must still reach the refusal, because
+rewriting an amount to make a chain close is how a statement comes to
+reconcile against a number nobody printed.
+
+Direction is read off the dates the same way the RPC reads it, or a
+pair of balances gets attributed to the wrong line and the "repair"
+breaks a chain that was sound.
+
+`StatementParse` gained **`notices`**, separate from `problems`: a
+problem is a line that will not be imported and a notice is a line that
+will be, differently from how it was read. Counting them together would
+put "3 could not be read" over three lines that were read perfectly
+well.
+
+### 2. The document editor threw away the printed amount column
+
+`_applyScan` built each line as:
+
+    unitPrice: l.unitPrice ?? (amount != null ? amount / qty : 0)
+
+So `amount` — **the figure the supplier's own total is built from** —
+was consulted only when there was nothing else. A misread price column,
+or an invoice with a discount column the reader was never asked about,
+produced a bill whose lines quietly did not equal the paper. `0705`'s
+banner then said the document did not tie: true, and silent about which
+line.
+
+`lineFromScan` makes the printed amount win and derives the price from
+it. `unit_price` is `numeric(18,4)`, so 10.00 over three stores as
+3.3333 and extends to 9.9999, which the 2-decimal line total rounds to
+the printed 10.00 — **the document ties to the paper by construction
+rather than by luck.**
+
+**The tolerance scales with quantity**, and that is the whole subtlety.
+A unit price is printed to two places and meant to four: 3.33 for a
+third of ten ringgit. Over three units that is one sen out and not a
+misreading; over a hundred it is fifty sen. So the slack is half a sen
+PER UNIT. A flat half-sen reports half the invoices in the country; a
+flat ringgit hides a real misread digit on a single-unit line.
+
+`ScanLineCorrections` puts every one on the screen, above the totals
+banner it explains. Not in the log: it changes a figure somebody is
+about to post.
+
+### 3. Which means the review dialog's one editable box was inert
+
+The dialog shows exactly one editable figure per line — the amount —
+because "quantity and unit price are rarely what needs correcting".
+Under the old rule, **editing it did nothing** whenever the reader had
+returned a unit price. Correct 255.00 to 155.00, press Apply, get
+3 × 85.00 = 255.00. The one correction the dialog offers on a line was
+the one thing it could not do. Fixed by the same change, and asserted
+by name.
+
+### And the copy that would have rotted
+
+`scan_recheck.dart` had its own `_priceOf` — the same arithmetic
+`_applyScan` had **at the time**. The moment `_applyScan` was fixed,
+the recheck would have reported every correctly-built line as a
+difference against the figure this app itself put there, with a
+"restore" button that put the misreading back. Both now call
+`lineFromScan`, and a test says so in the only way that keeps saying
+it.
+
+Twenty-eight mutants across the four files, all killed, every control
+survived. One survivor found a real gap on the way: a paper line
+carrying no figures at all was treated as a price of zero.
 
 ## This session's commits
 

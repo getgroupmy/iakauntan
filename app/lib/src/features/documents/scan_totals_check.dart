@@ -284,3 +284,80 @@ class ScanTotalsBanner extends ConsumerWidget {
     );
   }
 }
+
+/// Lines whose printed amount disagreed with their own extension.
+///
+/// A sibling of [ScanTotalsBanner] and deliberately separate from it:
+/// that one says the document does not tie to the paper, and this one
+/// says WHY, for the class of reason the reader can be caught at.
+///
+/// `lineFromScan` takes the printed amount as the truth — it is the
+/// figure the supplier's own total is built from — and derives the unit
+/// price from it. That is a change to what somebody is about to post,
+/// so it is on the screen rather than in the log. A correction nobody
+/// is told about is a correction nobody can disagree with.
+class ScanLineCorrections extends StatelessWidget {
+  const ScanLineCorrections(this.corrections, {super.key});
+
+  final List<String> corrections;
+
+  @override
+  Widget build(BuildContext context) {
+    if (corrections.isEmpty) return const SizedBox.shrink();
+    final colour = context.colors.warning;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Card(
+        key: const Key('scan-line-corrections'),
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.calculate_outlined, size: 20, color: colour),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      corrections.length == 1
+                          ? 'One line did not add up as read'
+                          : '${corrections.length} lines did not add up as '
+                              'read',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: colour,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // Every one of them, not the first few: each is a
+                    // figure somebody is about to post, and a list that
+                    // says "and 3 more" is a list that hides the one
+                    // that mattered.
+                    for (final c in corrections)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          c,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'The printed amount is what the supplier totalled, '
+                      'so it is what the line was taken as. A discount '
+                      'column reads exactly like this — check the price '
+                      'if the bill is not one.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

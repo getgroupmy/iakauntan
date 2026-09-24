@@ -353,6 +353,107 @@ List<OcrLine> foldOcrContinuations(List<OcrLine> lines) {
   return out;
 }
 
+/// What one scanned line's quantity and unit price should actually be.
+///
+/// ## The column that was being thrown away
+///
+/// A reader is asked for three figures per line — `quantity`,
+/// `unit_price` and `amount` — and the editor used the first two and
+/// IGNORED THE THIRD whenever a unit price came back. But `amount` is
+/// the figure printed in the rightmost column, and it is the one the
+/// supplier's own total is built from. The other two are the small
+/// print beside it.
+///
+/// So a line the reader got slightly wrong — a unit price misread, or a
+/// discount column it was never asked about — became a line whose
+/// extension disagreed with the paper, silently. `0705`'s banner then
+/// said the document did not tie to what was read, which is true and
+/// says nothing about WHICH line.
+///
+/// ## The amount wins, because the amount is what foots
+///
+/// The unit price is derived from it: `unit_price = amount / quantity`.
+/// `unit_price` is `numeric(18,4)`, so 10.00 over three comes back as
+/// 3.3333 and extends to 9.9999, which the 2-decimal line total rounds
+/// to the 10.00 that is printed. The document ties to the paper by
+/// construction rather than by luck.
+///
+/// This is also the right answer for the commonest legitimate
+/// disagreement: an invoice with a discount column, where quantity
+/// times price is the gross and `amount` is what is actually charged.
+///
+/// ## Told, not just done
+///
+/// [corrected] is non-null only where the difference is MATERIAL to the
+/// line total — half a sen or more. A unit price rounded for display
+/// (3.33 printed, 3.3333 meant) is not a disagreement worth a sentence,
+/// and reporting it would put a notice on nearly every invoice and
+/// train people to ignore all of them.
+typedef ScannedLine = ({double quantity, double unitPrice, String? corrected});
+
+/// How far a line's extension may legitimately miss its printed amount.
+///
+/// It SCALES WITH QUANTITY, and that is the whole subtlety. A unit price
+/// is printed to two places all over Malaysia and meant to four: 3.33 on
+/// the page for a third of ten ringgit. Extended over three units that
+/// is 9.99 against a printed 10.00 — one sen out, and not a misreading.
+/// Over a hundred units the same rounding is 50 sen out.
+///
+/// So the slack is half a sen PER UNIT, which is exactly the rounding
+/// the price column can hide, plus a whisker for the representation
+/// error in a double. A flat half-sen tolerance reports half the
+/// invoices in the country; a flat ringgit hides a real misread digit
+/// on a single-unit line.
+double _lineSlack(double quantity) => quantity.abs() * 0.005 + 0.0001;
+
+ScannedLine lineFromScan(OcrLine line) {
+  final read = line.quantity;
+  // A quantity of zero with money beside it is a misreading, not a free
+  // item: taken at face value it makes the unit price zero and the
+  // charge disappears off the bill entirely. One is the only quantity
+  // that keeps the money.
+  final quantity = (read == null || read == 0) ? 1.0 : read;
+  final amount = line.amount;
+  final price = line.unitPrice;
+
+  // Nothing printed in the amount column. The extension is all there
+  // is, and it is taken as read.
+  if (amount == null) return (quantity: quantity, unitPrice: price ?? 0, corrected: null);
+
+  final derived = amount / quantity;
+  if (price == null) {
+    // No price column, or none read. Deriving it is the only option
+    // and there is nothing to disagree with.
+    return (quantity: quantity, unitPrice: derived, corrected: null);
+  }
+
+  final extension = quantity * price;
+  if ((extension - amount).abs() < _lineSlack(quantity)) {
+    // They agree. The price as printed is kept, so a line reads back
+    // the way the paper does.
+    return (quantity: quantity, unitPrice: price, corrected: null);
+  }
+
+  return (
+    quantity: quantity,
+    unitPrice: derived,
+    corrected:
+        '${_qty(quantity)} x ${_money2(price)} comes to '
+        '${_money2(extension)}, but the line is printed as '
+        '${_money2(amount)}. Taken as ${_money2(amount)}.',
+  );
+}
+
+/// A quantity in a sentence: no trailing zeros on a whole one, because
+/// "2 x 15.00" reads and "2.00 x 15.00" does not.
+String _qty(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+/// Money in a sentence: always two places. "printed as 10" beside
+/// "comes to 9.99" reads as a different KIND of figure; "10.00" reads
+/// as the same figure, differently.
+String _money2(double v) => v.toStringAsFixed(2);
+
 class OcrExtraction {
   const OcrExtraction({
     this.supplierName,

@@ -79,6 +79,83 @@ void main() {
       expect(check(), isEmpty);
     });
 
+    /// The one that would rot, and did once.
+    ///
+    /// `_priceOf` used to be a COPY of the arithmetic in `_applyScan`:
+    /// `unitPrice ?? amount / quantity`. The moment `_applyScan` was
+    /// fixed to let the printed amount overrule a misread price column,
+    /// this file was still doing the old sum — so every line that had
+    /// been correctly built from its amount was reported here as a
+    /// difference against the very figure this app had put there, and
+    /// "restore" would have put the misreading back.
+    ///
+    /// Both now call `lineFromScan`, and this says so in the only way
+    /// that keeps saying it.
+    test('a line the printed amount overruled is not a difference', () {
+      // 3 x 8.50 comes to 25.50 and the line is printed as 255.00, so
+      // the document was built at 85.00 a unit.
+      const read = OcrExtraction(
+        documentNo: '5665871390',
+        currency: 'MYR',
+        lines: [
+          OcrLine(description: 'Toner', quantity: 3, unitPrice: 8.5,
+              amount: 255),
+        ],
+      );
+
+      final onScreen = [
+        LineDraft(description: 'Toner', quantity: 3, unitPrice: 85),
+      ];
+
+      expect(check(read: read, lines: onScreen), isEmpty);
+    });
+
+    test('a paper line carrying no figures at all offers no price back',
+        () {
+      // A heading, or a continuation row that had nothing above it to
+      // fold into, so it survives `foldOcrContinuations` as a line with
+      // a description and no money. There is no price on it to compare
+      // — and treating "no figures" as a price of zero would report the
+      // real price as a difference and offer to replace it with
+      // nothing.
+      const read = OcrExtraction(
+        documentNo: '5665871390',
+        currency: 'MYR',
+        lines: [OcrLine(description: 'Professional services')],
+      );
+
+      final onScreen = [
+        LineDraft(
+            description: 'Professional services', quantity: 1, unitPrice: 5000),
+      ];
+
+      final found = check(read: read, lines: onScreen);
+      expect(
+        found.where((d) => d.part == RecheckPart.lineUnitPrice),
+        isEmpty,
+      );
+    });
+
+    test('and a quantity of zero the reader printed is not offered back',
+        () {
+      // `lineFromScan` makes it one, because a zero quantity beside a
+      // real amount takes the charge off the bill entirely. Offering
+      // to "restore" the zero would offer to do exactly that.
+      const read = OcrExtraction(
+        documentNo: '5665871390',
+        currency: 'MYR',
+        lines: [
+          OcrLine(description: 'Repairs', quantity: 0, amount: 320),
+        ],
+      );
+
+      final onScreen = [
+        LineDraft(description: 'Repairs', quantity: 1, unitPrice: 320),
+      ];
+
+      expect(check(read: read, lines: onScreen), isEmpty);
+    });
+
     test('a description somebody changed', () {
       // The reported case from two days ago: keying an item number
       // rewrote the description that came off the PDF.

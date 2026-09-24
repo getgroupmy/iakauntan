@@ -182,7 +182,7 @@ List<PaperDifference> differencesFromPaper({
       ));
     }
 
-    final qty = r.quantity;
+    final qty = _quantityOf(r);
     if (qty != null && (qty - line.quantity).abs() >= _sen) {
       out.add(PaperDifference(
         part: RecheckPart.lineQuantity,
@@ -212,17 +212,27 @@ List<PaperDifference> differencesFromPaper({
 
 /// The unit price a read line implies.
 ///
-/// The same arithmetic `_applyScan` uses, and it has to be: a reader
-/// that gives an amount and a quantity but no unit price is ordinary,
-/// and working it out differently here would report a difference
-/// against a figure this app itself put there.
+/// `lineFromScan`, and it HAS to be. This is the one place in the app
+/// that compares a document against the paper it was built from, so any
+/// arithmetic of its own would report a difference against a figure
+/// this app itself put there — on every line where the printed amount
+/// overruled a misread price column, which is exactly the case that
+/// rule exists for.
+///
+/// It used to be a copy: `unitPrice ?? amount / quantity`. That was the
+/// same arithmetic `_applyScan` had at the time, and the two moved
+/// apart the moment one of them was fixed.
 double? _priceOf(OcrLine line) {
-  if (line.unitPrice != null) return line.unitPrice;
-  final amount = line.amount;
-  final qty = line.quantity ?? 1;
-  if (amount == null || qty == 0) return null;
-  return amount / qty;
+  if (line.unitPrice == null && line.amount == null) return null;
+  return lineFromScan(line).unitPrice;
 }
+
+/// The quantity a read line implies, by the same rule.
+///
+/// A printed quantity of zero becomes one — see `lineFromScan` — so a
+/// recheck must not then offer to put the zero back.
+double? _quantityOf(OcrLine line) =>
+    line.quantity == null ? null : lineFromScan(line).quantity;
 
 String _describe(OcrLine line) {
   final price = _priceOf(line);

@@ -969,6 +969,27 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
                 ),
                 for (final problem in preview.problems.take(5))
                   Text(problem, style: Theme.of(context).textTheme.bodySmall),
+                // What was READ and then CHANGED, kept apart from what
+                // could not be read: a sign put right off the running
+                // balance is a line that WILL be imported, and burying
+                // it in the problem list would read as a line that will
+                // not. Every one of them is shown -- a correction
+                // nobody was told about is a correction nobody can
+                // disagree with.
+                if (preview.notices.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${preview.notices.length} '
+                    '${preview.notices.length == 1 ? 'line was' : 'lines were'} '
+                    'corrected against the running balance',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.warning,
+                    ),
+                  ),
+                  for (final notice in preview.notices)
+                    Text(notice, style: Theme.of(context).textTheme.bodySmall),
+                ],
               ],
             ],
           ),

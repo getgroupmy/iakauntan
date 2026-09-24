@@ -472,20 +472,28 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // A reader that splits a wrapped description into two rows would
       // otherwise put a phantom line at price zero on the bill, with
       // the real charge's detail in it. See `foldOcrContinuations`.
-      final lines = foldOcrContinuations(read.lines)
+      // The printed AMOUNT decides each line, not the quantity and
+      // price beside it -- `lineFromScan` says why, and says so out
+      // loud when the two disagree. The old expression here used the
+      // amount only when no unit price came back, so a misread price
+      // column silently produced a bill that did not equal the paper.
+      final corrections = <String>[];
+      final folded = foldOcrContinuations(read.lines)
           .where((l) => (l.description ?? '').trim().isNotEmpty)
-          .map(
-            (l) => LineDraft(
-              description: l.description!.trim(),
-              quantity: l.quantity ?? 1,
-              unitPrice:
-                  l.unitPrice ??
-                  (l.amount != null && (l.quantity ?? 1) != 0
-                      ? l.amount! / (l.quantity ?? 1)
-                      : 0),
-            ),
-          )
           .toList();
+      final lines = <LineDraft>[];
+      for (var i = 0; i < folded.length; i++) {
+        final l = folded[i];
+        final settled = lineFromScan(l);
+        if (settled.corrected != null) {
+          corrections.add('Line ${i + 1}: ${settled.corrected}');
+        }
+        lines.add(LineDraft(
+          description: l.description!.trim(),
+          quantity: settled.quantity,
+          unitPrice: settled.unitPrice,
+        ));
+      }
 
       // A receipt that prints one total and no breakdown still has to
       // become a line, or there is nothing to post.
@@ -525,9 +533,19 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         current: _roundingMethod,
       );
 
+      _scanCorrections = corrections;
       _dirty = true;
     });
   }
+
+  /// Lines whose printed amount disagreed with their own extension, and
+  /// what was done about it.
+  ///
+  /// Held rather than snackbarred: `_applyScan` runs inside the load,
+  /// before this screen is on the phone, and a snackbar raised there is
+  /// a sentence that has gone by the time anybody is looking at the
+  /// document it is about.
+  List<String> _scanCorrections = const [];
 
   // ------------------------------------------------------------------
   // Currency and rate
@@ -1754,6 +1772,19 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         editable: editable,
                         onNotesChanged: _markDirty,
                       ),
+
+                      // Lines whose printed amount disagreed with
+                      // their own quantity times price, and what was
+                      // taken instead. Above the totals banner because
+                      // it explains a difference the banner would
+                      // otherwise only report.
+                      //
+                      // On screen rather than in a snackbar: the scan
+                      // is applied while this document is loading, and
+                      // a message raised then is gone before anybody is
+                      // looking at what it is about.
+                      if (_scanCorrections.isNotEmpty)
+                        ScanLineCorrections(_scanCorrections),
 
                       // What the paper said, where the lines say
                       // otherwise. Only on a saved document, because

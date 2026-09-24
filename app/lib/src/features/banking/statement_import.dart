@@ -179,7 +179,7 @@ class StatementRow {
 /// What came back from reading a paste: the rows, and the lines that
 /// could not be read.
 class StatementParse {
-  const StatementParse(this.rows, this.problems);
+  const StatementParse(this.rows, this.problems, [this.notices = const []]);
 
   final List<StatementRow> rows;
 
@@ -187,6 +187,15 @@ class StatementParse {
   /// rather than swallowed: a statement that imports 38 of 40 lines
   /// without saying so reconciles to the wrong number.
   final List<String> problems;
+
+  /// One message per line that was READ and then CHANGED.
+  ///
+  /// Separate from [problems] because they are different sentences to a
+  /// bookkeeper: a problem is a line that will not be imported, and a
+  /// notice is a line that will be, differently from how it was read.
+  /// Counting them together would put "3 could not be read" over three
+  /// lines that were read perfectly well and had their signs put right.
+  final List<String> notices;
 
   bool get isEmpty => rows.isEmpty;
 }
@@ -669,8 +678,114 @@ StatementParse scannedStatement(OcrExtraction? read) {
     ));
   }
 
-  return StatementParse(rows, problems);
+  final put = balancesDecideTheSigns(rows);
+  return StatementParse(put.rows, [...problems, ...put.problems], put.notices);
 }
+
+/// The sign of every scanned line, settled by the column that proves it.
+///
+/// ## The failure this exists for
+///
+/// A Malaysian retail statement prints two columns, Debit and Credit,
+/// and NO SIGN. So a reader looking at a photograph has to infer the
+/// sign from which column a figure sits in, and it gets that wrong
+/// often enough to matter -- the field description asks for it
+/// ("negative for money out") and a description is not a guarantee.
+///
+/// A wrong sign is the most expensive mistake available here, and until
+/// now the only thing that caught it was `import_bank_transactions`,
+/// which walks the running balance (`0369`) and REFUSES THE WHOLE
+/// IMPORT naming one line. That is the right check and the wrong
+/// remedy: somebody who photographed forty lines gets an error about
+/// line 12 and no way forward but to type all forty in.
+///
+/// ## Why this can be done rather than guessed
+///
+/// The running balance is not an opinion. Where two consecutive lines
+/// both carry one, the amount between them is ARITHMETIC:
+///
+///     oldest-first:  amount[i]   = balance[i] - balance[i-1]
+///     newest-first:  amount[i-1] = balance[i-1] - balance[i]
+///
+/// So the reader's figure is a CHECK on that, not the source of it. If
+/// it agrees, nothing happens. If it agrees in magnitude and disagrees
+/// in sign, the sign is put right and said so. If it disagrees in
+/// magnitude, NOTHING IS TOUCHED -- that is a missing line or a misread
+/// figure, and it must still reach the refusal, because silently
+/// rewriting an amount to make a chain close is how a statement comes
+/// to reconcile against a number nobody printed.
+///
+/// ## Every delta is computed from the ORIGINAL balances
+///
+/// So the repairs cannot cascade: line 12 being wrong does not move
+/// what line 13 is compared against. The balances are read values and
+/// are never rewritten.
+({List<StatementRow> rows, List<String> problems, List<String> notices})
+    balancesDecideTheSigns(List<StatementRow> rows) {
+  final out = [...rows];
+  final problems = <String>[];
+  final notices = <String>[];
+  if (rows.length < 2) return (rows: out, problems: problems, notices: notices);
+
+  // Which way the statement runs, off its own dates -- the same
+  // question `import_bank_transactions` asks, answered the same way, so
+  // the two cannot disagree about which line a pair of balances
+  // describes.
+  final newestFirst = rows.last.date.isBefore(rows.first.date);
+
+  for (var i = 1; i < rows.length; i++) {
+    final before = rows[i - 1].balance;
+    final after = rows[i].balance;
+    if (before == null || after == null) continue;
+
+    // Forwards, a pair of balances describes the LATER line; backwards
+    // it describes the earlier one, because going backwards is undoing
+    // the movement that got you there.
+    final at = newestFirst ? i - 1 : i;
+    final delta = newestFirst ? before - after : after - before;
+    final was = out[at].amount;
+
+    if ((delta - was).abs() < _sen) continue; // already right
+
+    if ((delta + was).abs() < _sen) {
+      out[at] = StatementRow(
+        date: out[at].date,
+        amount: delta,
+        description: out[at].description,
+        reference: out[at].reference,
+        balance: out[at].balance,
+      );
+      notices.add(
+        'Line ${at + 1}: read as ${_money(was)} but the balance moves by '
+        '${_money(delta)}, so it is ${delta < 0 ? 'money out' : 'money in'}. '
+        'Corrected.',
+      );
+      continue;
+    }
+
+    // Neither. Said here rather than left for the RPC, so it is on
+    // screen BEFORE somebody presses Import -- but not repaired, and
+    // the import will still be refused if they go ahead.
+    problems.add(
+      'Line ${at + 1}: read as ${_money(was)}, but the balance moves by '
+      '${_money(delta)}. A line is missing, or one of these figures was '
+      'misread.',
+    );
+  }
+
+  return (rows: out, problems: problems, notices: notices);
+}
+
+/// Half a sen, which is the right width for a figure carried to two
+/// places: it absorbs the representation error in a difference of
+/// doubles and nothing else. A whole sen would let a real one-sen
+/// transposition through, and a one-sen transposition is a real error.
+const _sen = 0.005;
+
+/// Two places and a sign, for a sentence a person reads rather than a
+/// figure a column aligns. `Fmt` is not imported here on purpose: this
+/// file is parsing, and it is tested without Flutter.
+String _money(double v) => v.toStringAsFixed(2);
 
 /// Which of the dialog's three sources is previewed and imported.
 ///
