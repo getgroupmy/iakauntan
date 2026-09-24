@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Bank statements: a door on a room that had no door |
+| Head at time of writing | A statement is a PDF more often than it is a CSV |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,080 Flutter tests**, 38 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,092 Flutter tests**, 38 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1587,6 +1587,91 @@ now, and that is the one somebody needs to see. It asks the inbox for
 `all`; `posted` would hide exactly that row.
 
 Twelve mutants across the two files, all killed, both controls survived.
+
+## A statement is a PDF more often than it is a CSV
+
+> bank statement should allow to upload pdf csv and also image not
+> only csv
+
+The import dialog's "Open a file" called `readAsString` on whatever was
+picked. So:
+
+- **a CSV or an MT940** parsed, as designed;
+- **a PDF** — which is what a bank emails — threw a `FormatException`,
+  reported as *"Could not read the file: FormatException…"*, which
+  reads as the statement being broken rather than the button being for
+  something else;
+- **a photograph** did the same.
+
+Both halves of the fix already existed and neither could be reached
+from here. `parseStatement` reads CSV and MT940. `scannedStatement`
+turns an AI SmartScan reading of a statement into the same
+`StatementRow`s — `0682` gave the `accounting.bank_statement` target
+`repeats` for exactly this. The only way to reach the second was to go
+to SmartScan FIRST, photograph it there, and be navigated back with the
+reading parked in `pendingStatementProvider`. Nobody holding a PDF
+guesses that.
+
+### One button, and the file decides
+
+`statementFileKind({mimeType, bytes})` in `statement_import.dart` is the
+switch, and it is a pure function on purpose — the decision is the rule,
+and a rule that needs a file dialog to reach is a rule nothing can
+assert.
+
+    StatementFile.text    -> parseStatement, costing nothing
+    StatementFile.scan    -> captureAndRead + scannedStatement
+    StatementFile.neither -> a sentence saying what to do instead
+
+Not two buttons. Which importer a file belongs to is a question about
+the file, so nobody has to know that a CSV is free and a PDF costs a
+scan, and nobody pays for a reading of a file that would have parsed
+here.
+
+**Both directions are wrong in a way that costs something**, which is
+why both are asserted: a CSV sent to the reader is a scan charged for on
+a file that parses better locally, and a PDF sent to the parser is the
+reported bug.
+
+### Sniffed from the bytes, not the extension
+
+The mime type is only a fallback. A browser hands over whatever the
+operating system guessed from the extension — routinely
+`application/octet-stream` for a `.sta`, empty for anything with no
+association — and a statement renamed by whoever downloaded it is the
+ordinary case. So `%PDF`, the PNG/JPEG/GIF/BMP magic, `RIFF….WEBP`, and
+`….ftyp` at **offset four** for an iPhone's HEIC.
+
+### The rule that was right on every file anybody tried
+
+"Is it text?" was first written as *contains no NUL byte*. That let
+`PK\x03\x04` — the first four bytes of a spreadsheet — through as text.
+A real `.xlsx` has a NUL a few bytes later, so the rule was correct on
+every file that would ever be tested by hand and wrong on the short one
+nobody would. It is now **any control byte except tab, newline and
+carriage return**, and the test names the four-byte case.
+
+Latin-1 is decoded rather than refused: a Malaysian statement is ASCII
+plus the occasional accented payee, and refusing a whole statement over
+one character in a narration nobody reconciles against is the wrong
+trade.
+
+### `captureAndRead` gained `picked`
+
+The importer picks the file itself, because it has to look at the bytes
+before it knows whether a reader is involved at all. So
+`captureAndRead` now takes a `CapturedFile` in place of asking for one,
+and everything after the pick is unchanged and deliberately so — the
+PDF refusal that happens **before** the upload and the charge, the
+progress modal, and the attachment that is kept when the reading fails.
+
+The capture is filed against `bank_transactions`, so the scan inbox and
+the Bank statements screen both say what became of it.
+
+Eleven mutants on the classifier, all killed, control survived. The
+`_openFile` routing itself is not widget-tested: it opens a real file
+dialog and there is no seam. The rule it applies is the pure function
+above, which is.
 
 ## This session's commits
 

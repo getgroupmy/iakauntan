@@ -1,4 +1,3 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,7 +10,9 @@ import '../../core/widgets.dart';
 import 'book_balance.dart';
 import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
+import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
+import '../smartscan/scan_destination.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
 import 'transfers_history_dialog.dart';
@@ -730,18 +731,57 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
   /// No extension filter. Banks name these `.csv`, `.txt`, `.sta`,
   /// `.940` and `.TXT`, and a filter that misses one is a file the
   /// picker refuses to show for a reason nobody can see.
-  /// `parseStatement` works out which format it is from the content.
+  ///
+  /// ## And a PDF or a photograph is a statement too
+  ///
+  /// Asked for in one sentence: "bank statement should allow to upload
+  /// pdf csv and also image not only csv". This button used to read
+  /// whatever was picked with `readAsString`, so a PDF came back as a
+  /// `FormatException` under "Could not read the file" — which reads as
+  /// the statement being broken rather than the button being for
+  /// something else. A PDF is what a bank emails and a photograph is
+  /// what somebody has of a printed one, so between them they are most
+  /// of the statements there are.
+  ///
+  /// ONE BUTTON, not two. Which importer a file belongs to is a
+  /// question about the file, and `statementFileKind` answers it from
+  /// the bytes — so nobody has to know that a CSV is free and a PDF
+  /// costs a scan, and nobody picks the wrong button and pays for a
+  /// reading of a file that could have been parsed here.
   Future<void> _openFile() async {
     setState(() => _reading = true);
     try {
-      final file = await openFile();
-      if (file == null) return;
-      final text = await file.readAsString();
-      if (!mounted) return;
-      setState(() {
-        _text.text = text;
-        _fileName = file.name;
-      });
+      // Picked here rather than inside `captureAndRead`, because what
+      // happens next depends on the bytes and asking twice would be a
+      // second file dialog over a file already chosen.
+      final file = await pickReceipt();
+      if (file == null || !mounted) return;
+
+      switch (statementFileKind(mimeType: file.mimeType, bytes: file.bytes)) {
+        case StatementFile.scan:
+          await _readStatement(file);
+        case StatementFile.text:
+          setState(() {
+            _text.text = statementText(file.bytes)!;
+            _fileName = file.name;
+            // A file chosen now replaces a photograph taken earlier.
+            // `statementPreview` gives the scan precedence, so leaving
+            // it would import the old reading and say nothing.
+            _scanned = null;
+            _scannedFrom = null;
+          });
+        case StatementFile.neither:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'That is not a statement this can read. Online banking '
+                'exports a CSV or an MT940; a PDF or a photograph of a '
+                'printed statement works too. A spreadsheet has to be '
+                'saved as CSV first.',
+              ),
+            ),
+          );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -750,6 +790,54 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
     } finally {
       if (mounted) setState(() => _reading = false);
     }
+  }
+
+  /// A PDF or a photograph, through the reader and into the same rows.
+  ///
+  /// `captureAndRead` is the whole of AI SmartScan's intake and it is
+  /// reused rather than reimplemented: it refuses a PDF BEFORE the
+  /// upload where the chosen reader cannot take one, shows the progress
+  /// modal, keeps the file when the reading fails, and files it against
+  /// `bank_transactions` so the scan inbox — and the Bank statements
+  /// screen — can say what became of it.
+  ///
+  /// The reading becomes rows through `scannedStatement`, which is the
+  /// same function the parked-photograph path uses. Two ways in, one
+  /// interpretation.
+  Future<void> _readStatement(CapturedFile file) async {
+    final staged = await captureAndRead(
+      context,
+      ref,
+      source: CaptureSource.file,
+      table: ScanDestination.bankStatement.table,
+      picked: file,
+    );
+    if (staged == null || !mounted) return;
+
+    final parse = scannedStatement(staged.read);
+    if (parse.rows.isEmpty && parse.problems.isEmpty) {
+      // The file is kept either way — `0708` refuses to delete it once
+      // anything is built from it, and nothing has been built here.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nothing on that document read as statement lines. The file '
+            'is kept. A reader has to be asked for the lines, which a '
+            'platform administrator sets up under Kinds of document.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _scanned = parse;
+      _scannedFrom = 'read from ${file.name}';
+      // The box and the reading are two answers to one question and
+      // `statementPreview` prefers the reading, so the box is cleared
+      // rather than left holding something that will not be imported.
+      _text.clear();
+      _fileName = null;
+    });
   }
 
   /// Whatever AI SmartScan photographed on the way here.
@@ -803,8 +891,9 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
                 'Open the file your bank exports, or paste it. A CSV needs '
                 'its header row — columns are found by name, so the order '
                 'does not matter. An MT940, which is what corporate '
-                'accounts get, is recognised on its own. Lines already '
-                'imported are skipped.',
+                'accounts get, is recognised on its own. A PDF or a '
+                'photograph of a printed statement is read by AI '
+                'SmartScan. Lines already imported are skipped.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
@@ -815,6 +904,9 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
                     onPressed: _reading ? null : _openFile,
                     icon: const Icon(Icons.folder_open_outlined, size: 18),
                     label: const Text('Open a file'),
+                    // The label stays short; what it accepts is in the
+                    // sentence above, where there is room to say why a
+                    // PDF takes longer than a CSV.
                   ),
                   if (_fileName != null) ...[
                     const SizedBox(width: 12),

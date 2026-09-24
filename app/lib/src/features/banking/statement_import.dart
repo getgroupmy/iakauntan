@@ -20,8 +20,122 @@
 /// did not look inside.
 library;
 
+import 'dart:convert';
+
 import '../../core/csv.dart';
 import '../../data/ocr_repository.dart';
+
+/// What the import dialog should do with a file somebody chose.
+///
+/// Asked for in one sentence: "bank statement should allow to upload
+/// pdf csv and also image not only csv". Only the CSV half was true.
+/// The dialog's "Open a file" read whatever was picked with
+/// `readAsString`, so a PDF or a photograph -- which is how most people
+/// actually have a statement -- came back as
+/// `FormatException`, reported as "Could not read the file", which
+/// reads as the file being broken rather than the button being for
+/// something else.
+///
+/// Both halves already existed and neither could be reached from here:
+/// `parseStatement` reads CSV and MT940, and `scannedStatement` turns
+/// an AI SmartScan reading into the same rows. This is the switch
+/// between them, and it is deliberately a PURE FUNCTION over the bytes
+/// -- the decision is the rule, and a rule that needs a file dialog to
+/// reach is a rule nothing can assert.
+enum StatementFile {
+  /// CSV or MT940. Read here, costing nothing.
+  text,
+
+  /// A PDF or a photograph. Only a reader turns this into rows, and
+  /// that costs a scan -- so it is never the guess for a file that
+  /// could be text.
+  scan,
+
+  /// Neither, so neither path can do anything with it. A spreadsheet
+  /// or an archive lands here, and saying so is the whole point: the
+  /// alternative is sending it to a reader that will charge for it and
+  /// find nothing.
+  neither,
+}
+
+/// Which of the two importers a chosen file belongs to.
+///
+/// Sniffed from the BYTES first and the mime type second. A browser
+/// hands over whatever the operating system guessed from the
+/// extension, which on the machines this runs on is routinely
+/// `application/octet-stream` for a `.sta` and empty for anything the
+/// system has no association for -- and a statement renamed by the
+/// person who downloaded it is the ordinary case, not the odd one.
+StatementFile statementFileKind({String? mimeType, required List<int> bytes}) {
+  if (_isPdf(mimeType, bytes) || _isImage(mimeType, bytes)) {
+    return StatementFile.scan;
+  }
+  return statementText(bytes) == null
+      ? StatementFile.neither
+      : StatementFile.text;
+}
+
+/// The text of a statement file, or null where its bytes are not text.
+///
+/// A CONTROL BYTE is the test, not just a NUL. CSV and MT940 are both
+/// line-oriented text and carry nothing below space except tab, newline
+/// and carriage return; every binary format this is guarding against
+/// carries them in its first few bytes -- `PK\x03\x04` opens a
+/// spreadsheet, and UTF-16, which is what a spreadsheet writes when
+/// asked for "Unicode text", is half NULs.
+///
+/// NUL alone was the first version of this rule and it let a short zip
+/// header through: `PK\x03\x04` has no NUL in it. A real spreadsheet
+/// has one a few bytes later, which is the worst way for a rule to be
+/// wrong -- right on every file anybody tried and wrong on the small
+/// one nobody did.
+///
+/// UTF-8 first, Latin-1 after. Malaysian statements are ASCII plus the
+/// occasional accented payee name, and a bank that still exports
+/// Latin-1 should not produce a refusal over one character in a
+/// narration nobody reconciles against.
+String? statementText(List<int> bytes) {
+  for (final b in bytes) {
+    if (b < 0x20 && b != 0x09 && b != 0x0A && b != 0x0D) return null;
+  }
+  try {
+    return utf8.decode(bytes);
+  } on FormatException {
+    return latin1.decode(bytes);
+  }
+}
+
+bool _isPdf(String? mimeType, List<int> bytes) =>
+    mimeType == 'application/pdf' ||
+    _startsWith(bytes, const [0x25, 0x50, 0x44, 0x46]); // %PDF
+
+/// The image formats a phone or a scanner actually produces.
+///
+/// By magic number rather than by extension, and the mime type is only
+/// a fallback: a `.jpg` that is really a PDF is a file somebody renamed,
+/// and the bytes are the thing that is true.
+bool _isImage(String? mimeType, List<int> bytes) {
+  if (mimeType != null && mimeType.startsWith('image/')) return true;
+  return _startsWith(bytes, const [0x89, 0x50, 0x4E, 0x47]) || // PNG
+      _startsWith(bytes, const [0xFF, 0xD8, 0xFF]) || // JPEG
+      _startsWith(bytes, const [0x47, 0x49, 0x46, 0x38]) || // GIF8
+      _startsWith(bytes, const [0x42, 0x4D]) || // BMP
+      // RIFF....WEBP and ....ftypheic / ftypheif / ftypmif1, both of
+      // which carry their marker a few bytes in rather than at 0.
+      (_startsWith(bytes, const [0x52, 0x49, 0x46, 0x46]) &&
+          _hasAt(bytes, 8, const [0x57, 0x45, 0x42, 0x50])) ||
+      _hasAt(bytes, 4, const [0x66, 0x74, 0x79, 0x70]);
+}
+
+bool _startsWith(List<int> bytes, List<int> magic) => _hasAt(bytes, 0, magic);
+
+bool _hasAt(List<int> bytes, int at, List<int> magic) {
+  if (bytes.length < at + magic.length) return false;
+  for (var i = 0; i < magic.length; i++) {
+    if (bytes[at + i] != magic[i]) return false;
+  }
+  return true;
+}
 
 /// One statement line, as read out of the paste.
 class StatementRow {

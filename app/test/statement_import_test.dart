@@ -208,4 +208,141 @@ Date,Description,Amount,Balance
       expect(row.toJson()['running_balance'], isNull);
     });
   });
+
+  /// Which importer a chosen file belongs to.
+  ///
+  /// Asked for as "bank statement should allow to upload pdf csv and
+  /// also image not only csv". Only the CSV half was ever true: the
+  /// dialog read whatever was picked with `readAsString`, so a PDF --
+  /// which is what a bank emails -- came back as a `FormatException`
+  /// under "Could not read the file".
+  ///
+  /// Two ways this can be wrong and both cost something real:
+  ///
+  ///   * a CSV sent to the reader is a scan CHARGED FOR, on a file that
+  ///     parses here for nothing and parses better;
+  ///   * a PDF sent to the parser is the bug being fixed -- an
+  ///     exception, or worse, mojibake that parses to zero rows and
+  ///     reads as an empty statement.
+  ///
+  /// So the classifier is asserted from the bytes in both directions,
+  /// and it is a pure function precisely so that it can be.
+  group('which importer a file belongs to', () {
+    List<int> of(String text) => text.codeUnits;
+
+    test('a CSV is text, whatever the system called it', () {
+      final csv = of('Date,Description,Amount\n06/03/2026,Cheque,-250.00\n');
+      expect(statementFileKind(mimeType: 'text/csv', bytes: csv),
+          StatementFile.text);
+      // The mime type a browser hands over for a `.sta` on a machine
+      // with no association for it.
+      expect(statementFileKind(mimeType: 'application/octet-stream', bytes: csv),
+          StatementFile.text);
+      expect(statementFileKind(bytes: csv), StatementFile.text);
+    });
+
+    test('an MT940 is text too', () {
+      expect(
+        statementFileKind(bytes: of(':20:STMT\n:61:260306D250,00NTRF\n')),
+        StatementFile.text,
+      );
+    });
+
+    test('a PDF goes to the reader, by its bytes', () {
+      // `%PDF`. The mime type is deliberately wrong here: a statement
+      // renamed by the person who downloaded it is the ordinary case.
+      expect(
+        statementFileKind(
+          mimeType: 'text/csv',
+          bytes: [0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37],
+        ),
+        StatementFile.scan,
+      );
+    });
+
+    test('and by its mime type when the bytes were not handed over', () {
+      expect(
+        statementFileKind(mimeType: 'application/pdf', bytes: const []),
+        StatementFile.scan,
+      );
+    });
+
+    test('a photograph goes to the reader', () {
+      expect(
+        statementFileKind(bytes: [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]),
+        StatementFile.scan,
+      ); // JPEG
+      expect(
+        statementFileKind(bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A]),
+        StatementFile.scan,
+      ); // PNG
+      expect(
+        statementFileKind(mimeType: 'image/heic', bytes: const []),
+        StatementFile.scan,
+      );
+    });
+
+    test('a HEIC off an iPhone, which carries its marker at byte four',
+        () {
+      // `....ftypheic`. Sniffed at an offset rather than at zero,
+      // because the first four bytes are a box length.
+      final heic = <int>[
+        0, 0, 0, 0x18, // box length
+        0x66, 0x74, 0x79, 0x70, // ftyp
+        0x68, 0x65, 0x69, 0x63, // heic
+      ];
+      expect(statementFileKind(bytes: heic), StatementFile.scan);
+    });
+
+    test('a spreadsheet is neither, and saying so is the point', () {
+      // A `.xlsx` is a zip: `PK\x03\x04`. Sending it to a reader would
+      // charge for a scan that finds nothing, and sending it to the
+      // parser gives mojibake that reads as an empty statement.
+      expect(
+        statementFileKind(bytes: [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00]),
+        StatementFile.neither,
+      );
+      // And the first four bytes alone, which carry no NUL.
+      expect(
+        statementFileKind(bytes: [0x50, 0x4B, 0x03, 0x04]),
+        StatementFile.neither,
+      );
+    });
+
+    test('and so is UTF-16, which is what a spreadsheet writes for '
+        '"Unicode text"', () {
+      // Every other byte is NUL, which is exactly the test.
+      expect(
+        statementFileKind(bytes: [0x44, 0x00, 0x61, 0x00, 0x74, 0x00]),
+        StatementFile.neither,
+      );
+    });
+  });
+
+  group('the text of a statement file', () {
+    test('UTF-8 comes back as itself', () {
+      expect(statementText('Tenaga Nasional\n'.codeUnits), 'Tenaga Nasional\n');
+    });
+
+    test('and Latin-1 is not refused over one accented payee', () {
+      // 0xE9 is a valid Latin-1 `é` and an invalid UTF-8 sequence.
+      // Refusing the file would refuse a whole statement over one
+      // character in a narration nobody reconciles against.
+      expect(statementText([0x43, 0x61, 0x66, 0xE9]), 'Caf\u00e9');
+    });
+
+    test('binary is not text, on its control bytes rather than on a NUL',
+        () {
+      // `PK\x03\x04` opens a spreadsheet and contains no NUL at all.
+      // A NUL-only rule let exactly this through.
+      expect(statementText([0x50, 0x4B, 0x03, 0x04]), isNull);
+      expect(statementText([0x44, 0x00, 0x61, 0x00]), isNull);
+    });
+
+    test('but a tab, a newline and a carriage return are text', () {
+      // An MT940 is CRLF throughout and a tab-separated export is a
+      // statement somebody will hand this.
+      expect(statementText('a\tb\r\nc\n'.codeUnits), 'a\tb\r\nc\n');
+    });
+  });
 }

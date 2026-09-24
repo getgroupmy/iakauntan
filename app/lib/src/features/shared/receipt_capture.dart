@@ -167,12 +167,26 @@ Future<StagedReceipt?> captureAndRead(
   WidgetRef ref, {
   required CaptureSource source,
   required String table,
+
+  /// A file already in hand, instead of asking for one.
+  ///
+  /// The bank statement importer picks the file ITSELF, because it has
+  /// to look at the bytes before it knows whether this is a reader's
+  /// job at all: a CSV is parsed here for nothing and must never reach
+  /// a scan. Asking again would be a second file dialog over a file
+  /// somebody has already chosen.
+  ///
+  /// Everything after the pick is the same, and deliberately so -- the
+  /// PDF refusal that happens before the upload, the progress modal,
+  /// the attachment that is kept when the reading fails.
+  CapturedFile? picked,
 }) async {
-  final file = switch (source) {
-    CaptureSource.scanner => await scanReceipt(),
-    CaptureSource.camera => await photographReceipt(),
-    CaptureSource.file => await pickReceipt(),
-  };
+  final file = picked ??
+      switch (source) {
+        CaptureSource.scanner => await scanReceipt(),
+        CaptureSource.camera => await photographReceipt(),
+        CaptureSource.file => await pickReceipt(),
+      };
   if (file == null || !context.mounted) return null;
 
   // Before the upload, not after it. `2f012feb` moved the "scanning is
