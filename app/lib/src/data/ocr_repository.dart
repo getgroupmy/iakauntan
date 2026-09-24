@@ -464,6 +464,42 @@ class OcrExtraction {
   /// Empty for every other document, which is almost all of them.
   final List<Map<String, String>> rows;
 
+  /// Whether the reader came back with NOTHING AT ALL.
+  ///
+  /// One answer, on the model, because two screens were each deciding
+  /// it for themselves and both got it wrong the same way: they asked
+  /// about a supplier, a total and a document number, which is what an
+  /// invoice has.
+  ///
+  /// A BANK STATEMENT has none of those. It has no supplier, no invoice
+  /// total and no document number — it has an account, a period and its
+  /// transactions, and those arrive in [rows]. So a CIMB statement whose
+  /// every line was read correctly reported "nothing legible came back"
+  /// on the result dialog and "nothing came back at all" on the "All
+  /// data" screen, and the only thing actually missing was three fields
+  /// that were never going to be on the page.
+  ///
+  /// Everything that can carry content is asked about here, which is
+  /// what stops the next destination with a different shape from
+  /// reading as a failure.
+  bool get foundNothing =>
+      rows.isEmpty &&
+      lines.isEmpty &&
+      fields.values.every((v) => v.trim().isEmpty) &&
+      (rawText ?? '').trim().isEmpty &&
+      supplierName == null &&
+      supplierTaxId == null &&
+      supplierRegistrationNo == null &&
+      supplierEmail == null &&
+      supplierPhone == null &&
+      supplierAddress == null &&
+      documentNo == null &&
+      documentDate == null &&
+      currency == null &&
+      subtotal == null &&
+      taxAmount == null &&
+      totalAmount == null;
+
   /// The same reading with some of it changed.
   ///
   /// Only ever sets; it cannot put a field back to null, which is what

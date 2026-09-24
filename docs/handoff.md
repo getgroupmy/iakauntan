@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | A capture is kept until somebody asks for it to go |
+| Head at time of writing | A statement is its rows, and two screens never looked at them |
 | CI | **green through run 2110 (`e41057c9`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0708` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 368 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,005 Flutter tests**, 38 deno tests |
+| Gates | 368 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,024 Flutter tests**, 38 deno tests |
 | API description | 790 functions, 366 tables, version `0708` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1230,6 +1230,7 @@ than faults in the new work.
 | "when the file is uploaded it should also add date and time in the filename" | `stampedFileName` — `bil_20260924-1710.pdf`, the extension left last |
 | "all document may be handwritten" | the reader's prompt, now its own module with `prompt_test.ts` asserting it still says so |
 | "why can't read again / the file should be available till it's deleted or attached" | the two automatic deletes in `scan_flow.dart` are gone; a deliberate "Remove the file" sits in the scan sheet, and `check_capture_is_kept.py` stops the automatic one coming back |
+| "bank statement was sent for scanning but it did not scan and recognise it, why?" | it very likely did — `foundNothing` on the model replaces two screens each asking the three questions an INVOICE answers, and `allDataLines` now lists `rows` |
 
 ### Four faults that were already there
 

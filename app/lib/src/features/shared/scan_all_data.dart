@@ -145,6 +145,19 @@ List<String> allDataLines(OcrExtraction read) {
         line.description,
         if (line.amount != null) line.amount!.toStringAsFixed(2),
       ].whereType<String>().join('  '),
+    // The rows a destination that takes them came back with — a bank
+    // statement IS its transactions, and this screen listed none of
+    // them. A statement whose every line was read showed "Nothing came
+    // back at all".
+    //
+    // Sorted by key so the columns line up down the list; a map has no
+    // order and a list that reshuffles between openings is one nobody
+    // trusts, which is the same reason `readerColumns` sorts.
+    for (final row in read.rows)
+      [
+        for (final k in row.keys.toList()..sort())
+          if ((row[k] ?? '').trim().isNotEmpty) row[k]!.trim(),
+      ].join('  '),
     for (final amount in [read.subtotal, read.taxAmount, read.totalAmount])
       if (amount != null) amount.toStringAsFixed(2),
   ];
