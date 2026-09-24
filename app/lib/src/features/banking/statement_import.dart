@@ -311,14 +311,71 @@ StatementParse parseCsvStatement(String text) {
   return StatementParse(rows, problems);
 }
 
+/// A figure as a statement prints it.
+///
+/// Four conventions, and a Malaysian statement uses whichever its bank
+/// chose. All four are ordinary and the last was not read at all:
+///
+///   * `1,250.00` and `RM 1,250.00` and `MYR1250.00`;
+///   * `(120.00)`, brackets for a withdrawal;
+///   * `120.00-`, a trailing minus, which is what a mainframe-era core
+///     banking system prints;
+///   * `1,250.00 DR` and `5,000.00 CR`, which is how a statement says
+///     the direction when it prints no sign at all. `DR` is money out
+///     of the account and `CR` is money in.
+///
+/// The last one used to come back NULL — `double.tryParse('1250.00DR')`
+/// — so a statement in that format reported "no amount could be read"
+/// on every line of it.
+///
+/// ## Why reading DR/CR as a sign is safe here
+///
+/// On a current account `DR` is money out, and on a credit card the
+/// same word describes the same movement from the bank's side and the
+/// opposite one from the holder's. Getting that backwards would be the
+/// most expensive mistake available — except that it cannot survive:
+/// `balancesDecideTheSigns` settles every sign against the running
+/// balance afterwards and says so. A hint that the arithmetic checks is
+/// a hint worth taking.
 double? _number(String raw) {
-  var s = raw.replaceAll(RegExp(r'[,\s]'), '').replaceAll('RM', '');
+  var s = raw.replaceAll(RegExp(r'[,\s]'), '');
+  s = s.replaceFirst(RegExp(r'^(RM|MYR)', caseSensitive: false), '');
   if (s.isEmpty) return null;
+
+  // The direction, where the figure carries it as a word. Taken off
+  // before anything else looks at the string, because `1250.00DR`
+  // parses as nothing at all.
+  //
+  // At EITHER END, because banks put it at both: `1,250.00 DR` on a
+  // statement laid out in columns and `DR 1,250.00` on one laid out in
+  // running text. Only one of the two used to be read, and neither was
+  // read before that.
+  bool? outward;
+  final suffix = RegExp(r'(DR|CR)$', caseSensitive: false).firstMatch(s);
+  final prefix = RegExp(r'^(DR|CR)', caseSensitive: false).firstMatch(s);
+  if (suffix != null) {
+    outward = suffix.group(1)!.toUpperCase() == 'DR';
+    s = s.substring(0, suffix.start);
+  } else if (prefix != null) {
+    outward = prefix.group(1)!.toUpperCase() == 'DR';
+    s = s.substring(prefix.end);
+  }
+
   // Statements write a withdrawal either as -120.00 or as (120.00).
   if (s.startsWith('(') && s.endsWith(')')) {
     s = '-${s.substring(1, s.length - 1)}';
   }
-  return double.tryParse(s);
+  // Or as 120.00-, which older core banking systems print.
+  if (s.endsWith('-')) s = '-${s.substring(0, s.length - 1)}';
+
+  // No explicit empty check: `double.tryParse('')` is null, which is
+  // what a bare `DR` with no figure beside it should come to anyway.
+  final value = double.tryParse(s);
+  if (value == null) return null;
+  // A word beats a sign that was probably not printed: where both are
+  // there they agree, and where they do not the word is the one the
+  // bank chose to say.
+  return outward == null ? value : (outward ? -value.abs() : value.abs());
 }
 
 /// Reads the date formats Malaysian banks actually export.

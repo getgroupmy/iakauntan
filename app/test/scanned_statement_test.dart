@@ -78,8 +78,97 @@ void main() {
     test('RM in front of the figure is not part of the figure', () {
       final parse = scannedStatement(read([
         {'transaction_date': '01/09/2026', 'amount': 'RM 1,900.00'},
+        {'transaction_date': '02/09/2026', 'amount': 'MYR1900.00'},
       ]));
-      expect(parse.rows.single.amount, 1900.00);
+      expect(parse.rows[0].amount, 1900.00);
+      expect(parse.rows[1].amount, 1900.00);
+    });
+
+    /// `DR` and `CR` beside the figure, which is how a statement says
+    /// the direction when it prints no sign at all.
+    ///
+    /// `double.tryParse('1250.00DR')` is null, so a statement in this
+    /// format used to report "no amount could be read" on EVERY line —
+    /// the whole statement, over a convention half the banks here use.
+    group('the direction written as a word', () {
+      test('DR is money out of the account', () {
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': '1,250.00 DR'},
+        ]));
+        expect(parse.problems, isEmpty);
+        expect(parse.rows.single.amount, -1250.00);
+      });
+
+      test('CR is money in', () {
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': '5,000.00 CR'},
+        ]));
+        expect(parse.rows.single.amount, 5000.00);
+      });
+
+      test('in either case, and stuck to the figure', () {
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': '250.00dr'},
+          {'transaction_date': '02/09/2026', 'amount': '250.00Cr'},
+        ]));
+        expect(parse.rows[0].amount, -250.00);
+        expect(parse.rows[1].amount, 250.00);
+      });
+
+      test('and the word beats a sign that was probably not printed', () {
+        // A reader that guessed a minus AND read the DR should not end
+        // up with a positive.
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': '-250.00 DR'},
+        ]));
+        expect(parse.rows.single.amount, -250.00);
+      });
+
+      // EQUIVALENT MUTANT, written down rather than chased: dropping
+      // the `^` from the prefix pattern cannot be caught. The suffix is
+      // tried first, so the prefix branch is reached only when the
+      // string does not END in DR or CR -- and a figure with the tag
+      // loose in the middle (`1250.00DRX`) comes back null either way,
+      // anchored or not. There is no input that tells them apart.
+      test('and in front of the figure, which is the other layout', () {
+        // A statement set in running text rather than columns writes it
+        // this way, and `double.tryParse('DR1250.00')` is null too.
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': 'DR 1,250.00'},
+          {'transaction_date': '02/09/2026', 'amount': 'CR 5,000.00'},
+        ]));
+        expect(parse.problems, isEmpty);
+        expect(parse.rows[0].amount, -1250.00);
+        expect(parse.rows[1].amount, 5000.00);
+      });
+
+      test('a bare DR with no figure is not an amount', () {
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': 'DR'},
+        ]));
+        expect(parse.rows, isEmpty);
+        expect(parse.problems.single, contains('no amount'));
+      });
+
+      // And if the bank's word disagrees with its own balance column,
+      // the balance wins -- which is what makes taking the word safe.
+      test('a wrong DR is put right by the running balance', () {
+        final parse = scannedStatement(read([
+          {'transaction_date': '01/09/2026', 'amount': '1000.00 CR',
+           'running_balance': '1000.00'},
+          {'transaction_date': '02/09/2026', 'amount': '250.00 CR',
+           'running_balance': '750.00'},
+        ]));
+        expect(parse.rows[1].amount, -250.00);
+        expect(parse.notices.single, contains('money out'));
+      });
+    });
+
+    test('a trailing minus is a withdrawal, as a mainframe prints it', () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '120.00-'},
+      ]));
+      expect(parse.rows.single.amount, -120.00);
     });
 
     // The one field that can check the others -- and now settle them.

@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Seventy lines, which is not a bank statement |
+| Head at time of writing | DR, CR, and the figure that parsed as nothing |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,139 Flutter tests**, 53 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,147 Flutter tests**, 53 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1936,6 +1936,46 @@ now look under `properties` first, the tests are built from the
 checked by putting the bug back and watching each fail. There is no
 mutation harness for Deno here, so that check was done by hand and is
 worth doing by hand again on anything in this file.
+
+## DR, CR, and the figure that parsed as nothing
+
+`double.tryParse('1250.00DR')` is null. So a statement whose bank writes
+the direction as a word — which is half of them — reported **"no amount
+could be read" on every line of it**, over a convention rather than
+over anything being wrong with the page.
+
+`_number` now reads four conventions, and only the first two were read
+before:
+
+    1,250.00   RM 1,250.00   MYR1250.00
+    (120.00)                            brackets for a withdrawal
+    120.00-                             a trailing minus, mainframe-era
+    1,250.00 DR   DR 1,250.00           the direction as a word
+
+**At either end**, because banks put it at both: after the figure on a
+statement laid out in columns, before it on one laid out in running
+text.
+
+### Why taking DR/CR as a sign is safe
+
+On a current account `DR` is money out. On a credit card the same word
+describes the same movement from the bank's side and the opposite one
+from the holder's, so getting it backwards would be the most expensive
+mistake available here — **except that it cannot survive**.
+`balancesDecideTheSigns` settles every sign against the running balance
+afterwards and says so. A hint the arithmetic checks is a hint worth
+taking, and there is a test for exactly that: a statement whose `CR`
+disagrees with its own balance column comes out right and says it was
+corrected.
+
+### One equivalent mutant, written down
+
+Dropping the `^` from the prefix pattern cannot be caught. The suffix is
+tried first, so the prefix branch is reached only when the string does
+not end in DR or CR — and a figure with the tag loose in the middle
+(`1250.00DRX`) comes back null either way. There is no input that tells
+them apart, and the note sits beside the assertion rather than in a
+list somebody has to find.
 
 ## This session's commits
 
