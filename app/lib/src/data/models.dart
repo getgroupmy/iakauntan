@@ -1055,6 +1055,7 @@ class BusinessDocument {
     this.shippingAmount = 0,
     this.serviceChargeAmount = 0,
     this.roundingAmount = 0,
+    this.roundingMethod,
     this.totalAmount = 0,
     this.paidAmount = 0,
     this.balanceAmount = 0,
@@ -1110,6 +1111,15 @@ class BusinessDocument {
   /// and it posts to 4250 rather than to sales.
   final double serviceChargeAmount;
   final double roundingAmount;
+
+  /// How THIS document rounds, where it says so itself. `0706`.
+  ///
+  /// Null is the ordinary case and means the company's own setting
+  /// applies, which is what every document raised before `0706` has.
+  /// Set from a scanned paper's stated total: Bank Negara's mechanism
+  /// rounds CASH, and a supplier's invoice settled by transfer is paid
+  /// to the sen.
+  final String? roundingMethod;
   final double totalAmount;
   final double paidAmount;
   final double balanceAmount;
@@ -1205,6 +1215,7 @@ class BusinessDocument {
       shippingAmount: Fmt.toDouble(j['shipping_amount']),
       serviceChargeAmount: Fmt.toDouble(j['service_charge_amount']),
       roundingAmount: Fmt.toDouble(j['rounding_amount']),
+      roundingMethod: j['rounding_method'] as String?,
       totalAmount: Fmt.toDouble(j['total_amount']),
       paidAmount: Fmt.toDouble(j['paid_amount']),
       balanceAmount: Fmt.toDouble(j['balance_amount']),

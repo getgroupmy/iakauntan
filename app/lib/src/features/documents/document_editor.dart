@@ -95,6 +95,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   DateTime? _deliveryDate;
   String _currency = 'MYR';
 
+  /// How this document rounds, where it says so itself. `0706`.
+  ///
+  /// Null means the company's setting, which is what every document
+  /// raised before `0706` has and what a typed-in one still gets. It is
+  /// set from a SCANNED paper's own stated total — Bank Negara's
+  /// mechanism rounds cash, and a supplier's invoice settled by transfer
+  /// is paid to the sen.
+  String? _roundingMethod;
+
   /// Null means no rate is known. Distinct from 1, which is a rate — and
   /// on a foreign document, the wrong one.
   double? _exchangeRate = 1;
@@ -217,6 +226,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _validUntil = doc.validUntil;
         _deliveryDate = doc.deliveryDate;
         _currency = doc.currency;
+        _roundingMethod = doc.roundingMethod;
         // The stored rate, not today's. This is the figure the ledger
         // posted at and the figure the gain on settlement is measured
         // from; re-resolving it here would rewrite history.
@@ -307,14 +317,48 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     // company that failed to load threw out of the getter that
     // computes the invoice total -- from `build`, on a screen whose
     // whole job is the total.
-    return switch (ref.read(currentOrgProvider).valueOrNull?.roundingMethod) {
-      'nearest_5cent' => (raw * 20).round() / 20,
-      'nearest_10cent' => (raw * 10).round() / 10,
-      _ => (raw * 100).round() / 100,
-    };
+    // The document's own answer first, the company's behind it —
+    // `app.recalc_*_totals_for` resolves it in exactly this order, and
+    // a screen that resolved it differently would show one total and
+    // save another. `0706`.
+    final method = _roundingMethod ??
+        ref.read(currentOrgProvider).valueOrNull?.roundingMethod ??
+        'none';
+    return roundedTo(raw, method);
   }
 
-  void _markDirty() => setState(() => _dirty = true);
+  void _markDirty() => setState(() {
+        _dirty = true;
+        _reconsiderRounding();
+      });
+
+  /// What the scanned paper says about rounding, asked again from
+  /// wherever the lines have got to. `0706`.
+  ///
+  /// Here rather than only at the moment of reading, because at that
+  /// moment the lines carry no tax code — `_applyScan` leaves them
+  /// alone on purpose — so a taxed bill cannot tie to the paper yet. It
+  /// ties once somebody has put the codes on, and that is what this
+  /// notices.
+  ///
+  /// Reads the answer `0705` already fetched rather than asking again:
+  /// it is the same figure off the same scan row, and a second source
+  /// for it would be a second thing to drift.
+  void _reconsiderRounding() {
+    if (_isNew) return;
+    final paper = ref
+        .read(documentScanTotalsProvider((
+          table: _kind.isSales ? 'sales_documents' : 'purchase_documents',
+          recordId: widget.documentId!,
+        )))
+        .valueOrNull;
+    if (paper == null) return;
+    _roundingMethod = roundingForLines(
+      paperTotal: paper.total,
+      lines: _lines,
+      current: _roundingMethod,
+    );
+  }
 
   /// Fills this bill in from the supplier's own paperwork.
   ///
@@ -383,6 +427,26 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _lines
         ..clear()
         ..addAll(lines);
+
+      // What rounding the SUPPLIER applied, decided from their own
+      // printed total rather than guessed. `0706`.
+      //
+      // Reported with a Google tax invoice whose total is MYR 1,173.01:
+      // this company rounds to 5 sen because it takes cash over a
+      // counter, so the bill became RM 1,173.00 with a one sen
+      // adjustment nobody on either side of it made. Bank Negara's
+      // mechanism rounds CASH; a bill settled by transfer is paid to
+      // the sen.
+      //
+      // Only where the paper can tell them apart — see
+      // `roundingThePaperApplied`, which answers nothing at all when two
+      // methods produce the same figure or none of them does.
+      _roundingMethod = roundingForLines(
+        paperTotal: read.totalAmount,
+        lines: lines,
+        current: _roundingMethod,
+      );
+
       _dirty = true;
     });
   }
@@ -556,6 +620,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
             'supplier_doc_no': _nullIfBlank(_supplierDocNo.text),
           'notes': _nullIfBlank(_notes.text),
           'currency': _currency,
+          // Null is a value here, not an omission: clearing it is how a
+          // document goes back to the company's own rule.
+          'rounding_method': _roundingMethod,
           'exchange_rate': _exchangeRate ?? 1,
           // Sales only. The column is on `sales_documents` alone,
           // and a bill has no salesperson by definition.
@@ -1578,6 +1645,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         tax: _taxTotal,
                         total: _grandTotal,
                         rounding: _grandTotal - (_subtotal + _taxTotal),
+                        roundingMethod: _roundingMethod,
                         currency: _currency,
                         baseCurrency: _base,
                         exchangeRate: _exchangeRate,
@@ -2554,6 +2622,7 @@ class _TotalsAndNotes extends StatelessWidget {
     required this.tax,
     required this.total,
     required this.rounding,
+    required this.roundingMethod,
     required this.currency,
     required this.baseCurrency,
     required this.exchangeRate,
@@ -2566,6 +2635,10 @@ class _TotalsAndNotes extends StatelessWidget {
   final double tax;
   final double total;
   final double rounding;
+
+  /// Set only where the document itself names one, which today means a
+  /// scanned paper decided it. Null is the ordinary case. `0706`.
+  final String? roundingMethod;
   final String currency;
   final String baseCurrency;
   final double? exchangeRate;
@@ -2612,7 +2685,28 @@ class _TotalsAndNotes extends StatelessWidget {
                 label: 'Rounding',
                 value: rounding,
                 currency: currency,
-                caption: 'Nearest 5 sen',
+                // What was actually applied, rather than the words
+                // "Nearest 5 sen" printed over whatever happened. A
+                // company on 10 sen read a caption describing somebody
+                // else's setting.
+                caption: switch (roundingMethod) {
+                  'nearest_10cent' => 'Nearest 10 sen',
+                  _ => 'Nearest 5 sen',
+                },
+              ),
+            ],
+            // Why there is no rounding line on a document that would
+            // otherwise have had one. Silent unless the paper decided
+            // it, so an ordinary typed-in document says nothing. `0706`.
+            if (roundingMethod != null && rounding.abs() < 0.005) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  roundingMethodSaid(roundingMethod!),
+                  key: const Key('rounding-from-the-paper'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             ],
             const Divider(height: 24),

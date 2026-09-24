@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/ocr_repository.dart';
+import 'line_draft.dart';
 
 /// Which of the three figures disagreed.
 enum TotalPart { subtotal, tax, total }
@@ -89,6 +90,94 @@ List<TotalsDifference> totalsDisagreement({
   compare(TotalPart.total, 'total', paper.total, total);
   return out;
 }
+
+/// The three ways a total can be rounded, as `0706` names them.
+///
+/// `'none'` is a rounding method: it means "to the sen", which is what
+/// every non-cash bill in the country is paid to.
+const roundingMethods = <String>['none', 'nearest_5cent', 'nearest_10cent'];
+
+/// What [raw] comes to under [method].
+double roundedTo(double raw, String method) => switch (method) {
+      'nearest_5cent' => (raw * 20).round() / 20,
+      'nearest_10cent' => (raw * 10).round() / 10,
+      _ => (raw * 100).round() / 100,
+    };
+
+/// What rounding the PAPER applied, where the paper can say.
+///
+/// Bank Negara's rounding mechanism, in force since 1 April 2008, exists
+/// because there is no one sen coin: it rounds the amount payable in
+/// CASH at a counter. A bill settled by transfer, card or on credit
+/// terms is paid to the sen and nobody rounds it. `organizations.
+/// rounding_method` is one switch for the whole company, though, so a
+/// company that takes cash — which is why the switch is set — had that
+/// setting restating every supplier bill it received as well.
+///
+/// The supplier's paper settles it, and settles it with a printed
+/// figure rather than a guess: whichever method takes the lines to the
+/// total the paper states is the one the supplier used.
+///
+/// Null where it cannot be told, and that is the important half:
+///
+///  * no total was read — there is nothing to compare;
+///  * MORE THAN ONE method produces the stated total. A bill that lands
+///    on a 5 sen boundary reads identically however it was rounded, and
+///    answering `none` there would turn every such document into an
+///    override of a company setting on no evidence at all;
+///  * NO method produces it, which means the lines do not tie to the
+///    paper for some other reason. That is what `0705`'s banner is for,
+///    and guessing a rounding method from a document that does not
+///    reconcile would bury it.
+String? roundingThePaperApplied({
+  required double? paperTotal,
+  required double rawTotal,
+}) {
+  if (paperTotal == null) return null;
+  final matches = roundingMethods
+      .where((m) => (roundedTo(rawTotal, m) - paperTotal).abs() < totalsTolerance)
+      .toList();
+  return matches.length == 1 ? matches.single : null;
+}
+
+/// The rounding the paper implies for the lines as they stand now.
+///
+/// The one seam between [roundingThePaperApplied] and the editor, so
+/// that the arithmetic in between — what the drafted lines actually
+/// come to, tax and all — is asserted over real [LineDraft]s rather
+/// than over a figure a test worked out by hand.
+///
+/// Asked again every time the lines move, and that is not an
+/// optimisation to skip: when a reading first lands, its lines carry NO
+/// TAX CODE. `_applyScan` leaves them alone deliberately — a rate
+/// guessed off a printed figure is a posted amount that does not match
+/// the return — so a taxed bill reads as 1,086.12 against a paper that
+/// says 1,173.01 and ties to nothing at all. It is only once somebody
+/// has put the codes on that the two can be compared, which is minutes
+/// later and several keystrokes away from the scan.
+///
+/// [current] is returned untouched wherever the paper cannot say, which
+/// is what stops a half-typed document from undoing an answer already
+/// reached — and what stops a second reading that found no total from
+/// clearing the first one's.
+String? roundingForLines({
+  required double? paperTotal,
+  required List<LineDraft> lines,
+  String? current,
+}) =>
+    roundingThePaperApplied(
+      paperTotal: paperTotal,
+      rawTotal: lines.fold<double>(0, (sum, l) => sum + l.totals.total),
+    ) ??
+    current;
+
+/// How to say it in the totals card.
+String roundingMethodSaid(String method) => switch (method) {
+      'none' => 'The paper does not round — this totals to the sen.',
+      'nearest_5cent' => 'The paper rounds to the nearest 5 sen.',
+      'nearest_10cent' => 'The paper rounds to the nearest 10 sen.',
+      _ => 'The paper sets how this rounds.',
+    };
 
 /// One difference, as a sentence.
 String differenceSentence(TotalsDifference d, {required String currency}) =>

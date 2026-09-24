@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The paper's own totals, beside what the lines come to |
-| CI | **green through run 2105 (`5bb2209a`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0705` is the highest. CI applies on green — see below |
+| Head at time of writing | The supplier's total is the amount owed |
+| CI | **green through run 2106 (`114f1199`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| Migrations | `0706` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 365 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,945 Flutter tests**, 37 deno tests |
-| API description | 789 functions, 366 tables, version `0705` |
+| Gates | 366 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,977 Flutter tests**, 37 deno tests |
+| API description | 789 functions, 366 tables, version `0706` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -1224,6 +1224,7 @@ than faults in the new work.
 | "prompt if to override the description" | `whatToTakeFrom`, both values side by side, keep is what a dismissal does |
 | "why does keying the item no. replace the price, tax and amount" | the same prompt, one row per field — so the item's tax can be taken while the figure off the paper stays |
 | "in some cases the tax is calculated in total instead of in single item" | `0705` + `ScanTotalsBanner` — tax stays per line, and the paper's own three figures are now shown beside what the lines come to when they disagree |
+| "scanned in with no round up or round down, make it automatic but not for all cases" | `0706` — `documents.rounding_method`, decided from the paper's own stated total. Bank Negara rounds CASH; the company-wide switch was restating every supplier bill |
 
 ### Four faults that were already there
 
@@ -1360,6 +1361,93 @@ One survived the first sweep and was a genuinely equivalent mutant
 answer); the real version — comparing against ZEROES — is killed.
 Three of the sixteen are on `document_editor.dart` itself, because every
 test of the banner passes with the banner deleted from the document.
+
+## The supplier did not round, and we did
+
+Reported with the supplier's own PDF — Google Asia Pacific tax invoice
+`5665871390`, filed against `BILL-2026-00016`:
+
+| The paper | This system |
+| --- | --- |
+| Subtotal MYR 1,086.12 | Subtotal RM 1,086.12 |
+| Service tax (8%) MYR 86.89 | SST RM 86.89 |
+| **Total MYR 1,173.01** | Rounding RM -0.01 · Nearest 5 sen |
+| | **Total RM 1,173.00** |
+
+One sen of rounding that nobody on either side of the bill applied. Paid
+that way, the supplier's statement is a sen short for ever.
+
+### `app.round_amount`'s own comment had said it since `0009`
+
+> Bank Negara rounding mechanism: **cash** totals round to the nearest 5
+> sen.
+
+The mechanism, in force since 1 April 2008, rounds the amount payable in
+CASH at a counter, because there is no one sen coin to pay the last sen
+with. A bill settled by transfer, card or on credit terms is paid to the
+sen and nobody rounds it.
+
+But `organizations.rounding_method` is one switch for the whole company,
+and both recalculation triggers applied it to every document ever raised
+or received. A company that takes cash over a counter — which is why the
+switch is set — had that setting silently restating every supplier bill
+it received as well.
+
+### The document decides; the paper tells it what to decide
+
+`0706` puts a nullable `rounding_method` on both document tables. **Null
+is every row in every existing database** and means the company's
+setting, exactly as before, so nothing already raised or posted moves by
+a sen. Both triggers resolve `coalesce(document, organization)`.
+
+What sets it is the scanned paper, and it is not a guess — the total is
+printed on the page. `roundingThePaperApplied` compares the stated total
+against what the lines come to under each method and takes the one that
+matches.
+
+**It answers nothing in three cases, and that is the load-bearing half:**
+
+- no total was read;
+- MORE THAN ONE method produces the stated total — a bill landing on a
+  5 sen boundary reads identically however it was rounded, and answering
+  there would override a company setting on no evidence;
+- NO method produces it, which means the document does not tie to the
+  paper for some other reason. That is what `0705`'s banner is for.
+
+### The trap the tests found
+
+The first build decided at the moment of reading, and a widget test
+driving the real `_applyScan` returned null for the reported invoice.
+`_applyScan` **puts no tax code on a line** — deliberately, since a rate
+guessed off a printed figure is a posted amount that does not match the
+return — so at that instant a taxed bill is 1,086.12 against a paper
+saying 1,173.01 and ties to nothing.
+
+So the question is asked again from `_markDirty`, against the total
+`0705` already fetched, every time the lines move. It is answered
+minutes later, when somebody has put the codes on. `?? current` keeps
+the answer once reached, so editing away from the paper does not start
+the rounding up again — the banner raises that instead.
+
+### Three classifications the gates demanded
+
+- **Frozen once posted.** The method decides `rounding_amount` and
+  `total_amount`, both already frozen, and the journal carries the
+  rounding line they produce.
+- **Carried by a recurring schedule.** A standing order meets the same
+  supplier's habit every month. Asserted behaviourally, not just
+  structurally: the walk only checks the column is named.
+- **Granted to `authenticated` and `service_role`.** A trigger function
+  needs no EXECUTE to fire, but the first thing it calls inside is
+  checked against the role that caused the write — which is what
+  splitting the recalculation into `app.recalc_*_totals_for(uuid)`
+  created, and what `trigger_reachable_grants.sql` caught.
+
+Twenty-one mutants across the migration, the Dart and the editor; all
+killed, controls survived. Two survived a first sweep and each was a real
+hole: nothing compared against a paper with more decimal places than the
+sen, and nothing proved a half-typed document keeps the answer already
+reached.
 
 ## This session's commits
 

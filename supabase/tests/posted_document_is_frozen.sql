@@ -397,7 +397,13 @@ declare
     -- credit to output tax -- and the SST-02 return is built from both,
     -- so a figure that moved after posting would put the return and the
     -- ledger out of agreement with each other.
-    'service_charge_tax', 'service_charge_tax_code_id'];
+    'service_charge_tax', 'service_charge_tax_code_id',
+    -- 0706. The method decides `rounding_amount` and `total_amount`,
+    -- which are two lines above and frozen for the reason the journal
+    -- carries them. A method that could be changed after posting would
+    -- move both of them, and the rounding line is a posting of its own
+    -- -- 4990 on the sales side.
+    'rounding_method'];
   -- Deliberately still writable on a posted document, and why:
   --   money that moves after posting ... paid_amount, applied_amount,
   --     balance_amount, status
