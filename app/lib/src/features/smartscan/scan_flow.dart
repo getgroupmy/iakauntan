@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/scan_kinds_repository.dart';
@@ -85,13 +87,19 @@ Future<void> runSmartScan(BuildContext context, WidgetRef ref) async {
     final chosen = await showScanKindSheet(
       context,
       read: staged.read,
+      onView: _viewer(context, ref, staged.attachmentId),
       because: staged.read == null
           ? 'It could not be read, so there is nothing to fill in. The '
               'file is kept either way — choose where it goes and type '
               'the figures in.'
           : null,
     );
-    if (chosen == null || !context.mounted) {
+    if (chosen?.named != null && context.mounted) {
+      await _recordNamedKind(context, ref, staged.attachmentId,
+          chosen!.named!);
+      return;
+    }
+    if (chosen?.to == null || !context.mounted) {
       // Backed out. THE FILE STAYS.
       //
       // It used to be deleted here, on the reasoning that a capture
@@ -107,10 +115,71 @@ Future<void> runSmartScan(BuildContext context, WidgetRef ref) async {
       // it — and `0708` refuses once something has been built from it.
       return;
     }
-    destination = chosen;
+    destination = chosen!.to!;
   }
 
   await _send(context, ref, staged, destination);
+}
+
+
+/// Opens the captured page, so "what is this?" can be answered by
+/// looking at it. `0709`.
+///
+/// Null where there is nothing to open — the attachment is gone, or the
+/// link cannot be minted. A button that opens nothing is worse than no
+/// button, so the sheet draws none.
+Future<void> Function()? _viewer(
+  BuildContext context,
+  WidgetRef ref,
+  String attachmentId,
+) {
+  final repo = ref.read(repoProvider);
+  if (repo == null) return null;
+  return () async {
+    try {
+      final path = await repo.attachmentPath(attachmentId);
+      if (path == null) return;
+      // The bucket is private, so this expires rather than being a URL
+      // that keeps working after it has been forwarded.
+      final url = await repo.attachmentUrl(path);
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(storageProblem(e))));
+      }
+    }
+  };
+}
+
+/// Records a kind of document this product has never heard of. `0709`.
+///
+/// Nothing is created from it. The file stays, the scan carries the
+/// name, and `platform_named_kinds` turns a pile of them into the
+/// argument for the next row in `scan_document_kinds`.
+Future<void> _recordNamedKind(
+  BuildContext context,
+  WidgetRef ref,
+  String attachmentId,
+  String named,
+) async {
+  try {
+    await ref.read(repoProvider)?.setScanDocumentKind(
+          attachmentId: attachmentId,
+          named: named,
+        );
+  } catch (_) {
+    // Best effort, like every other note written beside a scan. Losing
+    // the label is a smaller wrong than an error over a capture that
+    // is safely filed.
+  }
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Noted as "$named". The file is kept, and nothing has '
+          'been created from it.'),
+    ),
+  );
 }
 
 /// The same door, entered one step in.
@@ -141,18 +210,24 @@ Future<void> sendScanOn(
     final chosen = await showScanKindSheet(
       context,
       read: staged.read,
+      onView: _viewer(context, ref, staged.attachmentId),
       because: staged.read == null
           ? 'It could not be read, so there is nothing to fill in. The '
               'file is kept either way — choose where it goes and type '
               'the figures in.'
           : null,
     );
+    if (chosen?.named != null && context.mounted) {
+      await _recordNamedKind(context, ref, staged.attachmentId,
+          chosen!.named!);
+      return;
+    }
     // Abandoned. The capture is NOT deleted here, unlike the fresh
     // path: this file has been in the bucket since it was scanned and
     // is somebody's evidence. Backing out of building a record from it
     // is not a decision to throw it away.
-    if (chosen == null || !context.mounted) return;
-    destination = chosen;
+    if (chosen?.to == null || !context.mounted) return;
+    destination = chosen!.to!;
   }
 
   await _send(context, ref, staged, destination);
@@ -266,20 +341,26 @@ Future<void> _startDocument(
       final again = await showScanKindSheet(
         context,
         read: read,
+        onView: _viewer(context, ref, staged.attachmentId),
         because: 'Nothing on this names a ${kind.one}, so it is probably '
             'not a ${meta.singular.toLowerCase()}.',
       );
-      if (again == null || !context.mounted) {
+      if (again?.named != null && context.mounted) {
+        await _recordNamedKind(context, ref, staged.attachmentId,
+            again!.named!);
+        return;
+      }
+      if (again?.to == null || !context.mounted) {
         // The file stays, for the reason above. A document nothing on
         // it names a supplier for is exactly the one somebody wants to
         // come back to.
         return;
       }
-      if (again == destination) {
+      if (again!.to == destination) {
         // They insisted. Fall through to the ordinary picker.
         break;
       }
-      await _send(context, ref, staged, again);
+      await _send(context, ref, staged, again.to!);
       return;
     case SupplierOutcome.ask:
     case SupplierOutcome.resolved:

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0708",
+    "version": "0709",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -46385,6 +46385,77 @@
         }
       }
     },
+    "/rpc/platform_named_kinds": {
+      "post": {
+        "operationId": "platform_named_kinds",
+        "summary": "What people typed when nothing on the scan kind list fitted, folded case-insensitively, commonest first",
+        "description": "What people typed when nothing on the scan kind list fitted, folded case-insensitively, commonest first. The argument for the next row in scan_document_kinds. Platform admin only. 0709.\n\n`public.platform_named_kinds(p_days integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_days": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "named": {
+                        "type": "string"
+                      },
+                      "times": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "companies": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "last_seen": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_organizations": {
       "post": {
         "operationId": "platform_organizations",
@@ -68569,7 +68640,7 @@
       "post": {
         "operationId": "set_scan_document_kind",
         "summary": "Files the most recent scan of an attachment as a kind of document",
-        "description": "Files the most recent scan of an attachment as a kind of document. Accepts a kind that has since been switched off, and answers null where there is no scan to write on. 0614.\n\n`public.set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text)` Writes. Requires a signed-in user.",
+        "description": "Files the most recent scan of an attachment as a kind of document. Accepts a kind that has since been switched off, and answers null where there is no scan to write on. Refuses a kind that is not in scan_document_kinds. p_named is what somebody TYPED when nothing on the list fitted -- it is not a kind, it is never cleared by a later call that says nothing about it, and it is capped at 120 characters. 0614, 0709.\n\n`public.set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text, p_named text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -68593,6 +68664,9 @@
                     "format": "uuid"
                   },
                   "p_document_kind": {
+                    "type": "string"
+                  },
+                  "p_named": {
                     "type": "string"
                   }
                 },
@@ -92602,6 +92676,9 @@
           "posted_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "document_kind_named": {
+            "type": "string"
           }
         },
         "required": [

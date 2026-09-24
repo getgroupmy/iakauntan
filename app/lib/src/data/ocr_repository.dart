@@ -782,14 +782,20 @@ extension RepoOcr on Repo {
   /// Answers null where there was no scan to write on — a capture
   /// nobody read still reaches this with whatever the form said — which
   /// is why it is not an error.
+  /// [named] is what somebody typed when nothing on the list fitted.
+  /// `0709`. It is NOT a kind — `scan_document_kinds` is the vocabulary
+  /// and the server still refuses a code that is not in it — and it is
+  /// never cleared by a later call that says nothing about it.
   Future<String?> setScanDocumentKind({
     required String attachmentId,
     String? kind,
+    String? named,
   }) async {
     final out = await client.rpc('set_scan_document_kind', params: {
       'p_org_id': orgId,
       'p_attachment_id': attachmentId,
       'p_document_kind': kind,
+      if (named != null) 'p_named': named,
     });
     return out?.toString();
   }

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0708` (the highest applied migration).
-790 functions and 366 readable tables, of which
-309 functions only read.
+Schema version `0709` (the highest applied migration).
+791 functions and 366 readable tables, of which
+310 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**648 of 790 functions carry a `comment on
+**649 of 791 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (578)
+### general (579)
 
 Not gated on any module.
 
@@ -688,6 +688,7 @@ Not gated on any module.
 - `platform_force_transfer(p_org_id uuid, p_to_email text, p_reason text)` *(writes)* — Hands a company over to somebody else without the current owner's consent -- the path for an owner who has died, left, or lost their account.
 - `platform_landing_preview()`
 - `platform_mark_invoice_paid(p_invoice_id uuid, p_note text)` *(writes)* — Marks a platform invoice paid when the money arrived some way the system did not see -- a bank transfer reconciled by hand.
+- `platform_named_kinds(p_days integer)` — What people typed when nothing on the scan kind list fitted, folded case-insensitively, commonest first.
 - `platform_organizations()`
 - `platform_payment_gateways()`
 - `platform_promotions()`
@@ -881,7 +882,7 @@ Not gated on any module.
 - `set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` *(writes)* — Stores the PLATFORM's key for one AI provider -- ours, used by every company that has not set its own.
 - `set_received_einvoice_status(p_id uuid, p_status text)` *(writes)* — Moves a received document between received and ignored.
 - `set_requires_self_billed(p_document_id uuid, p_required boolean)` *(writes)* — Says whether a bill owes LHDN a self-billed e-Invoice.
-- `set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text)` *(writes)* — Files the most recent scan of an attachment as a kind of document.
+- `set_scan_document_kind(p_org_id uuid, p_attachment_id uuid, p_document_kind text, p_named text)` *(writes)* — Files the most recent scan of an attachment as a kind of document.
 - `set_scan_kind_target(p_code text, p_module text, p_action text)` *(writes)* — Points a kind of document at the module and action a scan of it becomes, or at neither.
 - `set_scan_target_fields(p_module text, p_action text, p_fields jsonb)` *(writes)* — Replaces which of a target's columns the reader is asked to fill.
 - `set_sst_registration(p_org_id uuid, p_registered boolean, p_from date, p_registration_no text, p_tax_code text)` *(writes)* — The only way to change a company's SST registration.

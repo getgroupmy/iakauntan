@@ -968,6 +968,7 @@ jobs:
                    supabase/tests/document_rounding.sql \
                    supabase/tests/entry_source.sql \
                    supabase/tests/attachment_is_evidence.sql \
+                   supabase/tests/named_kinds.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

@@ -136,6 +136,24 @@ extension RepoAttachments on Repo {
     return row['id'].toString();
   }
 
+  /// Where one attachment's object lives, by row id.
+  ///
+  /// For the callers that have the row and not the path — the capture
+  /// flow holds an `attachmentId` and nothing else, and being asked
+  /// "what is this?" with no way to look at the page is a question
+  /// somebody can only answer from memory. `0709`.
+  ///
+  /// Null where the row has gone, which is the ordinary end of a file
+  /// somebody removed.
+  Future<String?> attachmentPath(String id) async {
+    final row = await client
+        .from('attachments')
+        .select('storage_path')
+        .eq('id', id)
+        .maybeSingle();
+    return row?['storage_path']?.toString();
+  }
+
   /// A short-lived link. The bucket is private, so there is no public URL
   /// to hand out and nothing to leak if one is copied into an email an
   /// hour later.
