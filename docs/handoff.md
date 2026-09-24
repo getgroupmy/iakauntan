@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Assigning an item asks, field by field, before replacing anything |
-| CI | **green through run 2104 (`d475dd65`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0704` is the highest. CI applies on green — see below |
+| Head at time of writing | The paper's own totals, beside what the lines come to |
+| CI | **green through run 2105 (`5bb2209a`)**; 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| Migrations | `0705` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 364 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,923 Flutter tests**, 37 deno tests |
-| API description | 788 functions, 366 tables, version `0704` |
+| Gates | 365 SQL assertion files, **49 Python gates (+13 gate self-tests)**, **5,945 Flutter tests**, 37 deno tests |
+| API description | 789 functions, 366 tables, version `0705` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -1223,6 +1223,7 @@ than faults in the new work.
 | "all scanning activities logged, all replies logged in raw" | `0704` — `ocr_exchanges`, one row per CALL, opened from the console's scan log |
 | "prompt if to override the description" | `whatToTakeFrom`, both values side by side, keep is what a dismissal does |
 | "why does keying the item no. replace the price, tax and amount" | the same prompt, one row per field — so the item's tax can be taken while the figure off the paper stays |
+| "in some cases the tax is calculated in total instead of in single item" | `0705` + `ScanTotalsBanner` — tax stays per line, and the paper's own three figures are now shown beside what the lines come to when they disagree |
 
 ### Four faults that were already there
 
@@ -1297,6 +1298,68 @@ app routing around a policy with a reader that happens to be free.
 `OcrException` carries `status` since `0703` for exactly this; deciding
 by looking for "busy" in the sentence would stop working silently the
 day somebody improved the sentence.
+
+## The paper says one tax figure; this system charges each line
+
+> in some cases the tax is calculated in total instead of in single item
+> do also ponder on that
+
+Both halves of that are true and only one of them is a defect.
+
+**Tax is per line here, by design, and that is not changing.**
+`app.calc_document_line` charges each line at its own code; the header's
+`tax_amount` is DERIVED — `0009_functions.sql:280` has a trigger that
+sets it to `sum(lines.tax_amount)` every time a line moves. MyInvois
+requires tax per line item, the SST return reads the line, and the
+posting reads the line. So a document-level tax figure has **nowhere to
+be stored**: anything written to `documents.tax_amount` is overwritten
+by the next keystroke on any line.
+
+That is also why the obvious fixes were not built. Three were on the
+table and the user chose the first:
+
+1. **Reconcile and warn** — compare, say nothing unless they differ.
+2. Distribute the stated tax pro-rata across the lines.
+3. Post the difference as an explicit tax-adjustment line.
+
+2 and 3 both CHANGE THE NUMBERS on a statutory return to make a screen
+tidy, and neither can tell rounding apart from a line on the wrong code
+— which is the case that actually matters. They remain unbuilt, on
+purpose, and what option 1 surfaces is what should decide them.
+
+### What was built
+
+`0705` — `public.document_scan_totals(org, table, record_id)`. **No new
+columns:** the paper's subtotal, tax and total have been in
+`ocr_scans.extracted` since `0111`, and copying them onto the document
+would be a second copy to drift — worse, one a re-scan would leave
+stale. The function walks document → attachments → scans and returns the
+newest SUCCESSFUL reading's three figures with the file name it came
+off. Guarded by `app.is_org_member` in the WHERE clause, so a stranger
+gets no rows rather than an exception.
+
+`scan_totals_check.dart` — `totalsDisagreement()`, pure, and
+`ScanTotalsBanner`, which reads the provider and is silent unless
+something differs by half a sen or more.
+
+Three things it deliberately does NOT do, each of which would put a
+warning on a document that is perfectly fine:
+
+- **No paper is not zero paper.** A document nobody scanned gets no
+  rows, not zeroes — otherwise every typed-in bill in the system would
+  be reported as disagreeing with a reading that does not exist.
+- **A figure the reader did not find is skipped.** "There is no total
+  printed on this delivery order" is a real answer; comparing against
+  zero would report the whole document as out.
+- **Under half a sen is agreement.** Both sides are already rounded to
+  the cent, so what is left below that is floating point.
+
+Sixteen mutants across the three files, all killed, controls survived.
+One survived the first sweep and was a genuinely equivalent mutant
+(replacing a null reading with one that found nothing, which is the same
+answer); the real version — comparing against ZEROES — is killed.
+Three of the sixteen are on `document_editor.dart` itself, because every
+test of the banner passes with the banner deleted from the document.
 
 ## This session's commits
 

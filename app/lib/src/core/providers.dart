@@ -3680,6 +3680,22 @@ final depositNotesProvider = FutureProvider.autoDispose
           requireRepo(ref).depositNotes(kind: args.kind, status: args.status),
     );
 
+/// What the SCANNED paper said this document's totals were. `0705`.
+///
+/// Keyed by the record, not by the org: `requireRepo` already knows
+/// which company is being looked at, and a family key that repeats it
+/// would be a second place for the two to disagree.
+///
+/// `null` where nothing was ever read off this document, which is most
+/// of them.
+final documentScanTotalsProvider = FutureProvider.autoDispose
+    .family<ScanTotals?, ({String table, String recordId})>(
+      (ref, args) => requireRepo(ref).documentScanTotals(
+        table: args.table,
+        recordId: args.recordId,
+      ),
+    );
+
 /// What is still held for a party, either way.
 final depositsHeldForProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(

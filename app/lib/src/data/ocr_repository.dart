@@ -1716,3 +1716,62 @@ extension RepoScanReading on Repo {
     return OcrExtraction.fromJson(Map<String, dynamic>.from(held));
   }
 }
+
+/// What the PAPER said the totals were, for putting beside what the
+/// lines come to.
+///
+/// Three figures off the scan and enough to say where they came from.
+/// `null` on any one of them means the reader did not find it, which is
+/// a different answer from zero and must not be shown as a difference.
+class ScanTotals {
+  const ScanTotals({
+    required this.scanId,
+    required this.readAt,
+    required this.fileName,
+    this.subtotal,
+    this.tax,
+    this.total,
+  });
+
+  factory ScanTotals.fromJson(Map<String, dynamic> json) => ScanTotals(
+        scanId: json['scan_id']?.toString() ?? '',
+        readAt: DateTime.tryParse(json['read_at']?.toString() ?? ''),
+        fileName: json['file_name']?.toString() ?? '',
+        subtotal: OcrExtraction._num(json['subtotal']),
+        tax: OcrExtraction._num(json['tax_amount']),
+        total: OcrExtraction._num(json['total']),
+      );
+
+  final String scanId;
+  final DateTime? readAt;
+  final String fileName;
+  final double? subtotal;
+  final double? tax;
+  final double? total;
+
+  /// Whether the reading said anything worth comparing at all. A scan
+  /// that found none of the three is a scan of a page with no totals on
+  /// it, and there is nothing to reconcile.
+  bool get hasFigures => subtotal != null || tax != null || total != null;
+}
+
+extension RepoScanTotals on Repo {
+  /// What the newest successful reading of this document's paperwork
+  /// said its subtotal, tax and total were. `0705`.
+  ///
+  /// Null where nothing has been read — deliberately not zeroes, which
+  /// would make every typed-in document look like it disagreed with a
+  /// document that does not exist.
+  Future<ScanTotals?> documentScanTotals({
+    required String table,
+    required String recordId,
+  }) async {
+    final rows = Repo.rows(await client.rpc('document_scan_totals', params: {
+      'p_org_id': orgId,
+      'p_table': table,
+      'p_record_id': recordId,
+    }));
+    if (rows.isEmpty) return null;
+    return ScanTotals.fromJson(rows.first);
+  }
+}

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0704` (the highest applied migration).
-788 functions and 366 readable tables, of which
-307 functions only read.
+Schema version `0705` (the highest applied migration).
+789 functions and 366 readable tables, of which
+308 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**646 of 788 functions carry a `comment on
+**647 of 789 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (576)
+### general (577)
 
 Not gated on any module.
 
@@ -553,6 +553,7 @@ Not gated on any module.
 - `document_activity(p_document_id uuid)` — One document's whole timeline: what was sent, what changed, what was paid, and what LHDN said.
 - `document_lot_problems(p_document_id uuid, p_kind text)`
 - `document_numbering(p_org_id uuid)` — Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it.
+- `document_scan_totals(p_org_id uuid, p_table text, p_record_id uuid)` — What the SCANNED paper said this document's subtotal, tax and total were, from the newest successful reading of any file attached to it.
 - `draft_bill_from_received_einvoice(p_id uuid)` *(writes)* — Drafts a purchase document from a received e-Invoice.
 - `duplicate_purchase_documents(p_contact_id uuid, p_doc_type text, p_supplier_doc_no text, p_doc_date date, p_total_amount numeric, p_exclude_id uuid)` — Purchase documents already on the books that look like the one being entered -- by the supplier's own number, or by amount and date where there is no number.
 - `einvoice_credential_status(p_org_id uuid)` — What is configured per environment, and never what it is.

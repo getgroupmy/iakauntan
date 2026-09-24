@@ -16,6 +16,7 @@ import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../contacts/new_contact_dialog.dart';
+import 'scan_totals_check.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
@@ -1584,6 +1585,26 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         editable: editable,
                         onNotesChanged: _markDirty,
                       ),
+
+                      // What the paper said, where the lines say
+                      // otherwise. Only on a saved document, because
+                      // the reading hangs off an attachment and an
+                      // attachment hangs off a record id.
+                      //
+                      // Beneath the totals rather than above them, so
+                      // that the figures it disputes are on screen with
+                      // it.
+                      if (!_isNew)
+                        ScanTotalsBanner(
+                          table: _kind.isSales
+                              ? 'sales_documents'
+                              : 'purchase_documents',
+                          recordId: widget.documentId!,
+                          subtotal: _subtotal,
+                          tax: _taxTotal,
+                          total: _grandTotal,
+                          currency: _currency,
+                        ),
 
                       // The paper behind the document.
                       //

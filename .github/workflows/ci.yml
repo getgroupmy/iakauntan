@@ -964,6 +964,7 @@ jobs:
                    supabase/tests/ocr_rescan.sql \
                    supabase/tests/local_rescue.sql \
                    supabase/tests/scan_exchanges.sql \
+                   supabase/tests/scan_totals.sql \
                    supabase/tests/scan_document_kinds.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
