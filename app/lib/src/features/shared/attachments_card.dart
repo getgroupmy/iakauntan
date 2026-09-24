@@ -296,11 +296,27 @@ class _FileRowState extends ConsumerState<_FileRow> {
             tooltip: 'Open',
             onPressed: _open,
           ),
-          if (widget.canWrite)
+          // No delete button on the paper a posting or a reading was
+          // built from. `0708` refuses it in the database either way;
+          // this is so nobody presses a button that cannot work, and so
+          // the reason is on screen rather than in a red toast.
+          if (widget.canWrite && !file.isEvidence)
             IconButton(
+              key: const Key('attachment-remove'),
               icon: const Icon(Icons.delete_outline, size: 18),
               tooltip: 'Remove',
               onPressed: _remove,
+            ),
+          if (widget.canWrite && file.isEvidence)
+            const Tooltip(
+              message: 'This is what the record was built from — it is '
+                  'posted, or its figures were read off this page and '
+                  'never keyed by anybody. It stays with the record.',
+              child: Padding(
+                key: Key('attachment-kept'),
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.lock_outline, size: 18),
+              ),
             ),
         ],
       ),

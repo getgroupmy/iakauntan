@@ -12,6 +12,7 @@ class Attachment {
     required this.createdAt,
     this.mimeType,
     this.fileSize,
+    this.isEvidence = false,
   });
 
   final String id;
@@ -20,6 +21,12 @@ class Attachment {
   final DateTime createdAt;
   final String? mimeType;
   final int? fileSize;
+
+  /// Whether a posting or a reading was built from this file, so it
+  /// stays with the record. `0708`. Defaults false: a caller that did
+  /// not ask must not draw a lock it knows nothing about — the trigger
+  /// refuses either way.
+  final bool isEvidence;
 
   String get sizeLabel {
     final b = fileSize ?? 0;
@@ -36,7 +43,36 @@ class Attachment {
         createdAt: Fmt.parseDate(j['created_at']) ?? DateTime.now(),
         mimeType: j['mime_type']?.toString(),
         fileSize: j['file_size'] == null ? null : Fmt.toInt(j['file_size']),
+        isEvidence: j['is_evidence'] == true,
       );
+}
+
+/// The name a file is stored under, with the moment it arrived in it.
+///
+/// Asked for as "when the file is uploaded it should also add date and
+/// time in the filename". Two files called `invoice.pdf` filed against
+/// different bills, downloaded into the same folder, used to be
+/// `invoice.pdf` and `invoice (1).pdf` — and which was which was a
+/// question nobody could answer from the name.
+///
+/// `20260924-1710` rather than `24-09-2026 5:10pm`: it sorts, it has no
+/// spaces or colons to survive a filesystem, and it is unambiguous in a
+/// country that writes dates the other way round from the machine.
+///
+/// The extension stays last, because that is what every operating
+/// system opens the file by. A name with no extension is stamped at the
+/// end and left alone.
+String stampedFileName(String original, DateTime when) {
+  String two(int v) => v.toString().padLeft(2, '0');
+  final stamp = '${when.year}${two(when.month)}${two(when.day)}'
+      '-${two(when.hour)}${two(when.minute)}';
+
+  final name = original.trim().isEmpty ? 'file' : original.trim();
+  final dot = name.lastIndexOf('.');
+  // A dot at the very start is a hidden file, not an extension, and one
+  // at the very end is a typo — neither splits into a name and a suffix.
+  if (dot <= 0 || dot == name.length - 1) return '${name}_$stamp';
+  return '${name.substring(0, dot)}_$stamp${name.substring(dot)}';
 }
 
 /// Files filed against a record.
@@ -49,15 +85,17 @@ class Attachment {
 extension RepoAttachments on Repo {
   static const bucket = 'attachments';
 
+  /// The files on a record, each saying whether it can still be removed.
+  ///
+  /// Through `attachments_of` rather than the table, because
+  /// `is_evidence` is a question about a posting and a reading — see
+  /// `0708`. One round trip for the list rather than one per file.
   Future<List<Attachment>> attachments(String table, String recordId) async =>
-      Repo.rows(await client
-              .from('attachments')
-              .select()
-              .eq('entity_table', table)
-              .eq('entity_id', recordId)
-              .order('created_at', ascending: false))
-          .map(Attachment.fromJson)
-          .toList();
+      Repo.rows(await client.rpc('attachments_of', params: {
+        'p_org_id': orgId,
+        'p_table': table,
+        'p_record_id': recordId,
+      })).map(Attachment.fromJson).toList();
 
   /// Returns the id of the row created, which is what a scan is asked
   /// for.
@@ -71,7 +109,10 @@ extension RepoAttachments on Repo {
     // A filename goes into an object key and into a URL. Anything that
     // is not plainly a name is replaced rather than escaped, and the
     // uuid in front keeps two files of the same name apart.
-    final safe = fileName
+    // Stamped before anything else, so the name in the record and the
+    // name in the object key are the same name. `0708`.
+    final stamped = stampedFileName(fileName, DateTime.now());
+    final safe = stamped
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
     final key = '${DateTime.now().millisecondsSinceEpoch}-'
@@ -85,7 +126,7 @@ extension RepoAttachments on Repo {
           'org_id': orgId,
           'entity_table': table,
           'entity_id': recordId,
-          'file_name': fileName,
+          'file_name': stamped,
           'storage_path': path,
           'mime_type': mimeType,
           'file_size': bytes.length,

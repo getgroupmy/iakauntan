@@ -69,8 +69,13 @@ KNOWN = {
     ('public.create_organization', 'v_ar_id'): 'nothing stores an org AR default',
     ('public.create_organization', 'v_ap_id'): 'nothing stores an org AP default',
 
-    # A cast whose only purpose is to raise on a bad value.
-    ('app.custom_fields_guard', 'v_id'): 'casts to validate, discards the result',
+    # `app.custom_fields_guard.v_id` used to be here, described as "casts
+    # to validate, discards the result". That was never true: the cast
+    # validates AND the value is then looked up --
+    # `execute ... into v_ok using v_id, new.org_id`. The entry existed
+    # only because this gate could not see through `using`, which is
+    # fixed below. An allowlist entry is a decision somebody made; this
+    # one was a false positive wearing a reason.
 
     # A return value nothing needs.
     ('public.import_opening_balances', 'v_entry_id'): 'the journal id is not used',
@@ -114,8 +119,20 @@ def discarded(rows):
                     continue
                 # An `into` list: only names and commas between the
                 # `into` and this occurrence.
+                #
+                # `using` has to be excluded explicitly, and it is not a
+                # nicety: `execute ... into v_a using v_b, v_c` leaves
+                # `v_a using ` between the `into` and `v_b`, which is
+                # nothing but names and spaces and so read as an `into`
+                # list. Every argument passed to a dynamic statement was
+                # therefore reported as written and never read --
+                # `app.attachment_is_evidence` was the first function to
+                # use that form and the gate called both its arguments
+                # dead.
                 tail = before.rsplit(' into ', 1)
-                if len(tail) == 2 and re.fullmatch(r'[\sa-z0-9_,]*', tail[1]):
+                if (len(tail) == 2
+                        and re.fullmatch(r'[\sa-z0-9_,]*', tail[1])
+                        and not re.search(r'\busing\b', tail[1])):
                     assigned += 1
                     continue
                 read += 1
