@@ -167,10 +167,25 @@ begin
   -- A target nobody has configured is NOT sent. It would be a choice
   -- the model can make and then have nothing to fill, which reads to a
   -- bookkeeper as the scan having understood the document and lost it.
+  --
+  -- Made here rather than pointed at. This used to name
+  -- `contacts.contact`, which had no fields at the time -- and `0710`
+  -- gave every destination its own, so the assertion became a true
+  -- statement about nothing. A rule asserted against whichever row
+  -- happens to be unconfigured today stops being asserted the day
+  -- somebody configures it.
+  insert into public.scan_targets
+    (module_code, action, label, table_name, destination, hint,
+     sort_order, is_active, repeats)
+  values ('accounting', 'described_by_nobody', 'Nobody described this',
+          'expenses', 'expense', 'No fields.', 998, true, false);
+  v_out := public.scan_extraction_targets();
   perform pg_temp.check_true(
     'a target with no fields is not offered to the reader',
     not exists (select 1 from jsonb_array_elements(v_out) t
-                 where t ->> 'key' = 'contacts.contact'));
+                 where t ->> 'key' = 'accounting.described_by_nobody'));
+  delete from public.scan_targets where action = 'described_by_nobody';
+  v_out := public.scan_extraction_targets();
 
   -- The kinds of paper that land there travel with it: they are the
   -- operator's own words, and they are what a model matches a
