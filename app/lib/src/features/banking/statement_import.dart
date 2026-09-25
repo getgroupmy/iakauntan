@@ -652,6 +652,11 @@ const _periodLabels = <String>[
   'for the period',
   'period covered',
   'period from',
+  // Last, and bare, so every more specific label above wins first.
+  // A document that says only `Period: 01/08/2026-31/08/2026` is common
+  // enough to matter -- it is what 120 of 120 fixtures in the SmartScan
+  // corpus print, and not one of them was found before this line.
+  'period',
 ];
 
 /// Every whole date in one line of text, in the orders Malaysia writes.

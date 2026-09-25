@@ -34,7 +34,7 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Three real statements, three different defects |
+| Head at time of writing | A corpus that measures us, separately from the model |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
@@ -2270,6 +2270,62 @@ vision-model job and nothing here helps it.
 `_pagesRead = 3` in `text_reader_web.dart` also caps the typed reading
 at three pages. Fine for a header, and NOT fine if anything later wants
 the transaction lines off a 13-page statement's text layer.
+
+## A corpus that measures us, separately from the model
+
+The SmartScan Training/Handover v2 pack: 120 marked-synthetic fixture
+PDFs, twelve document families crossed with ten variants, each with
+ground-truth JSON and CSV. Nothing in it is a real institution, account
+or person.
+
+### What it settled, measured rather than argued
+
+Running the REAL parser over all 120 before changing anything:
+
+| | |
+| --- | --- |
+| Import correct, reader assumed perfect | **120 / 120** (1,488 rows) |
+| Import correct when the reader loses every sign | **120 / 120** (108 repaired from the balance chain) |
+| Statement period found | **0 / 120** |
+
+The first two are the useful news and neither had ever been measured.
+Our half — the dates, the arithmetic, the sign logic — files all twelve
+families correctly, and `balancesDecideTheSigns` puts back every one of
+1,488 signs when handed the worst plausible reading.
+
+The third was a real gap in a single line: these fixtures label it
+`Period: 01/08/2026-31/08/2026` and bare `period` was not in
+`_periodLabels`. Added LAST in the list so every more specific label
+still wins first. 120 / 120 after.
+
+### The gate
+
+`app/test/smartscan_corpus_test.dart` over
+`app/test/fixtures/smartscan_corpus.json` (380KB). The PDFs are NOT
+committed: Dart cannot open one on a test VM, and a corpus that needs a
+Python library to run is a corpus that stops being run. What is
+committed is the extracted text layer plus ground truth.
+
+**Dates are stored AS PRINTED (`01/08/26`), not as ISO.** The first
+version of this fixture stored the ground-truth ISO date in the `rows`,
+which meant `parseStatementDate` was never exercised — a mutant that
+put two-digit years in 1926 instead of 2026 survived the whole corpus.
+That is exactly the failure the mutation harness exists to catch, and
+it would have left a 120-document gate that could not see a century
+error.
+
+Four mutants, all killed: the bare `period` label removed, the balance
+chain stopped repairing, the century flipped, and the period taking its
+start rather than its end. The last needed its own assertion — both
+ends of a one-month period share a year, so the year check alone could
+not tell them apart; the period end must now not precede the last line.
+
+### What it does NOT prove
+
+Nothing here runs a vision model. `rows` is what a PERFECT reader would
+return, so every failure is ours and every success says only: given a
+correct reading, we file it correctly. The model's eyesight is measured
+by the live database, not by this.
 
 ## This session's commits
 
