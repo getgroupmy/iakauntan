@@ -411,3 +411,119 @@ String newUuid() {
       .join();
   return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
 }
+
+/// A file put somewhere safe, and nothing else done to it.
+///
+/// `0714`. The other half of what `StagedReceipt` describes: that one
+/// is a document that was read, this one is a document that was not.
+class KeptFile {
+  const KeptFile({
+    required this.attachmentId,
+    required this.fileName,
+    this.alreadyHere,
+  });
+
+  final String attachmentId;
+  final String fileName;
+
+  /// A file this organization had ALREADY filed with these exact bytes.
+  /// `0711`, and null when there is nothing to say — no match, or a
+  /// match that predates the hash and therefore cannot be recognised.
+  final Attachment? alreadyHere;
+}
+
+/// Upload a document and keep it. Do not read it.
+///
+/// ## The door that did not exist
+///
+/// Every way into AI SmartScan ran `captureAndRead`, which uploads and
+/// then spends money on a model in the same breath. Somebody holding a
+/// month of statements could not simply put them somewhere safe and
+/// come back on Tuesday — the only offer was "read this now", at a
+/// price, one document at a time.
+///
+/// So: the upload, and none of the rest of it. No reader, no charge, no
+/// `ocr_scans` row, and no `pdfBlock` — that refusal exists to predict
+/// a reader that cannot open a PDF, and there is no reader here.
+///
+/// ## It is kept, and it is FINDABLE
+///
+/// `keepForLater: true` sets `attachments.kept_at`, which is what puts
+/// the file in `scan_inbox` beside the readings. Without it the bytes
+/// are in the bucket and the file appears nowhere in the product at
+/// all, which is not saving it for later; it is losing it with extra
+/// steps. `0714` is that column and that union.
+///
+/// Returns null if nothing was picked. Throws nothing the caller has to
+/// catch except a failed upload, which is the one failure worth saying
+/// out loud — the file did not arrive.
+Future<KeptFile?> keepFileForLater(
+  BuildContext context,
+  WidgetRef ref, {
+  /// Which table the file is parked against until it belongs to
+  /// something. Passed in rather than decided here, exactly as
+  /// `captureAndRead` takes it.
+  required String table,
+
+  /// A file already in hand — dropped onto the window rather than
+  /// chosen from a dialog. Asking again would be a file dialog over a
+  /// file somebody has already handed over.
+  CapturedFile? picked,
+}) async {
+  final file = picked ?? await pickReceipt();
+  if (file == null || !context.mounted) return null;
+
+  final repo = ref.read(repoProvider)!;
+  final placeholder = newUuid();
+
+  // The same modal the scan uses, and it stops at `attaching` because
+  // that is all there is. Its words already fit: "Keeping a copy before
+  // anything else happens to it" is precisely the promise.
+  return whileScanning<KeptFile>(
+    context,
+    action: (report) async {
+      // Has this exact file been here before? `0711`. Never blocks: a
+      // lookup that fails is a lookup that found nothing, and the file
+      // is uploaded either way.
+      Attachment? alreadyHere;
+      try {
+        alreadyHere = await repo.identicalFile(file.bytes);
+      } catch (_) {
+        alreadyHere = null;
+      }
+
+      // `keepAttachment`, not `uploadAttachment(keepForLater: true)`.
+      // There is no flag here to get wrong, and getting it wrong would
+      // be silent: the file would upload, the button would say it was
+      // kept, and it would appear in no list at all.
+      final id = await repo.keepAttachment(
+        table: table,
+        recordId: placeholder,
+        fileName: file.name,
+        bytes: file.bytes,
+        mimeType: file.mimeType,
+      );
+
+      return KeptFile(
+        attachmentId: id,
+        fileName: file.name,
+        alreadyHere: alreadyHere,
+      );
+    },
+  );
+}
+
+/// What to say once a file has been kept.
+///
+/// Pure so it can be asserted, and one sentence rather than two: the
+/// thing a person needs to know is that it is safe AND that nothing was
+/// read, because "uploaded" on a screen called AI SmartScan reads as
+/// "scanned" unless it is contradicted.
+String keptFileMessage(KeptFile kept) {
+  final already = kept.alreadyHere;
+  final base = '${kept.fileName} is kept. It has not been read — open it '
+      'from the list when you want that.';
+  if (already == null) return base;
+  return '$base This organization had already filed a file with exactly '
+      'these contents, as ${already.fileName}.';
+}

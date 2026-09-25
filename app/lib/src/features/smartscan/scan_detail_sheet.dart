@@ -36,7 +36,13 @@ class _ScanDetailSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reading = ref.watch(scanReadingProvider(entry.scanId));
+    // A kept file has no scan, so there is no reading to fetch and
+    // nothing to be asked for. `0714`. Watching the provider with a
+    // null id would be a round trip whose only possible answer is the
+    // one already known.
+    final reading = entry.isKeptOnly
+        ? const AsyncValue<OcrExtraction?>.data(null)
+        : ref.watch(scanReadingProvider(entry.scanId!));
     final kinds = ref.watch(offeredScanKindsProvider).valueOrNull ?? const [];
 
     return DraggableScrollableSheet(
@@ -53,8 +59,11 @@ class _ScanDetailSheet extends ConsumerWidget {
           ),
           const SizedBox(height: Space.xs),
           Text(
-            'Read ${Fmt.dateTime(entry.scannedAt)}'
-            '${entry.provider == null ? '' : ' by ${entry.provider}'}',
+            // "Read ... by gemini" is untrue of a file nobody read.
+            entry.isKeptOnly
+                ? 'Kept ${Fmt.dateTime(entry.scannedAt)}, not read yet'
+                : 'Read ${Fmt.dateTime(entry.scannedAt)}'
+                      '${entry.provider == null ? '' : ' by ${entry.provider}'}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: Space.md),
@@ -89,7 +98,9 @@ class _ScanDetailSheet extends ConsumerWidget {
           const SizedBox(height: Space.lg),
           AsyncView<OcrExtraction?>(
             value: reading,
-            onRetry: () => ref.invalidate(scanReadingProvider(entry.scanId)),
+            onRetry: entry.isKeptOnly
+                ? () {}
+                : () => ref.invalidate(scanReadingProvider(entry.scanId!)),
             // Rows of a label over its column, with a value on the
             // right — which is a shape that IS decided before the
             // payload arrives, even though how many of them there are
@@ -285,7 +296,8 @@ class _ActionsState extends ConsumerState<_Actions> {
                     key: const ValueKey('scan-read-again'),
                     onPressed: _busy ? null : () => _rescan(null),
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Read it again'),
+                    label: Text(
+                        entry.isKeptOnly ? 'Read it' : 'Read it again'),
                   ),
                 ),
                 if (choices.isNotEmpty) ...[
@@ -397,7 +409,15 @@ class _WhatItBecame extends StatelessWidget {
   Widget build(BuildContext context) {
     final failed = entry.status == 'failed' || entry.error != null;
     final label = entry.postedLabel?.trim();
-    final (icon, text) = failed
+    final (icon, text) = entry.isKeptOnly
+        // Not a failure and not a document that became nothing: a file
+        // somebody deliberately put somewhere safe. `0714`.
+        ? (
+            Icons.inventory_2_outlined,
+            'Kept for later. Nothing has read it yet — "Read it" below '
+                'sends it to a reader.',
+          )
+        : failed
         ? (Icons.error_outline, 'It could not be read.')
         : !entry.isPosted
         ? (

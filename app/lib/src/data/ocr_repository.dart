@@ -1753,8 +1753,20 @@ class ScanInboxEntry {
     this.corrected = false,
   });
 
-  final String scanId;
+  /// NULL on a file that was kept and never read. `0714`.
+  ///
+  /// `scan_inbox` unions those in, because the AI SmartScan screen is
+  /// the pile of paper and a chip that says Everything cannot leave out
+  /// the documents somebody deliberately put there. There is no scan to
+  /// name, and naming one would be an id that fetches nothing.
+  final String? scanId;
   final DateTime scannedAt;
+
+  /// Whether this row is a file kept without a reading.
+  ///
+  /// Said once here rather than as `scanId == null` in four places, so
+  /// the meaning of the null is written down where the null is.
+  bool get isKeptOnly => scanId == null;
 
   /// Null once the record this was filed against has been deleted:
   /// `delete_attachments_of_row` takes the picture with the document and
@@ -1811,7 +1823,7 @@ class ScanInboxEntry {
   bool get fileCanBeRemoved => hasImage && !becameSomething;
 
   factory ScanInboxEntry.fromJson(Map<String, dynamic> j) => ScanInboxEntry(
-        scanId: j['scan_id'].toString(),
+        scanId: j['scan_id']?.toString(),
         attachmentId: j['attachment_id']?.toString(),
         fileName: j['file_name']?.toString(),
         storagePath: j['storage_path']?.toString(),

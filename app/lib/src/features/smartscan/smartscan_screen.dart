@@ -7,6 +7,9 @@ import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/ocr_repository.dart';
+import '../shared/file_drop.dart';
+import '../shared/receipt_capture.dart';
+import 'scan_destination.dart';
 import 'scan_detail_sheet.dart';
 import 'smartscan_settings.dart';
 import 'scan_flow.dart';
@@ -43,9 +46,78 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
 
   bool get _setup => _only == 'setup';
 
+  /// What stops the drop listener. Null off the web, where there is
+  /// nothing listening. `0714`.
+  void Function()? _stopDrop;
+
+  /// True while a drop is being uploaded, so a second gesture over the
+  /// same window does not start a second run over the first.
+  bool _keeping = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // On the DOCUMENT, not on a widget, because that is where the
+    // browser fires it — and it has to be removed again when this
+    // screen goes, or opening the screen twice would upload every
+    // dropped file twice.
+    _stopDrop = listenForDroppedFiles(_onDropped);
+  }
+
+  @override
+  void dispose() {
+    _stopDrop?.call();
+    super.dispose();
+  }
+
+  Future<void> _onDropped(List<DroppedFile> files) async {
+    if (!mounted || _keeping) return;
+    if (!ref.read(canWriteProvider)) return;
+    for (final f in files) {
+      if (!mounted) return;
+      await _keep(
+        picked: CapturedFile(
+          name: f.name,
+          bytes: f.bytes,
+          mimeType: f.mimeType,
+        ),
+      );
+    }
+  }
+
+  /// Upload a document and keep it, without reading it. `0714`.
+  Future<void> _keep({CapturedFile? picked}) async {
+    if (_keeping) return;
+    setState(() => _keeping = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final kept = await keepFileForLater(
+        context,
+        ref,
+        table: ScanDestination.unknown.table,
+        picked: picked,
+      );
+      if (kept == null) return;
+      ref.invalidate(scanInboxProvider);
+      messenger.showSnackBar(
+        SnackBar(content: Text(keptFileMessage(kept))),
+      );
+    } catch (e) {
+      // The one failure worth saying out loud: the file did not arrive,
+      // so there is nothing to come back to.
+      messenger.showSnackBar(
+        SnackBar(content: Text('The file was not kept: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _keeping = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final canWrite = ref.watch(canWriteProvider);
+    // Enough room for two labelled buttons in one app bar, or not.
+    final wide = MediaQuery.sizeOf(context).width >= 600;
     // Never asked for while the setup chip is selected: `setup` is not
     // a value `scan_inbox` knows, and sending it would be a filter the
     // database quietly reads as `all`.
@@ -56,17 +128,44 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
       appBar: AppBar(
         title: const Text('AI SmartScan'),
         actions: [
+          // Beside the scan and not instead of it. Two different jobs:
+          // "read this now" costs a call to a model, and "keep this"
+          // costs nothing and can wait until Tuesday.
+          //
+          // The label goes away on a narrow screen. Two labelled
+          // buttons need more than a phone's app bar has -- they
+          // overflowed it by 54 pixels, which Flutter draws as the
+          // yellow-and-black bar and which means part of a control
+          // cannot be reached. The icon keeps its tooltip, so what it
+          // does is still sayable.
+          if (canWrite)
+            if (wide)
+              OutlinedButton.icon(
+                key: const ValueKey('smartscan-keep'),
+                onPressed: _keeping ? null : () => _keep(),
+                icon: const Icon(Icons.upload_file_outlined, size: 18),
+                label: const Text('Upload'),
+              )
+            else
+              IconButton(
+                key: const ValueKey('smartscan-keep'),
+                tooltip: 'Upload a file and keep it',
+                onPressed: _keeping ? null : () => _keep(),
+                icon: const Icon(Icons.upload_file_outlined),
+              ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
               child: FilledButton.icon(
                 key: const ValueKey('smartscan-new'),
-                onPressed: () async {
-                  await runSmartScan(context, ref);
-                  ref.invalidate(scanInboxProvider);
-                },
+                onPressed: _keeping
+                    ? null
+                    : () async {
+                        await runSmartScan(context, ref);
+                        ref.invalidate(scanInboxProvider);
+                      },
                 icon: const Icon(Icons.document_scanner_outlined, size: 18),
-                label: const Text('Scan a document'),
+                label: Text(wide ? 'Scan a document' : 'Scan'),
               ),
             ),
         ],
@@ -125,7 +224,9 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
                     message: _only == 'all'
                         ? 'Photograph a bill, a receipt, a letterhead or a '
                               'bank statement and it is read, filed and '
-                              'listed here with what it became.'
+                              'listed here with what it became. Upload '
+                              '${canDropFiles ? 'or drop in ' : ''}a file to '
+                              'keep it here and read it later.'
                         : 'Try another filter.',
                   );
                 }
@@ -154,10 +255,16 @@ class _ScanRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final failed = entry.status == 'failed' || entry.error != null;
     return ListTile(
-      key: ValueKey('scan-${entry.scanId}'),
+      // The attachment where there is no scan. A key of `scan-null` on
+      // every kept file would be the same key on all of them. `0714`.
+      key: ValueKey(entry.scanId == null
+          ? 'kept-${entry.attachmentId}'
+          : 'scan-${entry.scanId}'),
       contentPadding: EdgeInsets.zero,
       leading: Icon(
-        failed
+        entry.isKeptOnly
+            ? Icons.inventory_2_outlined
+            : failed
             ? Icons.error_outline
             : entry.isPosted
             ? Icons.description_outlined
@@ -190,6 +297,15 @@ String scanRowSubtitle(ScanInboxEntry entry) {
   final parts = <String>[];
   final kind = entry.kindLabel?.trim();
   if (kind != null && kind.isNotEmpty) parts.add(kind);
+
+  // A file kept and never read. `0714`. First, because every branch
+  // below it describes a READING — "not filed against anything yet" is
+  // true of this too and says the wrong thing about it: it suggests a
+  // reading happened and led nowhere.
+  if (entry.isKeptOnly) {
+    parts.add('Kept, not read yet');
+    return parts.join(' · ');
+  }
 
   if (entry.status == 'failed' || entry.error != null) {
     // The reason, not just the fact. A failed reading with no reason is

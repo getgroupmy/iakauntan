@@ -957,6 +957,7 @@ jobs:
                    supabase/tests/bank_statement_scan.sql \
                    supabase/tests/credit_card_statement_import.sql \
                    supabase/tests/statement_span_check.sql \
+                   supabase/tests/kept_files_in_the_inbox.sql \
                    supabase/tests/scan_corrections.sql \
                    supabase/tests/reader_failures.sql \
                    supabase/tests/matter_trial_balance.sql \

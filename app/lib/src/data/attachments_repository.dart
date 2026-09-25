@@ -147,12 +147,21 @@ extension RepoAttachments on Repo {
 
   /// Returns the id of the row created, which is what a scan is asked
   /// for.
+  /// [keepForLater] marks the row `kept_at`: somebody uploaded this to
+  /// KEEP it, not to have it read. `0714`. It is what puts the file in
+  /// the AI SmartScan list without an `ocr_scans` row to carry it --
+  /// and without that mark the file is in the bucket and visible
+  /// nowhere in the product, which is not "saved for later" at all.
+  ///
+  /// False on every other upload, so an attachment filed against a bill
+  /// is exactly what it was.
   Future<String> uploadAttachment({
     required String table,
     required String recordId,
     required String fileName,
     required Uint8List bytes,
     String? mimeType,
+    bool keepForLater = false,
   }) async {
     // A filename goes into an object key and into a URL. Anything that
     // is not plainly a name is replaced rather than escaped, and the
@@ -170,22 +179,45 @@ extension RepoAttachments on Repo {
     await client.storage.from(bucket).uploadBinary(path, bytes);
     final row = await client
         .from('attachments')
-        .insert({
-          'org_id': orgId,
-          'entity_table': table,
-          'entity_id': recordId,
-          'file_name': stamped,
-          'storage_path': path,
-          'mime_type': mimeType,
-          'file_size': bytes.length,
-          // `0711`. Written on the way in, because it cannot be
-          // recovered afterwards without downloading the object back.
-          'content_sha256': contentHash(bytes),
-        })
+        .insert(attachmentRow(
+          orgId: orgId,
+          table: table,
+          recordId: recordId,
+          fileName: stamped,
+          path: path,
+          bytes: bytes,
+          mimeType: mimeType,
+          keepForLater: keepForLater,
+        ))
         .select('id')
         .single();
     return row['id'].toString();
   }
+
+  /// Upload a file to KEEP, not to read. `0714`.
+  ///
+  /// A method rather than `uploadAttachment(keepForLater: true)` at the
+  /// call site, and that is the whole of why it exists: `kept_at` is
+  /// the single column that puts the file in the AI SmartScan list, so
+  /// a `true` that became a `false` would leave the bytes in the bucket
+  /// and the document visible nowhere in the product. A boolean at a
+  /// call site is a boolean somebody can quietly get wrong; there is no
+  /// boolean here to get wrong.
+  Future<String> keepAttachment({
+    required String table,
+    required String recordId,
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+  }) =>
+      uploadAttachment(
+        table: table,
+        recordId: recordId,
+        fileName: fileName,
+        bytes: bytes,
+        mimeType: mimeType,
+        keepForLater: true,
+      );
 
   /// A file with these exact bytes this organization has filed before,
   /// or null.
@@ -280,3 +312,42 @@ extension RepoAttachments on Repo {
     await client.from('attachments').delete().eq('id', attachment.id);
   }
 }
+
+/// The row an upload writes, built apart from the client that writes it.
+///
+/// `RepoAttachments` is an EXTENSION, and a Dart extension method binds
+/// to the static type of its receiver — a fake `Repo` would never be
+/// called and the real body would run against a live Supabase client.
+/// So the payload is built here, where it can be asserted, rather than
+/// inline where it cannot. See docs/widget-tests.md.
+///
+/// `kept_at` is the column that decides whether a file is findable at
+/// all: `scan_inbox` unions on it, so an upload that omits it puts the
+/// bytes in the bucket and the document nowhere a person can see.
+Map<String, dynamic> attachmentRow({
+  required String orgId,
+  required String table,
+  required String recordId,
+  required String fileName,
+  required String path,
+  required Uint8List bytes,
+  String? mimeType,
+  bool keepForLater = false,
+  DateTime? now,
+}) =>
+    {
+      'org_id': orgId,
+      'entity_table': table,
+      'entity_id': recordId,
+      'file_name': fileName,
+      'storage_path': path,
+      'mime_type': mimeType,
+      'file_size': bytes.length,
+      // `0711`. Written on the way in, because it cannot be recovered
+      // afterwards without downloading the object back.
+      'content_sha256': contentHash(bytes),
+      // Absent rather than null unless asked for, so the column stays
+      // empty on every attachment that arrived any other way. `0714`.
+      if (keepForLater)
+        'kept_at': (now ?? DateTime.now()).toUtc().toIso8601String(),
+    };

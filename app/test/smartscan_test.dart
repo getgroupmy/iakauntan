@@ -399,6 +399,51 @@ void main() {
       expect(find.byKey(const ValueKey('smartscan-new')), findsOneWidget);
     });
 
+    testWidgets('both buttons fit on a phone, and Upload is reachable',
+        (tester) async {
+      // `0714` added an Upload button beside Scan, and two LABELLED
+      // buttons overflowed a phone's app bar by 54 pixels -- which
+      // Flutter draws as the yellow-and-black bar and which means part
+      // of a control cannot be pressed at all. The label is dropped
+      // below 600px and the tooltip carries the meaning instead.
+      //
+      // `onAPhone` is 412 wide, so a widget-test overflow is an
+      // exception and this test fails on one without asserting
+      // anything further.
+      await onAPhone(
+        tester,
+        wrap(const SmartScanScreen(), [
+          canWriteProvider.overrideWithValue(true),
+          scanInboxProvider.overrideWith((ref, only) async => [filed()]),
+        ]),
+      );
+
+      expect(find.byKey(const ValueKey('smartscan-keep')), findsOneWidget);
+      expect(find.byKey(const ValueKey('smartscan-new')), findsOneWidget);
+      // The word is gone; the control is not.
+      expect(find.text('Upload'), findsNothing);
+      expect(
+        tester.widget<IconButton>(
+          find.byKey(const ValueKey('smartscan-keep')),
+        ).tooltip,
+        'Upload a file and keep it',
+      );
+    });
+
+    testWidgets('and on a wide window both are named', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(wrap(const SmartScanScreen(), [
+        canWriteProvider.overrideWithValue(true),
+        scanInboxProvider.overrideWith((ref, only) async => [filed()]),
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload'), findsOneWidget);
+      expect(find.text('Scan a document'), findsOneWidget);
+    });
+
     testWidgets('and says so when nothing has been scanned', (tester) async {
       await onAPhone(
         tester,
