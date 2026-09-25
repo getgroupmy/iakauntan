@@ -12,6 +12,7 @@ import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
+import '../shared/scan_runner.dart';
 import '../smartscan/scan_destination.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
@@ -819,7 +820,25 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
     );
     if (staged == null || !mounted) return;
 
-    final parse = scannedStatement(staged.read);
+    // The file's own text layer, where it has one, and the statement's
+    // own date off it.
+    //
+    // This OUTRANKS the `document_date` the reader was asked for, and
+    // the reason is the whole of `95e08146`: two RHB statements came
+    // back read faultlessly, every line a day and a month, and
+    // `document_date` null — so a hundred and two lines were thrown
+    // away for want of a year that was printed on page one of the file
+    // as selectable text. A model is asked and may decline. A text
+    // layer is read.
+    //
+    // Null on a photograph, on a phone, and on a PDF with no text in
+    // it, and in every one of those cases the reading is used exactly
+    // as it was before.
+    final text = await pdfTextLayer(file.bytes, file.mimeType);
+    if (!mounted) return;
+    final period = text == null ? null : statementPeriodFromText(text);
+
+    final parse = scannedStatement(staged.read, period: period);
     if (parse.rows.isEmpty && parse.problems.isEmpty) {
       // THREE different failures wore one sentence, and the sentence
       // was wrong about all of them.
@@ -1004,10 +1023,18 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
                 // disagree with.
                 if (preview.notices.isNotEmpty) ...[
                   const SizedBox(height: 8),
+                  // The heading used to read "N lines were corrected
+                  // against the running balance", which was true when a
+                  // sign repair was the only notice there was and
+                  // became false the moment a second kind existed. It
+                  // was wrong twice over: it named a cause that no
+                  // longer applied to every notice, and it counted
+                  // NOTICES as LINES -- a single notice covering
+                  // fifty-five lines would have announced itself as
+                  // one. Each notice below says its own count and its
+                  // own cause, so the heading says neither.
                   Text(
-                    '${preview.notices.length} '
-                    '${preview.notices.length == 1 ? 'line was' : 'lines were'} '
-                    'corrected against the running balance',
+                    noticesHeading(preview.notices.length),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: context.colors.warning,

@@ -34,8 +34,8 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The live database, and the field my prompt suppressed |
-| CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| Head at time of writing | The year was in the file all along |
+| CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
@@ -2095,6 +2095,106 @@ two array entries, so the joined string no longer contained the phrase.
 assertions exist — a prompt has no callers, no types and no compiler,
 and the failure would have been a reader quietly told something
 slightly different.
+
+## The year was in the file all along
+
+The handover PDF the user attached — *Malaysian Bank & Credit Card
+Statement Parser* — sets the extraction order in its Stage C: **native
+PDF text first, geometry second, OCR third, vision/LLM only for what is
+left**, and §15 repeats it: "the LLM must not be the final authority for
+transaction amount, sign or balance when deterministic evidence exists."
+
+This repository already owned the deterministic half and the statement
+importer had never asked it anything.
+
+`app/web/pdfjs/` has had `pdf.js` vendored for two years — 1.8MB, lazy,
+served from our own origin so no CDN sees anybody's documents — and
+`text_reader_web.dart` exposes `readTextFromPdfBytes` with
+`onDeviceReadsPdf => true`. It was wired only to the "on this device"
+reader CHOICE in Settings. So `_readStatement` sent every PDF straight
+to the edge function to be LOOKED AT by a vision model.
+
+RHB exports a text PDF. Its period is printed on page one as selectable
+text. We asked a model for the year instead, it declined, and fifty-five
+lines of a faultless reading went on the floor — which is the bug the
+user photographed.
+
+### `statementPeriodFromText`
+
+Pure, in `statement_import.dart`, so the parser stays testable with no
+platform behind it. `pdfTextLayer` in `scan_runner.dart` is the seam
+that feeds it.
+
+It reads a LABEL and the date beside it — `Statement Date`, `Tarikh
+Penyata`, and the period forms in both languages, taking the LATER date
+because that is what a statement is named by. It does **not** hunt for
+loose dates: a statement's text layer is thick with them — a print date,
+a payment due date, every transaction line, an address whose postcode
+reads like a year — and taking the first thing shaped like a date is
+precisely how a statement gets filed twelve months out.
+
+With no label it will accept ONE named month and year **in the header
+region only**, and refuses where the header offers two. Numeric
+`10/2025` is not enough, because it is also the middle of `01/10/2025`.
+
+It OUTRANKS `document_date`. One was extracted from the page; the other
+was a question put to a reader that may decline — and did.
+
+### Bahasa Melayu months, which were never read
+
+`_monthNumber` took the first three letters and matched them against an
+English list. Five of the twelve Malay months do not survive that: MAC,
+MEI, OGOS, OKTOBER, DISEMBER. The other seven were being read by
+accident.
+
+So a statement printed in Malay came back as every line unreadable —
+over the language it was printed in. Maybank, CIMB and Bank Islam all
+issue them. It is now a map covering both languages.
+
+### And a heading that was false
+
+The import dialog printed `"$n lines were corrected against the running
+balance"` above the notices. True while a sign repair was the only kind
+of notice; false the moment a second kind existed — and wrong twice
+over, because it also counted NOTICES as LINES. One notice covering
+fifty-five undated lines would have announced itself as one line.
+
+`noticesHeading(int)` is now a pure function with assertions on it,
+claiming neither a cause nor a line count. Each notice carries its own.
+
+### What is NOT fixed by this
+
+- **A photographed statement has no text layer.** The prompt change in
+  `95e08146` is still what carries those, and it is a request rather
+  than a guarantee.
+- **A phone cannot do this at all.** `onDeviceReadsPdf` is false under
+  `dart:io` — ML Kit takes an image and there is no `pdf.js` on a phone.
+  `pdfTextLayer` returns null and the reading proceeds exactly as
+  before; the assertions in `statement_period_test.dart` are about that
+  degradation, because it is the half that runs everywhere.
+- **The parked-photograph path** (`_takeParkedStatement`) has no file
+  bytes, so no period.
+
+### Still open from the handover, and the user has not chosen
+
+Named to them, unanswered: whether to sequence the whole six-phase
+program or make the statement path solid first. The gaps ranked were
+(1) deterministic PDF text — this commit; (2) **credit-card statements,
+entirely absent** from the seven scan destinations, and half the
+handover is about them — statement date vs due date, statement balance
+vs outstanding, a sign convention that inverts; (3) per-bank adapters
+with fixtures; (4) the confidence/status ladder.
+
+Two decisions left with the user, both real:
+
+- §4 says **"do not send bank statements to arbitrary third-party OCR
+  services by default"**. They currently go to Gemini. This commit
+  reduces it — a text PDF now yields its period without leaving the
+  browser — but the document itself still goes out.
+- §5 says **never use floating point for money**. The Dart import path
+  uses `double`. The ledger is safe (`numeric` throughout, and
+  `import_bank_transactions` re-checks), so this is preview arithmetic,
+  not posting arithmetic.
 
 ## This session's commits
 

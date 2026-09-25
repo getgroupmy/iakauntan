@@ -500,14 +500,192 @@ DateTime resolveStatementYear({
   return best ?? _date(near.year, month, day) ?? near;
 }
 
+/// The statement's own date, read off a PDF's own text layer.
+///
+/// ## The failure this exists for
+///
+/// Found live, and it cost fifty-five lines of somebody's October
+/// statement. RHB exports a TEXT PDF: the period is printed on page one
+/// as selectable text, and this repository has vendored `pdf.js` for
+/// two years. We sent the page to a vision model as a picture instead,
+/// asked it for `document_date`, and it returned null — so
+/// `resolveStatementYear` had no anchor, refused to guess, and every
+/// line of a faultless reading went on the floor.
+///
+/// A model is ASKED. A text layer is READ. Where the evidence is
+/// printed and deterministic it should not be a model's to withhold.
+///
+/// ## What it reads
+///
+/// A LABEL, and the date beside it — `Statement Date`, `Tarikh
+/// Penyata`, and the period forms in both languages, from which it
+/// takes the LATER date, because that is what a statement is named by
+/// and the end a running balance closes at.
+///
+/// ## And what it refuses to read
+///
+/// Loose dates. A statement's text layer is thick with them: a print
+/// date, a payment due date, a "customer since", every transaction
+/// line, and an address whose postcode reads like a year. Taking the
+/// first thing shaped like a date is exactly how a statement gets filed
+/// twelve months out — the failure this whole chain exists to refuse.
+///
+/// With no label it will accept ONE named month and year in the header
+/// and nothing else. Numeric `10/2025` is not enough: it is also the
+/// middle of `01/10/2025`, and a header that offers two different
+/// months is two plausible readings, which is a null and a sentence
+/// rather than a guess.
+({DateTime date, String evidence})? statementPeriodFromText(String text) {
+  final lines = text
+      .split(RegExp(r'[\r\n]+'))
+      .map((l) => l.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((l) => l.isNotEmpty)
+      .toList();
+  if (lines.isEmpty) return null;
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final lower = line.toLowerCase();
+    for (final label in _periodLabels) {
+      final at = lower.indexOf(label);
+      if (at < 0) continue;
+
+      // Normally on the same line, after the label. A table that puts
+      // the label in one cell and the date in the next comes out of
+      // `pdf.js` as two lines, so the next one is tried before giving
+      // up on a label that is plainly there.
+      var found = _datesIn(line.substring(at + label.length));
+      if (found.isEmpty && i + 1 < lines.length) {
+        found = _datesIn(lines[i + 1]);
+      }
+      if (found.isEmpty) continue;
+
+      // A period is two dates and a statement date is one. Taking the
+      // later covers both: the end of the period, or the only date
+      // there was.
+      found.sort();
+      return (date: found.last, evidence: line);
+    }
+  }
+
+  // No label anywhere. The header may still name its month outright —
+  // "PENYATA BAGI OKTOBER 2025" with the words split across cells, or
+  // a plain "October 2025" under the account number.
+  //
+  // The header only. Past it are the transaction lines, and a
+  // description carrying a month and a year would otherwise vote.
+  const header = 40;
+  DateTime? only;
+  String? evidence;
+  final seen = <String>{};
+  for (final line in lines.take(header)) {
+    for (final m in RegExp(r'\b([A-Za-z]{3,9})\.?\s+(\d{4})\b').allMatches(line)) {
+      final month = _monthNumber(m.group(1)!);
+      if (month == null) continue;
+      final year = int.parse(m.group(2)!);
+      // A statement is not from 1904 and not from 2400. A four-digit
+      // number beside a word that happens to start like a month is
+      // otherwise a period.
+      if (year < 1990 || year > 2100) continue;
+      if (seen.add('$year-$month')) {
+        // The last day of the month, because that is where the period
+        // ends and what every line on it is nearest to.
+        only = DateTime(year, month + 1, 0);
+        evidence = line;
+      }
+    }
+  }
+  if (seen.length == 1 && only != null && evidence != null) {
+    return (date: only, evidence: evidence);
+  }
+  return null;
+}
+
+/// What a Malaysian statement calls its own date, in both languages.
+///
+/// Ordered so nothing here is a prefix of a later entry in a way that
+/// would take the wrong half: every one is matched on the whole phrase.
+const _periodLabels = <String>[
+  'statement date',
+  'tarikh penyata',
+  'date of statement',
+  'statement period',
+  'penyata bagi tempoh',
+  'tempoh penyata',
+  'bagi tempoh',
+  'for the period',
+  'period covered',
+  'period from',
+];
+
+/// Every whole date in one line of text, in the orders Malaysia writes.
+///
+/// NEVER MM/DD/YYYY. `05/03/2026` is the fifth of March here and the
+/// third of May in an American layout, and there is nothing in the
+/// string to tell them apart — so the rule is the local one, applied
+/// without exception rather than guessed at per document.
+List<DateTime> _datesIn(String text) {
+  final out = <DateTime>[];
+  void add(DateTime? d) {
+    if (d != null && !out.contains(d)) out.add(d);
+  }
+
+  // 2025-10-31. Taken first: run after the day-first pattern it would
+  // be reading the tail of its own match.
+  for (final m
+      in RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b').allMatches(text)) {
+    add(_date(int.parse(m.group(1)!), int.parse(m.group(2)!),
+        int.parse(m.group(3)!)));
+  }
+
+  // 31/10/2025, 31-10-25, 31.10.2025
+  for (final m in RegExp(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b')
+      .allMatches(text)) {
+    var year = int.parse(m.group(3)!);
+    if (year < 100) year += 2000;
+    add(_date(year, int.parse(m.group(2)!), int.parse(m.group(1)!)));
+  }
+
+  // 31 OCT 2025, 31 Oktober 2025, 31-Dis-2025
+  for (final m
+      in RegExp(r'\b(\d{1,2})[\s-]([A-Za-z]{3,9})\.?[\s-](\d{2,4})\b')
+          .allMatches(text)) {
+    final month = _monthNumber(m.group(2)!);
+    if (month == null) continue;
+    var year = int.parse(m.group(3)!);
+    if (year < 100) year += 2000;
+    add(_date(year, month, int.parse(m.group(1)!)));
+  }
+
+  return out;
+}
+
+/// A month name in either of the languages a Malaysian statement is
+/// printed in.
+///
+/// Matched on the first three letters, which is what distinguishes
+/// every month in both languages and costs nothing — `Sep`, `September`
+/// and `SEPTEMBER` are one entry, and so are `Ogo` and `OGOS`.
+///
+/// THE MALAY HALF WAS MISSING, and it was missing silently. A statement
+/// printing `03 OGOS` or `17 DIS` returned null here, which the caller
+/// reads as "no date could be read" — so a Bahasa Melayu statement came
+/// back as every line unreadable, over the language it was printed in.
+/// Maybank, CIMB and Bank Islam all issue them.
+///
+/// Five of the twelve differ enough to matter: MAC, MEI, OGOS, OKTOBER
+/// and DISEMBER. The other seven share their first three letters with
+/// English and were already being read by accident.
 int? _monthNumber(String name) {
-  const months = [
-    'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-    'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-  ];
+  const months = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    // Bahasa Melayu, where it differs. `apr`, `jan`, `feb`, `jun`,
+    // `jul`, `nov` and `sep` are spelled the same for three letters.
+    'mac': 3, 'mei': 5, 'ogo': 8, 'okt': 10, 'dis': 12,
+  };
   if (name.length < 3) return null;
-  final at = months.indexOf(name.toLowerCase().substring(0, 3));
-  return at < 0 ? null : at + 1;
+  return months[name.toLowerCase().substring(0, 3)];
 }
 
 /// Rejects the impossible rather than letting DateTime roll it over —
@@ -778,9 +956,20 @@ double? _mt940Amount(String raw) {
 /// whole import is refused, naming the line. So the balance is passed
 /// through whenever the reader gave one, and that check is the reason
 /// this parser is allowed to be naive about the sign.
-StatementParse scannedStatement(OcrExtraction? read) {
+StatementParse scannedStatement(
+  OcrExtraction? read, {
+  /// The statement's own date, read off the file's text layer rather
+  /// than asked of a model. `statementPeriodFromText`.
+  ///
+  /// It OUTRANKS `document_date`, and that is the point of it: one was
+  /// printed on the page and extracted, the other was a question put to
+  /// a reader that may decline to answer — and did, on two RHB
+  /// statements, taking a hundred and two faultless lines down with it.
+  ({DateTime date, String evidence})? period,
+}) {
   final rows = <StatementRow>[];
   final problems = <String>[];
+  final notices = <String>[];
 
   // The balance printed BEFORE the first line and AFTER the last, where
   // the statement prints one.
@@ -798,6 +987,12 @@ StatementParse scannedStatement(OcrExtraction? read) {
   // year, because neither the statement's own date nor any other line
   // supplied one. One cause, however many lines it took down.
   var unplaceable = 0;
+
+  // Lines placed in a year by the file's own text layer. Counted so it
+  // can be SAID: a year that came from somewhere other than the line
+  // itself is a thing somebody checking their statement is entitled to
+  // know about, and to disagree with.
+  var placedFromPeriod = 0;
 
   final source = read?.rows ?? const <Map<String, String>>[];
   for (var i = 0; i < source.length; i++) {
@@ -852,13 +1047,14 @@ StatementParse scannedStatement(OcrExtraction? read) {
     // December's transactions into this year.
     if (date == null && rawDate != null) {
       final partial = parsePartialStatementDate(rawDate);
-      final anchor = read?.documentDate ?? anchorDate;
+      final anchor = period?.date ?? read?.documentDate ?? anchorDate;
       if (partial != null && anchor != null) {
         date = resolveStatementYear(
           day: partial.day,
           month: partial.month,
           near: anchor,
         );
+        if (period != null) placedFromPeriod++;
       }
     }
 
@@ -912,8 +1108,22 @@ StatementParse scannedStatement(OcrExtraction? read) {
     );
   }
 
+  if (placedFromPeriod > 0 && period != null) {
+    notices.add(
+      '$placedFromPeriod ${placedFromPeriod == 1 ? 'line prints' : 'lines print'} '
+      'a day and a month with no year. They have been placed in the year '
+      'nearest ${_day(period.date)}, which is the statement\'s own date as '
+      'printed on the file — "${period.evidence}". Nothing was guessed from '
+      'today\'s date.',
+    );
+  }
+
   final put = balancesDecideTheSigns(rows, leading: leading, trailing: trailing);
-  return StatementParse(put.rows, [...problems, ...put.problems], put.notices);
+  return StatementParse(
+    put.rows,
+    [...problems, ...put.problems],
+    [...notices, ...put.notices],
+  );
 }
 
 /// The sign of every scanned line, settled by the column that proves it.
@@ -1046,6 +1256,14 @@ const _sen = 0.005;
 /// file is parsing, and it is tested without Flutter.
 String _money(double v) => v.toStringAsFixed(2);
 
+/// A date in a sentence somebody reads, rather than in a field.
+///
+/// Day first, because this is Malaysia and the notice sits beside a
+/// statement printed the same way.
+String _day(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/'
+    '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
 /// Which of the dialog's three sources is previewed and imported.
 ///
 /// A photograph wins over whatever is in the text box, because it is
@@ -1058,6 +1276,29 @@ String _money(double v) => v.toStringAsFixed(2);
 /// Its own function rather than an expression inside `build`, because
 /// the precedence is the rule and a rule inside a widget that needs a
 /// camera to reach cannot be asserted.
+/// What stands above the notices in the import dialog.
+///
+/// A pure function for one line of text, because that line was WRONG in
+/// production and nothing could have caught it. It read:
+///
+///     "$n lines were corrected against the running balance"
+///
+/// which was true while a sign repair was the only notice that existed
+/// and false the moment a second kind did. It was wrong twice over. It
+/// named a cause — the running balance — that no longer applied to
+/// every notice under it, so a year taken off the statement header was
+/// announced as an arithmetic correction. And it counted NOTICES as
+/// LINES, which were the same number only by accident: one notice
+/// covering fifty-five undated lines would have introduced itself as
+/// one line.
+///
+/// Both facts belong to the notices themselves, each of which says its
+/// own count and its own cause. So this says neither, and the dialog
+/// has no arithmetic of its own left to get wrong.
+String noticesHeading(int count) => count == 1
+    ? 'One thing worth knowing before you import'
+    : '$count things worth knowing before you import';
+
 StatementParse? statementPreview(StatementParse? scanned, String typed) =>
     scanned ?? (typed.trim().isEmpty ? null : parseStatement(typed));
 

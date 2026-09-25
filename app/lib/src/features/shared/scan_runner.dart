@@ -33,6 +33,45 @@ bool looksLikePdf(String? mimeType, Uint8List? bytes) =>
         bytes[2] == 0x44 && // D
         bytes[3] == 0x46); //  F
 
+/// The text a PDF already carries, where this machine can read one.
+///
+/// ## Why a second reader, next to the one that reads pictures
+///
+/// Because a PDF exported by a bank is not a picture. RHB, Maybank and
+/// CIMB all export statements with a real text layer: the account
+/// number, the period, every narration and every figure are in the
+/// file as characters. We were sending them to a vision model to be
+/// LOOKED AT, and when the model declined to report the statement's own
+/// date — which it did, on two live statements — a hundred and two
+/// faultless lines were discarded for want of a year that was sitting
+/// in the file the whole time.
+///
+/// `web/pdfjs/` has been vendored here for two years for the on-device
+/// reader. This is the same engine asked the same question by the
+/// statement importer, which never thought to ask it.
+///
+/// ## It answers null rather than failing
+///
+/// Every caller so far uses this to IMPROVE a reading it already has,
+/// never to replace one. A photographed statement has no text layer, a
+/// phone has no PDF engine at all (`onDeviceReadsPdf` is false under
+/// `dart:io`), and an encrypted PDF throws from inside `pdf.js`. None
+/// of those is a failure worth surfacing: they are all simply "no text
+/// here", and the reading carries on exactly as it did before.
+Future<String?> pdfTextLayer(Uint8List? bytes, String? mimeType) async {
+  if (bytes == null || !looksLikePdf(mimeType, bytes)) return null;
+  if (!onDeviceReadsPdf) return null;
+  try {
+    final text = await readTextFromPdfBytes(bytes);
+    return text.trim().isEmpty ? null : text;
+  } catch (_) {
+    // A scanned PDF with no text layer, a password on the file, an
+    // engine that would not load. The document still goes to the
+    // reader; this was only ever the better answer where there was one.
+    return null;
+  }
+}
+
 /// Whether a server reading that failed is worth trying HERE instead.
 ///
 /// Asked for in one sentence: "when the ai model is not reachable it

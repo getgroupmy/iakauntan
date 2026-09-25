@@ -1,0 +1,388 @@
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:iakauntan/src/data/ocr_repository.dart';
+import 'package:iakauntan/src/features/banking/statement_import.dart';
+import 'package:iakauntan/src/features/shared/scan_runner.dart';
+
+/// The statement's own date, taken off the file instead of asked for.
+///
+/// ## What went wrong, on real paper
+///
+/// Two RHB statements, 43 and 59 rows, read faultlessly by a vision
+/// model: right target, brought-forward and carried-forward rows in the
+/// proper shape, signed amounts, running balances, multi-line
+/// narrations preserved. Every line printed `01 Oct` or `23 Jan` — a
+/// day and a month — and `document_date` came back NULL.
+///
+/// `resolveStatementYear` then has no anchor. It refuses to guess, by
+/// design, because a statement photographed in January whose lines are
+/// last December would otherwise be filed into a financial year that
+/// may already be closed. So a hundred and two perfect lines were
+/// thrown away for want of one field.
+///
+/// And RHB exports a TEXT PDF. The period is printed on page one as
+/// selectable text, and this repository has had `pdf.js` vendored under
+/// `web/pdfjs/` the whole time. The year was never missing. It was
+/// never looked at.
+///
+/// ## The rule these assertions are really defending
+///
+/// A model is ASKED and may decline. A text layer is READ. Where the
+/// evidence is printed, deterministic and already in hand, it outranks
+/// the answer to a question — which is the single most important thing
+/// in the handover this came from, and the reason `period` beats
+/// `document_date` below rather than filling in behind it.
+///
+/// The other half is restraint. A statement's text layer is thick with
+/// dates: a print date, a payment due date, an address with a postcode
+/// that reads like a year, and every transaction line. A reader that
+/// takes the first thing shaped like a date would place the whole
+/// statement on the strength of a due date — so most of what follows is
+/// about what this must REFUSE to read.
+void main() {
+  group('a labelled statement date', () {
+    test('is read in English, day first', () {
+      final found = statementPeriodFromText('''
+RHB BANK BERHAD
+CURRENT ACCOUNT STATEMENT
+Account No : 2141 0400 0123 45
+Statement Date : 31/10/2025
+''');
+
+      expect(found, isNotNull);
+      expect(found!.date, DateTime(2025, 10, 31));
+      // The line itself, so the notice can quote the page rather than
+      // asking somebody to take its word for it.
+      expect(found.evidence, contains('Statement Date'));
+    });
+
+    test('and in Malay, which is how half of them print it', () {
+      final found = statementPeriodFromText(
+        'PENYATA AKAUN SEMASA\nTarikh Penyata 31 Oktober 2025\n',
+      );
+
+      expect(found?.date, DateTime(2025, 10, 31));
+    });
+
+    test('a period gives its END, not its start', () {
+      // The statement is named by where it closes, and the closing
+      // balance is what the chain has to reach.
+      final found = statementPeriodFromText(
+        'Statement Period 01/10/2025 - 31/10/2025',
+      );
+
+      expect(found?.date, DateTime(2025, 10, 31));
+    });
+
+    test('and a label in one table cell finds the date in the next', () {
+      // `pdf.js` emits a two-cell row as two lines. A label plainly
+      // there, with the date one line down, is not a document without
+      // a statement date.
+      final found = statementPeriodFromText(
+        'Tarikh Penyata\n30/09/2025\n',
+      );
+
+      expect(found?.date, DateTime(2025, 9, 30));
+    });
+
+    test('is preferred over a payment due date sitting beside it', () {
+      // A credit-card statement prints both, the due date LATER, and
+      // taking the wrong one files every line three weeks out.
+      final found = statementPeriodFromText('''
+Payment Due Date 20/11/2025
+Statement Date 31/10/2025
+Minimum Payment RM 50.00
+''');
+
+      expect(found?.date, DateTime(2025, 10, 31));
+    });
+  });
+
+  group('what it refuses to read', () {
+    test('a page full of transaction dates and no label at all', () {
+      // The whole point. These are the lines, not the header, and
+      // placing a statement from its first transaction is a guess
+      // wearing a date's clothes.
+      final found = statementPeriodFromText('''
+01/10 TRANSFER TO LIM HARDWARE 1,250.00 980,124.85
+03/10 DUITNOW QR 45.90 980,078.95
+05/10 IBG CREDIT 12,000.00 992,078.95
+''');
+
+      expect(found, isNull);
+    });
+
+    test('a header naming two different months', () {
+      // Two plausible readings is a null and a sentence. Never infer a
+      // year when two interpretations remain open.
+      final found = statementPeriodFromText(
+        'STATEMENT\nOctober 2025\nBrought forward from September 2025\n',
+      );
+
+      expect(found, isNull);
+    });
+
+    test('a bare numeric 10/2025, which is also the middle of a date', () {
+      final found = statementPeriodFromText('PENYATA 10/2025');
+
+      expect(found, isNull);
+    });
+
+    test('a month and year past the header, where the lines live', () {
+      // Forty lines in, this is a narration. A description reading
+      // "RENTAL MAY 2024" must not out-vote the header.
+      final padding = List.filled(60, 'DUITNOW TRANSFER 100.00').join('\n');
+      final found = statementPeriodFromText('$padding\nRENTAL MAY 2024\n');
+
+      expect(found, isNull);
+    });
+
+    test('an impossible date, rather than rolling it over', () {
+      // 31 February becoming 3 March would anchor the statement to a
+      // day nobody printed.
+      expect(statementPeriodFromText('Statement Date 31/02/2026'), isNull);
+    });
+
+    test('and nothing at all', () {
+      expect(statementPeriodFromText(''), isNull);
+      expect(statementPeriodFromText('   \n\n  '), isNull);
+    });
+  });
+
+  group('the header may name its own month', () {
+    test('when exactly one month and year appears and nothing contradicts', () {
+      final found = statementPeriodFromText('''
+MAYBANK ISLAMIC BERHAD
+PENYATA BAGI OKTOBER 2025
+Akaun : 5123 4567 8901
+''');
+
+      // The last day of it, because that is where a period ends and
+      // what every line on it is nearest to.
+      expect(found?.date, DateTime(2025, 10, 31));
+    });
+
+    test('and a four-digit number that is not a year does not make one', () {
+      // "MAR 1234" is a reference, not March of the year 1234.
+      expect(statementPeriodFromText('REF MAR 1234'), isNull);
+    });
+  });
+
+  /// Day-first, without exception.
+  ///
+  /// `05/03/2026` is the fifth of March in Malaysia and the third of
+  /// May in an American layout, and there is nothing in the string to
+  /// tell them apart. The rule is the local one, applied always rather
+  /// than sniffed at per document — a sniffing parser gets it right on
+  /// the statements where the day exceeds twelve and silently wrong on
+  /// the twelve days a month where it does not.
+  group('never MM/DD/YYYY', () {
+    test('the fifth of March, not the third of May', () {
+      final found = statementPeriodFromText('Statement Date 05/03/2026');
+
+      expect(found?.date, DateTime(2026, 3, 5));
+    });
+  });
+
+  /// Five of the twelve Malay months do not share three letters with
+  /// their English name. `_monthNumber` knew none of them, so a
+  /// Bahasa Melayu statement came back as every line unreadable — over
+  /// the language it was printed in, on statements Maybank, CIMB and
+  /// Bank Islam all issue.
+  group('a month printed in Malay', () {
+    void reads(String raw, int day, int month) {
+      final p = parsePartialStatementDate(raw);
+      expect(p, isNotNull, reason: '"$raw" read as nothing');
+      expect(p!.day, day);
+      expect(p.month, month);
+    }
+
+    test('the five that differ', () {
+      reads('01 MAC', 1, 3);
+      reads('05 MEI', 5, 5);
+      reads('03 OGOS', 3, 8);
+      reads('10 OKT', 10, 10);
+      reads('17 DIS', 17, 12);
+    });
+
+    test('the long forms too', () {
+      reads('17 Disember', 17, 12);
+      reads('03 Ogos', 3, 8);
+    });
+
+    test('and English still reads the way it did', () {
+      reads('03 SEP', 3, 9);
+      reads('3-Sep', 3, 9);
+      reads('25 December', 25, 12);
+    });
+
+    test('a word that is not a month is still nothing', () {
+      // The failure a map makes easy: a lookup that returns a number
+      // for anything three letters long would turn "TRANSFER" into a
+      // date.
+      expect(parsePartialStatementDate('03 TRANSFER'), isNull);
+      expect(parsePartialStatementDate('03 XYZ'), isNull);
+    });
+  });
+
+  /// The line above the notices, which was false in production.
+  ///
+  /// It read "$n lines were corrected against the running balance" —
+  /// written when a sign repair was the only notice there was. A year
+  /// taken off the statement header is not an arithmetic correction and
+  /// was about to be announced as one, and the count was a count of
+  /// NOTICES wearing the word "lines": the new notice covers fifty-five
+  /// lines in one sentence and would have called itself one.
+  _platformSeam();
+
+  group('the heading above the notices', () {
+    test('claims no cause, because there is more than one', () {
+      for (final n in [1, 2, 7]) {
+        expect(noticesHeading(n), isNot(contains('running balance')));
+        expect(noticesHeading(n), isNot(contains('corrected')));
+      }
+    });
+
+    test('and counts no lines, because it cannot know them', () {
+      // "1 line" over a notice about fifty-five of them. The count of
+      // notices is not the count of lines and has not been since a
+      // notice was allowed to cover more than one.
+      expect(noticesHeading(1), isNot(contains('line')));
+      expect(noticesHeading(3), isNot(contains('lines')));
+    });
+
+    test('reads as English at one and at many', () {
+      expect(noticesHeading(1), 'One thing worth knowing before you import');
+      expect(noticesHeading(3), '3 things worth knowing before you import');
+    });
+  });
+
+  group('the reading and the file together', () {
+    OcrExtraction read(List<Map<String, String>> rows, {String? date}) =>
+        OcrExtraction.fromJson({
+          'rows': rows,
+          if (date != null) 'document_date': date,
+        });
+
+    final october = (date: DateTime(2025, 10, 31), evidence: 'Statement Date 31/10/2025');
+
+    List<Map<String, String>> rhb() => [
+          {'description': 'B/F BALANCE', 'running_balance': '981,374.85'},
+          {
+            'transaction_date': '01 Oct',
+            'description': 'TRANSFER TO LIM HARDWARE',
+            'amount': '-1,250.00',
+            'running_balance': '980,124.85',
+          },
+          {
+            'transaction_date': '03 Oct',
+            'description': 'IBG CREDIT',
+            'amount': '12,000.00',
+            'running_balance': '992,124.85',
+          },
+        ];
+
+    test('places the lines the reader could not', () {
+      // The reported case exactly: day-and-month lines, document_date
+      // null, and the year sitting in the file's text layer all along.
+      final parse = scannedStatement(read(rhb()), period: october);
+
+      expect(parse.rows, hasLength(2));
+      expect(parse.rows.first.date, DateTime(2025, 10, 1));
+      expect(parse.rows.last.date, DateTime(2025, 10, 3));
+      expect(parse.problems, isEmpty);
+    });
+
+    test('and says where the year came from', () {
+      final parse = scannedStatement(read(rhb()), period: october);
+
+      final notice = parse.notices.singleWhere(
+        (n) => n.contains('no year'),
+        orElse: () => '',
+      );
+      expect(notice, isNotEmpty);
+      // The count, the date used, and the line it was read off — so
+      // somebody can disagree with it against the page.
+      expect(notice, contains('2'));
+      expect(notice, contains('31/10/2025'));
+      expect(notice, contains('Statement Date 31/10/2025'));
+    });
+
+    test('the file OUTRANKS what the reader said', () {
+      // The model offered a year and the page printed one. The page
+      // wins: one was extracted, the other was answered.
+      final parse = scannedStatement(
+        read(rhb(), date: '2024-10-31'),
+        period: october,
+      );
+
+      expect(parse.rows.first.date.year, 2025);
+    });
+
+    test('and with neither, nothing is guessed', () {
+      final parse = scannedStatement(read(rhb()));
+
+      expect(parse.rows, isEmpty);
+      expect(parse.problems, hasLength(1));
+      expect(parse.problems.single, contains('2 lines print'));
+      expect(parse.problems.single, contains('Nothing has been guessed'));
+    });
+
+    test('a statement whose lines carry their own year ignores the file', () {
+      // Nothing to place, so nothing to say. A notice on a statement
+      // that never needed one is noise, and noise is how the real ones
+      // stop being read.
+      final parse = scannedStatement(
+        read([
+          {
+            'transaction_date': '03/09/2026',
+            'description': 'TRANSFER',
+            'amount': '-1,250.00',
+          },
+        ]),
+        period: october,
+      );
+
+      expect(parse.rows.single.date, DateTime(2026, 9, 3));
+      expect(parse.notices, isEmpty);
+    });
+  });
+}
+
+/// The reader that made this possible, asked what it can do here.
+///
+/// `pdfTextLayer` is the seam between a pure parser and a platform.
+/// Under `dart:io` — which is what a `flutter test` VM is, and what a
+/// phone is — `onDeviceReadsPdf` is false: ML Kit takes an image and
+/// nothing else, and there is no 1.8MB of `pdf.js` on a phone to make
+/// up the difference.
+///
+/// So what these assert is the DEGRADATION, which is the half that
+/// runs everywhere. Every caller uses this to improve a reading it
+/// already has, never to replace one — and a null has to mean "no text
+/// here", quietly, or a phone would start refusing statements a
+/// browser reads and a photograph would start failing instead of
+/// scanning.
+void _platformSeam() {
+  group('the PDF text layer, where this machine has no engine for one', () {
+    test('answers null rather than throwing', () async {
+      // `readTextFromPdfBytes` under dart:io throws UnsupportedError by
+      // design. If that ever reaches the importer, pressing Upload on a
+      // phone stops importing statements at all.
+      final pdf = Uint8List.fromList([0x25, 0x50, 0x44, 0x46, 0x2D]);
+
+      expect(await pdfTextLayer(pdf, 'application/pdf'), isNull);
+    });
+
+    test('and null for anything that is not a PDF at all', () async {
+      // A photographed statement. The commonest case there is, and it
+      // must cost nothing -- no engine loaded, no exception caught.
+      final jpeg = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+
+      expect(await pdfTextLayer(jpeg, 'image/jpeg'), isNull);
+      expect(await pdfTextLayer(null, 'application/pdf'), isNull);
+    });
+  });
+}
