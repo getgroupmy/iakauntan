@@ -34,7 +34,7 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Phase 1: what a statement says about itself |
+| Head at time of writing | UOB has a text layer after all |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
@@ -2424,6 +2424,58 @@ form that returns null on error and loading. The gate has a budget of
 Twenty-two assertions in `statement_header_test.dart`, two more in the
 corpus gate, fourteen mutants across two sweeps killed with both controls surviving, 38 deno
 tests, analyzer exit 0.
+
+## UOB, and a correction I owed
+
+I told the user UOB's statements were "largely inline images" and would
+stay a vision-model job. That came from page one of ONE file — a page of
+legal boilerplate with the table headings rendered — and it was wrong
+about the document.
+
+Four more UOB statements have a full text layer: around eight thousand
+characters in the first three pages, every transaction in it.
+
+### The shape, which no other bank here prints
+
+```
+Basic Savings Acct* A/C Number: 1-2-3 RM 01 FEB 2021  To 28 FEB 2021
+```
+
+The period is on the same line as the account number with NO LABEL
+anywhere — not `Statement Period`, not `Tarikh Penyata`, nothing. What
+resolves it is the UNLABELLED path: one month and one year in the
+header region and nothing contradicting them. It lands on the period
+END on all four (28 Feb 2021, 31 Mar 2023, 31 May 2023, 30 Jun 2023),
+because the last day of the only month named is where the period ends.
+
+Line dates are `01 FEB 01 FEB ...` — a transaction date and a value
+date, neither carrying a year — and place against that period.
+
+Four fixtures in `statement_period_test.dart`, account number and name
+redacted and the layout intact, plus the guard: a header naming TWO
+months refuses rather than guesses.
+
+### And the limit that remains
+
+`_pagesRead = 3` in `text_reader_web.dart` reads the first three pages
+only. Fine for a header, and these statements run to 6, 12, 18 and 22
+pages — so every transaction past page three still depends on the
+model, not on the text layer.
+
+## The user was testing a stale build
+
+Worth knowing before reading any bug report from this stretch. A
+screenshot showed the toast:
+
+> A reader has to be asked for the lines, which a platform
+> administrator sets up under Kinds of document.
+
+That string was DELETED in `faa23d90`, which deployed and went green.
+So the browser was serving a cached Flutter web build from before that
+commit, and every test the user ran that day was against code
+predating the whole day's work. `web/sw_rescue.js` exists because this
+has happened before. A hard reload, or unregistering the service
+worker, is the fix.
 
 ## This session's commits
 

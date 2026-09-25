@@ -301,6 +301,70 @@ Akaun : 5123 4567 8901
     });
   });
 
+  /// UOB, which I was wrong about.
+  ///
+  /// Earlier in this work I told the user UOB's statements were
+  /// "largely inline images" and would stay a vision-model job. That
+  /// was drawn from page one of ONE file, which is a page of legal
+  /// boilerplate with the table headings rendered — and it was wrong
+  /// about the document. Four more UOB statements have a full text
+  /// layer: around eight thousand characters in the first three pages,
+  /// every transaction in it.
+  ///
+  /// It is worth the correction being a test rather than a note,
+  /// because the shape UOB prints is one no other bank here does:
+  ///
+  ///     Basic Savings Acct* A/C Number: 1-2-3 RM 01 FEB 2021 To 28 FEB 2021
+  ///
+  /// The period is on the same line as the account number, with no
+  /// label anywhere — not `Statement Period`, not `Tarikh Penyata`,
+  /// nothing. What resolves it is the unlabelled path: one month and
+  /// one year in the header region and nothing contradicting them.
+  ///
+  /// The account number and name are redacted; the layout is not.
+  group('UOB prints its period with no label at all', () {
+    ({DateTime date, String evidence})? read(String month, String year,
+        String lastDay) =>
+        statementPeriodFromText(
+          'Aktiviti Akaun Anda / Account Activities for Your\n'
+          'Basic Savings Acct* A/C Number: 1-2-3 RM '
+          '01 $month $year To $lastDay $month $year\n'
+          'Tarikh\nTransaksi\nTrans Date\n'
+          'Deskripsi Transaksi\nTransaction Description\n'
+          'Keluar\nWithdrawal\nSimpanan\nDeposit\nBaki\nBalance\n'
+          'BALANCE B/F 1,112.38\n',
+        );
+
+    test('and the period still comes out, at its END', () {
+      expect(read('FEB', '2021', '28')?.date, DateTime(2021, 2, 28));
+      expect(read('MAY', '2023', '31')?.date, DateTime(2023, 5, 31));
+      expect(read('JUN', '2023', '30')?.date, DateTime(2023, 6, 30));
+      expect(read('MAR', '2023', '31')?.date, DateTime(2023, 3, 31));
+    });
+
+    test('its lines print a day and a month, which place against that', () {
+      // `01 FEB 01 FEB DuitNow/Instant Trf` — a transaction date and a
+      // value date, neither carrying a year.
+      final p = parsePartialStatementDate('01 FEB');
+      expect(p, isNotNull);
+      expect(p!.day, 1);
+      expect(p.month, 2);
+    });
+
+    test('and a second month in the header would refuse, not guess', () {
+      // The guard that makes the unlabelled path safe. UOB's header
+      // names one month twice; a header naming two is two plausible
+      // readings and gets a null.
+      final found = statementPeriodFromText(
+        'Basic Savings Acct* A/C Number: 1-2-3 RM '
+        '01 FEB 2021 To 28 FEB 2021\n'
+        'Brought forward from JAN 2021\n',
+      );
+
+      expect(found, isNull);
+    });
+  });
+
   /// `01Jan` -- the reported one, with a screenshot.
   ///
   /// "0 lines read, 27 could not be", then five copies of
