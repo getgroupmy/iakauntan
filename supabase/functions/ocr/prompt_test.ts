@@ -139,3 +139,42 @@ Deno.test("the line-level rule still says not to add a year", () => {
   assertStringIncludes(SYSTEM, "year from the");
   assertStringIncludes(SYSTEM, "01 Oct");
 });
+
+/**
+ * A statement says things about itself, not only about its lines.
+ *
+ * The period, the two balances and the account it belongs to. None of
+ * it was asked for, so the one check that spans a whole document could
+ * not be made at all:
+ *
+ *     opening + sum(every amount) == closing
+ *
+ * The running-balance walk catches a line misread BETWEEN two balances.
+ * It cannot catch a line missing from the end, a statement read from
+ * the wrong page, or a first line never returned — each of which closes
+ * a chain that was never the whole statement.
+ *
+ * Each paragraph here holds up code in `statement_import.dart`, so
+ * dropping one silently disarms a check over there.
+ */
+Deno.test("a statement is asked about itself as well as its lines", () => {
+  assertStringIncludes(SYSTEM, "AND THE STATEMENT ITSELF, in `statement`");
+});
+
+Deno.test("the period is named as what places every line", () => {
+  // `resolveStatementYear` measures a bare `03/09` against it.
+  assertStringIncludes(SYSTEM, "THE PERIOD IS WHAT PLACES EVERY LINE");
+  assertStringIncludes(SYSTEM, "period_end");
+});
+
+Deno.test("the two balances are asked for as printed, never computed", () => {
+  // A closing balance worked out by adding up the rows agrees with the
+  // rows by construction and checks nothing at all.
+  assertStringIncludes(SYSTEM, "THE TWO BALANCES ARE A CHECK");
+  assertStringIncludes(SYSTEM, "cannot check the rows");
+});
+
+Deno.test("and four characters of the account number, never the whole", () => {
+  assertStringIncludes(SYSTEM, "FOUR CHARACTERS OF THE ACCOUNT NUMBER");
+  assertStringIncludes(SYSTEM, "even where the statement prints the number");
+});

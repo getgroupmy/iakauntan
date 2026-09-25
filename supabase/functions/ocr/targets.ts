@@ -188,6 +188,86 @@ export function targetSchema(
     };
   }
 
+  // The header a repeating document carries, beside the lines.
+  //
+  // A bank statement is not only its rows. It prints a period, an
+  // opening and a closing balance, and the account it belongs to — and
+  // until now the reader was asked for NONE of it, so the one check
+  // that would catch a dropped line across the whole document could not
+  // be made at all:
+  //
+  //     opening + sum(every amount) == closing
+  //
+  // `import_bank_transactions` walks the chain line to line, which
+  // catches a line misread BETWEEN two balances. It cannot catch a line
+  // missing from the END, or a statement read from the wrong page, or
+  // the first line never returned — all of which close a chain that was
+  // never the whole statement. The footing does.
+  //
+  // `account_number_tail` is four characters and not the account
+  // number. Enough to say "this statement may not be for the account
+  // you are importing into", which is worth saying; not enough to be
+  // worth leaking, which the whole number would be.
+  if (targets.some((t) => t.repeats)) {
+    const header: Record<string, unknown> = {
+      period_start: {
+        type: ["string", "null"],
+        description:
+          "The first day the statement covers, exactly as printed. " +
+          "Null if the statement does not print a period.",
+      },
+      period_end: {
+        type: ["string", "null"],
+        description:
+          "The last day the statement covers, exactly as printed — the " +
+          "statement date where only one date is printed. This is what " +
+          "places a line reading `03/09` in a year, so it matters more " +
+          "than it looks.",
+      },
+      opening_balance: {
+        type: ["string", "null"],
+        description:
+          "The balance the statement opens at, as printed, with any " +
+          "DR, CR, minus or brackets kept. `BAKI DIBAWA KE HADAPAN`, " +
+          "`BALANCE B/F`, `OPENING BALANCE`, or the figure in the " +
+          "summary box.",
+      },
+      closing_balance: {
+        type: ["string", "null"],
+        description:
+          "The balance the statement closes at, as printed, the same " +
+          "way. `BALANCE C/F`, `CLOSING BALANCE`, `BAKI PENUTUPAN`.",
+      },
+      account_number_tail: {
+        type: ["string", "null"],
+        description:
+          "The LAST FOUR characters of the account or card number, and " +
+          "nothing else — `4001` from `**** 4001`, `2574767` gives " +
+          "`4767`. Never the whole number, even where the statement " +
+          "prints it in full.",
+      },
+      institution: {
+        type: ["string", "null"],
+        description:
+          "The bank or issuer whose statement this is, as printed on " +
+          "the page.",
+      },
+    };
+    schema.statement = {
+      type: ["object", "null"],
+      additionalProperties: false,
+      // Every key named, as everywhere else here: strict mode rejects a
+      // nested object without `required`, and the rejection reads to a
+      // bookkeeper as the document being unreadable.
+      required: Object.keys(header),
+      description:
+        "What the whole document says about itself, as opposed to what " +
+        "any one line says. Fill this for a destination that takes " +
+        "rows; leave it null for one that takes a single record.",
+      properties: header,
+    };
+  }
+
   // `rows` exists only where some target repeats. A bank statement is
   // not one record with fields, it is forty of them with the same four
   // — and a schema that offered only `fields` would get the first line,

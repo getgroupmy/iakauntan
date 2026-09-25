@@ -267,7 +267,18 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     // paste on the way out.
     final parsed = await showDialog<StatementParse>(
       context: context,
-      builder: (_) => const _PasteDialog(),
+      builder: (_) => _PasteDialog(
+        // `.valueOrNull`, not `.value`: `AsyncError.value` THROWS, so
+        // the `??` beside it never runs and an errored provider would
+        // take the Import button down with it. `check_async_value.py`
+        // caught this one.
+        intoAccountNumber:
+            (ref.read(bankAccountsProvider).valueOrNull ?? const [])
+            .cast<Map<String, dynamic>>()
+            .where((b) => b['id'] == _bankAccountId)
+            .map((b) => b['account_number']?.toString())
+            .firstOrNull,
+      ),
     );
     if (parsed == null || !mounted) return;
 
@@ -296,8 +307,9 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
       // with, and somebody who pastes a balance column deserves to know
       // the check happened rather than to assume it.
       if (checks > 0) 'balance follows on $checks lines',
-      if (parsed.problems.isNotEmpty)
-        '${parsed.problems.length} could not be read',
+      // `unreadable`, not `problems.length`. One message can cover
+      // fifty-five undated lines and a footing failure covers none.
+      if (parsed.unreadable > 0) '${parsed.unreadable} could not be read',
     ];
 
     // The figure the difference gets measured against, taken from the
@@ -687,7 +699,16 @@ class _LineTile extends StatelessWidget {
 }
 
 class _PasteDialog extends ConsumerStatefulWidget {
-  const _PasteDialog();
+  const _PasteDialog({this.intoAccountNumber});
+
+  /// The account number of the bank account this import is going into.
+  ///
+  /// Passed in rather than looked up, because the dialog does not know
+  /// which account the person pressed Upload beside — the screen does,
+  /// and that is the one question about the document only the screen
+  /// can answer. Null where the account has no number recorded, which
+  /// is not a failure: `accountMismatch` stays silent on an absence.
+  final String? intoAccountNumber;
 
   @override
   ConsumerState<_PasteDialog> createState() => _PasteDialogState();
@@ -838,7 +859,15 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
     if (!mounted) return;
     final period = text == null ? null : statementPeriodFromText(text);
 
-    final parse = scannedStatement(staged.read, period: period);
+    // The account this is going into, so the statement can be checked
+    // against it. `0683`'s five columns describe a LINE; this is the
+    // one question about the document that only the screen can answer,
+    // because only the screen knows where the person pressed Upload.
+    final parse = scannedStatement(
+      staged.read,
+      period: period,
+      intoAccountNumber: widget.intoAccountNumber,
+    );
     if (parse.rows.isEmpty && parse.problems.isEmpty) {
       // THREE different failures wore one sentence, and the sentence
       // was wrong about all of them.
@@ -1004,7 +1033,7 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
                 const SizedBox(height: 12),
                 Text(
                   '${preview.rows.length} lines read'
-                  '${preview.problems.isEmpty ? '' : ', ${preview.problems.length} could not be'}',
+                  '${preview.unreadable == 0 ? '' : ', ${preview.unreadable} could not be'}',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: preview.problems.isEmpty

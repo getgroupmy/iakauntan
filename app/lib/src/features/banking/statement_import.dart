@@ -179,7 +179,31 @@ class StatementRow {
 /// What came back from reading a paste: the rows, and the lines that
 /// could not be read.
 class StatementParse {
-  const StatementParse(this.rows, this.problems, [this.notices = const []]);
+  const StatementParse(
+    this.rows,
+    this.problems, [
+    this.notices = const [],
+    int? unreadable,
+  ]) : _unreadable = unreadable;
+
+  final int? _unreadable;
+
+  /// HOW MANY LINES were not imported — which is not how many messages
+  /// say so.
+  ///
+  /// It used to be `problems.length`, and that was right while every
+  /// problem was one line. `95e08146` broke it: fifty-five lines that
+  /// print a day and a month with no year are ONE failure with one
+  /// cause, and saying it fifty-five times filled the dialog with the
+  /// same sentence and buried the reason. So one message now covers
+  /// them all — and the heading above it went on counting messages,
+  /// and announced fifty-five discarded lines as "1 could not be".
+  ///
+  /// A document-level problem counts as none of them. A statement whose
+  /// opening and closing balances do not bridge has a problem with the
+  /// STATEMENT, not with any line, and inflating a line count with it
+  /// would be the same mistake pointing the other way.
+  int get unreadable => _unreadable ?? problems.length;
 
   final List<StatementRow> rows;
 
@@ -1039,6 +1063,12 @@ StatementParse scannedStatement(
   /// a reader that may decline to answer — and did, on two RHB
   /// statements, taking a hundred and two faultless lines down with it.
   ({DateTime date, String evidence})? period,
+
+  /// The account number of the bank account this is being imported
+  /// into, so the statement can be checked against it. Null where the
+  /// caller has no account in hand — the parked-photograph path, and
+  /// every test that is not about this.
+  String? intoAccountNumber,
 }) {
   final rows = <StatementRow>[];
   final problems = <String>[];
@@ -1066,6 +1096,19 @@ StatementParse scannedStatement(
   // itself is a thing somebody checking their statement is entitled to
   // know about, and to disagree with.
   var placedFromPeriod = 0;
+
+  // Lines that could not be read, as a COUNT of lines rather than of
+  // messages. One message now covers fifty-five undated lines, and a
+  // document-level problem covers none at all.
+  var perLine = 0;
+
+  // What the document says about itself: its period, the balance it
+  // opens and closes at, the account it belongs to. Asked for since
+  // Phase 1; empty on every reading taken before it, which is why
+  // nothing below is allowed to require it.
+  final header = read?.statement ?? const <String, String>{};
+  final headerEnd = parseStatementDate(header['period_end'] ?? '') ??
+      parseStatementDate(header['period_start'] ?? '');
 
   final source = read?.rows ?? const <Map<String, String>>[];
   for (var i = 0; i < source.length; i++) {
@@ -1120,7 +1163,8 @@ StatementParse scannedStatement(
     // December's transactions into this year.
     if (date == null && rawDate != null) {
       final partial = parsePartialStatementDate(rawDate);
-      final anchor = period?.date ?? read?.documentDate ?? anchorDate;
+      final anchor =
+          period?.date ?? headerEnd ?? read?.documentDate ?? anchorDate;
       if (partial != null && anchor != null) {
         date = resolveStatementYear(
           day: partial.day,
@@ -1140,6 +1184,7 @@ StatementParse scannedStatement(
       if (rawDate != null && parsePartialStatementDate(rawDate) != null) {
         unplaceable++;
       } else {
+        perLine++;
         problems.add(
           'Line $at: no date could be read'
           '${rawDate == null ? '' : ' from "$rawDate"'}.',
@@ -1151,6 +1196,7 @@ StatementParse scannedStatement(
 
     final amount = rawAmount == null ? null : _number(rawAmount);
     if (amount == null) {
+      perLine++;
       problems.add(
         'Line $at: no amount could be read'
         '${rawAmount == null ? '' : ' from "$rawAmount"'}.',
@@ -1191,11 +1237,54 @@ StatementParse scannedStatement(
     );
   }
 
+  // Is this even the right account? Four digits, and a notice rather
+  // than a refusal -- see `accountMismatch`.
+  final wrongAccount = accountMismatch(
+    statementTail: header['account_number_tail'],
+    accountNumber: intoAccountNumber,
+  );
+  if (wrongAccount != null) notices.add(wrongAccount);
+
   final put = balancesDecideTheSigns(rows, leading: leading, trailing: trailing);
+
+  // DOES THE STATEMENT FOOT?
+  //
+  // `import_bank_transactions` walks the running balance from one line
+  // to the next, which catches a line misread BETWEEN two balances. It
+  // cannot catch a line missing from the END, a page never read, or a
+  // first line never returned — each of those closes a chain that was
+  // never the whole statement, and closes it perfectly.
+  //
+  // Opening plus every amount should reach closing. One sen of
+  // tolerance, which is the acceptance matrix's own figure and is what
+  // rounding can legitimately cost across a page of two-decimal money.
+  //
+  // Nothing is adjusted to make it agree. A closing balance worked out
+  // from the rows agrees with the rows by construction and checks
+  // nothing at all, which is why the reader is told to give what is
+  // printed or nothing.
+  final opening = _numberOrNull(header['opening_balance']);
+  final closing = _numberOrNull(header['closing_balance']);
+  if (opening != null && closing != null && put.rows.isNotEmpty) {
+    final sum = put.rows.fold<double>(0, (a, r) => a + r.amount);
+    final reached = opening + sum;
+    final gap = reached - closing;
+    if (gap.abs() > 0.01) {
+      problems.add(
+        'The statement opens at ${_money(opening)} and closes at '
+        '${_money(closing)}. The ${put.rows.length} lines read come to '
+        '${_money(sum)}, which reaches ${_money(reached)} — '
+        '${_money(gap.abs())} out. A line is missing or misread, and '
+        'nothing has been changed to make it agree.',
+      );
+    }
+  }
+
   return StatementParse(
     put.rows,
     [...problems, ...put.problems],
     [...notices, ...put.notices],
+    perLine + unplaceable,
   );
 }
 
@@ -1349,6 +1438,54 @@ String _day(DateTime d) =>
 /// Its own function rather than an expression inside `build`, because
 /// the precedence is the rule and a rule inside a widget that needs a
 /// camera to reach cannot be asserted.
+/// The last four digits of an account number, or null if there are not
+/// four digits in it.
+///
+/// Digits only, because the two sides are written differently and
+/// neither spelling is wrong: a statement prints `**** 4001` or
+/// `8881062574767`, and the account was typed into this system as
+/// `3900-0007-994` or `3900 0007 994`. Comparing the strings compares
+/// the punctuation.
+String? accountTail(String? raw) {
+  if (raw == null) return null;
+  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+  return digits.length < 4 ? null : digits.substring(digits.length - 4);
+}
+
+/// Whether this statement looks like it belongs to the account it is
+/// being imported into.
+///
+/// ## Why four digits, and why a notice
+///
+/// The reader is asked for FOUR CHARACTERS of the account number and
+/// never the whole thing — enough to say "this may not be the right
+/// account", not enough to be worth leaking. That is the pack's own
+/// privacy rule and it decides the strength of the answer too: four
+/// digits can collide, so this is a NOTICE and not a refusal.
+///
+/// It is a notice for a second reason. Somebody may be filing a
+/// statement from an account that was renumbered, or an old statement
+/// from before a migration, and the lines on it are still perfectly
+/// importable. A refusal would make this system wrong about a document
+/// the person holding it knows more about than we do.
+///
+/// Null where there is nothing to compare — no tail read, or an account
+/// recorded here without a number. Silence is right for both: an
+/// absence is not a disagreement, and a warning raised whenever a field
+/// is blank is a warning people learn to scroll past.
+String? accountMismatch({
+  required String? statementTail,
+  required String? accountNumber,
+}) {
+  final want = accountTail(accountNumber);
+  final got = accountTail(statementTail);
+  if (want == null || got == null) return null;
+  if (want == got) return null;
+  return 'This statement ends $got and the account you are importing '
+      'into ends $want. The lines will still import — check it is the '
+      'right account before you do.';
+}
+
 /// What stands above the notices in the import dialog.
 ///
 /// A pure function for one line of text, because that line was WRONG in

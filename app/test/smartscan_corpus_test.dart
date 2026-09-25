@@ -175,4 +175,59 @@ void main() {
     expect(missing, isEmpty, reason: missing.join('\n'));
     expect(placed, 108);
   });
+
+  /// Does every document foot, and is a truncated one caught?
+  ///
+  /// The acceptance matrix asks for reconciliation within 0.01 MYR on
+  /// every applicable fixture, and until the reader was asked for the
+  /// two balances there was nothing to reconcile against.
+  ///
+  /// The second half is the one that matters. `import_bank_transactions`
+  /// walks the running balance from each line to the next, which catches
+  /// a line misread BETWEEN two balances and cannot catch a line missing
+  /// from the END — what is gone is gone from both sides of every
+  /// comparison that remains, so the chain closes perfectly on a
+  /// statement that is not all there. Dropping the last row of each
+  /// fixture is that failure, 108 times.
+  group('the whole document, not only its lines', () {
+    test('all 120 foot, opening through closing', () {
+      final broken = <String>[];
+
+      for (final e in fixtures.entries) {
+        final f = e.value as Map<String, dynamic>;
+        final parse = scannedStatement(OcrExtraction.fromJson({
+          'rows': rowsOf(f),
+          'statement': f['statement'],
+        }));
+        if (parse.problems.isNotEmpty) {
+          broken.add('${e.key}: ${parse.problems.first}');
+        }
+      }
+
+      expect(broken, isEmpty, reason: broken.join('\n'));
+    });
+
+    test('and a line dropped off the end is caught every time', () {
+      final missed = <String>[];
+      var checked = 0;
+
+      for (final e in fixtures.entries) {
+        final f = e.value as Map<String, dynamic>;
+        final rows = rowsOf(f);
+        if (rows.length < 2) continue;
+        checked++;
+
+        final parse = scannedStatement(OcrExtraction.fromJson({
+          'rows': rows.sublist(0, rows.length - 1),
+          'statement': f['statement'],
+        }));
+        if (parse.problems.isEmpty) missed.add(e.key);
+      }
+
+      expect(missed, isEmpty,
+          reason: 'truncation went unnoticed on: ${missed.join(", ")}');
+      // The twelve that are skipped are the `no_activity` variants.
+      expect(checked, 108);
+    });
+  });
 }

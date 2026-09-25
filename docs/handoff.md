@@ -34,7 +34,7 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | A corpus that measures us, separately from the model |
+| Head at time of writing | Phase 1: what a statement says about itself |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
@@ -2326,6 +2326,104 @@ Nothing here runs a vision model. `rows` is what a PERFECT reader would
 return, so every failure is ours and every success says only: given a
 correct reading, we file it correctly. The model's eyesight is measured
 by the live database, not by this.
+
+## Phase 1: what a statement says about itself
+
+First phase of the SmartScan programme from the two handovers. A
+repeating document is now asked for a HEADER beside its rows:
+`period_start`, `period_end`, `opening_balance`, `closing_balance`,
+`account_number_tail`, `institution`.
+
+### No migration, and why
+
+`scan_target_fields` maps to COLUMNS of the destination table, and a
+statement header maps to no column of `bank_transactions`. `0683`'s own
+reasoning settles it: a question whose answer does not vary per
+installation should not be asked once per installation. So the header
+is hard-coded in `targets.ts` beside `rows`, not seeded.
+
+`currency` is deliberately NOT in it. The base schema already has a
+top-level `currency`, and offering the same thing twice is what the
+`0682` comment in `targets.ts` warns against. Multi-currency is its own
+family in the corpus and gets done properly later.
+
+### The check that could not be made
+
+`import_bank_transactions` walks the running balance from each line to
+the next. That catches a line misread BETWEEN two balances, and it
+cannot catch:
+
+- a line missing from the END of the statement;
+- a second page never read;
+- a first line never returned.
+
+Each of those leaves a chain that closes PERFECTLY, because what is
+missing is missing from both sides of every comparison that remains.
+The statement reconciles to a number nobody printed.
+
+`opening + sum(every amount) == closing` is the check that spans the
+whole document. One sen of tolerance, which is the acceptance matrix's
+own figure. Nothing is adjusted to make it agree, and the reader is told
+to give the two balances as printed or to give null — a closing balance
+worked out from the rows agrees with the rows by construction.
+
+Proved across the corpus: all 120 foot, and dropping the last row of
+each fixture is caught **108 times out of 108**.
+
+### Four characters of the account number
+
+`account_number_tail`, never the whole number, even where the statement
+prints it in full. Enough to say "this statement may not be for the
+account you are importing into"; not enough to be worth leaking. That
+is `docs/SECURITY_PRIVACY.md` in the pack, applied.
+
+### And a regression of mine, found on the way
+
+`95e08146` made ONE message cover fifty-five undated lines — the right
+change, because fifty-five copies of one sentence buries the cause. The
+heading above it went on counting MESSAGES:
+
+    '${preview.problems.length} could not be'
+
+So fifty-five discarded lines would have announced themselves as "1
+could not be", on the exact line the user photographed twice.
+
+`StatementParse.unreadable` now counts LINES. A document-level problem
+counts as none of them: a statement that does not foot has a problem
+with the STATEMENT, not with any line, and inflating a line count with
+it would be the same mistake pointing the other way.
+
+### Is it even the right account?
+
+`accountTail` takes four digits off both sides with the punctuation
+stripped, because a statement prints `**** 4001` while the account was
+typed into this system as `3900-0007-994` — comparing the strings
+compares the hyphens.
+
+A mismatch is a NOTICE, not a refusal, for two reasons. Four digits can
+collide. And somebody may be filing a statement from an account that was
+renumbered, or an old one from before a migration, whose lines are still
+perfectly importable — refusing would make this system wrong about a
+document the person holding it knows more about than we do. It names
+both tails so it can be checked against the page.
+
+`_PasteDialog` takes the number as a parameter rather than looking it
+up: the dialog does not know which account the person pressed Upload
+beside, and the screen does.
+
+### And a latent bug `check_async_value.py` caught
+
+I wrote `ref.read(bankAccountsProvider).value ?? const []`.
+`AsyncError.value` THROWS, so the `??` never runs — an errored provider
+would have taken the Import button down with it. `.valueOrNull` is the
+form that returns null on error and loading. The gate has a budget of
+39 and my line made it 40.
+
+### Gates
+
+Twenty-two assertions in `statement_header_test.dart`, two more in the
+corpus gate, fourteen mutants across two sweeps killed with both controls surviving, 38 deno
+tests, analyzer exit 0.
 
 ## This session's commits
 

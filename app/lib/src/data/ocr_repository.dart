@@ -475,6 +475,7 @@ class OcrExtraction {
     this.target,
     this.fields = const {},
     this.rows = const [],
+    this.statement = const {},
   });
 
   final String? supplierName;
@@ -553,6 +554,26 @@ class OcrExtraction {
   /// until somebody who knows the column decides which way round it is.
   /// Coercion belongs where the column is known.
   final Map<String, String> fields;
+
+  /// What the document says about ITSELF, where it takes rows.
+  ///
+  /// A bank statement is not only its lines. It prints a period, an
+  /// opening and a closing balance, and the account it belongs to —
+  /// and none of that was ever asked for, so the one check that spans
+  /// a whole document could not be made:
+  ///
+  ///     opening + sum(every amount) == closing
+  ///
+  /// `import_bank_transactions` walks the chain line to line, which
+  /// catches a line misread BETWEEN two balances. It cannot catch a
+  /// line missing from the END, a statement read from the wrong page,
+  /// or a first line never returned — each of those closes a chain
+  /// that was never the whole statement.
+  ///
+  /// Strings, like [fields], and for the same reason: the schema asks
+  /// for what is PRINTED, and coercion belongs where the column is
+  /// known. Empty for every document that takes a single record.
+  final Map<String, String> statement;
 
   /// One entry per printed line, where the destination takes rows.
   ///
@@ -685,6 +706,10 @@ class OcrExtraction {
           for (final e in ((j['fields'] as Map?) ?? const {}).entries)
             if (_text(e.value) != null) '${e.key}': _text(e.value)!,
         },
+        statement: {
+          for (final e in ((j['statement'] as Map?) ?? const {}).entries)
+            if (_text(e.value) != null) '${e.key}': _text(e.value)!,
+        },
         rows: [
           for (final r in ((j['rows'] as List?) ?? const []))
             if (r is Map)
@@ -732,6 +757,7 @@ class OcrExtraction {
         // no answer here, and a stored `{}` reads as "the reader was
         // asked and found nothing" when it was never asked.
         if (fields.isNotEmpty) 'fields': fields,
+        if (statement.isNotEmpty) 'statement': statement,
         if (rows.isNotEmpty) 'rows': rows,
       };
 

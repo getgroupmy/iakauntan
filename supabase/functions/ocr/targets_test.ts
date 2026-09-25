@@ -261,9 +261,92 @@ Deno.test("every property the targets add is also required", () => {
   for (const k of Object.keys(extra)) {
     assertEquals(required.includes(k), true, `${k} is not required`);
   }
-  // `target`, `fields` and `rows` for this pair.
-  assertEquals(required.length, base.length + 3);
+  // `target`, `fields`, `statement` and `rows` for this pair. The count
+  // is asserted as well as the loop above, because the loop only proves
+  // that what IS there is required -- it cannot notice a key that
+  // stopped being added at all.
+  assertEquals(required.length, base.length + 4);
 });
+
+/**
+ * The header a repeating document carries, beside its lines.
+ *
+ * A bank statement is not only its rows. It prints a period, an opening
+ * and a closing balance, and the account it belongs to, and the reader
+ * was asked for none of it -- so the one check that spans the whole
+ * document could not be made:
+ *
+ *     opening + sum(every amount) == closing
+ *
+ * `import_bank_transactions` walks the chain line to line, which catches
+ * a line misread BETWEEN two balances. It cannot catch a line missing
+ * from the end, a statement read from the wrong page, or a first line
+ * never returned -- each of which closes a chain that was never the
+ * whole statement.
+ */
+Deno.test("a repeating target is asked about the document, not only its lines", () => {
+  const extra = targetSchema([
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }],
+    },
+  ])!;
+
+  const stmt = extra.statement as Record<string, unknown>;
+  assertEquals(typeof stmt, "object");
+  const props = Object.keys(stmt.properties as Record<string, unknown>);
+  for (
+    const k of [
+      "period_start",
+      "period_end",
+      "opening_balance",
+      "closing_balance",
+      "account_number_tail",
+      "institution",
+    ]
+  ) {
+    assertEquals(props.includes(k), true, `${k} is not asked for`);
+  }
+  // Strict mode rejects a nested object whose `required` does not name
+  // every property, and the 400 reads to a bookkeeper as the document
+  // being unreadable. Same rule as `rows`, one level down.
+  assertEquals(stmt.required, props);
+  assertEquals(stmt.additionalProperties, false);
+});
+
+Deno.test("and a one-record target is asked nothing about a statement", () => {
+  // `statement` on a bill is a key that can only ever be null, which is
+  // one more thing for a model to think about and fill in wrongly.
+  const extra = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+  ])!;
+
+  assertEquals("statement" in extra, false);
+});
+
+Deno.test("four characters of the account number, and it says so", () => {
+  // Deliberate, and the reason is in SECURITY_PRIVACY: four digits is
+  // enough to warn that a statement may not belong to the account it is
+  // being imported into, and not enough to be worth leaking. A reader
+  // left to itself returns the whole number.
+  const extra = targetSchema([
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }],
+    },
+  ])!;
+  const stmt = extra.statement as Record<string, unknown>;
+  const tail = (stmt.properties as Record<string, { description: string }>)
+    .account_number_tail.description;
+
+  assertEquals(tail.includes("LAST FOUR"), true);
+  assertEquals(tail.includes("Never the whole number"), true);
+});
+
 
 Deno.test("no targets adds nothing to required", () => {
   assertEquals(requiredWith(["a"], null), ["a"]);
