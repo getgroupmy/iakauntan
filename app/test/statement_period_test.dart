@@ -235,6 +235,161 @@ Akaun : 5123 4567 8901
   /// was about to be announced as one, and the count was a count of
   /// NOTICES wearing the word "lines": the new notice covers fifty-five
   /// lines in one sentence and would have called itself one.
+  /// Three real Malaysian statements, and what each one broke.
+  ///
+  /// The layouts below are copied from the files themselves. The
+  /// account numbers, names and addresses are NOT — those are
+  /// somebody's actual banking details and do not belong in a
+  /// repository. What is preserved is the SHAPE, which is the only
+  /// part that was ever the problem.
+  ///
+  /// One caveat, stated rather than glossed: these were extracted with
+  /// a different PDF library than the one that runs in the browser.
+  /// `pdf.js` joins its text items with a space unless the item carries
+  /// `hasEOL`, so it will not weld tokens together in quite the same
+  /// places. Both spellings are asserted where it matters, because the
+  /// parser must not depend on which of them it is handed.
+  group('the statements this actually failed on', () {
+    test('AmBank prints its labels and its values in separate blocks', () {
+      // Every label, then every value. The statement date's value is
+      // three lines below its label, behind the account number -- so a
+      // parser that tries only the next line finds an account number,
+      // no date, and gives up on a period printed in full.
+      final found = statementPeriodFromText(
+        'ACCOUNT NO. / NO. AKAUN\n'
+        'STATEMENT DATE / TARIKH PENYATA\n'
+        ': 1234567890123\n'
+        ': 01/12/2025 - 31/12/2025\n'
+        'CURRENCY / MATA WANG\n'
+        'PAGE / MUKA SURAT\n'
+        ': MYR\n'
+        ': 1 of 3\n',
+      );
+
+      // The END of the period. A statement is named by where it closes.
+      expect(found?.date, DateTime(2025, 12, 31));
+    });
+
+    test('and Hong Leong welds the address onto the period end', () {
+      // `08/01/25PERSIARAN` -- the next cell of the table run onto the
+      // closing date with no space. A trailing word boundary cannot
+      // match between `5` and `P`, so the closing date was invisible
+      // and the OPENING one was taken instead: a statement anchored to
+      // the wrong end of itself.
+      final found = statementPeriodFromText(
+        'Page No  / No Mukasurat : 1 of 9\n'
+        'Statement Period  / : 09/12/24 - 08/01/25PERSIARAN SG LONG 2\n'
+        'Tempoh PenyataanBANDAR SG LONG\n',
+      );
+
+      expect(found?.date, DateTime(2025, 1, 8));
+    });
+
+    test('and the same header spaced out the way pdf.js would give it', () {
+      final found = statementPeriodFromText(
+        'Statement Period  / : 09/12/24 - 08/01/25 PERSIARAN SG LONG 2',
+      );
+
+      expect(found?.date, DateTime(2025, 1, 8));
+    });
+
+    test('a year still cannot run on into a reference number', () {
+      // Dropping the boundary must not let the year eat digits. That
+      // is what the boundary was really guarding; `(?!\d)` replaced it,
+      // and letters are all that got let through.
+      expect(statementPeriodFromText('Statement Date 09/12/241234'), isNull);
+    });
+  });
+
+  /// `01Jan` -- the reported one, with a screenshot.
+  ///
+  /// "0 lines read, 27 could not be", then five copies of
+  /// `no date could be read from "01Jan"`. A complaint about a date
+  /// that is perfectly legible, on every line of the statement, raised
+  /// because the separator the parser insisted on was not printed.
+  ///
+  /// AmBank jams them: `07Dec`, `26Dec`, `01Jan`, `13Jan`.
+  group('a day and a month with nothing between them', () {
+    void reads(String raw, int day, int month) {
+      final p = parsePartialStatementDate(raw);
+      expect(p, isNotNull, reason: '"$raw" read as nothing');
+      expect(p!.day, day);
+      expect(p.month, month);
+    }
+
+    test('the reported statement, line by line', () {
+      reads('01Jan', 1, 1);
+      reads('13Jan', 13, 1);
+      reads('14Jan', 14, 1);
+      reads('28Jan', 28, 1);
+      reads('07Dec', 7, 12);
+      reads('26Dec', 26, 12);
+    });
+
+    test('and jammed Malay too, since both are printed that way', () {
+      reads('03Ogos', 3, 8);
+      reads('17Dis', 17, 12);
+    });
+
+    test('the spaced and hyphenated forms still read', () {
+      // Most banks do print a separator. Making it optional must not
+      // cost the layouts that already worked.
+      reads('03 SEP', 3, 9);
+      reads('3-Sep', 3, 9);
+    });
+
+    test('an ordinal is not a date', () {
+      // The risk a relaxed separator creates: `1ST` and `3RD` are two
+      // letters, which is why `_monthNumber` insists on three.
+      expect(parsePartialStatementDate('1ST'), isNull);
+      expect(parsePartialStatementDate('3RD'), isNull);
+      expect(parsePartialStatementDate('22ND'), isNull);
+    });
+
+    test('and two letters is never a month', () {
+      // The guard that stops `1ST` being a date is the three-letter
+      // minimum, and with the separator now optional it is the only
+      // thing standing between a reference and a transaction date.
+      //
+      // EQUIVALENT MUTANT, written down here rather than left for
+      // somebody to hunt: relaxing `_monthNumber`'s own
+      // `if (s.length < 3) return null` to `< 2` cannot be caught. Every
+      // caller reaches it through a regex that already demands
+      // `[A-Za-z]{3,}` -- `parsePartialStatementDate`,
+      // `parseStatementDate`, `_datesIn` and the header month-year scan
+      // are all spelled that way -- so a two-letter name never arrives
+      // at the guard at all. The assertions below still say what the
+      // intent is, and they would catch a regex relaxed to `{2,}`;
+      // they simply cannot catch the guard being loosened underneath
+      // one that is stricter.
+      expect(parsePartialStatementDate('03DE'), isNull);
+      expect(parsePartialStatementDate('03JA'), isNull);
+      expect(parsePartialStatementDate('03 MA'), isNull);
+    });
+
+    test('a label with no date near it does not reach the transactions', () {
+      // The window must stop inside the header. Widen it and the label
+      // finds the first TRANSACTION date instead, which anchors the
+      // whole statement to its own first entry -- a guess wearing a
+      // date's clothes, and the exact failure all of this refuses.
+      final found = statementPeriodFromText(
+        'Statement Period\n'
+        'Account 1234567\n'
+        'Branch KUALA LUMPUR MAIN BRANCH\n'
+        'Tel No 03-2164 2525\n'
+        'Page No 1 of 9\n'
+        '09-12-2024 FPX Payment fr CA via Internet 20,000.00\n'
+        '10-12-2024 Instant Transfer 37,222.88\n',
+      );
+
+      expect(found, isNull);
+    });
+    test('and neither is a word that merely starts like one', () {
+      expect(parsePartialStatementDate('03DECLINED'), isNull);
+      expect(parsePartialStatementDate('12MARGIN'), isNull);
+    });
+  });
+
   _platformSeam();
 
   group('the heading above the notices', () {

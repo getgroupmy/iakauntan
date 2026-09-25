@@ -34,7 +34,7 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The year was in the file all along |
+| Head at time of writing | Three real statements, three different defects |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
@@ -2195,6 +2195,81 @@ Two decisions left with the user, both real:
   uses `double`. The ledger is safe (`numeric` throughout, and
   `import_bank_transactions` re-checks), so this is preview arithmetic,
   not posting arithmetic.
+
+## Three real statements, three different defects
+
+The user sent three of their own statements after the fix above was
+still not enough: Hong Leong (9pp), AmBank (3pp) and UOB (14pp). Each
+broke something different, and the reported one was not what the
+previous commit had addressed at all.
+
+### `01Jan` — no separator, which is what the screenshot said
+
+AmBank prints the day and month welded: `07Dec`, `26Dec`, `01Jan`,
+`13Jan`. `parsePartialStatementDate` required `[\s-]` between them, so
+it returned null on every line — "0 lines read, 27 could not be", over
+dates that are perfectly legible. The separator is now optional.
+
+### AmBank prints labels and values in two blocks
+
+Its text layer extracts as every label, then every value:
+
+```
+ACCOUNT NO. / NO. AKAUN
+STATEMENT DATE / TARIKH PENYATA
+: 1234567890123
+: 01/12/2025 - 31/12/2025
+```
+
+The period is three lines below its label, behind the account number.
+`statementPeriodFromText` tried only the next line, found an account
+number, and gave up on a period printed in full. `_labelWindow = 4` now
+scans a short way down. SHORT ON PURPOSE: a window long enough to reach
+the transaction rows would anchor the statement to its own first entry,
+and there is a test that fails if it is widened to 40.
+
+### Hong Leong welds the address onto the period end
+
+`09/12/24 - 08/01/25PERSIARAN SG LONG 2`. `_datesIn` ended its
+day-first pattern with `\b`, and there is no word boundary between `5`
+and `P` — so the closing date was invisible and the OPENING one was
+taken instead: a statement anchored to the wrong end of itself. The
+boundary is now `(?!\d)`, which keeps the year from running into a
+reference number (the thing `\b` was really guarding) while letting a
+welded letter through.
+
+### And the fourth, which the tests found rather than the files
+
+Relaxing the separator turned `03DECLINED` into 3 December and
+`12MARGIN` into 12 March, because `_monthNumber` matched on the first
+three letters. Harmless while a separator was required; dangerous the
+moment it was not. A month name must now be a PREFIX of a real month
+name — `DEC`, `SEPT` and `OGOS` are; `DECLINED` agrees for three
+letters and then disagrees.
+
+No two months across the two languages share a three-letter prefix with
+different numbers, so there is nothing to disambiguate.
+
+### Fixtures, and what they are not
+
+The layouts in `statement_period_test.dart` are copied from the real
+files. The account numbers, names and addresses are NOT — those are
+somebody's actual banking details and do not belong in a repository.
+
+One caveat recorded beside them: they were extracted with a different
+PDF library than the browser's. `pdf.js` joins its text items with a
+space unless the item carries `hasEOL`, so it will not weld tokens in
+the same places. Both spellings are asserted where it matters.
+
+### UOB, and a cap worth knowing about
+
+UOB's statement is largely inline images — its text layer is legal
+boilerplate and column headings, with the rows rendered. It stays a
+vision-model job and nothing here helps it.
+
+`_pagesRead = 3` in `text_reader_web.dart` also caps the typed reading
+at three pages. Fine for a header, and NOT fine if anything later wants
+the transaction lines off a 13-page statement's text layer.
 
 ## This session's commits
 

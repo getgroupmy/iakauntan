@@ -402,8 +402,9 @@ DateTime? parseStatementDate(String raw) {
     return _date(year, int.parse(dmy.group(2)!), int.parse(dmy.group(1)!));
   }
 
-  // 06 Mar 2026
-  final named = RegExp(r'^(\d{1,2})[\s-]([A-Za-z]{3,})[\s-](\d{2,4})$')
+  // 06 Mar 2026, and `06Mar2026` for the same reason as the partial
+  // form below: a PDF's text layer runs tokens together.
+  final named = RegExp(r'^(\d{1,2})[\s-]?([A-Za-z]{3,})[\s-]?(\d{2,4})$')
       .firstMatch(s);
   if (named != null) {
     const months = [
@@ -448,8 +449,18 @@ DateTime? parseStatementDate(String raw) {
     return (day: day, month: month);
   }
 
-  // 03 SEP, 3-Sep, 03 September
-  final named = RegExp(r'^(\d{1,2})[\s-]([A-Za-z]{3,})$').firstMatch(s);
+  // 03 SEP, 3-Sep, 03 September -- AND `01Jan`, with nothing at all
+  // between them.
+  //
+  // AmBank prints it jammed: `07Dec`, `26Dec`, `01Jan`. Reported with a
+  // screenshot reading "0 lines read, 27 could not be" over
+  // `no date could be read from "01Jan"` -- a complaint about a date
+  // that is perfectly legible, on every line of the statement, because
+  // the separator this insisted on was not there.
+  //
+  // The separator is optional rather than absent: `3-Sep` and
+  // `03 September` are still how most banks print it.
+  final named = RegExp(r'^(\d{1,2})[\s-]?([A-Za-z]{3,})$').firstMatch(s);
   if (named != null) {
     final month = _monthNumber(named.group(2)!);
     if (month == null) return null;
@@ -550,13 +561,30 @@ DateTime resolveStatementYear({
       final at = lower.indexOf(label);
       if (at < 0) continue;
 
-      // Normally on the same line, after the label. A table that puts
-      // the label in one cell and the date in the next comes out of
-      // `pdf.js` as two lines, so the next one is tried before giving
-      // up on a label that is plainly there.
+      // Normally on the same line, after the label.
+      //
+      // But not on AmBank, which extracts as two COLUMN BLOCKS — every
+      // label, then every value:
+      //
+      //     ACCOUNT NO. / NO. AKAUN
+      //     STATEMENT DATE / TARIKH PENYATA
+      //     : 8881062574767
+      //     : 01/12/2025 - 31/12/2025
+      //
+      // The label is plainly there and its value is three lines down,
+      // behind the account number. Trying only the next line finds
+      // `: 8881062574767`, no date, and gives up on a statement whose
+      // period is printed in full.
+      //
+      // So a short window, and the FIRST line in it that yields a date
+      // wins. Short because the header ends and the transaction lines
+      // begin, and a window long enough to reach those would anchor
+      // the statement to its own first transaction — a guess wearing a
+      // date's clothes, which is what all of this exists to refuse.
       var found = _datesIn(line.substring(at + label.length));
-      if (found.isEmpty && i + 1 < lines.length) {
-        found = _datesIn(lines[i + 1]);
+      for (var ahead = 1; found.isEmpty && ahead <= _labelWindow; ahead++) {
+        if (i + ahead >= lines.length) break;
+        found = _datesIn(lines[i + ahead]);
       }
       if (found.isEmpty) continue;
 
@@ -605,6 +633,14 @@ DateTime resolveStatementYear({
 ///
 /// Ordered so nothing here is a prefix of a later entry in a way that
 /// would take the wrong half: every one is matched on the whole phrase.
+/// How far below a label its value may sit.
+///
+/// Four, because AmBank's is three down and a statement's header is not
+/// much taller than that. Every line further is a line closer to the
+/// transactions, and taking a date off one of those would place the
+/// whole statement on its own first entry.
+const _labelWindow = 4;
+
 const _periodLabels = <String>[
   'statement date',
   'tarikh penyata',
@@ -639,7 +675,16 @@ List<DateTime> _datesIn(String text) {
   }
 
   // 31/10/2025, 31-10-25, 31.10.2025
-  for (final m in RegExp(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b')
+  //
+  // NO TRAILING `\b`. A PDF's text layer runs neighbouring cells
+  // together — Hong Leong's header extracts as
+  // `09/12/24 - 08/01/25PERSIARAN SG LONG 2`, with the address welded
+  // to the period's end date. A word boundary between `5` and `P` does
+  // not exist, so the closing date of the statement was invisible and
+  // the OPENING one was taken instead. `(?!\d)` keeps the year from
+  // running on into a reference number, which is the thing the
+  // boundary was actually guarding against.
+  for (final m in RegExp(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?!\d)')
       .allMatches(text)) {
     var year = int.parse(m.group(3)!);
     if (year < 100) year += 2000;
@@ -648,7 +693,7 @@ List<DateTime> _datesIn(String text) {
 
   // 31 OCT 2025, 31 Oktober 2025, 31-Dis-2025
   for (final m
-      in RegExp(r'\b(\d{1,2})[\s-]([A-Za-z]{3,9})\.?[\s-](\d{2,4})\b')
+      in RegExp(r'\b(\d{1,2})[\s-]?([A-Za-z]{3,9})\.?[\s-]?(\d{2,4})(?!\d)')
           .allMatches(text)) {
     final month = _monthNumber(m.group(2)!);
     if (month == null) continue;
@@ -663,29 +708,52 @@ List<DateTime> _datesIn(String text) {
 /// A month name in either of the languages a Malaysian statement is
 /// printed in.
 ///
-/// Matched on the first three letters, which is what distinguishes
-/// every month in both languages and costs nothing — `Sep`, `September`
-/// and `SEPTEMBER` are one entry, and so are `Ogo` and `OGOS`.
+/// ## Two failures, and they pull in opposite directions
 ///
-/// THE MALAY HALF WAS MISSING, and it was missing silently. A statement
-/// printing `03 OGOS` or `17 DIS` returned null here, which the caller
-/// reads as "no date could be read" — so a Bahasa Melayu statement came
-/// back as every line unreadable, over the language it was printed in.
-/// Maybank, CIMB and Bank Islam all issue them.
+/// THE MALAY HALF WAS MISSING, silently. A statement printing `03 OGOS`
+/// or `17 DIS` returned null here, which the caller reads as "no date
+/// could be read" — so a Bahasa Melayu statement came back as every
+/// line unreadable, over the language it was printed in. Maybank, CIMB
+/// and Bank Islam all issue them. Five of the twelve differ enough to
+/// matter: MAC, MEI, OGOS, OKTOBER, DISEMBER. The other seven shared
+/// their first three letters with English and were being read by
+/// accident.
 ///
-/// Five of the twelve differ enough to matter: MAC, MEI, OGOS, OKTOBER
-/// and DISEMBER. The other seven share their first three letters with
-/// English and were already being read by accident.
+/// AND THE MATCH WAS TOO LOOSE. It took the first three letters and
+/// looked them up, so `DECLINED` was December and `MARGIN` was March.
+/// That was harmless while a separator was required — nothing reads
+/// `03 DECLINED` as a date field — but AmBank prints `01Jan` with
+/// nothing between them, so the separator had to become optional, and
+/// the moment it did, `03DECLINED` became the third of December.
+///
+/// ## The rule
+///
+/// The name must be a PREFIX of a real month name, at least three
+/// letters long — not merely share three letters with one. `DEC` and
+/// `SEPT` and `OGOS` are prefixes. `DECLINED` is not a prefix of
+/// `DECEMBER`; it agrees for three letters and then disagrees, which
+/// is exactly the case that was being waved through.
+///
+/// No two months in the two languages share a prefix of three letters
+/// with different numbers, so there is nothing to disambiguate: `jun`
+/// is June and Jun, `jul` is July and Julai, `mar` is March and `mac`
+/// is Mac, and both mean the same month.
 int? _monthNumber(String name) {
-  const months = {
-    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-    // Bahasa Melayu, where it differs. `apr`, `jan`, `feb`, `jun`,
-    // `jul`, `nov` and `sep` are spelled the same for three letters.
-    'mac': 3, 'mei': 5, 'ogo': 8, 'okt': 10, 'dis': 12,
+  final s = name.toLowerCase().replaceAll('.', '').trim();
+  if (s.length < 3) return null;
+  const months = <String, int>{
+    'january': 1, 'february': 2, 'march': 3, 'april': 4,
+    'may': 5, 'june': 6, 'july': 7, 'august': 8,
+    'september': 9, 'october': 10, 'november': 11, 'december': 12,
+    // Bahasa Melayu. `april`, `september` and `november` are spelled
+    // the same and are already above.
+    'januari': 1, 'februari': 2, 'mac': 3, 'mei': 5,
+    'jun': 6, 'julai': 7, 'ogos': 8, 'oktober': 10, 'disember': 12,
   };
-  if (name.length < 3) return null;
-  return months[name.toLowerCase().substring(0, 3)];
+  for (final e in months.entries) {
+    if (e.key.startsWith(s)) return e.value;
+  }
+  return null;
 }
 
 /// Rejects the impossible rather than letting DateTime roll it over —
