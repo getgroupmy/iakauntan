@@ -34,9 +34,9 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | UOB has a text layer after all |
+| Head at time of writing | The same file, twice (0711) |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0710` is the highest. CI applies on green — see below |
+| Migrations | `0711` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,156 Flutter tests**, 64 deno tests |
@@ -2476,6 +2476,75 @@ commit, and every test the user ran that day was against code
 predating the whole day's work. `web/sw_rescue.js` exists because this
 has happened before. A hard reload, or unregistering the service
 worker, is the fix.
+
+## The same file, twice — `0711`
+
+Asked for as "when the bank statement or ai scan or any file is
+uploaded it should keep a copy of the file in storage so it can be used
+back as[well as] will prevent duplicate upload of same file".
+
+### Half of it was already true
+
+`attachments` has kept every upload since `0010`, the bytes live in the
+`attachments` bucket, and `0708` refuses to DELETE a file once a reading
+or posting is built from it. Nothing has ever been thrown away.
+
+### The half that was not
+
+Nothing anywhere knew what a file CONTAINED. Upload the same statement
+twice and it became a second row, a second object, and a second scan —
+which is a second charge to whichever reader the org pays for.
+`import_bank_transactions` still refuses a line it has already posted,
+so the books stayed right; what was wasted was money.
+
+`file_name` cannot answer it: `stampedFileName` puts the moment of
+upload into every name, so two uploads of one file never share one.
+`file_size` alone is a coincidence waiting to happen.
+
+### Three decisions, each a way it could have gone wrong
+
+**NULLABLE, permanently.** Every existing row has no hash and cannot be
+given one without downloading every stored object back. A migration that
+reads the whole bucket to populate a column that only helps future
+uploads is not worth it. Callers treat null as UNKNOWN, never as "not a
+duplicate", and `identicalFile` documents that.
+
+**NOT UNIQUE.** A unique index would make the database REFUSE the second
+upload. Somebody re-uploads a file when the first scan went badly and
+they want another go — their document, their call. The index is for
+LOOKING UP.
+
+**Scoped to the org.** Two companies uploading the same public form are
+not duplicates, and one org must never be told a file exists on the
+strength of a row it cannot see.
+
+### What is built and what is not
+
+Built: `contentHash(bytes)` (pure), the hash written on every upload,
+migration `0711`, and `supabase/tests/attachment_content_hash.sql` in
+CI's run list.
+
+NOT built: the LOOKUP. It was written and then taken back out, because
+`check_unreachable.py` refused it — "a wrapper for a call nobody can
+make is a promise the product does not keep" — and the gate was right.
+Reusing an existing attachment is not the one-liner it looks like: a row
+carries `entity_table`, `entity_id` and `0708`'s evidence lock, and
+handing a new document an attachment filed against a different record
+needs more thought than a commit about hashing should contain.
+
+So this commit RECORDS and does not yet match. That is not a
+placeholder: a hash cannot be computed backwards without downloading
+every stored object, so the only way to have one for today's uploads is
+to take it today. Every upload from `0711` onward builds the history the
+lookup will need.
+
+### Verification
+
+Five assertions against the PUBLISHED SHA-256 vectors rather than
+against our own output. Four mutants killed with the control surviving,
+including "hash only the first kilobyte", which would call two 22-page
+statements identical whenever their first page matched. The SQL test was
+watched to FAIL twice: with the index dropped, and with it made UNIQUE.
 
 ## This session's commits
 

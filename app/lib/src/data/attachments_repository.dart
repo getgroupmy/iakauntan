@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 import '../core/format.dart';
 import 'repository.dart';
 
@@ -46,6 +48,52 @@ class Attachment {
         isEvidence: j['is_evidence'] == true,
       );
 }
+
+/// The SHA-256 of a file's bytes, lowercase hex.
+///
+/// ## Why the bytes and not the name
+///
+/// `stampedFileName` puts the moment of upload into every name, so two
+/// uploads of one file NEVER share a name -- which is the right answer
+/// for telling two downloads apart and useless for telling two uploads
+/// together. `file_size` on its own is a coincidence waiting to happen.
+///
+/// The only question worth asking is whether the CONTENT is the same,
+/// and this answers exactly that: identical or not, with nothing in
+/// between and no false positive to explain to somebody whose two
+/// statements happen to be the same length.
+///
+/// ## What it is for
+///
+/// Not for refusing an upload. Somebody re-uploads a file when the
+/// first scan went badly and they want another go, which is a thing
+/// they are entitled to do on their own document. It is for LOOKING UP,
+/// so the app can say "this is already here, from the 3rd, filed
+/// against that bill" and let the person decide -- and, where they do
+/// not want a second go, hand back the reading that was already paid
+/// for rather than buying it twice.
+///
+/// Lowercase hex because `0711`'s check constraint demands it: a column
+/// that quietly accepts an uppercase digest is a column where two
+/// spellings of one file do not match each other.
+///
+/// ## Recorded now, matched later
+///
+/// Nothing reads this yet. It is written on every upload from `0711`
+/// onward so that when the lookup and its screen land there is a
+/// history to match against — a hash cannot be computed backwards
+/// without downloading every stored object, so the only way to have
+/// one for today's uploads is to take it today.
+///
+/// The lookup was written and then TAKEN OUT of this commit on
+/// purpose. `check_unreachable.py` refused it — "a wrapper for a call
+/// nobody can make is a promise the product does not keep" — and it
+/// was right: reusing an existing attachment is not the one-liner it
+/// looks like, because a row carries `entity_table`, `entity_id` and
+/// `0708`'s evidence lock, and handing a new document an attachment
+/// filed against a different record needs more thought than a commit
+/// about hashing should contain.
+String contentHash(Uint8List bytes) => sha256.convert(bytes).toString();
 
 /// The name a file is stored under, with the moment it arrived in it.
 ///
@@ -130,6 +178,9 @@ extension RepoAttachments on Repo {
           'storage_path': path,
           'mime_type': mimeType,
           'file_size': bytes.length,
+          // `0711`. Written on the way in, because it cannot be
+          // recovered afterwards without downloading the object back.
+          'content_sha256': contentHash(bytes),
         })
         .select('id')
         .single();
