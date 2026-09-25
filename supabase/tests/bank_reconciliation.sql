@@ -413,8 +413,18 @@ begin
   perform pg_temp.check_true('nor a closing figure it does not have',
     (r->>'closing_balance') is null);
 
-  -- A gap in the middle breaks the chain rather than failing it: one
-  -- link short, not a refusal.
+  -- A gap in the middle is CHECKED ACROSS, which is `0713` and is a
+  -- change from what this file asserted before it.
+  --
+  -- `0369` compared adjacent lines only, so the blank in the middle
+  -- here broke the chain and nothing was checked at all. That reads as
+  -- cautious and was not: Hong Leong prints a balance on 21 lines of a
+  -- 95-line statement, so under the old rule 74 of them were checked by
+  -- nothing, and a reader that dropped one of those 74 was never
+  -- contradicted.
+  --
+  -- 10 and 10 between balances of 10 and 30 is a span that bridges, so
+  -- the link across the gap is claimed BECAUSE it was verified.
   r := public.import_bank_transactions(v_bank, jsonb_build_array(
     jsonb_build_object('transaction_date','2026-09-01','description','A',
                        'amount',10,'running_balance',10),
@@ -422,10 +432,25 @@ begin
                        'amount',10),
     jsonb_build_object('transaction_date','2026-09-03','description','C',
                        'amount',10,'running_balance',30)));
-  perform pg_temp.check_eq('a blank balance breaks the chain, not the import',
+  perform pg_temp.check_eq('a blank balance does not stop the import',
     (r->>'imported')::numeric, 3);
-  perform pg_temp.check_eq('and no link is claimed across the gap',
-    (r->>'balance_checks')::numeric, 0);
+  perform pg_temp.check_eq('and the run across the gap is checked as one span',
+    (r->>'balance_checks')::numeric, 1);
+
+  -- And the whole point of checking it: the same shape with the middle
+  -- line gone no longer bridges, and used to import in silence.
+  begin
+    perform public.import_bank_transactions(v_bank, jsonb_build_array(
+      jsonb_build_object('transaction_date','2026-10-01','description','A',
+                         'amount',10,'running_balance',10),
+      jsonb_build_object('transaction_date','2026-10-03','description','C',
+                         'amount',10,'running_balance',30)));
+    raise exception 'FAIL: a line missing from a run was imported';
+  exception when sqlstate '23514' then
+    v_msg := sqlerrm;
+  end;
+  perform pg_temp.check_true('a line missing from the run is refused',
+    v_msg like '%should come to 20.00%');
 end $$;
 
 -- ---------------------------------------------------------------------

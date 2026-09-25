@@ -297,16 +297,22 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     if (!mounted) return;
     // Skipped lines and unreadable lines are both reported. A statement
     // that half-imports quietly reconciles to the wrong number.
-    final checks = (result['balance_checks'] as num? ?? 0).toInt();
+    // LINES, not spans. `balance_checks` counts the runs the arithmetic
+    // closed, and since 0713 a run can be a whole page: Hong Leong
+    // prints a balance on 21 lines of a 95-line statement, so reporting
+    // spans would tell somebody 20 about a statement whose own
+    // arithmetic proved all 95. `lines_proved` is what was proved.
+    final proved = (result['lines_proved'] as num? ?? 0).toInt();
+    final imported = (result['imported'] as num? ?? 0).toInt();
     final parts = <String>[
-      '${result['imported']} imported',
+      '$imported imported',
       if ((result['skipped'] as num? ?? 0) > 0)
         '${result['skipped']} already there',
       // Worth saying out loud. It is the difference between a paste
       // that looks right and one the statement's own arithmetic agrees
       // with, and somebody who pastes a balance column deserves to know
       // the check happened rather than to assume it.
-      if (checks > 0) 'balance follows on $checks lines',
+      if (proved > 0) 'balance follows across $proved of $imported lines',
       // `unreadable`, not `problems.length`. One message can cover
       // fifty-five undated lines and a footing failure covers none.
       if (parsed.unreadable > 0) '${parsed.unreadable} could not be read',
