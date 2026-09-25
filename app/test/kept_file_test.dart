@@ -65,6 +65,78 @@ void main() {
     });
   });
 
+  group('a sheet read more than once', () {
+    // Reported with a screenshot: one uploaded AmBank statement showing
+    // TWICE in the list, two rows with the same name, the same date and
+    // the same sentence under each — read, reasonably, as "it created a
+    // duplicate of the file". Nothing was duplicated: one attachment,
+    // read twice fifty-three seconds apart. `scan_inbox` returned one
+    // row per SCAN where the screen promises one per SHEET.
+    //
+    // `0715` collapses them, and this is the other half of that: the
+    // readings it collapses must not vanish silently, because a second
+    // reading is a second charge.
+    ScanInboxEntry twice({String? posted, String? label}) => ScanInboxEntry(
+          scanId: 's-1',
+          attachmentId: 'att-1',
+          fileName: 'ambank.pdf',
+          status: 'ok',
+          readings: 2,
+          postedTable: posted,
+          postedLabel: label,
+          scannedAt: DateTime(2026, 9, 25),
+        );
+
+    test('says so on a row that became nothing', () {
+      expect(scanRowSubtitle(twice()),
+          'Not filed against anything yet · read 2 times');
+    });
+
+    test('and on one that became something', () {
+      expect(
+        scanRowSubtitle(twice(posted: 'expenses', label: 'EXP-1')),
+        contains('read 2 times'),
+      );
+    });
+
+    test('and on one that failed', () {
+      final e = ScanInboxEntry(
+        scanId: 's-1',
+        attachmentId: 'att-1',
+        fileName: 'x.pdf',
+        status: 'failed',
+        error: 'The reader would not answer',
+        readings: 3,
+        scannedAt: DateTime(2026, 9, 25),
+      );
+      expect(scanRowSubtitle(e), contains('read 3 times'));
+    });
+
+    test('but a sheet read once says nothing about it', () {
+      // "read 1 times" on every row would be noise, and wrong English.
+      final e = ScanInboxEntry(
+        scanId: 's-1',
+        attachmentId: 'att-1',
+        fileName: 'x.pdf',
+        status: 'ok',
+        scannedAt: DateTime(2026, 9, 25),
+      );
+      expect(e.readings, 1);
+      expect(scanRowSubtitle(e), isNot(contains('times')));
+    });
+
+    test('and a kept file has been read no times at all', () {
+      final e = ScanInboxEntry(
+        scanId: null,
+        attachmentId: 'att-1',
+        fileName: 'x.pdf',
+        readings: 0,
+        scannedAt: DateTime(2026, 9, 25),
+      );
+      expect(scanRowSubtitle(e), 'Kept, not read yet');
+    });
+  });
+
   group('what the person is told after keeping one', () {
     test('it is safe, and it was NOT read', () {
       // Both halves matter. "Uploaded" on a screen called AI SmartScan

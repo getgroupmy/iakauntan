@@ -307,16 +307,26 @@ String scanRowSubtitle(ScanInboxEntry entry) {
     return parts.join(' · ');
   }
 
+  // Read more than once. `0715`. The inbox shows ONE row per sheet of
+  // paper -- two rows for one document read twice is what somebody
+  // reported as "it created a duplicate of the file" -- so the other
+  // readings would vanish without this. A second reading is a second
+  // charge, and it has to be visible from the list rather than behind
+  // a tap.
+  final again = entry.readings > 1 ? 'read ${entry.readings} times' : null;
+
   if (entry.status == 'failed' || entry.error != null) {
     // The reason, not just the fact. A failed reading with no reason is
     // a row somebody can only shrug at.
     final why = entry.error?.trim();
     parts.add(why == null || why.isEmpty ? 'Could not be read' : why);
+    if (again != null) parts.add(again);
     return parts.join(' · ');
   }
 
   if (!entry.isPosted) {
     parts.add('Not filed against anything yet');
+    if (again != null) parts.add(again);
     return parts.join(' · ');
   }
 
@@ -325,10 +335,12 @@ String scanRowSubtitle(ScanInboxEntry entry) {
     // Posted, and the record has since been deleted. Said, because a
     // row that quietly read as unfiled would be a lie.
     parts.add('Filed against something that has since been deleted');
+    if (again != null) parts.add(again);
     return parts.join(' · ');
   }
 
   final on = entry.postedDate;
   parts.add(on == null ? label : '$label, ${Fmt.date(on)}');
+  if (again != null) parts.add(again);
   return parts.join(' · ');
 }

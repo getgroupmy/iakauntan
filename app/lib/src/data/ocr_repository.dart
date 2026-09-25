@@ -1751,6 +1751,7 @@ class ScanInboxEntry {
     this.postedDate,
     this.reviewedAt,
     this.corrected = false,
+    this.readings = 1,
   });
 
   /// NULL on a file that was kept and never read. `0714`.
@@ -1767,6 +1768,15 @@ class ScanInboxEntry {
   /// Said once here rather than as `scanId == null` in four places, so
   /// the meaning of the null is written down where the null is.
   bool get isKeptOnly => scanId == null;
+
+  /// How many times this sheet of paper has been read. `0715`.
+  ///
+  /// One normally, 0 on a file kept and never read, and more once
+  /// somebody has used "Read it again". The inbox shows ONE row per
+  /// sheet, so without this the other readings would vanish silently --
+  /// and a second reading is a second charge, which somebody looking at
+  /// the list is entitled to see.
+  final int readings;
 
   /// Null once the record this was filed against has been deleted:
   /// `delete_attachments_of_row` takes the picture with the document and
@@ -1843,6 +1853,9 @@ class ScanInboxEntry {
         postedDate: Fmt.parseDate(j['posted_date']),
         reviewedAt: Fmt.parseDate(j['reviewed_at']),
         corrected: j['corrected'] == true,
+        // Absent from an older server, and 1 is what every row meant
+        // before `0715` counted them.
+        readings: (j['readings'] as num?)?.toInt() ?? 1,
       );
 }
 

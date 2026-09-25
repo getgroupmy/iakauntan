@@ -178,4 +178,103 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- 6. One sheet of paper, one row
+--
+-- `0715`, and the bug that produced it. Reported with a screenshot: one
+-- uploaded AmBank statement showing TWICE in the inbox, two rows with
+-- the same name, the same date and the same sentence under each --
+-- read, reasonably, as "it created a duplicate of the file".
+--
+-- Nothing was duplicated. One attachment, read twice fifty-three
+-- seconds apart, and `scan_inbox` returned one row per SCAN while the
+-- screen it feeds promises one per SHEET.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Dua Bacaan Sdn Bhd');
+  v_att uuid;
+  v_n   integer;
+  r     record;
+begin
+  v_att := pg_temp.a_file(v_org, 'ambank.pdf', true);
+
+  insert into public.ocr_scans
+    (org_id, attachment_id, storage_path, provider, key_source, status,
+     created_at)
+  values (v_org, v_att, 'x/y/z', 'gemini', 'platform', 'ok',
+          now() - interval '2 minutes'),
+         (v_org, v_att, 'x/y/z', 'gemini', 'platform', 'ok',
+          now() - interval '1 minute');
+
+  select count(*)::integer into v_n from public.scan_inbox(v_org, 100, 'all');
+  perform pg_temp.check_eq('one file read twice is ONE row', v_n, 1);
+
+  select * into r from public.scan_inbox(v_org, 100, 'all');
+  -- Not hidden. Somebody charged for two readings has to be able to
+  -- see that two happened, and the row is where they are looking.
+  perform pg_temp.check_eq('and it says how many readings there were',
+    r.readings, 2);
+end;
+$$;
+
+-- And the reading that BECAME something wins, whatever the order.
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Sudah Jadi Bil Sdn Bhd');
+  v_att  uuid;
+  v_exp  uuid;
+  v_old  uuid;
+  r      record;
+begin
+  v_att := pg_temp.a_file(v_org, 'bill.pdf', false);
+
+  insert into public.expenses
+    (org_id, expense_no, expense_date, amount, total_amount, status,
+     account_id)
+  values (v_org, 'EXP-1', current_date, 100, 100, 'draft',
+          (select id from public.accounts
+            where org_id = v_org and not is_group limit 1))
+  returning id into v_exp;
+
+  -- The older reading posted an expense; the newer one did not.
+  insert into public.ocr_scans
+    (org_id, attachment_id, storage_path, provider, key_source, status,
+     posted_table, posted_id, posted_at, created_at)
+  values (v_org, v_att, 'x/y/z', 'gemini', 'platform', 'ok',
+          'expenses', v_exp, now(), now() - interval '2 minutes')
+  returning id into v_old;
+
+  insert into public.ocr_scans
+    (org_id, attachment_id, storage_path, provider, key_source, status,
+     created_at)
+  values (v_org, v_att, 'x/y/z', 'gemini', 'platform', 'ok',
+          now() - interval '1 minute');
+
+  select * into r from public.scan_inbox(v_org, 100, 'all');
+  perform pg_temp.check_eq(
+    'the reading that became something is the one shown', r.scan_id, v_old);
+  perform pg_temp.check_eq('so the row still says what it became',
+    r.posted_table, 'expenses');
+end;
+$$;
+
+-- A scan whose document was deleted has no attachment to group by, and
+-- every one of those must still appear rather than collapsing into one.
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Dokumen Dipadam Sdn Bhd');
+  v_n   integer;
+begin
+  insert into public.ocr_scans
+    (org_id, attachment_id, storage_path, provider, key_source, status)
+  values (v_org, null, 'x/y/one.pdf', 'gemini', 'platform', 'ok'),
+         (v_org, null, 'x/y/two.pdf', 'gemini', 'platform', 'ok');
+
+  select count(*)::integer into v_n from public.scan_inbox(v_org, 100, 'all');
+  perform pg_temp.check_eq(
+    'two scans with no attachment left are two rows, not one', v_n, 2);
+end;
+$$;
+
 rollback;
