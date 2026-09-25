@@ -34,7 +34,7 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The same file, twice (0711) |
+| Head at time of writing | Telling somebody the file is already here |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0711` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
@@ -2524,7 +2524,10 @@ Built: `contentHash(bytes)` (pure), the hash written on every upload,
 migration `0711`, and `supabase/tests/attachment_content_hash.sql` in
 CI's run list.
 
-NOT built: the LOOKUP. It was written and then taken back out, because
+**Now built, in the commit after:** the LOOKUP and its caller. See
+"Telling somebody the file is already here" below.
+
+It was written and then taken back out of `0711`'s own commit, because
 `check_unreachable.py` refused it — "a wrapper for a call nobody can
 make is a promise the product does not keep" — and the gate was right.
 Reusing an existing attachment is not the one-liner it looks like: a row
@@ -2568,6 +2571,67 @@ against our own output. Four mutants killed with the control surviving,
 including "hash only the first kilobyte", which would call two 22-page
 statements identical whenever their first page matched. The SQL test was
 watched to FAIL twice: with the index dropped, and with it made UNIQUE.
+
+## Telling somebody the file is already here
+
+The other half of `0711`. `captureAndRead` now asks, BEFORE uploading,
+whether this organization has filed these exact bytes before —
+`Repo.identicalFile(bytes)` — and carries the answer out on
+`StagedReceipt.alreadyHere`. The statement importer turns it into a
+notice.
+
+### The choke point, and why there
+
+`receipt_capture.dart`, inside `captureAndRead`'s `whileScanning`
+action, just before `repo.uploadAttachment`. EVERY scan path goes
+through it — statement, receipt, bill, expense — which is what was
+asked for: "bank statement or ai scan or any file". The comment two
+lines above it already said the second press is "a second upload and a
+second charge"; it simply had no way to tell.
+
+### The upload still happens, and that is the decision
+
+Three options were on the table: reuse the existing attachment row, make
+a new row pointing at the same storage object, or upload normally and
+SAY so. The third was chosen.
+
+An `attachments` row is not merely a file. It carries `entity_table`,
+`entity_id` and `0708`'s evidence lock, so handing this document
+somebody else's attachment would re-file THEIR paper against a record
+they did not choose. Telling them costs one duplicate object in a
+bucket; reusing silently could cost them the audit trail.
+
+And re-uploading is often deliberate — the first scan went badly and
+they want another go, on their own document, for a reason they
+understand better than this system does. So it is a NOTICE beside the
+sign repairs, never a refusal, and `alreadyHereNotice` has an assertion
+that it does not read like one.
+
+### The lookup never blocks
+
+A query that throws is treated as "found nothing" and the capture
+carries on. The one thing worse than missing a duplicate is refusing
+somebody's document over a lookup that went wrong.
+
+### Verification
+
+Ten assertions in `content_hash_test.dart`, five mutants killed with
+the control surviving — including "it reads as a refusal instead of a
+notice", which is how this feature most plausibly goes wrong.
+`check_unreachable.py` is green because `identicalFile` now has a real
+caller; it was refused in the previous commit and that refusal was
+correct.
+
+### And the sweep now runs the API-description check
+
+`0711` taught this the hard way (CI 2129). The local gate command now
+ends with
+
+```
+python3 scripts/generate_api_description.py "$DB" --check
+```
+
+because `for f in scripts/check_*.py` never matched the generator.
 
 ## This session's commits
 

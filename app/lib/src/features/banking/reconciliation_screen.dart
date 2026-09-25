@@ -863,11 +863,28 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
     // against it. `0683`'s five columns describe a LINE; this is the
     // one question about the document that only the screen can answer,
     // because only the screen knows where the person pressed Upload.
-    final parse = scannedStatement(
+    var parse = scannedStatement(
       staged.read,
       period: period,
       intoAccountNumber: widget.intoAccountNumber,
     );
+
+    // `0711`. The file was uploaded either way -- see
+    // `alreadyHereNotice` for why reusing the old attachment is not the
+    // free win it looks like -- but somebody who has sent this exact
+    // statement before is entitled to know before they import it again.
+    final seenBefore = alreadyHereNotice(
+      fileName: staged.alreadyHere?.fileName,
+      filedAt: staged.alreadyHere?.createdAt,
+    );
+    if (seenBefore != null) {
+      parse = StatementParse(
+        parse.rows,
+        parse.problems,
+        [seenBefore, ...parse.notices],
+        parse.unreadable,
+      );
+    }
     if (parse.rows.isEmpty && parse.problems.isEmpty) {
       // THREE different failures wore one sentence, and the sentence
       // was wrong about all of them.

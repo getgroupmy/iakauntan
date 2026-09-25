@@ -147,10 +147,26 @@ class StagedReceipt {
     required this.attachmentId,
     required this.placeholderId,
     required this.read,
+    this.alreadyHere,
   });
 
   final String attachmentId;
   final String placeholderId;
+
+  /// A file this organization had ALREADY FILED with these exact bytes.
+  ///
+  /// `0711`. Null when there is nothing to say — no match, or a match
+  /// that predates the hash and therefore cannot be recognised. Never
+  /// proof that a file is new.
+  ///
+  /// The upload happens anyway and this is carried out beside it, on
+  /// purpose. An `attachments` row is not only a file: it carries
+  /// `entity_table`, `entity_id` and `0708`'s evidence lock, so handing
+  /// a new document somebody else's attachment would re-file their
+  /// paper against a record they did not choose. Telling them costs a
+  /// duplicate object; reusing silently could cost them the audit
+  /// trail.
+  final Attachment? alreadyHere;
 
   /// Null when the capture was filed but the reading failed or was
   /// declined — the paper is still worth keeping.
@@ -258,6 +274,21 @@ Future<StagedReceipt?> captureAndRead(
   final outcome = await whileScanning<_Capture>(
     context,
     action: (report) async {
+      // Has this exact file been here before? `0711`.
+      //
+      // Asked BEFORE the upload and inside the modal, because it is a
+      // round trip and the modal is already saying "uploading". It
+      // never blocks: a lookup that fails is a lookup that found
+      // nothing, and the capture carries on. The one thing worse than
+      // not noticing a duplicate is refusing a document over a query
+      // that went wrong.
+      Attachment? alreadyHere;
+      try {
+        alreadyHere = await repo.identicalFile(file.bytes);
+      } catch (_) {
+        alreadyHere = null;
+      }
+
       final String attachmentId;
       try {
         attachmentId = await repo.uploadAttachment(
@@ -268,7 +299,12 @@ Future<StagedReceipt?> captureAndRead(
           mimeType: file.mimeType,
         );
       } catch (e) {
-        return (attachmentId: null, read: null, error: e);
+        return (
+          attachmentId: null,
+          read: null,
+          error: e,
+          alreadyHere: alreadyHere,
+        );
       }
 
       report(ScanStage.reading);
@@ -298,9 +334,19 @@ Future<StagedReceipt?> captureAndRead(
           onLocalFallback: () => report(ScanStage.readingHere),
           target: target,
         );
-        return (attachmentId: attachmentId, read: read, error: null);
+        return (
+          attachmentId: attachmentId,
+          read: read,
+          error: null,
+          alreadyHere: alreadyHere,
+        );
       } catch (e) {
-        return (attachmentId: attachmentId, read: null, error: e);
+        return (
+          attachmentId: attachmentId,
+          read: null,
+          error: e,
+          alreadyHere: alreadyHere,
+        );
       }
     },
   );
@@ -330,6 +376,7 @@ Future<StagedReceipt?> captureAndRead(
     attachmentId: attachmentId,
     placeholderId: placeholder,
     read: outcome.read,
+    alreadyHere: outcome.alreadyHere,
   );
 }
 
@@ -344,6 +391,10 @@ typedef _Capture = ({
   String? attachmentId,
   OcrExtraction? read,
   Object? error,
+
+  /// A file this organization had already filed with these exact bytes,
+  /// found before the upload. `0711`.
+  Attachment? alreadyHere,
 });
 
 /// A version 4 UUID, for parking an attachment against a record that

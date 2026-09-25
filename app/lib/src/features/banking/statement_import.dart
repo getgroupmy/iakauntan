@@ -1486,6 +1486,37 @@ String? accountMismatch({
       'right account before you do.';
 }
 
+/// What to say when this exact file has been filed here before.
+///
+/// ## Why it is said rather than acted on
+///
+/// The upload happens anyway. An `attachments` row is not merely a
+/// file: it carries `entity_table`, `entity_id` and `0708`'s evidence
+/// lock, so handing this document somebody else's attachment would
+/// re-file their paper against a record they did not choose. Telling
+/// them costs one duplicate object in a bucket; reusing silently could
+/// cost them the audit trail.
+///
+/// So this is a NOTICE, next to the sign repairs — something that was
+/// done differently from how it looked, worth knowing and not worth
+/// stopping for. Somebody re-uploading a statement because the first
+/// scan went badly is doing a reasonable thing, and the answer to it is
+/// a sentence, not a refusal.
+///
+/// Null when there is nothing to say. That covers a file genuinely new
+/// AND a file whose match predates `0711` and cannot be recognised —
+/// the two are indistinguishable from here, which is exactly why this
+/// never claims a document IS new.
+String? alreadyHereNotice({String? fileName, DateTime? filedAt}) {
+  if (fileName == null && filedAt == null) return null;
+  final named = (fileName ?? '').trim();
+  return 'This exact file has been filed here before'
+      '${filedAt == null ? '' : ', on ${_day(filedAt)}'}'
+      '${named.isEmpty ? '' : ', as $named'}. '
+      'It has been kept again rather than replacing what is already '
+      'there — the lines below are from this reading.';
+}
+
 /// What stands above the notices in the import dialog.
 ///
 /// A pure function for one line of text, because that line was WRONG in

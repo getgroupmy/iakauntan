@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/data/attachments_repository.dart';
+import 'package:iakauntan/src/features/banking/statement_import.dart';
 
 /// The same file, twice.
 ///
@@ -23,6 +24,8 @@ import 'package:iakauntan/src/data/attachments_repository.dart';
 /// `file_size` on its own is a coincidence waiting to happen.
 void main() {
   Uint8List bytes(String s) => Uint8List.fromList(utf8.encode(s));
+
+  _duplicateSentence();
 
   group('the hash of a file', () {
     test('is the published SHA-256, not something of our own', () {
@@ -83,6 +86,65 @@ void main() {
       expect(contentHash(big), contentHash(same));
       // Changed in the LAST byte. A prefix hash would miss this.
       expect(contentHash(big), isNot(contentHash(tweaked)));
+    });
+  });
+}
+
+/// And what gets said when the same file turns up again.
+///
+/// The upload happens either way. An `attachments` row is not merely a
+/// file — it carries `entity_table`, `entity_id` and `0708`'s evidence
+/// lock — so handing this document somebody else's attachment would
+/// re-file their paper against a record they did not choose. Telling
+/// them costs one duplicate object; reusing silently could cost them
+/// the audit trail.
+void _duplicateSentence() {
+  group('the sentence about a file that has been here before', () {
+    test('names when it was filed, and what it was called', () {
+      final said = alreadyHereNotice(
+        fileName: 'maybank-august.pdf',
+        filedAt: DateTime(2026, 8, 3),
+      );
+
+      expect(said, isNotNull);
+      expect(said, contains('03/08/2026'));
+      expect(said, contains('maybank-august.pdf'));
+    });
+
+    test('is a notice and not a refusal', () {
+      // Somebody re-uploading because the first scan went badly is
+      // doing a reasonable thing. The answer is a sentence.
+      final said = alreadyHereNotice(
+        fileName: 'x.pdf',
+        filedAt: DateTime(2026, 8, 3),
+      );
+
+      expect(said, contains('kept again'));
+      expect(said, isNot(contains('cannot')));
+      expect(said, isNot(contains('refused')));
+    });
+
+    test('and says nothing at all when there is nothing to say', () {
+      // A file genuinely new AND a file whose match predates `0711`
+      // both arrive here as nulls, and they are indistinguishable from
+      // here — which is exactly why this must never claim a document
+      // IS new.
+      expect(alreadyHereNotice(), isNull);
+      expect(alreadyHereNotice(fileName: null, filedAt: null), isNull);
+    });
+
+    test('a date with no name still says the useful half', () {
+      final said = alreadyHereNotice(filedAt: DateTime(2026, 1, 9));
+
+      expect(said, isNotNull);
+      expect(said, contains('09/01/2026'));
+    });
+
+    test('and a name with no date likewise', () {
+      final said = alreadyHereNotice(fileName: 'rhb-oct.pdf');
+
+      expect(said, isNotNull);
+      expect(said, contains('rhb-oct.pdf'));
     });
   });
 }

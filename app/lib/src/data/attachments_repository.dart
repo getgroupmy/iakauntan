@@ -187,6 +187,43 @@ extension RepoAttachments on Repo {
     return row['id'].toString();
   }
 
+  /// A file with these exact bytes this organization has filed before,
+  /// or null.
+  ///
+  /// `0711`. Asked BEFORE an upload, so somebody who sends the same
+  /// statement twice is told rather than charged for a second reading
+  /// of it.
+  ///
+  /// ## Null means "nothing found", and that is two different things
+  ///
+  /// No such file, and no file whose hash was ever taken. Every row
+  /// uploaded before `0711` has `content_sha256` null and cannot be
+  /// given one without downloading the object back, so an absence here
+  /// is never PROOF that a file is new. Callers must treat it as
+  /// "nothing to say" and carry on, never as "definitely not a
+  /// duplicate".
+  ///
+  /// ## Scoped to the organization, twice over
+  ///
+  /// By RLS and by the index. Two companies uploading the same public
+  /// form are not duplicates of each other, and one org must never be
+  /// told a file "already exists" on the strength of a row it is not
+  /// allowed to see.
+  ///
+  /// The NEWEST match, because the useful sentence is about the last
+  /// time this happened rather than the first.
+  Future<Attachment?> identicalFile(Uint8List bytes) async {
+    final rows = await client
+        .from('attachments')
+        .select()
+        .eq('org_id', orgId)
+        .eq('content_sha256', contentHash(bytes))
+        .order('created_at', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return Attachment.fromJson(Map<String, dynamic>.from(rows.first));
+  }
+
   /// Where one attachment's object lives, by row id.
   ///
   /// For the callers that have the row and not the path — the capture
