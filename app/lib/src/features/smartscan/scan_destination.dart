@@ -93,6 +93,29 @@ enum ScanDestination {
 /// destinations in front of it and the page in its hand. That is a
 /// better answer than anything string matching produces afterwards,
 /// which is why it is asked first.
+/// The `module.action` key this destination is on the server.
+///
+/// The inverse of [destinationFromTarget], and written beside it so
+/// the two cannot drift -- a test walks every value and asserts the
+/// round trip.
+///
+/// Sent to the reader by a screen that already KNOWS what it is
+/// holding, so the reader is told rather than asked. `ScanDestination
+/// .unknown` has no key, because "I do not know" is not a destination
+/// and naming it would narrow the reader to nothing.
+extension ScanDestinationTarget on ScanDestination {
+  String? get targetKey => switch (this) {
+        ScanDestination.bill => 'purchases.bill',
+        ScanDestination.purchaseOrder => 'purchases.purchase_order',
+        ScanDestination.goodsReceived => 'purchases.goods_received',
+        ScanDestination.invoice => 'sales.invoice',
+        ScanDestination.expense => 'accounting.expense',
+        ScanDestination.bankStatement => 'accounting.bank_statement',
+        ScanDestination.contact => 'contacts.contact',
+        ScanDestination.unknown => null,
+      };
+}
+
 ScanDestination? destinationFromTarget(String? target) =>
     switch (target?.trim()) {
       'purchases.bill' => ScanDestination.bill,

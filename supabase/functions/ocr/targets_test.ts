@@ -4,6 +4,7 @@ import {
   assertStringIncludes,
 } from "jsr:@std/assert@1.0.19";
 import {
+  narrowToTarget,
   outputBudget,
   requiredWith,
   targetPrompt,
@@ -418,4 +419,119 @@ Deno.test("and a long document still gets the advice that suits it", () => {
     tooLongMessage(assembled(targetSchema([receiptTarget]))),
     "page with the totals",
   );
+});
+
+/**
+ * The destination the caller already knows.
+ *
+ * Reported with two screenshots: somebody pressed Upload inside the
+ * bank statement importer, beside a named bank account, and got back
+ * "Nothing on that document read as statement lines". There is no
+ * ambiguity in that press — they said what the document is and where
+ * it goes — and the reader was still handed seven destinations and
+ * asked to pick. A statement classified as anything else comes back
+ * with `rows` null and nothing to import.
+ */
+Deno.test("naming a destination narrows to it", () => {
+  const all = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  const one = narrowToTarget(all, "accounting.bank_statement");
+  assertEquals(one.length, 1);
+  assertEquals(one[0].key, "accounting.bank_statement");
+});
+
+Deno.test("and the schema then certainly has rows on it", () => {
+  // The whole point. Un-narrowed, whether `rows` appears depends on
+  // some OTHER target happening to repeat; narrowed to the statement,
+  // it is there because the statement is there.
+  const one = narrowToTarget(
+    usableTargets([
+      { key: "accounting.bank_statement", label: "A bank statement",
+        repeats: true, fields: [{ name: "amount" }] },
+      { key: "purchases.bill", label: "A bill",
+        fields: [{ name: "total_amount" }] },
+    ]),
+    "accounting.bank_statement",
+  );
+
+  const schema = targetSchema(one)!;
+  assert("rows" in schema, "a narrowed statement must ask for rows");
+  // And the bill's fields are gone, which on a long statement is
+  // output budget that was being spent on nulls.
+  assert(!("fields" in schema), "no single-record target is left to fill");
+});
+
+Deno.test("naming nothing leaves every destination on offer", () => {
+  const all = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  assertEquals(narrowToTarget(all, null).length, 2);
+  assertEquals(narrowToTarget(all, "").length, 2);
+  assertEquals(narrowToTarget(all, "   ").length, 2);
+  assertEquals(narrowToTarget(all, undefined).length, 2);
+});
+
+Deno.test("and an unknown key WIDENS rather than silencing the reader", () => {
+  // A caller out of step with the database. The right answer is the
+  // behaviour this had before -- every target offered -- not a reader
+  // with nothing at all to choose from, which would make every scan
+  // from that caller return nothing.
+  const all = usableTargets([
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  assertEquals(narrowToTarget(all, "accounting.does_not_exist").length, 1);
+  assertEquals(narrowToTarget(all, "accounting.does_not_exist")[0].key,
+    "purchases.bill");
+});
+
+Deno.test("the prompt tells a told reader that it has been told", () => {
+  const one = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+  ]);
+
+  const told = targetPrompt(one, true);
+  assertStringIncludes(told, "ALREADY BEEN IDENTIFIED");
+  assertStringIncludes(told, "A bank statement");
+  // It must still be able to disagree -- somebody picked the wrong
+  // file -- but not by quietly choosing a different destination, since
+  // the screen that asked has nowhere to put one.
+  assertStringIncludes(told, "`target` is null");
+  assertStringIncludes(told, "Do not quietly");
+});
+
+Deno.test("and an untold reader is still asked to decide", () => {
+  const all = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  const asked = targetPrompt(all, false);
+  assertStringIncludes(asked, "Decide which of these it is");
+  assertStringIncludes(asked, "placed wrongly costs more");
+  assert(
+    !asked.includes("ALREADY BEEN IDENTIFIED"),
+    "nothing identified it",
+  );
+});
+
+Deno.test("the default is untold, so every existing caller is unchanged", () => {
+  const all = usableTargets([
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+  assertEquals(targetPrompt(all), targetPrompt(all, false));
 });

@@ -148,6 +148,14 @@ Future<OcrExtraction> readDocument(
   /// that goes on saying "Reading the document" through it is a modal
   /// that looks stuck.
   void Function()? onLocalFallback,
+
+  /// The destination this document is already known to have, as
+  /// `module.action`.
+  ///
+  /// Only the server reader is told: the on-device engine has no
+  /// schema to narrow and reads what it reads. See
+  /// `Repo.scanAttachment`.
+  String? target,
 }) async {
   final repo = ref.read(repoProvider)!;
   // `0700`. The company's setting decides by default, and a caller can
@@ -157,7 +165,8 @@ Future<OcrExtraction> readDocument(
   // refusals, the PDF branch, and `recordLocalScan`.
   if (!(onDevice ?? ocr.onDevice)) {
     try {
-      return await repo.scanAttachment(attachmentId, provider: provider);
+      return await repo.scanAttachment(attachmentId,
+          provider: provider, target: target);
     } catch (e) {
       if (!readerUnreachable(e) ||
           !canReadHere(

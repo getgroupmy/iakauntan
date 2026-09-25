@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | DR, CR, and the figure that parsed as nothing |
+| Head at time of writing | The importer knew, and never said |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,147 Flutter tests**, 53 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,152 Flutter tests**, 61 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -1976,6 +1976,66 @@ not end in DR or CR — and a figure with the tag loose in the middle
 (`1250.00DRX`) comes back null either way. There is no input that tells
 them apart, and the note sits beside the assertion rather than in a
 list somebody has to find.
+
+## The importer knew, and never said
+
+Reported with two screenshots: Upload pressed inside the bank statement
+importer, beside a named Maybank account, and back came *"Nothing on
+that document read as statement lines."*
+
+### The reader was never told what it was reading
+
+The `ocr` edge function took `org_id`, `attachment_id` and `provider`.
+**Nothing else.** So a screen that exists to import bank statements and
+does nothing else uploaded a statement and asked the reader to pick
+from seven destinations with no hint at all. Classify it as a bill and
+`rows` comes back null — and `rows` is the only place statement lines
+can be.
+
+`narrowToTarget(targets, key)` narrows to the one the caller named.
+Three things follow at once: **`rows` is certainly in the schema** (not
+"if some other target happens to repeat"), the prompt stops describing
+six destinations that are not this one, and the other targets' fields
+stop being asked for — which on a long statement is output budget spent
+on nulls.
+
+`targetPrompt(targets, known)` changes the job entirely when the
+destination is known: from *"decide which of these it is"* to *"this is
+a bank statement, transcribe it"*. **Null stays sayable** — somebody
+who picked the wrong file has said something untrue and the reader must
+be able to disagree — but it is told not to quietly choose a different
+destination, because the screen that asked has nowhere to put one.
+
+**An unknown key widens rather than narrows.** A caller out of step
+with the database gets the behaviour it had before, every target
+offered, not a reader with nothing to choose from — which would make
+every scan from that caller return nothing.
+
+`ScanDestination.targetKey` is the Dart side, with a round-trip test
+against `destinationFromTarget`. Two tables of the same facts drift,
+and the failure when they do is *silent*: a stale key widens back and
+the hint is simply ignored.
+
+### And my own message was wrong about all three failures
+
+It said *"a platform administrator sets up under Kinds of document."*
+**`0683` set the statement's five columns up and they are live** — so
+the one person who saw it was sent to configure something already
+configured, on the strength of a guess this screen had no business
+making.
+
+It also wore one sentence over three different failures. Now:
+
+- the scan failed outright → *"could not be read at all"*, and where to
+  try a different reader;
+- `foundNothing` → *"nothing legible came back"*, and the usual reason;
+- read fine, read as something else → *"read, but not as a bank
+  statement"*, and what to check.
+
+Eleven new assertions on the edge function, four killed mutants on the
+key table, control survived. The edge-function assertions were checked
+by putting each bug back by hand and watching the right test fail —
+there is still no mutation harness for Deno.
 
 ## This session's commits
 

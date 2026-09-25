@@ -60,6 +60,7 @@ import { Exchange, record } from "./exchange.ts";
 import { ReaderRefusal, withOneRetry } from "./retry.ts";
 import {
   type ScanTarget,
+  narrowToTarget,
   outputBudget,
   requiredWith,
   targetPrompt,
@@ -1208,6 +1209,11 @@ async function runReader(
   // for a platform that has set none up, and then every call below
   // falls back to the schema and prompt this function shipped with.
   targets: ScanTarget[] = [],
+  // Whether the caller NAMED the destination, so `targets` is the one
+  // they asked for rather than everything on offer. Changes the prompt
+  // from "decide which of these it is" to "this is a bank statement,
+  // transcribe it". See `narrowToTarget`.
+  known = false,
 ): Promise<Extraction> {
   const extra = targetSchema(targets);
   // `required` grows with `properties`, and forgetting that broke every
@@ -1230,7 +1236,9 @@ async function runReader(
     properties: { ...SCHEMA.properties, ...extra },
     required: requiredWith(SCHEMA.required, extra),
   };
-  const system = extra === null ? SYSTEM : SYSTEM + "\n" + targetPrompt(targets);
+  const system = extra === null
+    ? SYSTEM
+    : SYSTEM + "\n" + targetPrompt(targets, known);
 
   // Which reader made the calls this run is about to add. Stamped
   // here, once, rather than passed down into five readers that have no
@@ -1353,6 +1361,7 @@ async function tryFallback(
   bytes: Uint8Array,
   mime: string,
   targets: ScanTarget[],
+  known: boolean,
 ): Promise<{ extraction: Extraction; reader: FallbackReader } | null> {
   try {
     const { data, error } = await db.rpc("ocr_fallback", { p_scan_id: scanId });
@@ -1369,7 +1378,7 @@ async function tryFallback(
     }, orgId);
     return {
       extraction: await runReader(
-        rec, reader, credential, bytes, mime, targets),
+        rec, reader, credential, bytes, mime, targets, known),
       reader,
     };
   } catch (e) {
@@ -1492,6 +1501,19 @@ serveFunction("ocr.failed", async (req: Request) => {
     }
   }
 
+  // The destination the caller already knows. A screen that exists to
+  // do one thing -- the bank statement importer -- has told us what
+  // this is, and asking the reader to guess anyway is how a statement
+  // that read perfectly came back as a bill with no rows on it.
+  const asked = typeof body?.target === "string" ? body.target.trim() : "";
+  targets = narrowToTarget(targets, asked);
+  // Known only where the narrowing actually MATCHED. An unknown key
+  // widens back to everything, and telling the reader "this has
+  // already been identified" over a list of seven is worse than not
+  // telling it anything.
+  const knownTarget = asked !== "" && targets.length === 1 &&
+    targets[0].key === asked;
+
   // Every call this scan makes to a vendor, in order, kept raw for the
   // console. `0704`. Declared out here rather than inside the `try`
   // because the CATCH needs it too -- a scan that failed is the one
@@ -1549,7 +1571,7 @@ serveFunction("ocr.failed", async (req: Request) => {
     const extraction = await withOneRetry(
       () =>
         runReader(exchanges, begin, credential, bytes as Uint8Array, mime,
-          targets),
+          targets, knownTarget),
       { onRetry: (failure) => blips.push(failure) },
     );
     const firstFailure = blips.length > 0 ? blips[0] : null;
@@ -1637,6 +1659,7 @@ serveFunction("ocr.failed", async (req: Request) => {
     if (bytes) {
       const rescued = await tryFallback(
         exchanges, db, begin.scan_id, orgId, bytes, mime, targets,
+        knownTarget,
       );
       if (rescued) {
         const { error: settled } = await db.rpc("ocr_finish", {

@@ -180,6 +180,11 @@ Future<StagedReceipt?> captureAndRead(
   /// PDF refusal that happens before the upload, the progress modal,
   /// the attachment that is kept when the reading fails.
   CapturedFile? picked,
+
+  /// The destination this capture is already known to have, as
+  /// `module.action`. Passed to the reader so it is not asked to guess
+  /// what a screen has already been told. See `narrowToTarget`.
+  String? target,
 }) async {
   final file = picked ??
       switch (source) {
@@ -291,6 +296,7 @@ Future<StagedReceipt?> captureAndRead(
           localPath: file.path,
           localBytes: file.bytes,
           onLocalFallback: () => report(ScanStage.readingHere),
+          target: target,
         );
         return (attachmentId: attachmentId, read: read, error: null);
       } catch (e) {

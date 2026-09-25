@@ -823,6 +823,18 @@ extension RepoOcr on Repo {
   Future<OcrExtraction> scanAttachment(
     String attachmentId, {
     String? provider,
+
+    /// The destination the CALLER already knows, as
+    /// `module.action` — `accounting.bank_statement`.
+    ///
+    /// A screen that exists to do one thing has already been told what
+    /// the document is, and asking the reader to guess anyway is how a
+    /// statement that read perfectly came back classified as a bill
+    /// with no rows on it. See `narrowToTarget` in the edge function.
+    ///
+    /// Not validated here: an unknown key widens back to every target
+    /// on the server, which is the behaviour this had before.
+    String? target,
   }) async {
     final FunctionResponse res;
     try {
@@ -830,6 +842,7 @@ extension RepoOcr on Repo {
         'org_id': orgId,
         'attachment_id': attachmentId,
         if (provider != null) 'provider': provider,
+        if (target != null) 'target': target,
       });
     } on FunctionException catch (e) {
       // A non-2xx throws rather than coming back as data, so the

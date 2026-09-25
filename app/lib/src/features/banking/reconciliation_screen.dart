@@ -811,22 +811,48 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
       source: CaptureSource.file,
       table: ScanDestination.bankStatement.table,
       picked: file,
+      // We KNOW what this is. Somebody pressed Upload on a screen that
+      // imports bank statements and nothing else, so the reader is
+      // told rather than asked -- which is what puts `rows` in the
+      // schema at all.
+      target: ScanDestination.bankStatement.targetKey,
     );
     if (staged == null || !mounted) return;
 
     final parse = scannedStatement(staged.read);
     if (parse.rows.isEmpty && parse.problems.isEmpty) {
-      // The file is kept either way — `0708` refuses to delete it once
-      // anything is built from it, and nothing has been built here.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Nothing on that document read as statement lines. The file '
-            'is kept. A reader has to be asked for the lines, which a '
-            'platform administrator sets up under Kinds of document.',
-          ),
-        ),
-      );
+      // THREE different failures wore one sentence, and the sentence
+      // was wrong about all of them.
+      //
+      // It said a platform administrator had to set the reader up
+      // under Kinds of document. `0683` set the statement's five
+      // columns up years ago and they are live — so the one person who
+      // saw this was sent to configure something that was already
+      // configured, on the strength of a guess this screen had no
+      // business making.
+      //
+      // The file is kept in every case: `0708` refuses to delete it
+      // once anything is built from it, and nothing has been built
+      // here.
+      final read = staged.read;
+      final String why;
+      if (read == null) {
+        why = 'That document could not be read at all. The file is '
+            'kept — open it from AI SmartScan to try a different '
+            'reader, or paste the statement in below.';
+      } else if (read.foundNothing) {
+        why = 'Nothing legible came back from that document. The file '
+            'is kept. A photograph of a screen, or a scan at an angle, '
+            'is usually the reason.';
+      } else {
+        // Read perfectly well, and read as something else. Which is
+        // worth saying plainly rather than calling it unreadable.
+        why = 'That was read, but not as a bank statement — no lines '
+            'with a date and an amount came back. The file is kept. '
+            'Check it is the statement itself rather than a summary or '
+            'an advice slip.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(why)));
       return;
     }
     setState(() {

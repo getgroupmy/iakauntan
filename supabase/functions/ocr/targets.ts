@@ -67,6 +67,49 @@ export function usableTargets(raw: unknown): ScanTarget[] {
 }
 
 /**
+ * The one destination the CALLER already knows, where they named it.
+ *
+ * ## The failure this exists for
+ *
+ * Somebody presses "Upload" inside the bank statement importer, beside
+ * a named bank account. There is no ambiguity left: they have said what
+ * the document is and where it goes. And the reader was still asked to
+ * pick from seven destinations with no hint — so a statement that read
+ * perfectly could come back classified as a bill, with `rows` null and
+ * nothing to import, reported to the person as "nothing on that
+ * document read as statement lines".
+ *
+ * Narrowing does three things at once: `rows` is certainly in the
+ * schema, the prompt stops describing six destinations that are not
+ * this one, and every field of those six stops being asked for — which
+ * on a long statement is output budget spent on nulls.
+ *
+ * ## Null is still sayable, and that is deliberate
+ *
+ * The enum becomes "this key, or null". Somebody who pressed Upload on
+ * the wrong file has said something untrue, and the reader must be able
+ * to disagree — `targetPrompt` tells it so in as many words. What it
+ * must NOT do is quietly pick a different destination, because the
+ * screen that asked has nowhere to put one.
+ *
+ * ## An unknown key widens rather than narrows
+ *
+ * A caller naming a destination this platform has not configured is a
+ * caller out of step with the database, and the right answer is the
+ * behaviour it had before — every target offered — not a reader with
+ * nothing to choose from at all.
+ */
+export function narrowToTarget(
+  targets: ScanTarget[],
+  key: string | null | undefined,
+): ScanTarget[] {
+  const wanted = (key ?? "").trim();
+  if (wanted === "") return targets;
+  const found = targets.filter((t) => t.key === wanted);
+  return found.length === 0 ? targets : found;
+}
+
+/**
  * The part of the JSON schema that asks where this document goes.
  *
  * Two properties rather than one per target. `target` is the choice —
@@ -196,16 +239,38 @@ function rowProperties(targets: ScanTarget[]): Record<string, unknown> {
   return properties;
 }
 
-/** The lines added to the system prompt, or "" when nothing is set up. */
-export function targetPrompt(targets: ScanTarget[]): string {
+/**
+ * The lines added to the system prompt, or "" when nothing is set up.
+ *
+ * [known] says the CALLER already named the destination — see
+ * `narrowToTarget`. The wording changes completely, and it has to: "one
+ * of these seven, you decide" and "this is a bank statement, transcribe
+ * it" are different jobs, and a reader told the second does the second
+ * far better than a reader left to infer it.
+ */
+export function targetPrompt(targets: ScanTarget[], known = false): string {
   if (targets.length === 0) return "";
-  const lines = [
-    "",
-    "This document is going somewhere. Decide which of these it is and",
-    "fill in what that one needs. Transcribe; do not infer a field from",
-    "another field, and leave null anything the page does not print.",
-    "",
-  ];
+  const lines = known && targets.length === 1
+    ? [
+      "",
+      `This document has ALREADY BEEN IDENTIFIED as: ${targets[0].label}.`,
+      "The person handing it to you said so, on a screen that does",
+      "nothing else. Do not spend effort deciding what it is — fill in",
+      "what it needs, from the page.",
+      "",
+      "If the page is plainly NOT that — they picked the wrong file —",
+      "`target` is null and you say why in `note`. Do not quietly",
+      "choose something else instead: the screen that asked has nowhere",
+      "to put a different answer, so it would be thrown away.",
+      "",
+    ]
+    : [
+      "",
+      "This document is going somewhere. Decide which of these it is and",
+      "fill in what that one needs. Transcribe; do not infer a field from",
+      "another field, and leave null anything the page does not print.",
+      "",
+    ];
   for (const t of targets) {
     const kinds = (t.kinds ?? []).filter((k) => k);
     lines.push(
@@ -223,12 +288,14 @@ export function targetPrompt(targets: ScanTarget[]): string {
       );
     }
   }
-  lines.push(
-    "",
-    "If it is none of them, `target` is null and `fields` is null. A",
-    "document placed wrongly costs more than one placed nowhere: the",
-    "first becomes a record somebody has to find and undo.",
-  );
+  if (!known) {
+    lines.push(
+      "",
+      "If it is none of them, `target` is null and `fields` is null. A",
+      "document placed wrongly costs more than one placed nowhere: the",
+      "first becomes a record somebody has to find and undo.",
+    );
+  }
   return lines.join("\n");
 }
 
