@@ -605,18 +605,51 @@ DateTime resolveStatementYear({
       // begin, and a window long enough to reach those would anchor
       // the statement to its own first transaction — a guess wearing a
       // date's clothes, which is what all of this exists to refuse.
-      var found = _datesIn(line.substring(at + label.length));
-      for (var ahead = 1; found.isEmpty && ahead <= _labelWindow; ahead++) {
+      // CUT AT THE NEXT FIELD. A credit card prints its statement date
+      // and its payment due date side by side, and the due date is
+      // three weeks later -- on a 20 August statement it is 10
+      // September, in the NEXT period. Taking the later of the two
+      // filed the whole statement a month out, which is the failure
+      // this function was written to refuse, arriving by a different
+      // door. `Statement Date : 20 AUG 2026  Payment Due Date : 10 SEP
+      // 2026` now reads as far as `Payment` and no further.
+      var found = _datesIn(_upToTheNextField(line.substring(at + label.length)));
+      if (found.isNotEmpty) {
+        // A period is two dates and a statement date is one. Taking the
+        // later covers both: the end of the period, or the only date
+        // there was.
+        found.sort();
+        return (date: found.last, evidence: line);
+      }
+
+      // The value sits below the label. Which column of it is ours is
+      // settled by the labels on THIS line: a header that names three
+      // fields across and prints three values under them is read by
+      // position, because there is nothing else to read it by.
+      //
+      // `STATEMENT DATE / TARIKH PENYATA` names ONE field twice, in two
+      // languages, so it is not a row of columns and the span below it
+      // is a span -- which is why the fields are counted as fields
+      // rather than as phrases.
+      //
+      // Known limit, written down rather than guessed at: a period
+      // column beside a due-date column gives this the period's FIRST
+      // date rather than its last. That is the right month, which is
+      // what places the lines; the old rule gave the due date, which is
+      // the wrong one.
+      final fields = _fieldsNamedIn(lower);
+      final mine = fields.indexOf(_statementField);
+      for (var ahead = 1; ahead <= _labelWindow; ahead++) {
         if (i + ahead >= lines.length) break;
         found = _datesIn(lines[i + ahead]);
+        if (found.isEmpty) continue;
+        if (fields.length > 1 && mine >= 0 && mine < found.length) {
+          return (date: found[mine], evidence: line);
+        }
+        found.sort();
+        return (date: found.last, evidence: line);
       }
-      if (found.isEmpty) continue;
-
-      // A period is two dates and a statement date is one. Taking the
-      // later covers both: the end of the period, or the only date
-      // there was.
-      found.sort();
-      return (date: found.last, evidence: line);
+      continue;
     }
   }
 
@@ -631,6 +664,13 @@ DateTime resolveStatementYear({
   String? evidence;
   final seen = <String>{};
   for (final line in lines.take(header)) {
+    // A line that names the PAYMENT DUE DATE does not get a vote. It
+    // carries a month and a year like any other, and the month it
+    // carries is the one AFTER the statement's -- so a card whose
+    // statement date failed to extract would otherwise be filed on the
+    // day the money is owed, which is the failure this whole chain
+    // exists to refuse, arriving with a plausible-looking date.
+    if (_fieldsNamedIn(line.toLowerCase()).contains('due')) continue;
     for (final m in RegExp(r'\b([A-Za-z]{3,9})\.?\s+(\d{4})\b').allMatches(line)) {
       final month = _monthNumber(m.group(1)!);
       if (month == null) continue;
@@ -683,6 +723,110 @@ const _periodLabels = <String>[
   'period',
 ];
 
+/// The field this reader is after, named once so the two places that
+/// test for it cannot drift apart.
+const _statementField = 'statement';
+
+/// What ELSE a statement header prints, and which field each phrase
+/// belongs to.
+///
+/// ## Why a card needed this and a current account did not
+///
+/// A deposit statement's header says when it is for and very little
+/// else. A credit card's says at least four things at once, and the
+/// handover pack is explicit that they must never be conflated:
+/// statement date, payment due date, statement balance, minimum
+/// payment. The due date is the dangerous one -- it is a real date,
+/// three weeks after the statement, and on a 20 August statement it
+/// reads 10 September. Every rule here that takes "the later date" was
+/// written for a PERIOD, where later means the end of it, and a card
+/// turns that same rule into a statement filed in the wrong month.
+///
+/// So the phrases are grouped by FIELD rather than listed. Two phrases
+/// naming the same field are a bilingual header; two phrases naming
+/// different fields are two columns, and only the second means the
+/// value beside the label is not ours.
+///
+/// The money phrases carry no date and are here anyway: what they do
+/// is END the value before them. `Statement Date 20/08/2026 Credit
+/// Limit 30,000.00` has one date in it and `Statement Date 20/08/2026
+/// Minimum Payment Due 10/09/2026` has two, and nothing but the label
+/// tells them apart.
+const _headerFields = <String, String>{
+  // The date this reader is after, as a point and as a span. Every
+  // entry in `_periodLabels` appears here, because a label that can be
+  // searched for must also be countable as a field.
+  'statement date': _statementField,
+  'tarikh penyata': _statementField,
+  'date of statement': _statementField,
+  'statement period': _statementField,
+  'penyata bagi tempoh': _statementField,
+  'tempoh penyata': _statementField,
+  'bagi tempoh': _statementField,
+  'for the period': _statementField,
+  'period covered': _statementField,
+  'period from': _statementField,
+  'period': _statementField,
+  // The one that is three weeks later and belongs to the next period.
+  'payment due date': 'due',
+  'tarikh akhir pembayaran': 'due',
+  'tarikh bayaran akhir': 'due',
+  'due date': 'due',
+  // Money. None of these is a date; each of them ends a value.
+  'minimum payment': 'amount',
+  'bayaran minimum': 'amount',
+  'statement balance': 'amount',
+  'outstanding balance': 'amount',
+  'current balance': 'amount',
+  'previous balance': 'amount',
+  'baki penyata': 'amount',
+  'credit limit': 'amount',
+  'had kredit': 'amount',
+  'available credit': 'amount',
+  // And the number the statement is for, which on AmBank's layout sits
+  // between the label and its value.
+  'account no': 'account',
+  'no. akaun': 'account',
+  'card number': 'account',
+  'nombor kad': 'account',
+};
+
+/// As much of [rest] as still belongs to the label it came after.
+///
+/// Cut at the first phrase naming a DIFFERENT field. Another phrase for
+/// the same field is a translation, not a new column, and cutting there
+/// would throw away the value it is a translation of.
+String _upToTheNextField(String rest) {
+  final lower = rest.toLowerCase();
+  var end = rest.length;
+  for (final e in _headerFields.entries) {
+    if (e.value == _statementField) continue;
+    final at = lower.indexOf(e.key);
+    if (at >= 0 && at < end) end = at;
+  }
+  return rest.substring(0, end);
+}
+
+/// The fields one line of header names, left to right, each run of the
+/// same field counted once.
+///
+/// `STATEMENT DATE / TARIKH PENYATA` is one field. `Statement Date
+/// Payment Due Date Minimum Payment` is three, and the row beneath it
+/// is three columns in that order.
+List<String> _fieldsNamedIn(String lower) {
+  final hits = <({int at, String field})>[];
+  for (final e in _headerFields.entries) {
+    final at = lower.indexOf(e.key);
+    if (at >= 0) hits.add((at: at, field: e.value));
+  }
+  hits.sort((a, b) => a.at.compareTo(b.at));
+  final out = <String>[];
+  for (final h in hits) {
+    if (out.isEmpty || out.last != h.field) out.add(h.field);
+  }
+  return out;
+}
+
 /// Every whole date in one line of text, in the orders Malaysia writes.
 ///
 /// NEVER MM/DD/YYYY. `05/03/2026` is the fifth of March here and the
@@ -690,16 +834,24 @@ const _periodLabels = <String>[
 /// string to tell them apart — so the rule is the local one, applied
 /// without exception rather than guessed at per document.
 List<DateTime> _datesIn(String text) {
-  final out = <DateTime>[];
-  void add(DateTime? d) {
-    if (d != null && !out.contains(d)) out.add(d);
+  // Collected WITH THE OFFSET each was matched at, and returned in the
+  // order they are PRINTED rather than in the order the three patterns
+  // happen to run. The patterns run ISO first so the day-first one
+  // cannot read the tail of an ISO match -- that is about matching, and
+  // it has no business deciding which of `Statement Date` and `Payment
+  // Due Date` sits in the first column of the row below them.
+  final out = <({int at, DateTime date})>[];
+  void add(int at, DateTime? d) {
+    if (d == null) return;
+    if (out.any((e) => e.date == d)) return;
+    out.add((at: at, date: d));
   }
 
   // 2025-10-31. Taken first: run after the day-first pattern it would
   // be reading the tail of its own match.
   for (final m
       in RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b').allMatches(text)) {
-    add(_date(int.parse(m.group(1)!), int.parse(m.group(2)!),
+    add(m.start, _date(int.parse(m.group(1)!), int.parse(m.group(2)!),
         int.parse(m.group(3)!)));
   }
 
@@ -717,7 +869,7 @@ List<DateTime> _datesIn(String text) {
       .allMatches(text)) {
     var year = int.parse(m.group(3)!);
     if (year < 100) year += 2000;
-    add(_date(year, int.parse(m.group(2)!), int.parse(m.group(1)!)));
+    add(m.start, _date(year, int.parse(m.group(2)!), int.parse(m.group(1)!)));
   }
 
   // 31 OCT 2025, 31 Oktober 2025, 31-Dis-2025
@@ -728,10 +880,11 @@ List<DateTime> _datesIn(String text) {
     if (month == null) continue;
     var year = int.parse(m.group(3)!);
     if (year < 100) year += 2000;
-    add(_date(year, month, int.parse(m.group(1)!)));
+    add(m.start, _date(year, month, int.parse(m.group(1)!)));
   }
 
-  return out;
+  out.sort((a, b) => a.at.compareTo(b.at));
+  return out.map((e) => e.date).toList();
 }
 
 /// A month name in either of the languages a Malaysian statement is
