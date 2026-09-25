@@ -343,12 +343,51 @@ Future<OcrExtraction> _readHere(
 /// that was read and corrected must not be lost because the note would
 /// not write: the form has the figures either way, and a scan with no
 /// kind on it is what every reading before 0614 looks like.
+///
+/// ## [fallback], for a screen that knew before it asked
+///
+/// The reader's answer wins, because the reader saw the paper. But a
+/// screen that NARROWED the reader to one destination never gets one:
+/// nothing was asked to choose, so nothing chose, and the scan is filed
+/// under no kind at all. The bank statement importer is that screen,
+/// and the single scan in the live database shows it -- twenty rows
+/// read, `document_kind` null.
+///
+/// So the caller may name the kind it is certain of, and it is used
+/// only where the reader said nothing. `ScanDestination.knownKind` is
+/// where that certainty is written down, and it is null wherever a
+/// destination could honestly be more than one kind of paper.
+///
+/// [accepted] is nullable because a reading that FAILED is still worth
+/// filing under what it was. "A bank statement that could not be read"
+/// is a far more useful thing to find three months later than a
+/// document of no kind that could not be read.
+/// Which kind gets recorded: the reader's, or the caller's, or none.
+///
+/// Named and separate because `rememberDocumentKind` writes through
+/// `Repo.client`, which a fake cannot stand in for -- an extension
+/// method binds to the STATIC type of its receiver, so a test that
+/// faked it would watch the real body run. The DECISION is the part
+/// that can be got wrong silently, so the decision is what is
+/// asserted. See docs/widget-tests.md.
+///
+/// The reader wins wherever it answered, because the reader is the one
+/// that saw the paper. An empty string is not an answer.
+String? kindToRemember(OcrExtraction? accepted, String? fallback) {
+  final read = accepted?.documentKind?.trim();
+  if (read != null && read.isNotEmpty) return read;
+  final known = fallback?.trim();
+  if (known != null && known.isNotEmpty) return known;
+  return null;
+}
+
 Future<void> rememberDocumentKind(
   WidgetRef ref, {
   required String attachmentId,
-  required OcrExtraction accepted,
+  required OcrExtraction? accepted,
+  String? fallback,
 }) async {
-  final kind = accepted.documentKind;
+  final kind = kindToRemember(accepted, fallback);
   if (kind == null) return;
   try {
     await ref

@@ -72,6 +72,50 @@ enum ScanDestination {
         _ => null,
       };
 
+  /// The `scan_document_kinds.code` this destination is CERTAIN of
+  /// before the reader has said anything, or null where the paper could
+  /// honestly be more than one thing.
+  ///
+  /// ## The gap this closes
+  ///
+  /// `0614` put `document_kind` on the scan so that the question a
+  /// bookkeeper asks three months later -- what did it think this was
+  /// -- has an answer. The answer comes from the READER, which is right
+  /// where the reader is the only one who saw the paper.
+  ///
+  /// It is not right on a screen that already knew. The bank statement
+  /// importer tells the reader `accounting.bank_statement` before the
+  /// file is even uploaded, and then recorded nothing, because the
+  /// reader it had narrowed to one destination was never asked to
+  /// choose a kind and so returned none. The one scan in the live
+  /// database is exactly that: twenty rows read out of a statement, and
+  /// `document_kind` null.
+  ///
+  /// ## And why most of these are null
+  ///
+  /// A destination is where a reading GOES; a kind is what the paper
+  /// IS, and the two are not one to one. A quotation and a purchase
+  /// order are the same destination and different papers. `invoice` is
+  /// a sales invoice here and `0614`'s `bill` kind is a supplier's, so
+  /// neither names the other. A contact comes off a name card or off an
+  /// SSM profile, and only the reader can tell which.
+  ///
+  /// Guessing any of those would put a wrong answer where there is
+  /// currently an honest blank, which is worse than the blank: the
+  /// blank is readable as "nobody recorded this" and a wrong kind is
+  /// not readable as anything.
+  String? get knownKind => switch (this) {
+        ScanDestination.bankStatement => 'bank_statement',
+        ScanDestination.goodsReceived => 'delivery_order',
+        ScanDestination.expense => 'receipt',
+        ScanDestination.bill => 'bill',
+        ScanDestination.purchaseOrder ||
+        ScanDestination.invoice ||
+        ScanDestination.contact ||
+        ScanDestination.unknown =>
+          null,
+      };
+
   /// Whether this destination needs a contact before anything can be
   /// created. A bill with no supplier is refused by the database —
   /// `purchase_documents.contact_id` is NOT NULL — so it is asked for

@@ -3876,3 +3876,48 @@ afterwards.
   balance from three statements at once. `0655` is built around that.
 - Demo accounts ship a password **inside the bundle**. Every gate in
   front of them is cumulative and is only ever added to, never replaced.
+
+## Counting the live database: most of it is demo, and it evaporates
+
+A correction to something `0712` states as fact, and a trap for anyone
+who measures production the way that migration did.
+
+`0712` decided not to backfill a credit card's sign because the live
+database held no `credit_card` account, and offered the surrounding
+counts as context:
+
+    fifteen current accounts, two cash accounts and sixty-eight
+    statement lines between them
+
+The `credit_card` half is true and was still true when checked again an
+hour later. **The sixty-eight lines are not what that sentence implies.**
+Re-running the identical query eighty minutes on returned **zero**
+`bank_transactions`, and `attachments` had gone from six to zero as
+well.
+
+Nothing was lost and nothing is wrong. Fourteen of the seventeen bank
+accounts belong to **demo companies**, and `app.demo_rebuild()` DELETES
+and recreates every one of them — `0682` says so in its own comment.
+The rows were demo rows and a rebuild ran between the two queries.
+
+Three things follow, and the third is the one that costs time:
+
+- **Count `is_demo` separately, always.** A bare `count(*)` over this
+  database is mostly a measurement of the demo tenants, and it changes
+  under you. `join public.organizations o on o.id = x.org_id` and group
+  by `o.is_demo`.
+- **The MCP connector runs as `postgres`**, and none of these tables
+  sets `FORCE ROW LEVEL SECURITY`, so the owner bypasses RLS and a count
+  is literal. When two identical queries disagree, the rows really did
+  go — do not go looking for a policy hiding them, which is where the
+  first ten minutes of this went.
+- **`reltuples` lies in the useful direction.** `pg_class.reltuples`
+  still read 6 for `attachments` after the delete, which is how the
+  contradiction was spotted at all: an `ocr_scans` row referencing an
+  attachment that `count(*)` said did not exist.
+
+Real, non-demo footprint at the time of writing: **three bank accounts,
+all `current`, and one scan** — gemini, `status: ok`, twenty rows. That
+is the whole of the production evidence any of this work rests on, and
+it is worth re-measuring rather than assuming, because one scan is also
+what makes a four-state confidence ladder premature.

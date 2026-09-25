@@ -847,6 +847,26 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
     );
     if (staged == null || !mounted) return;
 
+    // What it was, recorded on the scan.
+    //
+    // `0614` exists so that "what did it think this was" has an answer
+    // three months later, and this screen is the one place where the
+    // answer was never in doubt -- somebody pressed Upload on a screen
+    // that imports bank statements and nothing else. It recorded
+    // nothing anyway, because the kind comes off the READER and a
+    // reader narrowed to one destination is never asked to choose one.
+    //
+    // Before the reading is even looked at, and with `staged.read`
+    // possibly null: a statement that could not be read is still a
+    // statement, and that is the more useful thing to find later.
+    await rememberDocumentKind(
+      ref,
+      attachmentId: staged.attachmentId,
+      accepted: staged.read,
+      fallback: ScanDestination.bankStatement.knownKind,
+    );
+    if (!mounted) return;
+
     // The file's own text layer, where it has one, and the statement's
     // own date off it.
     //
