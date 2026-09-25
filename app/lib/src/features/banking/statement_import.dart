@@ -794,6 +794,11 @@ StatementParse scannedStatement(OcrExtraction? read) {
   // been misread.
   DateTime? anchorDate;
 
+  // Lines that printed a day and a month and could not be placed in a
+  // year, because neither the statement's own date nor any other line
+  // supplied one. One cause, however many lines it took down.
+  var unplaceable = 0;
+
   final source = read?.rows ?? const <Map<String, String>>[];
   for (var i = 0; i < source.length; i++) {
     final row = source[i];
@@ -858,10 +863,19 @@ StatementParse scannedStatement(OcrExtraction? read) {
     }
 
     if (date == null) {
-      problems.add(
-        'Line $at: no date could be read'
-        '${rawDate == null ? '' : ' from "$rawDate"'}.',
-      );
+      // A day and a month that could not be placed in a year is not
+      // forty-three separate failures, it is ONE -- the statement's own
+      // date was not read, and nothing else on the page can supply the
+      // year. Counted here and said once below; saying it per line
+      // fills the dialog with the same sentence and buries the cause.
+      if (rawDate != null && parsePartialStatementDate(rawDate) != null) {
+        unplaceable++;
+      } else {
+        problems.add(
+          'Line $at: no date could be read'
+          '${rawDate == null ? '' : ' from "$rawDate"'}.',
+        );
+      }
       continue;
     }
     anchorDate ??= date;
@@ -885,6 +899,17 @@ StatementParse scannedStatement(OcrExtraction? read) {
       // of the reading against.
       balance: _numberOrNull(_first(row, const ['running_balance'])),
     ));
+  }
+
+  if (unplaceable > 0) {
+    problems.add(
+      '$unplaceable ${unplaceable == 1 ? 'line prints' : 'lines print'} a '
+      'day and a month with no year, and the statement\'s own date was '
+      'not read — so there is nothing on the page to say which year they '
+      'belong to. Nothing has been guessed. Send the page with the '
+      'statement date or the period on it, or paste the statement in '
+      'instead.',
+    );
   }
 
   final put = balancesDecideTheSigns(rows, leading: leading, trailing: trailing);

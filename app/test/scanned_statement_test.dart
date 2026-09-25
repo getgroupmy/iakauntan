@@ -566,7 +566,82 @@ void main() {
       ]));
 
       expect(parse.rows, isEmpty);
-      expect(parse.problems.single, contains('no date'));
+      expect(parse.problems.single, contains('no year'));
+    });
+
+    /// The live case, from two RHB statements the user sent through.
+    ///
+    /// The reader did everything right — `accounting.bank_statement`,
+    /// 43 and 59 rows, brought-forward and carried-forward rows in the
+    /// proper shape, signed amounts, running balances. Every line
+    /// printed `01 Oct` or `23 Jan`, and `document_date` came back
+    /// NULL, so there was nothing anywhere to say which year.
+    ///
+    /// What that produced was forty-three copies of "Line N: no date
+    /// could be read", five of which fit in the dialog — a wall of the
+    /// same sentence, none of which named the cause.
+    test('a whole statement with no year anywhere is ONE problem, not '
+        'one per line', () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01 Oct', 'amount': '1,500.00',
+         'running_balance': '982,874.85'},
+        {'transaction_date': '03 Oct', 'amount': '13,000.00',
+         'running_balance': '995,874.85'},
+        {'transaction_date': '05 Oct', 'amount': '-1,000.00',
+         'running_balance': '994,874.85'},
+      ]));
+
+      expect(parse.rows, isEmpty);
+      expect(parse.problems, hasLength(1));
+      // It names the count, the cause, and what to do -- and says
+      // plainly that nothing was invented.
+      expect(parse.problems.single, contains('3 lines'));
+      expect(parse.problems.single, contains('no year'));
+      expect(parse.problems.single, contains('Nothing has been guessed'));
+    });
+
+    test('and one such line says "line", not "lines"', () {
+      final parse = scannedStatement(read([
+        {'transaction_date': '01 Oct', 'amount': '1,500.00'},
+      ]));
+      expect(parse.problems.single, contains('1 line prints'));
+    });
+
+    test('a line that is not a date at all is still reported on its own',
+        () {
+      // "smudged" is not a day and a month, so it is a different
+      // failure and keeps its line number. Folding it into the count
+      // would hide a genuinely unreadable line among placeable ones.
+      final parse = scannedStatement(read([
+        {'transaction_date': '01/09/2026', 'amount': '10.00'},
+        {'transaction_date': 'smudged', 'amount': '20.00'},
+      ]));
+
+      expect(parse.rows, hasLength(1));
+      expect(parse.problems.single, contains('Line 2'));
+      expect(parse.problems.single, contains('smudged'));
+    });
+
+    test('and once the header date is there, the same statement is fine',
+        () {
+      // The fix on the other side: the prompt now asks for the
+      // statement's own date even though a statement leaves the rest
+      // of the generic fields null.
+      final parse = scannedStatement(
+        OcrExtraction.fromJson(const {
+          'document_date': '2025-10-31',
+          'rows': [
+            {'transaction_date': '01 Oct', 'amount': '1,500.00',
+             'running_balance': '982,874.85'},
+            {'transaction_date': '03 Oct', 'amount': '13,000.00',
+             'running_balance': '995,874.85'},
+          ],
+        }),
+      );
+
+      expect(parse.problems, isEmpty);
+      expect(parse.rows[0].date, DateTime(2025, 10, 1));
+      expect(parse.rows[1].date, DateTime(2025, 10, 3));
     });
 
     test('a month that is not a month is not a date', () {

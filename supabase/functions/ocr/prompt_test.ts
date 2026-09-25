@@ -102,3 +102,40 @@ Deno.test("and every printed line is asked for, including the odd ones", () => {
   assertStringIncludes(SYSTEM, "in the order printed");
   assertStringIncludes(SYSTEM, "reconciles to");
 });
+
+/**
+ * A statement's own date is the one generic field it must fill.
+ *
+ * Found live, on two RHB statements. The reader did everything right —
+ * `accounting.bank_statement`, 43 and 59 rows, brought-forward and
+ * carried-forward rows in the proper shape, signed amounts, running
+ * balances. Every line printed `01 Oct` or `23 Jan`, and
+ * `document_date` came back NULL.
+ *
+ * That was this prompt's own doing: it said a statement "does not fill
+ * in the fields above", so the reader dutifully left the one field that
+ * could place those lines in a year. `resolveStatementYear` then had no
+ * anchor and every line of both statements was thrown away — with the
+ * reading itself perfect.
+ */
+Deno.test("a statement is asked for its own date, as the one exception", () => {
+  assertStringIncludes(SYSTEM, "WITH ONE EXCEPTION, `document_date`");
+  assertStringIncludes(SYSTEM, "PUT THE STATEMENT'S OWN DATE IN `document_date`");
+});
+
+Deno.test("and told why it is not optional", () => {
+  // A reader that treats it as a nice-to-have leaves it null on the
+  // statements that need it most -- the ones whose lines carry no year.
+  assertStringIncludes(SYSTEM, "it is not optional");
+  assertStringIncludes(SYSTEM, "thrown away");
+});
+
+Deno.test("the line-level rule still says not to add a year", () => {
+  // The two must not be confused. The LINE is given exactly as
+  // printed; the HEADER date is what places it. A reader that helpfully
+  // expanded each line would take that decision away and get it wrong
+  // across new year.
+  assertStringIncludes(SYSTEM, "Do not add a");
+  assertStringIncludes(SYSTEM, "year from the");
+  assertStringIncludes(SYSTEM, "01 Oct");
+});

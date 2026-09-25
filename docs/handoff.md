@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | The importer knew, and never said |
+| Head at time of writing | The live database, and the field my prompt suppressed |
 | CI | **green through run 2114 (`e5d7490e`)**; later pushes watched | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0710` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,152 Flutter tests**, 61 deno tests |
+| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,156 Flutter tests**, 64 deno tests |
 | API description | 791 functions, 366 tables, version `0710` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -2036,6 +2036,65 @@ Eleven new assertions on the edge function, four killed mutants on the
 key table, control survived. The edge-function assertions were checked
 by putting each bug back by hand and watching the right test fail —
 there is still no mutation harness for Deno.
+
+## The live database, and the one field my own prompt suppressed
+
+The Supabase connector attached mid-session, so this is the first thing
+in this stretch checked against **the real database** rather than
+reasoned from the code. Three scans were there, all
+`target: accounting.bank_statement`, all `status: ok`.
+
+### What already works, proven on real paper
+
+A photographed Maybank statement — `IMG_7621` — **imported cleanly**:
+eight transactions, one deposit and seven withdrawals, and the balance
+chain closes exactly from the 504.50 opening to the 10.50 close. The
+reader returned `OPENING BALANCE` with a null amount and a balance,
+which is precisely the brought-forward shape `7b9bc7fe` added, and the
+response carried **no `fields` key at all** — proof the narrowing from
+`faa23d90` was live and the schema had been cut down to the statement
+alone.
+
+### And what did not
+
+Two RHB PDFs, 43 and 59 rows. The reading is faultless: correct target,
+b/f and c/f rows in the right shape, signed amounts, running balances,
+multi-line narrations preserved. Every line prints `01 Oct` or
+`23 Jan` — **a day and a month, no year** — and `document_date` came
+back **null**.
+
+`resolveStatementYear` then has no anchor, refuses to guess, and every
+line of both statements is thrown away.
+
+**That was this prompt's own doing.** The rewrite in `de693ad0` told the
+reader a statement *"does not fill in the fields above"*, so it
+dutifully left the one generic field that could place those lines in a
+year. A correct instruction, one exception too broad.
+
+`document_date` is now carved out explicitly and told it is **not
+optional**, with the consequence spelled out — a statement whose lines
+have no year and no `document_date` cannot be filed at all.
+
+### Forty-three copies of one sentence
+
+The other half. Each unplaceable line raised its own problem, so the
+dialog showed five identical *"no date could be read"* messages out of
+forty-three, none of which named the cause. They are now **counted and
+said once**, naming the count, the reason and what to do — and stating
+plainly that nothing was guessed.
+
+A line that is genuinely unreadable (`smudged`) still keeps its own
+line number: folding it into the count would hide a real failure among
+placeable ones.
+
+### The assertion that earned its keep
+
+Reflowing the statement paragraph split `"in the order printed"` across
+two array entries, so the joined string no longer contained the phrase.
+`prompt_test.ts` caught it immediately. That is exactly why those
+assertions exist — a prompt has no callers, no types and no compiler,
+and the failure would have been a reader quietly told something
+slightly different.
 
 ## This session's commits
 
