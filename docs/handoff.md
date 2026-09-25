@@ -2538,6 +2538,29 @@ every stored object, so the only way to have one for today's uploads is
 to take it today. Every upload from `0711` onward builds the history the
 lookup will need.
 
+### The gate my local sweep could not see
+
+CI run 2129 went RED on "Check the API description still matches the
+schema". `docs/api/openapi.json` and `docs/api/llms.txt` are GENERATED
+from the live schema and carry the highest applied migration in their
+header — they said `0710` and the schema now says `0711`, plus three
+lines for the new column.
+
+The reason it was not caught here: the local gate sweep runs
+`for f in scripts/check_*.py`, and the generator is
+`scripts/generate_api_description.py`. It does not match the glob.
+
+**Run this too, before any push that adds a migration:**
+
+```
+DB="postgresql://postgres@/postgres?host=/var/tmp&port=5599"
+python3 scripts/generate_api_description.py "$DB" --check
+```
+
+The local Postgres reproduced CI exactly — same line counts, same first
+difference — so regenerating locally is safe. The diff was the version
+in two files and the new `content_sha256` property, and nothing else.
+
 ### Verification
 
 Five assertions against the PUBLISHED SHA-256 vectors rather than
