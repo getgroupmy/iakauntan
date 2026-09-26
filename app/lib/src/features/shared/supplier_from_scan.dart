@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
@@ -669,7 +670,7 @@ Future<String?> _create(
     return saved.id;
   } catch (e) {
     messenger.showSnackBar(
-      SnackBar(content: Text('Could not create the ${kind.one}: \$e')),
+      SnackBar(content: Text('Could not create the ${kind.one}: ${errorText(e)}')),
     );
     return null;
   }

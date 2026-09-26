@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -375,7 +376,7 @@ class _PaymentCard extends ConsumerWidget {
             ),
             lines.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => _PaymentBody(run: run, lines: list),
             ),
           ],
@@ -657,7 +658,7 @@ class _PayslipsCard extends StatelessWidget {
             const SectionHeader('Payslips'),
             payslips.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => Column(children: [
                 for (var i = 0; i < list.length; i++) ...[
                   if (i > 0) const Divider(height: 1),
@@ -988,7 +989,7 @@ class _HistoryCard extends StatelessWidget {
                 subtitle: 'Every request and decision stays on the record'),
             requests.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => list.isEmpty
                   ? Text('You have not asked for access before.',
                       style: Theme.of(context).textTheme.bodySmall)

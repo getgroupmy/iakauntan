@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -131,7 +131,7 @@ class _PendingState extends ConsumerState<_Pending> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+          SnackBar(content: Text(errorText(e))),
         );
       }
     } finally {
@@ -368,7 +368,7 @@ class _UnknownWorkspaceCopyCardState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -523,7 +523,7 @@ class _EditReservationDialogState
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     }
   }
@@ -569,7 +569,7 @@ class _EditReservationDialogState
             const SizedBox(height: 16),
             orgs.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('Could not load the companies: $e'),
+              error: (e, _) => Text('Could not load the companies: ${errorText(e)}'),
               data: (rows) => SearchablePicker<String>(
                 options: [
                   for (final o in rows)
@@ -848,7 +848,7 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     }
   }
@@ -888,7 +888,7 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
               const SizedBox(height: 16),
               orgs.when(
                 loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('Could not load the companies: $e'),
+                error: (e, _) => Text('Could not load the companies: ${errorText(e)}'),
                 data: (rows) => SearchablePicker<String>(
                   options: [
                     for (final o in rows)

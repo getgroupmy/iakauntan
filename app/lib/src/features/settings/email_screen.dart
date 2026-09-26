@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -336,7 +337,7 @@ class _OutboxTabState extends ConsumerState<_OutboxTab> {
     } catch (err) {
       // The likeliest error by far is that nobody has set the provider
       // key yet, and the function says so in as many words.
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(err))));
     }
     if (mounted) setState(() => _busy = false);
     ref.invalidate(emailOutboxProvider(_status));

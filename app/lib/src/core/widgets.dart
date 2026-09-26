@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repository.dart';
 import 'denials.dart';
+import 'error_text.dart';
 import 'format.dart';
 import 'providers.dart';
 import 'theme.dart';
@@ -123,7 +124,7 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
       error: (err, _) {
         if (err is! OrgNotReady) {
           _stopWaiting();
-          return ErrorState(message: '$err', onRetry: widget.onRetry);
+          return ErrorState(message: errorText(err), onRetry: widget.onRetry);
         }
 
         // Still settling. Shown as the load it is.
@@ -131,7 +132,7 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
         if (_waiting) return _loading;
 
         return ErrorState(
-          message: '$err Check your connection and try again.',
+          message: '${errorText(err)} Check your connection and try again.',
           onRetry: () {
             _stopWaiting();
             widget.onRetry?.call();
@@ -789,7 +790,7 @@ Future<bool> runWithFeedback(
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('$err'),
+          content: Text(errorText(err)),
           backgroundColor: danger,
           duration: const Duration(seconds: 6),
         ),

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show StorageException;
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
@@ -328,7 +329,7 @@ Future<OcrExtraction> _readHere(
     // actionable, and it used to arrive as a Dart toString of a JSON
     // body. `storageProblem` says what is true instead.
     if (e is StorageException) throw OcrException(storageProblem(e));
-    throw OcrException('Could not read it on this device: $e');
+    throw OcrException('Could not read it on this device: ${errorText(e)}');
   }
 }
 

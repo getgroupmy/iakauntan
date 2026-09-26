@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
@@ -224,7 +225,7 @@ class _NewItemDialogState extends ConsumerState<NewItemDialog> {
       // Shown here rather than thrown away: the likely failure is a code
       // already on the list, and "ITM-100 is taken" is something the
       // person can act on without losing what they typed.
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

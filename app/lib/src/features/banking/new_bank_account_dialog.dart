@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 
 /// Add a bank account without leaving what you were recording.
@@ -265,7 +266,7 @@ class _NewBankAccountDialogState
       ref.invalidate(unregisteredBankAccountsProvider);
       if (mounted) Navigator.pop(context, id);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

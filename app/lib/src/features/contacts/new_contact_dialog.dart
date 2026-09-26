@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
@@ -176,7 +177,7 @@ class _NewContactDialogState extends ConsumerState<NewContactDialog> {
       ref.invalidate(contactsProvider);
       if (mounted) Navigator.pop(context, created);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/layout.dart';
@@ -308,7 +309,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Could not load: $e')));
+        ).showSnackBar(SnackBar(content: Text('Could not load: ${errorText(e)}')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -604,7 +605,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // where it would be saved as the euro rate.
       if (mounted) {
         setState(() => _exchangeRate = null);
-        _toast('Could not read the exchange rate: $e', error: true);
+        _toast('Could not read the exchange rate: ${errorText(e)}', error: true);
       }
     } finally {
       if (mounted) setState(() => _resolvingRate = false);
@@ -774,7 +775,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       if (!silent) _toast('Saved', success: true);
       return id;
     } catch (e) {
-      _toast('$e', error: true);
+      _toast(errorText(e), error: true);
       return null;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -909,7 +910,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(e))));
     }
   }
 
@@ -2328,7 +2329,7 @@ class _HeaderCard extends ConsumerWidget {
         );
       },
       loading: () => const LinearProgressIndicator(),
-      error: (e, _) => Text('Could not load contacts: $e'),
+      error: (e, _) => Text('Could not load contacts: ${errorText(e)}'),
     );
 
     final isForeign = currency != baseCurrency;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -65,7 +66,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$verb failed: $e')));
+        ).showSnackBar(SnackBar(content: Text('$verb failed: ${errorText(e)}')));
       }
     } finally {
       if (mounted) setState(() => _running = false);

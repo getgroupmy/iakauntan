@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -76,7 +77,7 @@ class _TransferDialogState extends ConsumerState<_TransferDialog> {
         }
       });
     } catch (e) {
-      if (mounted) setState(() => _loadError = '$e');
+      if (mounted) setState(() => _loadError = errorText(e));
     }
   }
 
@@ -108,7 +109,7 @@ class _TransferDialogState extends ConsumerState<_TransferDialog> {
       if (mounted) {
         setState(() => _working = false);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(errorText(e))));
       }
     }
   }

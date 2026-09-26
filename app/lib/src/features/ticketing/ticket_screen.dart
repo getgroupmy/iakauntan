@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -66,7 +66,7 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
       // names the moves that were available instead — so it is shown
       // rather than replaced with "something went wrong".
       messenger.showSnackBar(
-        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

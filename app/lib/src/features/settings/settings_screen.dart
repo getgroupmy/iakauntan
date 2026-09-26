@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -979,7 +980,7 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
               // than assuming par. Said plainly, because the fix is to
               // enter the rate, not to try again.
               error: (e, _) =>
-                  Text('$e', style: TextStyle(color: context.colors.warning)),
+                  Text(errorText(e), style: TextStyle(color: context.colors.warning)),
               data: (rows) => rows.isEmpty
                   ? Text(
                       'Nothing open in a currency other than '
@@ -2187,7 +2188,7 @@ class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2324,7 +2325,7 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2479,7 +2480,7 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2683,7 +2684,7 @@ class _JoinCompanyState extends ConsumerState<_JoinCompanyDialog> {
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _said = '$e');
+      setState(() => _said = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

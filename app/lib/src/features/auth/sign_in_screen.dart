@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
+import '../../core/error_text.dart';
 import '../../core/platform_live.dart';
 import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
@@ -981,7 +982,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     } catch (e) {
       // The readable half, never the class name and the status code.
       if (mounted) {
-        setState(() => _error = resendFailureDetail('$e'));
+        setState(() => _error = resendFailureDetail(errorText(e)));
         _challengeAgain();
       }
     } finally {
@@ -1047,7 +1048,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         // `toString` naming a class. `resendFailureDetail` keeps the
         // part somebody can read and drops the rest.
         setState(
-          () => _error = resendConfirmationFailed(resendFailureDetail('$e')),
+          () => _error = resendConfirmationFailed(resendFailureDetail(errorText(e))),
         );
       }
     } finally {
@@ -1404,7 +1405,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _challengeAgain();
     } catch (e) {
       if (mounted) {
-        setState(() => _error = resendFailureDetail('$e'));
+        setState(() => _error = resendFailureDetail(errorText(e)));
         _challengeAgain();
       }
     } finally {
@@ -1647,7 +1648,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       // one fact they needed.
       if (mounted) {
         setState(
-          () => _error = resendConfirmationFailed(resendFailureDetail('$e')),
+          () => _error = resendConfirmationFailed(resendFailureDetail(errorText(e))),
         );
       }
     } finally {

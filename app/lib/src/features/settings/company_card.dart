@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/address_field.dart';
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -878,7 +879,7 @@ class _LogoRowState extends ConsumerState<_LogoRow> {
       ref.invalidate(orgLogoProvider);
       if (mounted) _say('Logo updated');
     } catch (e) {
-      if (mounted) _say('$e');
+      if (mounted) _say(errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -894,7 +895,7 @@ class _LogoRowState extends ConsumerState<_LogoRow> {
       ref.invalidate(orgLogoProvider);
       if (mounted) _say('Logo removed');
     } catch (e) {
-      if (mounted) _say('$e');
+      if (mounted) _say(errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1038,7 +1039,7 @@ class _StationeryRowState extends ConsumerState<_StationeryRow> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        ).showSnackBar(SnackBar(content: Text(errorText(e))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

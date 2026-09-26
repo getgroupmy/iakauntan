@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -122,7 +123,7 @@ class _ApplyOnAccountState extends ConsumerState<_ApplyOnAccount> {
       // The database refuses more than the document owes, more than the
       // receipt holds, and money belonging to another party. Its
       // messages say which, so they are shown rather than replaced.
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

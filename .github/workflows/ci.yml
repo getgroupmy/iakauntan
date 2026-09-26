@@ -1123,6 +1123,25 @@ jobs:
           python3 scripts/check_files_open_in_app_test.py
           python3 scripts/check_files_open_in_app.py
 
+      # And that a failure is shown as the sentence the sender wrote,
+      # not as the driver's envelope around it. Reported with a
+      # screenshot: the database refused to close a bank reconciliation
+      # that was out by RM 11,008.23, in a sentence written for exactly
+      # that moment, and the phone showed it wrapped in
+      # `PostgrestException(message: ..., code: 23514, details: Bad
+      # Request, hint: null)`. `runWithFeedback` and `AsyncView` are how
+      # every action and every screen in this app report a failure, and
+      # both did it, so this was every refusal the database has ever
+      # made.
+      #
+      # The self-test runs first and includes the real tree, because a
+      # scan that matched nothing after somebody renamed `errorText`
+      # would go on printing `ok`.
+      - name: Check a caught error is shown as its message
+        run: |
+          python3 scripts/check_error_text_test.py
+          python3 scripts/check_error_text.py
+
       # The same question of the SCHEMA, which on a project whose first
       # rule is that the database IS the application is the layer that
       # matters most. It found twenty columns nothing mentioned at all,

@@ -37,8 +37,8 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/format.dart';
@@ -358,7 +358,7 @@ class _SubAccountDialogState extends ConsumerState<SubAccountDialog> {
           // The server's own sentence where there is one: `0655`'s
           // refusals name the account and say what it would cost,
           // which is the part somebody can act on.
-          _error = e is PostgrestException ? e.message : '$e';
+          _error = errorText(e);
         });
       }
     }

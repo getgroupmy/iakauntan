@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/attachments_repository.dart';
@@ -145,7 +146,7 @@ class _FileViewerState extends State<_FileViewer> {
         if (!mounted) return;
         setState(() => _problem =
             'That PDF could not be opened. If it asks for a password '
-            'when you open it elsewhere, this cannot read it yet.\n\n$e');
+            'when you open it elsewhere, this cannot read it yet.\n\n${errorText(e)}');
         return;
       }
       if (!mounted) return;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import 'customer_portal_summary.dart';
@@ -49,7 +50,7 @@ class _CustomerPortalPageState extends State<CustomerPortalPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     } finally {
       if (mounted) setState(() => _busyId = null);

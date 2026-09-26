@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -139,7 +140,7 @@ class _LotDialogState extends ConsumerState<LotDialog> {
         setState(() => _failure = 'Nothing of ${widget.itemCode} is on hand.');
       }
     } catch (e) {
-      if (mounted) setState(() => _failure = '$e');
+      if (mounted) setState(() => _failure = errorText(e));
     }
   }
 

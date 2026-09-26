@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../shared/file_viewer.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -539,7 +540,7 @@ class _Attachments extends ConsumerWidget {
               } catch (e) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$e')),
+                  SnackBar(content: Text(errorText(e))),
                 );
               }
             },

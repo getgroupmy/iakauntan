@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
@@ -427,7 +428,7 @@ class _SettlementDetail extends ConsumerWidget {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(e))));
     }
   }
 }
@@ -633,7 +634,7 @@ class _ReceiptEmailDialogState extends ConsumerState<_ReceiptEmailDialog> {
       if (finished) Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -415,7 +416,7 @@ class _FileRowState extends ConsumerState<_FileRow> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            e is OcrException ? e.message : 'Could not read it: $e',
+            errorText(e),
           ),
         ),
       );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../data/repository.dart';
@@ -75,7 +76,7 @@ class _ChargeRunSheetState extends ConsumerState<_ChargeRunSheet> {
           : await repo.rentPreview(widget.id, _from, _to);
       if (mounted) setState(() => _preview = rows);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

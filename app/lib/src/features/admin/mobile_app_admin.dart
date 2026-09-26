@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/platform_live.dart';
 import '../../core/providers.dart';
@@ -952,7 +953,7 @@ class _BothCardState extends ConsumerState<_BothCard> {
           notes: notes,
         );
       } catch (e) {
-        failures.add('${platform.label}: $e');
+        failures.add('${platform.label}: ${errorText(e)}');
       }
       ref.invalidate(appReleasesProvider(platform));
     }

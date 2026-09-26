@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/error_text.dart';
 import '../core/format.dart';
 import 'attachments_repository.dart' show RepoAttachments;
 import 'repository.dart';
@@ -1134,8 +1135,10 @@ String _functionError(FunctionException e) {
 
 /// A scan that did not happen, with the reason the database or the
 /// provider gave. Nothing was charged.
-class OcrException implements Exception {
+class OcrException implements Exception, Explained {
   OcrException(this.message, {this.status});
+
+  @override
 
   final String message;
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 
@@ -320,7 +321,7 @@ class _PublicMenuPageState extends ConsumerState<PublicMenuPage> {
       // person — the shop is closed, that dish is off, the zone needs
       // another eight ringgit — so they are shown rather than replaced.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_clean('$e'))),
+        SnackBar(content: Text(_clean(errorText(e)))),
       );
     }
   }

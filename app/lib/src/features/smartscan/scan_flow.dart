@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
@@ -444,7 +445,7 @@ Future<void> _startDocument(
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not start it: $e')));
+          .showSnackBar(SnackBar(content: Text('Could not start it: ${errorText(e)}')));
     }
   }
 }

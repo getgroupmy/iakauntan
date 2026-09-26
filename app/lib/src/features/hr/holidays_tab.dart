@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -139,7 +140,7 @@ class _HolidaysTabState extends ConsumerState<HolidaysTab> {
       ));
       ref.invalidate(publicHolidaysProvider(_year));
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(err))));
     }
     if (mounted) setState(() => _busy = false);
   }

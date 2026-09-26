@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -1554,7 +1555,7 @@ class _DocumentEditorState extends ConsumerState<_DocumentEditor> {
       // Strip PostgREST's wrapper so the database's own sentence shows.
       if (mounted) {
         setState(() =>
-            _error = '$e'.replaceFirst(RegExp(r'^\w*Exception[^:]*:\s*'), ''));
+            _error = errorText(e).replaceFirst(RegExp(r'^\w*Exception[^:]*:\s*'), ''));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -106,7 +107,7 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
       // The one failure worth saying out loud: the file did not arrive,
       // so there is nothing to come back to.
       messenger.showSnackBar(
-        SnackBar(content: Text('The file was not kept: $e')),
+        SnackBar(content: Text('The file was not kept: ${errorText(e)}')),
       );
     } finally {
       if (mounted) setState(() => _keeping = false);

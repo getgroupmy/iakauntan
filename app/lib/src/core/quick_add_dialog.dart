@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'error_text.dart';
+
 /// Add a row to a short list without leaving what you were doing.
 ///
 /// The long tail of the "offer to add what is missing" work. A customer
@@ -176,7 +178,7 @@ class _QuickAddDialogState extends State<QuickAddDialog> {
     } catch (e) {
       // The likely failure is a code already in use, which is something
       // the person can fix without losing what is behind this dialog.
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

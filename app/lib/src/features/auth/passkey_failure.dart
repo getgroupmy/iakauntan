@@ -20,13 +20,16 @@
 /// which it was — so nothing on web throws this.
 library;
 
+import '../../core/error_text.dart';
+
 /// Thrown by a platform implementation when the ceremony failed for a
 /// stated reason.
-class PasskeyFailure implements Exception {
+class PasskeyFailure implements Exception, Explained {
   /// Constructs a failure carrying the sentence to show.
   const PasskeyFailure(this.message);
 
   /// What to put in front of the person, already in plain language.
+  @override
   final String message;
 
   @override

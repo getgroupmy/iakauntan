@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -175,7 +176,7 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
               const SizedBox(height: Space.lg),
               people.when(
                 loading: () => const SizedBox.shrink(),
-                error: (e, _) => Text('$e'),
+                error: (e, _) => Text(errorText(e)),
                 data: (rows) => Card(
                   child: Padding(
                     padding: const EdgeInsets.all(Space.lg),

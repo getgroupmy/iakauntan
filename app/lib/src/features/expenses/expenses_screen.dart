@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/skeletons.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/download.dart';
@@ -1224,7 +1225,7 @@ class _ExpenseDetail extends ConsumerWidget {
         );
       }
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(err))));
     }
   }
 }

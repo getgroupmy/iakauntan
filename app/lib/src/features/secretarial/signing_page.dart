@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -296,10 +297,7 @@ class _SigningPageState extends ConsumerState<SigningPage> {
     }
   }
 
-  String _readable(Object e) {
-    final s = e is PostgrestException ? e.message : e.toString();
-    return s.replaceFirst(RegExp(r'^.*?:\s*'), '');
-  }
+  String _readable(Object e) => errorText(e);
 }
 
 enum _Tone { neutral, good, warn }

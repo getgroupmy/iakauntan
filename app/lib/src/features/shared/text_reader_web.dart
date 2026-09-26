@@ -26,6 +26,8 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
+import '../../core/error_text.dart';
+
 /// Where the vendored engine lives.
 ///
 /// Absolute, resolved against the document base, and that is not
@@ -104,7 +106,7 @@ Future<void> _mustReach(String what, String url) async {
   try {
     status = (await _fetch(url, init).toDart).status;
   } catch (e) {
-    throw StateError('The $what could not be fetched from $url ($e).');
+    throw StateError('The $what could not be fetched from $url (${errorText(e)}).');
   }
   if (status < 200 || status >= 300) {
     throw StateError('The $what is not being served: $url returned $status.');
@@ -318,7 +320,7 @@ Future<String> readTextFromPdfBytes(Uint8List bytes) async {
     lib = await _loadPdfjs().toDart;
   } catch (e) {
     throw StateError(
-      'The PDF reader did not load ($e). Reload the page and try again.',
+      'The PDF reader did not load (${errorText(e)}). Reload the page and try again.',
     );
   }
 
@@ -539,7 +541,7 @@ Future<List<Uint8List>> pdfPageImages(Uint8List bytes, {int maxPages = 20}) asyn
     lib = await _loadPdfjs().toDart;
   } catch (e) {
     throw StateError(
-      'The PDF viewer did not load ($e). Reload the page and try again.',
+      'The PDF viewer did not load (${errorText(e)}). Reload the page and try again.',
     );
   }
 

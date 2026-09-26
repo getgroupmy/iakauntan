@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -152,7 +153,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(Space.xl),
-            child: Text('Could not read your details: $e'),
+            child: Text('Could not read your details: ${errorText(e)}'),
           ),
         ),
         data: (row) {

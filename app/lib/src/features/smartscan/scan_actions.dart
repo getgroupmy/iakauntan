@@ -24,6 +24,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../data/ocr_repository.dart';
 import '../shared/receipt_capture.dart';
@@ -304,7 +305,7 @@ Future<bool> rescanDocument(
     messenger.showSnackBar(SnackBar(
       content: Text(e is OcrException
           ? e.message
-          : 'Could not read it again: $e'),
+          : 'Could not read it again: ${errorText(e)}'),
     ));
     return false;
   }

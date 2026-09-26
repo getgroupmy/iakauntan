@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -334,7 +335,7 @@ class _BalanceCard extends ConsumerWidget {
     return check.when(
       loading: () =>
           const Card(child: ListTile(title: Text('Checking the statements…'))),
-      error: (e, _) => Card(child: ListTile(title: Text('$e'))),
+      error: (e, _) => Card(child: ListTile(title: Text(errorText(e)))),
       data: (r) {
         if (r == null) return const SizedBox.shrink();
         final balances = r['balances'] == true;
