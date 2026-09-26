@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -12,6 +11,7 @@ import '../../data/scan_kinds_repository.dart';
 import '../contacts/contact_editor.dart';
 import '../documents/doc_types.dart';
 import '../expenses/expenses_screen.dart' show showExpenseFromScan;
+import '../shared/file_viewer.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
 import '../shared/supplier_from_scan.dart';
@@ -138,11 +138,16 @@ Future<void> Function()? _viewer(
   return () async {
     try {
       final path = await repo.attachmentPath(attachmentId);
-      if (path == null) return;
-      // The bucket is private, so this expires rather than being a URL
-      // that keeps working after it has been forwarded.
-      final url = await repo.attachmentUrl(path);
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (path == null || !context.mounted) return;
+      // In the app, from the bytes -- see `showFileInApp`. A signed URL
+      // handed to the external browser is a working link to a private
+      // document sitting in another application's history.
+      await showFileInApp(
+        context,
+        ref,
+        storagePath: path,
+        fileName: path.split('/').last,
+      );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)

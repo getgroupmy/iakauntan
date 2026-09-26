@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -15,6 +14,7 @@ import 'text_reader.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
 import 'scan_progress.dart';
+import 'file_viewer.dart';
 import 'scan_runner.dart';
 import 'scan_result_dialog.dart';
 
@@ -425,15 +425,18 @@ class _FileRowState extends ConsumerState<_FileRow> {
   }
 
   Future<void> _open() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      // The bucket is private, so this is a link that expires rather
-      // than a URL that keeps working after it has been forwarded.
-      final url = await ref.read(repoProvider)!.attachmentUrl(file.storagePath);
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not open: $e')));
-    }
+    // In the app, from the bytes. This used to mint a signed URL and
+    // hand it to the external browser, which put a working link to a
+    // private document into another application's address bar and
+    // history for the life of the signature. No URL is made now, so
+    // there is nothing to leak rather than a leak that expires.
+    await showFileInApp(
+      context,
+      ref,
+      storagePath: file.storagePath,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+    );
   }
 
   Future<void> _remove() async {

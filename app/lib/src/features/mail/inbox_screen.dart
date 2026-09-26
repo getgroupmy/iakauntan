@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../shared/file_viewer.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
-import '../../core/safe_link.dart';
 import '../../data/reserved_names_repository.dart';
 import 'attachments.dart';
 import 'compose.dart';
@@ -523,15 +523,18 @@ class _Attachments extends ConsumerWidget {
             ),
             onTap: () async {
               try {
-                final url = await inboundAttachmentUrl(
-                  ref.read(supabaseProvider),
-                  '${a['storage_path']}',
-                );
-                if (!context.mounted) return;
-                final opened = await launchExternal(url);
-                if (!context.mounted || opened) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Could not open that file.')),
+                // In the app, from the bytes. A signed URL handed to
+                // the external browser is a working link into somebody
+                // else's post, sitting in another application's history
+                // for an hour.
+                final client = ref.read(supabaseProvider);
+                final path = '${a['storage_path']}';
+                await showFileInApp(
+                  context,
+                  ref,
+                  fileName: '${a['file_name'] ?? 'Attachment'}',
+                  mimeType: a['mime_type']?.toString(),
+                  fetch: () => inboundAttachmentBytes(client, path),
                 );
               } catch (e) {
                 if (!context.mounted) return;

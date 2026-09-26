@@ -274,15 +274,6 @@ extension RepoAttachments on Repo {
     return row?['storage_path']?.toString();
   }
 
-  /// A short-lived link. The bucket is private, so there is no public URL
-  /// to hand out and nothing to leak if one is copied into an email an
-  /// hour later.
-  Future<String> attachmentUrl(String storagePath,
-          {Duration validFor = const Duration(minutes: 10)}) =>
-      client.storage
-          .from(bucket)
-          .createSignedUrl(storagePath, validFor.inSeconds);
-
   /// The file itself, for the on-device reader — which takes bytes
   /// rather than a link, because it never goes near the network.
   Future<Uint8List> attachmentBytes(String storagePath) =>

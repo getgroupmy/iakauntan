@@ -506,16 +506,19 @@ final inboundAttachmentsProvider = FutureProvider.autoDispose
   );
 });
 
-/// A link to one, good for an hour.
+/// The file itself, for showing it INSIDE the app.
 ///
-/// Signed rather than public, and short-lived, for the reason the chat
-/// bucket gives: the object is private and the policy that guards it
-/// asks whether you work there *now*.
-Future<String> inboundAttachmentUrl(
+/// This used to mint an hour-long signed link and hand it to the
+/// external browser, which left a working URL into somebody else's
+/// post sitting in another application's history. Downloaded through
+/// the same authenticated client instead, so the same policy answers
+/// the same question -- do you work there *now* -- and no URL exists
+/// to leak.
+Future<Uint8List> inboundAttachmentBytes(
   SupabaseClient client,
   String storagePath,
 ) =>
-    client.storage.from('mail').createSignedUrl(storagePath, 60 * 60);
+    client.storage.from('mail').download(storagePath);
 
 /// The words this company has written over its own door.
 ///

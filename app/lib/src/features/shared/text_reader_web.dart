@@ -21,6 +21,7 @@
 /// the same expense.
 library;
 
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
@@ -496,4 +497,100 @@ Future<String> readTextFromBytes(Uint8List bytes) async {
       .recognize(image.toJS, 'eng', _options())
       .toDart;
   return result.data.text;
+}
+
+/// Whether a PDF can be DRAWN here, as opposed to read.
+///
+/// True in a browser, because `pdf.js` is vendored under `web/pdfjs/`
+/// and has been for two years. Separate from [onDeviceReadsPdf] --
+/// which is about the same library and happens to agree today --
+/// because they are different questions and a future native renderer
+/// would change one without the other.
+bool get canRenderPdfPages => true;
+
+/// How wide a page is drawn for LOOKING at.
+///
+/// Smaller than the 2400px the OCR path uses. That number exists so
+/// Tesseract can resolve small print; this one exists so a person can
+/// read a bill on a phone, and four times the pixels would be four
+/// times the memory and the wait for no visible gain.
+const _viewEdge = 1400.0;
+
+/// Pages of a PDF, drawn as PNG bytes, for showing one inside the app.
+///
+/// ## Why bytes rather than a link
+///
+/// The four places this replaces each minted a SIGNED URL and handed it
+/// to the external browser. That put a working link to a private
+/// document into another application's address bar, its history, and
+/// whatever else can read a tab -- for ten minutes, forwardable, on a
+/// bank statement. Asked for as "should not open using external browser
+/// or app ... to avoid exposure of link and addresses".
+///
+/// `getDocument` takes the bytes, exactly as `readTextFromPdfBytes`
+/// does, so nothing is fetched and no URL exists to leak.
+///
+/// [maxPages] stops a forty-page contract from becoming forty
+/// full-size bitmaps in memory at once. The caller says how many were
+/// left out rather than pretending the document ended.
+Future<List<Uint8List>> pdfPageImages(Uint8List bytes, {int maxPages = 20}) async {
+  final _PdfLib lib;
+  try {
+    lib = await _loadPdfjs().toDart;
+  } catch (e) {
+    throw StateError(
+      'The PDF viewer did not load ($e). Reload the page and try again.',
+    );
+  }
+
+  final src = JSObject()..setProperty('data'.toJS, bytes.toJS);
+  final doc = await lib.getDocument(src).promise.toDart;
+  try {
+    final pages = doc.numPages < maxPages ? doc.numPages : maxPages;
+    final out = <Uint8List>[];
+    for (var n = 1; n <= pages; n++) {
+      final page = await doc.getPage(n).toDart;
+      out.add(await _drawPage(page));
+    }
+    return out;
+  } finally {
+    await doc.destroy().toDart;
+  }
+}
+
+Future<Uint8List> _drawPage(_PdfPage page) async {
+  final unit = page.getViewport(JSObject()..setProperty('scale'.toJS, 1.0.toJS));
+  final longest = unit.width > unit.height ? unit.width : unit.height;
+  final scale = longest > 0 ? (_viewEdge / longest).clamp(1.0, 3.0) : 1.5;
+  final viewport =
+      page.getViewport(JSObject()..setProperty('scale'.toJS, scale.toJS));
+
+  final canvas = _createElement('canvas') as _Canvas
+    ..width = viewport.width.round()
+    ..height = viewport.height.round();
+  final context = canvas.getContext('2d');
+  if (context == null) {
+    throw StateError('This browser would not give us a drawing surface.');
+  }
+
+  await page
+      .render(JSObject()
+        ..setProperty('canvasContext'.toJS, context)
+        ..setProperty('viewport'.toJS, viewport))
+      .promise
+      .toDart;
+
+  // PNG rather than JPEG. This is a document with thin black strokes on
+  // white, which is where JPEG's artefacts are ugliest and where PNG
+  // compresses best anyway.
+  // The quality argument is ignored for PNG, which is lossless, and the
+  // binding requires it.
+  return _dataUrlBytes(canvas.toDataURL('image/png', 1.0));
+}
+
+/// The bytes inside a `data:` URL, without going near the network.
+Uint8List _dataUrlBytes(String dataUrl) {
+  final comma = dataUrl.indexOf(',');
+  if (comma < 0) throw StateError('The page did not draw.');
+  return base64Decode(dataUrl.substring(comma + 1));
 }

@@ -66,3 +66,20 @@ Future<String> readTextFromBytes(Uint8List bytes) async {
     }
   }
 }
+
+/// Pages of a PDF, drawn as pictures, for showing one inside the app.
+///
+/// `pdf.js` is a browser library and there is none of it here, so on a
+/// phone this throws rather than pretending. The caller asks
+/// [canRenderPdfPages] first and says something useful instead.
+Future<List<Uint8List>> pdfPageImages(Uint8List bytes, {int maxPages = 20}) =>
+    throw UnsupportedError('A PDF cannot be drawn on this device.');
+
+/// Whether a PDF can be DRAWN here, as opposed to read.
+///
+/// False on a phone: `pdf.js` is vendored for the browser, and nothing
+/// in this build renders a PDF page. Separate from
+/// [onDeviceReadsPdf] -- which is about the same library and happens
+/// to agree today -- because they are different questions and a future
+/// native renderer would change one without the other.
+bool get canRenderPdfPages => false;

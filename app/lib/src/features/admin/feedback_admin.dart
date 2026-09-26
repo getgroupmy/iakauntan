@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../shared/file_viewer.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
-import '../../core/safe_link.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -219,14 +219,19 @@ class _ReportFiles extends ConsumerWidget {
                   ),
                   onPressed: () async {
                     final repo = ref.read(platformRepoProvider);
-                    // Signed at the moment of pressing, not when the
-                    // row was drawn. A link minted on expand and left
-                    // on screen expires while somebody reads the
-                    // report, and the failure is a 400 from storage
-                    // that says nothing about time.
-                    final url = await repo
-                        .feedbackFileUrl('${file['storage_path']}');
-                    await launchExternal(url);
+                    // In the app, from the bytes. A screenshot attached
+                    // to a bug report is somebody's books on their
+                    // screen, and a signed URL handed to the external
+                    // browser leaves a working link to it in another
+                    // application's history.
+                    final path = '${file['storage_path']}';
+                    await showFileInApp(
+                      context,
+                      ref,
+                      fileName: '${file['file_name'] ?? 'Attachment'}',
+                      mimeType: file['mime_type']?.toString(),
+                      fetch: () => repo.feedbackFileBytes(path),
+                    );
                   },
                 ),
             ],

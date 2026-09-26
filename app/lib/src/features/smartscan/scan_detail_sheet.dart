@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -10,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/scan_kinds_repository.dart';
+import '../shared/file_viewer.dart';
 import '../shared/text_reader.dart';
 import 'scan_actions.dart';
 import 'scan_destination.dart';
@@ -172,14 +172,19 @@ class _ScanDetailSheet extends ConsumerWidget {
   }
 
   Future<void> _openImage(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(repoProvider);
     final path = entry.storagePath;
-    if (repo == null || path == null) return;
+    if (ref.read(repoProvider) == null || path == null) return;
     try {
-      // The bucket is private, so this is a link that expires rather
-      // than a URL that keeps working after it has been forwarded.
-      final url = await repo.attachmentUrl(path);
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      // In the app, from the bytes -- see `showFileInApp`. A signed
+      // URL handed to the external browser is a working link to a
+      // private document sitting in another application's history.
+      await showFileInApp(
+        context,
+        ref,
+        storagePath: path,
+        fileName: entry.fileName ?? 'Document',
+        mimeType: entry.mimeType,
+      );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)

@@ -4092,10 +4092,15 @@ class Repo {
     unawaited(notifyPush(conversationId: conversationId));
   }
 
-  /// Short-lived, because the object is private and the policy that
-  /// guards it asks whether you are in the conversation *now*.
-  Future<String> chatFileUrl(String storagePath) =>
-      client.storage.from('chat').createSignedUrl(storagePath, 60 * 60);
+  /// The file itself, for showing it INSIDE the app.
+  ///
+  /// The viewer takes bytes rather than a link on purpose: a signed URL
+  /// handed to the external browser is a working link to somebody's
+  /// private conversation sitting in another application's history for
+  /// an hour. Downloaded through the same authenticated client, so the
+  /// same policy answers the same question and no URL is created.
+  Future<Uint8List> chatFileBytes(String storagePath) =>
+      client.storage.from('chat').download(storagePath);
 
   /// Storage rejects a key with characters it cannot round-trip, and a
   /// name typed on a phone is not a key. The original is kept in
@@ -6148,17 +6153,16 @@ class PlatformRepo {
         await client.rpc('feedback_files', params: {'p_report_id': reportId}),
       );
 
-  /// A short-lived link to one.
+  /// The file itself, for showing it INSIDE the console.
   ///
-  /// The bucket is private, so there is no public URL to hand out and
-  /// nothing to leak if the link is still in somebody's browser
-  /// history an hour later. Ten minutes is long enough to open a
-  /// screenshot and short enough not to matter afterwards.
-  Future<String> feedbackFileUrl(String storagePath,
-          {Duration validFor = const Duration(minutes: 10)}) =>
-      client.storage
-          .from('feedback')
-          .createSignedUrl(storagePath, validFor.inSeconds);
+  /// This used to mint a ten-minute signed link and hand it to the
+  /// external browser. A screenshot attached to a bug report is
+  /// somebody's books on their screen, and ten minutes is long enough
+  /// for that link to be forwarded, cached and logged. Downloaded
+  /// through the same authenticated client instead, so no URL exists
+  /// to leak rather than one that expires.
+  Future<Uint8List> feedbackFileBytes(String storagePath) =>
+      client.storage.from('feedback').download(storagePath);
 
   /// `value` is `dynamic` rather than a map because `platform_settings`
   /// stores jsonb, and not every setting is an object: `mail_domain` is

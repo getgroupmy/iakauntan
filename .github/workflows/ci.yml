@@ -1109,6 +1109,20 @@ jobs:
           python3 scripts/check_routes_test.py
           python3 scripts/check_routes.py
 
+      # And that a private document is never handed to another
+      # application. Four screens used to mint a SIGNED URL and open it
+      # with `LaunchMode.externalApplication`, which puts a working link
+      # to somebody's bank statement into a different app's address bar
+      # and history for the life of the signature. Reading one goes
+      # through `showFileInApp`, which takes the bytes, so no URL is
+      # created and there is nothing to leak.
+      #
+      # No database needed: it reads the Dart.
+      - name: Check no screen mints a link to a private document
+        run: |
+          python3 scripts/check_files_open_in_app_test.py
+          python3 scripts/check_files_open_in_app.py
+
       # The same question of the SCHEMA, which on a project whose first
       # rule is that the database IS the application is the layer that
       # matters most. It found twenty columns nothing mentioned at all,
