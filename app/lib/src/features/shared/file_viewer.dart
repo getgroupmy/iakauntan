@@ -83,6 +83,16 @@ bool looksLikePdfFile(String fileName, String? mimeType) {
   return fileName.toLowerCase().endsWith('.pdf');
 }
 
+/// Said where a PDF cannot be drawn at all.
+///
+/// Reachable on a desktop build: `pdfx` ships Android, iOS, macOS,
+/// Windows and web, and `dart.library.io` is also true on Linux, where
+/// there is no plugin behind the Dart API. Not reachable on a phone or
+/// in a browser, which is where the people are.
+const _noPdfHere =
+    'A PDF cannot be drawn on this device. Open it in the app on a '
+    'phone, or in a browser.';
+
 class _FileViewer extends StatefulWidget {
   const _FileViewer({
     required this.fileName,
@@ -118,13 +128,26 @@ class _FileViewerState extends State<_FileViewer> {
         return;
       }
       if (!canRenderPdfPages) {
-        setState(() => _problem =
-            'A PDF cannot be shown on this device yet. Open it from the '
-            'web app, where it is drawn in the page rather than handed '
-            'to another application.');
+        setState(() => _problem = _noPdfHere);
         return;
       }
-      final pages = await pdfPageImages(bytes);
+      final List<Uint8List> pages;
+      try {
+        pages = await pdfPageImages(bytes);
+      } catch (e) {
+        // The file arrived; drawing it did not work. Said apart from
+        // the download failure above, because `storageProblem` talks
+        // about buckets and permissions and would send somebody to look
+        // in entirely the wrong place.
+        //
+        // A PDF that will not open is ordinarily an encrypted one --
+        // Malaysian banks send those -- so that is named first.
+        if (!mounted) return;
+        setState(() => _problem =
+            'That PDF could not be opened. If it asks for a password '
+            'when you open it elsewhere, this cannot read it yet.\n\n$e');
+        return;
+      }
       if (!mounted) return;
       setState(() => _pages = pages);
     } catch (e) {

@@ -65,6 +65,15 @@ ALLOWED: set[str] = set()
 CALL = re.compile(r'\b' + MINTER + r'\s*\(')
 
 
+# `pdfx` renders a PDF on a phone. Its WEB implementation fetches
+# character maps from a CDN, and this repository vendors `pdf.js` and
+# Tesseract under `web/` precisely so that reading a document tells
+# nobody. So exactly one file may import it, and that file is the one
+# the conditional export sends everything-but-the-browser to.
+PDFX_IMPORT = re.compile(r"^import 'package:pdfx/", re.M)
+PDFX_ALLOWED = 'app/lib/src/features/shared/text_reader_io.dart'
+
+
 def main() -> int:
     if not LIB.exists():
         print(f'FAIL no lib at {LIB}', file=sys.stderr)
@@ -90,6 +99,31 @@ def main() -> int:
             line = text[:m.start()].count('\n') + 1
             bad.append((rel, line))
 
+    stray = []
+    for f in sorted(LIB.rglob('*.dart')):
+        rel = f.relative_to(ROOT).as_posix()
+        if rel == PDFX_ALLOWED:
+            continue
+        if PDFX_IMPORT.search(f.read_text()):
+            stray.append(rel)
+    if stray:
+        print('FAIL these import `pdfx` outside the one file allowed to:',
+              file=sys.stderr)
+        for rel in stray:
+            print(f'  {rel}', file=sys.stderr)
+        print(file=sys.stderr)
+        print("  Its web side fetches character maps from a CDN. `pdf.js` "
+              'is vendored under web/ so that', file=sys.stderr)
+        print('  reading a document tells nobody, and importing `pdfx` '
+              'anywhere the browser compiles', file=sys.stderr)
+        print('  puts that back.', file=sys.stderr)
+        return 1
+
+    if not (ROOT / PDFX_ALLOWED).exists():
+        print(f'FAIL {PDFX_ALLOWED} is gone; this sweep guards nothing',
+              file=sys.stderr)
+        return 1
+
     if bad:
         print('FAIL these mint a link to a private document:', file=sys.stderr)
         for rel, line in bad:
@@ -102,7 +136,8 @@ def main() -> int:
         print('  paperwork, sitting in another application.', file=sys.stderr)
         return 1
 
-    print('ok   nothing mints a link to a private document')
+    print('ok   nothing mints a link to a private document, and `pdfx` '
+          'stays off the web side')
     return 0
 
 

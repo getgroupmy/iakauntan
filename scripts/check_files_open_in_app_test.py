@@ -53,6 +53,33 @@ class ItRecognisesACall(unittest.TestCase):
         self.assertIsNone(sweep.CALL.search('await showFileInApp(context, ref)'))
 
 
+class ItKeepsPdfxOffTheWebSide(unittest.TestCase):
+    """`pdfx` draws a PDF on a phone; its web side fetches from a CDN.
+
+    This repository vendors `pdf.js` and Tesseract under `web/` so that
+    reading a document tells nobody, and importing `pdfx` anywhere the
+    browser compiles would put that straight back.
+    """
+
+    def test_it_sees_an_import(self):
+        self.assertTrue(
+            sweep.PDFX_IMPORT.search("import 'package:pdfx/pdfx.dart';"))
+
+    def test_including_a_deep_one(self):
+        self.assertTrue(sweep.PDFX_IMPORT.search(
+            "import 'package:pdfx/src/renderer/interfaces/document.dart';"))
+
+    def test_but_not_one_merely_mentioned_in_a_comment(self):
+        # `// see package:pdfx` must not fail the build.
+        self.assertIsNone(
+            sweep.PDFX_IMPORT.search("// see import 'package:pdfx/pdfx.dart';"))
+
+    def test_and_the_one_file_allowed_to_is_the_non_web_side(self):
+        # If this moves, the conditional export moved with it and the
+        # sweep is guarding the wrong file.
+        self.assertTrue(sweep.PDFX_ALLOWED.endswith('text_reader_io.dart'))
+
+
 class TheRealTree(unittest.TestCase):
     """And the app it guards actually passes it.
 
@@ -68,6 +95,15 @@ class TheRealTree(unittest.TestCase):
         # Every private file is read as bytes now, so there is no
         # legitimate caller left. A future one goes in WITH ITS REASON.
         self.assertEqual(sweep.ALLOWED, set())
+
+    def test_only_the_non_web_side_imports_pdfx(self):
+        root = Path(__file__).resolve().parent.parent
+        importers = [
+            f.relative_to(root).as_posix()
+            for f in (root / 'app/lib').rglob('*.dart')
+            if sweep.PDFX_IMPORT.search(f.read_text())
+        ]
+        self.assertEqual(importers, [sweep.PDFX_ALLOWED])
 
     def test_and_the_viewer_exists_to_send_them_to(self):
         root = Path(__file__).resolve().parent.parent

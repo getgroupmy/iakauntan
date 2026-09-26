@@ -177,6 +177,25 @@ dependencies:
   # supabase_flutter; named here because `call_engine.dart` imports it
   # directly and a transitive dependency is not a promise.
   web_socket_channel: ^3.0.3
+  # DRAWING a PDF, on a phone. `pdf` above writes them; this one
+  # renders a page to a picture, from BYTES, which is the whole
+  # requirement — `showFileInApp` exists so that a private document is
+  # never handed to another application as a signed link, and before
+  # this there was nothing on Android or iOS that could draw one.
+  #
+  # Its WEB implementation is deliberately never reached. It fetches
+  # character maps from `cdn.jsdelivr.net`, and this repository vendors
+  # `pdf.js` and Tesseract under `web/` precisely so that reading a
+  # document tells nobody. `text_reader.dart`'s conditional export keeps
+  # the browser on the vendored copy, and `text_reader_io.dart` is the
+  # only file that imports this package. Registering the plugin fetches
+  # nothing — `PdfxPlugin.registerWith` assigns a platform instance and
+  # does no more — so the CDN is reached only by opening a document
+  # through `pdfx` on web, which nothing here does.
+  #
+  # MIT. It brings `photo_view`, `universal_platform` and `extension`
+  # with it, none of which this code calls.
+  pdfx: ^2.11.0
 
 dev_dependencies:
   flutter_test:
