@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
+import '../../data/models.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -92,7 +94,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(errorText(e))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -249,6 +251,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
                       lines: _lines,
                       canPost: canPost,
                       onMatch: _match,
+                      onPost: _post,
                       onUnmatch: _unmatch,
                     ),
                     const SizedBox(height: 40),
@@ -344,9 +347,16 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     if (!mounted) return;
 
     if (suggestions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Nothing posted matches that amount and date. '
-            'Record the receipt or payment first.'),
+      // It used to end here, which on a ledger with nothing in it is
+      // where every line ended: "record the receipt first", twenty-four
+      // times, with nothing on the screen that could record one.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Nothing already posted matches that amount '
+            'and date.'),
+        action: SnackBarAction(
+          label: 'Post it',
+          onPressed: () => _post(line),
+        ),
       ));
       return;
     }
@@ -365,6 +375,41 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
         sourceId: chosen['source_id'] as String,
       ),
       successMessage: 'Matched',
+    );
+    if (ok) await _refresh();
+  }
+
+  /// Enters a statement line into the ledger against one account.
+  Future<void> _post(Map<String, dynamic> line) async {
+    final List<Account> accounts;
+    try {
+      accounts = await ref.read(accountsProvider.future);
+    } catch (e) {
+      // The chart has to arrive before anything can be chosen from it,
+      // and a button that throws into the void looks like a button that
+      // does nothing.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(errorText(e))));
+      return;
+    }
+    if (!mounted) return;
+
+    final chosen = await showDialog<_PostChoice>(
+      context: context,
+      builder: (_) => _PostLineDialog(line: line, accounts: accounts),
+    );
+    if (chosen == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      doing: 'posting a statement line',
+      action: () => ref.read(repoProvider)!.postBankTransaction(
+            transactionId: line['id'] as String,
+            accountId: chosen.accountId,
+            description: chosen.description,
+          ),
+      successMessage: 'Posted',
     );
     if (ok) await _refresh();
   }
@@ -497,6 +542,69 @@ class _Controls extends StatelessWidget {
   }
 }
 
+/// Why a reconciliation does not balance, in the words that fit it.
+///
+/// ## The sentence this replaces, and what was wrong with it
+///
+/// The screen used to say, whatever the figures were:
+///
+///     24 statement lines are still unmatched. A difference is a line
+///     nobody has matched, a payment entered twice, or a charge the
+///     books have not heard of.
+///
+/// Reported with a screenshot where all three were wrong. A Maybank
+/// statement for October 2025 had been scanned and imported perfectly
+/// into an account whose ledger begins in January 2026 — so the book
+/// balance was zero, the difference was the statement balance to the
+/// sen, and there was no discrepancy between two sets of records
+/// because there was only one set of records.
+///
+/// Somebody hunting the first when they have the second looks for a
+/// missing RM 11,008.23 that was never there.
+///
+/// ## Why no date has to be passed in
+///
+/// `posted_entries` counts postings dated ON OR BEFORE the statement
+/// date and `books_start` is the earliest posting at ANY date, so a
+/// zero count already means every posting falls after the statement.
+/// Comparing the two dates here would be asking a question the pair of
+/// figures has answered.
+///
+/// A server that does not send `posted_entries` — an app talking to a
+/// deployment older than `0716` — gets the sentence that was always
+/// here, rather than a guess.
+String whyItIsOut(Map<String, dynamic> status) {
+  final lines = (status['unmatched_lines'] as num?)?.toInt() ?? 0;
+  final posted = (status['posted_entries'] as num?)?.toInt();
+  if (posted == null || posted > 0) return _aDifference(lines);
+
+  final start = _startedOn(status['books_start']);
+  final opening = start == null
+      ? 'Nothing has ever been posted to this account'
+      : 'Nothing is posted to this account by the statement date — its '
+          'books start on ${Fmt.date(start)}';
+  final tail = lines == 1
+      ? 'the statement line has'
+      : 'the $lines statement lines have';
+  return '$opening, so there is nothing for the statement to agree '
+      'with. That is not a difference to hunt: $tail to be entered into '
+      'the ledger first.';
+}
+
+String _aDifference(int lines) {
+  final count = lines == 1
+      ? '1 statement line is still unmatched'
+      : '$lines statement lines are still unmatched';
+  return '$count. A difference is a line nobody has matched, a payment '
+      'entered twice, or a charge the books have not heard of.';
+}
+
+DateTime? _startedOn(Object? value) {
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
+
 class _StatusCard extends StatelessWidget {
   const _StatusCard({required this.status});
 
@@ -517,7 +625,11 @@ class _StatusCard extends StatelessWidget {
             _Line(label: 'Book balance', value: Fmt.toDouble(status['book_balance'])),
             _Line(
               label: 'Less what the bank has not seen',
-              value: -Fmt.toDouble(status['unpresented']),
+              // `0 - x` rather than `-x`: negating a double zero gives
+              // NEGATIVE zero, which this formats as "RM -0.00" — and
+              // a minus sign in front of nothing reads as a figure
+              // somebody should go and look at.
+              value: 0 - Fmt.toDouble(status['unpresented']),
               caption: 'Unpresented cheques and deposits in transit',
             ),
             const Divider(height: 20),
@@ -556,10 +668,7 @@ class _StatusCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  '${status['unmatched_lines']} statement lines are still '
-                  'unmatched. A difference is a line nobody has matched, a '
-                  'payment entered twice, or a charge the books have not '
-                  'heard of.',
+                  whyItIsOut(status),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -606,12 +715,14 @@ class _LinesCard extends StatelessWidget {
     required this.canPost,
     required this.onMatch,
     required this.onUnmatch,
+    required this.onPost,
   });
 
   final List<Map<String, dynamic>> lines;
   final bool canPost;
   final ValueChanged<Map<String, dynamic>> onMatch;
   final ValueChanged<Map<String, dynamic>> onUnmatch;
+  final ValueChanged<Map<String, dynamic>> onPost;
 
   @override
   Widget build(BuildContext context) {
@@ -640,6 +751,7 @@ class _LinesCard extends StatelessWidget {
                   canPost: canPost,
                   onMatch: () => onMatch(line),
                   onUnmatch: () => onUnmatch(line),
+                  onPost: () => onPost(line),
                 ),
           ],
         ),
@@ -654,12 +766,21 @@ class _LineTile extends StatelessWidget {
     required this.canPost,
     required this.onMatch,
     required this.onUnmatch,
+    required this.onPost,
   });
 
   final Map<String, dynamic> line;
   final bool canPost;
   final VoidCallback onMatch;
   final VoidCallback onUnmatch;
+
+  /// Post this line straight to an account.
+  ///
+  /// Beside Match rather than instead of it. They answer different
+  /// questions — "which of the things I have already entered is this?"
+  /// and "this was never entered; enter it" — and a ledger that has
+  /// both kinds of line needs both verbs.
+  final VoidCallback onPost;
 
   @override
   Widget build(BuildContext context) {
@@ -684,9 +805,15 @@ class _LineTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Money(amount, bold: true),
+          if (canPost && !matched)
+            IconButton(
+              tooltip: 'Post to an account',
+              icon: const Icon(Icons.post_add, size: 20),
+              onPressed: onPost,
+            ),
           if (canPost)
             IconButton(
-              tooltip: matched ? 'Unmatch' : 'Match',
+              tooltip: matched ? 'Unmatch' : 'Match to something posted',
               icon: Icon(matched ? Icons.close : Icons.search, size: 20),
               onPressed: matched ? onUnmatch : onMatch,
             ),
@@ -703,6 +830,120 @@ class _LineTile extends StatelessWidget {
         _ => 'the books',
       };
 }
+
+/// What was chosen in [_PostLineDialog].
+class _PostChoice {
+  const _PostChoice({required this.accountId, this.description});
+
+  final String accountId;
+  final String? description;
+}
+
+/// Which account the other side of a statement line goes to.
+///
+/// One question, because that is all the posting needs: the bank's own
+/// side is decided by the line's sign and the amount is the line's own.
+/// A form that asked for either of those would be offering somebody the
+/// chance to disagree with the bank.
+class _PostLineDialog extends StatefulWidget {
+  const _PostLineDialog({required this.line, required this.accounts});
+
+  final Map<String, dynamic> line;
+  final List<Account> accounts;
+
+  @override
+  State<_PostLineDialog> createState() => _PostLineDialogState();
+}
+
+class _PostLineDialogState extends State<_PostLineDialog> {
+  late final TextEditingController _description = TextEditingController(
+    text: widget.line['description']?.toString() ?? '',
+  );
+  String? _accountId;
+
+  @override
+  void dispose() {
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = Fmt.toDouble(widget.line['amount']);
+    final id = _accountId;
+
+    return AlertDialog(
+      title: const Text('Post this line'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${Fmt.date(Fmt.parseDate(widget.line['transaction_date']))}'
+              ' · ${Fmt.money(amount)}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              postingSideNote(amount),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            SearchablePicker<String>(
+              // Headings dropped: a group account cannot receive a
+              // posting, so offering one is offering a refusal.
+              options: accountPickerOptions(widget.accounts),
+              value: _accountId,
+              onChanged: (v) => setState(() => _accountId = v),
+              label: 'Account',
+              hint: 'Search by code or name',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _description,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                helperText: 'What the journal will be called',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: id == null
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    _PostChoice(
+                      accountId: id,
+                      description: _description.text.trim().isEmpty
+                          ? null
+                          : _description.text.trim(),
+                    ),
+                  ),
+          child: const Text('Post'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Which way round the posting goes, said in words before it is made.
+///
+/// `bank_transactions.amount` is a GL-signed movement on the bank's own
+/// account — `0085` fixed that meaning and `0712` made a credit card
+/// obey it by storing the card negated — so the sign is the whole rule
+/// and there is no account-type branch behind this sentence either.
+String postingSideNote(double amount) => amount < 0
+    ? 'Money out. The account you choose will be debited.'
+    : 'Money in. The account you choose will be credited.';
 
 class _PasteDialog extends ConsumerStatefulWidget {
   const _PasteDialog({this.intoAccountNumber});
@@ -814,7 +1055,7 @@ class _PasteDialogState extends ConsumerState<_PasteDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Could not read the file: $e')));
+      ).showSnackBar(SnackBar(content: Text('Could not read the file: ${errorText(e)}')));
     } finally {
       if (mounted) setState(() => _reading = false);
     }

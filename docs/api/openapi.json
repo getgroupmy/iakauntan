@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0715",
+    "version": "0717",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -22179,8 +22179,8 @@
     "/rpc/bank_reconciliation_status": {
       "post": {
         "operationId": "bank_reconciliation_status",
-        "summary": "Bank reconciliation status",
-        "description": "`public.bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)` Reads only. Requires a signed-in user.",
+        "summary": "Where a reconciliation stands, as figures",
+        "description": "Where a reconciliation stands, as figures. `posted_entries` at zero means the books hold nothing on this account by the statement date, which is not a difference to hunt; `books_start` says whether the statement simply predates them. `0716`.\n\n`public.bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28139,8 +28139,8 @@
     "/rpc/complete_bank_reconciliation": {
       "post": {
         "operationId": "complete_bank_reconciliation",
-        "summary": "Closes a reconciliation, and refuses two things in an order that matters",
-        "description": "Closes a reconciliation, and refuses two things in an order that matters. FIRST that the statement date is after the last completed one -- because a repeat of a closed period passes the difference test for the wrong reason: every line up to that date is already reconciled, so there is nothing left to be out by, and a nil difference means agreement only the first time. THEN that the difference is zero, naming how many statement lines are still unmatched, because completing it while it is out buries the difference in a period somebody has signed off. Reopen the earlier one if it was wrong. Needs `can_post`.\n\n`public.complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` Writes. Requires a signed-in user.",
+        "summary": "Closes a reconciliation, and refuses one that does not balance \u2014 naming, since `0716`, whether the difference\u2026",
+        "description": "Closes a reconciliation, and refuses one that does not balance \u2014 naming, since `0716`, whether the difference is a discrepancy to hunt or an account with nothing posted to it at all.\n\n`public.complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -53580,6 +53580,73 @@
         }
       }
     },
+    "/rpc/post_bank_transaction": {
+      "post": {
+        "operationId": "post_bank_transaction",
+        "summary": "Turns an unmatched statement line into a journal against one chosen account, and matches the line to it",
+        "description": "Turns an unmatched statement line into a journal against one chosen account, and matches the line to it. The other half of bank import: before `0717` a line could only be matched to something already posted, so an empty ledger had no way forward at all.\n\n`public.post_bank_transaction(p_transaction_id uuid, p_account_id uuid, p_description text, p_contact_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_transaction_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_description": {
+                    "type": "string"
+                  },
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_transaction_id",
+                  "p_account_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/post_bank_transfer": {
       "post": {
         "operationId": "post_bank_transfer",
@@ -73270,8 +73337,8 @@
     "/rpc/unmatch_bank_transaction": {
       "post": {
         "operationId": "unmatch_bank_transaction",
-        "summary": "Breaks the link between a statement line and what it was matched to, leaving the line on the statement and\u2026",
-        "description": "Breaks the link between a statement line and what it was matched to, leaving the line on the statement and the document alone. Refuses a line that belongs to a COMPLETED reconciliation: that line is part of an agreement somebody signed, and unpicking it would leave the reconciliation claiming a difference of zero it can no longer support. Reopen the reconciliation first. Needs `can_post`.\n\n`public.unmatch_bank_transaction(p_transaction_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Detaches a statement line from what it was matched to \u2014 reversing the journal first where that journal was\u2026",
+        "description": "Detaches a statement line from what it was matched to \u2014 reversing the journal first where that journal was posted FROM this line, so that an undo and a redo cannot double the figure. `0717`.\n\n`public.unmatch_bank_transaction(p_transaction_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

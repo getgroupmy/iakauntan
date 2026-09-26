@@ -1153,5 +1153,332 @@ begin
   raise notice 'ok   bank statements: the fourteen a sweep found';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `0716`: nothing in the books is not a difference
+--
+-- The screenshot this comes from: a Maybank statement for October 2025,
+-- scanned and imported perfectly, against an account whose ledger
+-- begins in January 2026. Book balance 0, statement 11,008.23, "out by
+-- -11,008.23", and an explanation offering three causes -- an unmatched
+-- line, a double entry, a charge the books have not heard of -- none of
+-- which is a thing that happened. There was nothing in the books at all.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_acct uuid; v_bank uuid; v_st jsonb; v_said text;
+  v_cust uuid; v_rcp uuid; v_inv uuid;
+begin
+  v_org := pg_temp.br_org('Books After The Statement Sdn Bhd');
+  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
+  values (v_org, v_acct, 'Maybank current', 'Maybank', '9001')
+  returning id into v_bank;
+
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-02-10','description','Payment in',
+                       'amount',300,'running_balance',300),
+    jsonb_build_object('transaction_date','2026-02-20','description','Payment in',
+                       'amount',200,'running_balance',500)));
+
+  v_st := public.bank_reconciliation_status(v_bank, date '2026-02-28', 500);
+
+  -- The figures the screen already had, unchanged.
+  perform pg_temp.check_eq('an empty ledger holds nothing',
+    (v_st->>'book_balance')::numeric, 0);
+  perform pg_temp.check_eq('so the difference is the statement itself',
+    (v_st->>'difference')::numeric, -500);
+  perform pg_temp.check_eq('and every line is unmatched',
+    (v_st->>'unmatched_lines')::numeric, 2);
+
+  -- The two it did not have. A book balance of zero cannot tell
+  -- "nothing posted" from "posted and netted off"; the count can.
+  perform pg_temp.check_eq('nothing at all is posted to the account',
+    (v_st->>'posted_entries')::numeric, 0);
+  perform pg_temp.check_true('and the books have no start yet',
+    v_st->>'books_start' is null);
+
+  begin
+    perform public.complete_bank_reconciliation(v_bank, date '2026-02-28', 500);
+    raise exception 'FAIL: completed against an empty ledger';
+  exception when sqlstate '23514' then
+    v_said := SQLERRM;
+  end;
+  perform pg_temp.check_true(
+    'the refusal says the books are empty, not that there is a difference',
+    position('Nothing is posted' in v_said) > 0);
+  perform pg_temp.check_true(
+    'and it does not send somebody hunting a discrepancy',
+    position('bury the difference' in v_said) = 0);
+
+  -- Now the ledger exists, but it starts AFTER the statement -- which
+  -- is the case that was reported, and the one worth naming a date for.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-900', 'Buyer', 'customer') returning id into v_cust;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-900', date '2026-05-01', v_cust, 'MYR', 1,
+          700, 700, 700, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_inv, 1, 'Sale', 1, 700);
+  perform public.post_sales_document(v_inv);
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'RCP-900', date '2026-05-06', v_cust, 700, 700, 'MYR', 1, v_bank)
+  returning id into v_rcp;
+  insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
+  values (v_org, v_rcp, v_inv, 700);
+  perform public.post_receipt(v_rcp);
+
+  v_st := public.bank_reconciliation_status(v_bank, date '2026-02-28', 500);
+  perform pg_temp.check_eq('still nothing posted by the statement date',
+    (v_st->>'posted_entries')::numeric, 0);
+  perform pg_temp.check_eq(
+    'but the books now have a start, and it is after the statement',
+    v_st->>'books_start', '2026-05-06');
+
+  begin
+    perform public.complete_bank_reconciliation(v_bank, date '2026-02-28', 500);
+    raise exception 'FAIL: completed against books that start later';
+  exception when sqlstate '23514' then
+    v_said := SQLERRM;
+  end;
+  perform pg_temp.check_true('the refusal names the day the books start',
+    position('2026-05-06' in v_said) > 0);
+
+  -- And where there IS something posted by the statement date, this is
+  -- an ordinary difference again and reads like one. Nothing about
+  -- `0716` may weaken the refusal that `0085` exists for.
+  v_st := public.bank_reconciliation_status(v_bank, date '2026-05-31', 500);
+  perform pg_temp.check_true('the ledger is no longer empty',
+    (v_st->>'posted_entries')::numeric > 0);
+
+  begin
+    perform public.complete_bank_reconciliation(v_bank, date '2026-05-31', 500);
+    raise exception 'FAIL: completed a reconciliation that did not balance';
+  exception when sqlstate '23514' then
+    v_said := SQLERRM;
+  end;
+  perform pg_temp.check_true('a real difference is still refused as one',
+    position('bury the difference' in v_said) > 0);
+
+  raise notice 'ok   an empty ledger is named as one, not shown as a difference';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- `0717`: a statement line can become a posting
+--
+-- Before this, `suggest_bank_matches` could only offer documents that
+-- were already posted, so a statement imported into an empty ledger had
+-- nowhere to go: twenty-four lines, twenty-four answers of "Record the
+-- receipt or payment first", and no way on that screen to record one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_gl uuid; v_bank uuid; v_card uuid; v_card_gl uuid;
+  v_in uuid; v_out uuid; v_zero uuid; v_purchase uuid;
+  v_sales uuid; v_rent uuid; v_group uuid; v_other_org uuid; v_theirs uuid;
+  v_entry uuid; v_st jsonb; v_said text; v_rec uuid;
+begin
+  v_org := pg_temp.br_org('Nothing Posted Yet Sdn Bhd');
+  select id into v_gl from public.accounts where org_id = v_org and code = '1120';
+  select id into v_sales from public.accounts where org_id = v_org and code = '4100';
+  select id into v_rent from public.accounts where org_id = v_org and code = '6200';
+  select id into v_group from public.accounts where org_id = v_org and code = '4000';
+
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
+  values (v_org, v_gl, 'Maybank current', 'Maybank', '7001')
+  returning id into v_bank;
+
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-02','description','Sale settled',
+                       'amount',900,'running_balance',900),
+    jsonb_build_object('transaction_date','2026-04-08','description','Office rent',
+                       'amount',-400,'running_balance',500),
+    jsonb_build_object('transaction_date','2026-04-09','description','Nil fee',
+                       'amount',0,'running_balance',500)));
+
+  select id into v_in from public.bank_transactions
+   where bank_account_id = v_bank and amount = 900;
+  select id into v_out from public.bank_transactions
+   where bank_account_id = v_bank and amount = -400;
+  select id into v_zero from public.bank_transactions
+   where bank_account_id = v_bank and amount = 0;
+
+  -- Money in: the bank is debited, the account chosen is credited.
+  v_entry := public.post_bank_transaction(v_in, v_sales);
+  perform pg_temp.check_eq('money in debits the bank',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_gl), 900);
+  perform pg_temp.check_eq('and credits the account chosen',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_sales), 900);
+  perform pg_temp.check_eq('the journal is filed as a bank transaction',
+    (select source::text from public.gl_entries where id = v_entry),
+    'bank_transaction');
+  perform pg_temp.check_eq('and points back at the line it came from',
+    (select source_id from public.gl_entries where id = v_entry), v_in);
+  perform pg_temp.check_true('the line is matched to its own journal',
+    (select matched_table = 'gl_entries' and matched_id = v_entry
+        and gl_entry_id = v_entry and is_reconciled
+       from public.bank_transactions where id = v_in));
+  perform pg_temp.check_eq('it takes the date the money moved',
+    (select entry_date from public.gl_entries where id = v_entry)::text,
+    '2026-04-02');
+  perform pg_temp.check_eq('and the line description where none is given',
+    (select description from public.gl_entries where id = v_entry),
+    'Sale settled');
+
+  -- Money out: the other way round, on the same rule and no branch.
+  v_entry := public.post_bank_transaction(v_out, v_rent, 'April rent');
+  perform pg_temp.check_eq('money out credits the bank',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_gl), 400);
+  perform pg_temp.check_eq('and debits the account chosen',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_rent), 400);
+  perform pg_temp.check_eq('a description given is the one used',
+    (select description from public.gl_entries where id = v_entry),
+    'April rent');
+
+  -- Which is the whole point: the reconciliation can now close.
+  v_st := public.bank_reconciliation_status(v_bank, date '2026-04-30', 500);
+  perform pg_temp.check_eq('the books now hold what the statement says',
+    (v_st->>'book_balance')::numeric, 500);
+  perform pg_temp.check_eq('with nothing the bank has not seen',
+    (v_st->>'unpresented')::numeric, 0);
+  perform pg_temp.check_eq('and no difference left',
+    (v_st->>'difference')::numeric, 0);
+  v_rec := public.complete_bank_reconciliation(v_bank, date '2026-04-30', 500);
+  perform pg_temp.check_true('so it closes', v_rec is not null);
+end $$;
+
+do $$
+declare
+  v_org uuid; v_gl uuid; v_bank uuid; v_line uuid; v_second uuid;
+  v_sales uuid; v_rent uuid; v_group uuid;
+  v_other uuid; v_theirs uuid; v_entry uuid; v_said text;
+begin
+  v_org := pg_temp.br_org('Refusals Sdn Bhd');
+  select id into v_gl from public.accounts where org_id = v_org and code = '1120';
+  select id into v_sales from public.accounts where org_id = v_org and code = '4100';
+  select id into v_group from public.accounts where org_id = v_org and code = '4000';
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
+  values (v_org, v_gl, 'Maybank current', 'Maybank', '7002')
+  returning id into v_bank;
+
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-02','description','In',
+                       'amount',100,'running_balance',100),
+    jsonb_build_object('transaction_date','2026-04-03','description','Nil',
+                       'amount',0,'running_balance',100)));
+  select id into v_line from public.bank_transactions
+   where bank_account_id = v_bank and amount = 100;
+  select id into v_second from public.bank_transactions
+   where bank_account_id = v_bank and amount = 0;
+
+  begin
+    perform public.post_bank_transaction(v_second, v_sales);
+    raise exception 'FAIL: posted a line for nothing';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a line for nothing has nothing to post';
+  end;
+
+  begin
+    perform public.post_bank_transaction(v_line, v_group);
+    raise exception 'FAIL: posted to a heading';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a heading cannot receive a posting';
+  end;
+
+  begin
+    perform public.post_bank_transaction(v_line, v_gl);
+    raise exception 'FAIL: posted both sides to the bank itself';
+  exception when sqlstate '23514' then
+    raise notice 'ok   both sides on one account is refused';
+  end;
+
+  v_other := pg_temp.br_org('Somebody Else Sdn Bhd');
+  select id into v_theirs from public.accounts where org_id = v_other and code = '4100';
+  begin
+    perform public.post_bank_transaction(v_line, v_theirs);
+    raise exception 'FAIL: posted to another company account';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   another company''s account is not offered';
+  end;
+
+  -- One line, one posting. A second would double the figure.
+  v_entry := public.post_bank_transaction(v_line, v_sales);
+  begin
+    perform public.post_bank_transaction(v_line, v_sales);
+    raise exception 'FAIL: posted the same line twice';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a line already matched cannot be posted again';
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Undo, which is where this would have rotted
+  -- ---------------------------------------------------------------
+  perform public.unmatch_bank_transaction(v_line);
+  perform pg_temp.check_true('unmatching frees the line',
+    (select not is_reconciled and gl_entry_id is null and matched_table is null
+       from public.bank_transactions where id = v_line));
+  perform pg_temp.check_eq('and the journal it made is reversed',
+    (select count(*) from public.gl_entries
+      where reversed_entry_id = v_entry and status = 'posted'), 1);
+  perform pg_temp.check_eq('so the books are back where they were',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+      where l.account_id = v_gl and e.status = 'posted'), 0);
+
+  -- The failure this reversal exists for: undo, redo, and the figure
+  -- would otherwise be in the books twice.
+  perform public.post_bank_transaction(v_line, v_sales);
+  perform pg_temp.check_eq('posting it again does not double it',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+      where l.account_id = v_gl and e.status = 'posted'), 100);
+
+  raise notice 'ok   a statement line posts once, and undoes cleanly';
+end $$;
+
+do $$
+declare
+  v_org uuid; v_gl uuid; v_card uuid; v_line uuid; v_entry uuid; v_buy uuid;
+begin
+  -- A card, whose figures `0712` stores negated so that one meaning of
+  -- `amount` serves every account type. A purchase must RAISE what is
+  -- owed, which on a liability is a credit.
+  v_org := pg_temp.br_org('Card Holder Sdn Bhd');
+  select id into v_gl from public.accounts where org_id = v_org and code = '2120';
+  select id into v_buy from public.accounts where org_id = v_org and code = '5100';
+
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, account_type)
+  values (v_org, v_gl, 'AmBank card', 'AmBank', '7003', 'credit_card')
+  returning id into v_card;
+
+  -- As printed on the statement: a purchase raising the balance owed.
+  perform public.import_bank_transactions(v_card, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-04','description','Petrol',
+                       'amount',150,'running_balance',150)));
+  select id into v_line from public.bank_transactions where bank_account_id = v_card;
+  perform pg_temp.check_eq('the card stores a purchase negated',
+    (select amount from public.bank_transactions where id = v_line), -150);
+
+  v_entry := public.post_bank_transaction(v_line, v_buy);
+  perform pg_temp.check_eq('so a card purchase credits the card',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_gl), 150);
+  perform pg_temp.check_eq('and debits what was bought',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_buy), 150);
+
+  raise notice 'ok   a card purchase raises what is owed';
+end $$;
+
 
 rollback;

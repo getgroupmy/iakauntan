@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/error_text.dart';
 import '../core/format.dart';
 // For `writeCustomFields`, which both `openMatter` and `createTicket`
 // need and which each of them used to write out again inline.
@@ -2327,6 +2328,32 @@ class Repo {
       'p_source_id': sourceId,
     },
   );
+
+  /// Posts a statement line straight to an account, and matches it to
+  /// the journal that makes.
+  ///
+  /// The other half of bank import. `suggestBankMatches` can only offer
+  /// documents that are ALREADY posted, so a statement imported into a
+  /// ledger with nothing in it had no way forward at all — every line
+  /// answered "Record the receipt or payment first" and the screen
+  /// offered no way to record one. `0717`.
+  Future<String> postBankTransaction({
+    required String transactionId,
+    required String accountId,
+    String? description,
+    String? contactId,
+  }) async {
+    final id = await callRpc(
+      'post_bank_transaction',
+      params: {
+        'p_transaction_id': transactionId,
+        'p_account_id': accountId,
+        'p_description': description,
+        'p_contact_id': contactId,
+      },
+    );
+    return '$id';
+  }
 
   Future<void> unmatchBankTransaction(String transactionId) => callRpc(
     'unmatch_bank_transaction',
@@ -5902,8 +5929,9 @@ extension RepoOrgLogo on Repo {
       .eq('id', orgId);
 }
 
-class MyInvoisException implements Exception {
+class MyInvoisException implements Exception, Explained {
   MyInvoisException(this.message, [this.details]);
+  @override
   final String message;
   final dynamic details;
   @override

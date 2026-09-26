@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
+import 'package:iakauntan/src/core/searchable_picker.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/banking/reconciliation_screen.dart';
 
@@ -39,6 +41,10 @@ void main() {
     double statement = 12160,
     double difference = 0,
     int unmatched = 0,
+    // Null rather than 0 by default, so every test written before
+    // `0716` goes on describing a server that does not send these.
+    int? postedEntries,
+    String? booksStart,
   }) => {
     'book_balance': book,
     'unpresented': unpresented,
@@ -46,10 +52,25 @@ void main() {
     'statement_balance': statement,
     'difference': difference,
     'unmatched_lines': unmatched,
+    if (postedEntries != null) 'posted_entries': postedEntries,
+    if (booksStart != null) 'books_start': booksStart,
   };
 
   const oneBank = [
     {'id': 'b1', 'name': 'Maybank Current', 'account_no': '5140 1234'},
+  ];
+
+  // Enough of a chart of accounts for the posting dialog to offer
+  // something. The heading is here on purpose: `accountPickerOptions`
+  // drops it, and a fixture without one could not show that.
+  final someAccounts = [
+    Account(id: 'a-head', code: '6000', name: 'EXPENSES',
+        accountType: 'expense', accountSubtype: 'operating_expense',
+        isGroup: true),
+    Account(id: 'a-rent', code: '6200', name: 'Rental',
+        accountType: 'expense', accountSubtype: 'operating_expense'),
+    Account(id: 'a-sales', code: '4100', name: 'Sales',
+        accountType: 'revenue', accountSubtype: 'sales'),
   ];
 
   Widget wrap(
@@ -63,6 +84,7 @@ void main() {
     overrides: [
       repoProvider.overrideWithValue(repo ?? _FakeRepo(st)),
       bankAccountsProvider.overrideWith((ref) async => banks),
+      accountsProvider.overrideWith((ref) async => someAccounts),
       memberRoleProvider.overrideWith((ref) async => role),
     ],
     child: MaterialApp(
@@ -102,6 +124,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
   }
+
+  _theEmptyLedger();
 
   group('the working, so it can be checked', () {
     testWidgets('what the bank has not seen is subtracted, and looks it',
@@ -146,6 +170,159 @@ void main() {
       // And the gap between them is what is shown largest.
       expect(find.text('Out by'), findsOneWidget);
       expect(find.text('RM 240.00'), findsOneWidget);
+    });
+  });
+
+  group('an empty ledger, on the screen', () {
+    testWidgets('says so, instead of naming three causes that do not apply',
+        (tester) async {
+      // The reported figures, to the sen.
+      await show(tester, status(book: 0, unpresented: 0, expected: 0,
+          statement: 11008.23, difference: -11008.23, unmatched: 24,
+          postedEntries: 0, booksStart: '2026-01-02'));
+
+      expect(find.textContaining('nothing for the statement to agree with'),
+          findsOneWidget);
+      expect(find.textContaining('02/01/2026'), findsOneWidget);
+      expect(find.textContaining('a line nobody has matched'), findsNothing);
+    });
+
+    testWidgets('and nothing subtracted is not shown as minus nothing',
+        (tester) async {
+      // "RM -0.00" on the row above the difference reads as a figure
+      // somebody should go and look at. It is zero.
+      await show(tester, status(book: 0, unpresented: 0, expected: 0,
+          statement: 11008.23, difference: -11008.23, unmatched: 24,
+          postedEntries: 0));
+
+      expect(find.text('RM -0.00'), findsNothing);
+      // Book balance, what the bank has not seen, and what the
+      // statement should therefore read: three zeroes and no minus.
+      expect(find.text('RM 0.00'), findsNWidgets(3));
+    });
+  });
+
+  group('posting a line that was never entered', () {
+    final oneLine = [
+      {
+        'id': 'line-1',
+        'transaction_date': '2025-10-31',
+        'description': 'FPX PAYMENT',
+        'amount': -10000.0,
+        'is_reconciled': false,
+      },
+    ];
+
+    testWidgets('an unmatched line offers it', (tester) async {
+      final repo = _FakeRepo(status(difference: -10000, unmatched: 1,
+          postedEntries: 0))
+        ..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      expect(find.byIcon(Icons.post_add), findsOneWidget);
+    });
+
+    testWidgets('a line already matched does not', (tester) async {
+      // It has a journal. A second one would double the figure, which
+      // the database refuses -- so the button would be a refusal with
+      // a nicer icon.
+      final repo = _FakeRepo(status())
+        ..lines = [
+          {...oneLine.first, 'is_reconciled': true,
+            'matched_table': 'gl_entries'},
+        ];
+      await show(tester, status(), repo: repo);
+
+      expect(find.byIcon(Icons.post_add), findsNothing);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    });
+
+    testWidgets('and somebody who cannot post is offered neither',
+        (tester) async {
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo, role: 'viewer');
+
+      expect(find.byIcon(Icons.post_add), findsNothing);
+    });
+
+    testWidgets('the dialog says which way round the posting goes',
+        (tester) async {
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      // Below the fold on a test surface: tapping without this hits
+      // nothing and the dialog never opens.
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Post this line'), findsOneWidget);
+      // Money out: the chosen account is debited. Getting this backwards
+      // files a month of spending as income.
+      expect(find.textContaining('debited'), findsOneWidget);
+      // The line's own description, ready to be kept or changed.
+      expect(find.widgetWithText(TextField, 'FPX PAYMENT'), findsOneWidget);
+      // And nothing posts until an account is chosen.
+      expect(
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Post'))
+            .onPressed,
+        isNull,
+      );
+      expect(repo.posted, isNull);
+    });
+
+    testWidgets('choosing an account posts the line against it',
+        (tester) async {
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      // Scoped to the dialog: the screen behind it has an account
+      // picker of its own, and an unscoped finder matches both.
+      await tester.tap(find.descendant(
+        of: find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(SearchablePicker<String>),
+        ),
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      // The heading is not on offer: a group account cannot receive a
+      // posting, so listing it would be listing a refusal.
+      expect(find.textContaining('6000 — EXPENSES'), findsNothing);
+      await tester.tap(find.text('6200 — Rental').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Post'));
+      await tester.pumpAndSettle();
+
+      expect(repo.posted, {
+        'transactionId': 'line-1',
+        'accountId': 'a-rent',
+        // The line's own wording, carried through untouched.
+        'description': 'FPX PAYMENT',
+      });
+    });
+
+    testWidgets('and backing out of it posts nothing', (tester) async {
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(repo.posted, isNull);
     });
   });
 
@@ -452,6 +629,88 @@ void main() {
 /// Only what the screen asks for. Anything else throws, so a screen that
 /// grows a third call fails loudly here rather than rendering a
 /// reconciliation built out of empty maps.
+/// `0716`: an empty ledger is not a difference.
+///
+/// Reported with a screenshot. A Maybank statement for October 2025 was
+/// scanned and imported perfectly into an account whose ledger begins
+/// in January 2026, and the screen said "24 statement lines are still
+/// unmatched. A difference is a line nobody has matched, a payment
+/// entered twice, or a charge the books have not heard of." All three
+/// are discrepancies between two sets of records. There was one set.
+void _theEmptyLedger() {
+  group('why it is out', () {
+    test('three named causes, where there are two sets of records', () {
+      final said = whyItIsOut({'unmatched_lines': 3, 'posted_entries': 12});
+
+      expect(said, contains('3 statement lines are still unmatched'));
+      expect(said, contains('a line nobody has matched'));
+    });
+
+    test('but not where the books hold nothing by the statement date', () {
+      final said = whyItIsOut({
+        'unmatched_lines': 24,
+        'posted_entries': 0,
+        'books_start': '2026-01-02',
+      });
+
+      // The date is the useful half: it says which side of the ledger
+      // the statement fell on.
+      expect(said, contains('02/01/2026'));
+      expect(said, contains('nothing for the statement to agree with'));
+      expect(said, contains('24 statement lines have'));
+      // And it must not send somebody hunting a discrepancy.
+      expect(said, isNot(contains('a line nobody has matched')));
+      expect(said, isNot(contains('entered twice')));
+    });
+
+    test('and one posting is enough to make it a difference again', () {
+      // The boundary. `posted > 0` written as `posted > 1` reads an
+      // account holding a single entry as an empty one, and every
+      // fixture above uses a comfortable number.
+      final said = whyItIsOut({'unmatched_lines': 3, 'posted_entries': 1});
+
+      expect(said, contains('a line nobody has matched'));
+      expect(said, isNot(contains('nothing for the statement to agree')));
+    });
+
+    test('an account with nothing ever posted to it names no date', () {
+      final said = whyItIsOut({'unmatched_lines': 2, 'posted_entries': 0});
+
+      expect(said, contains('Nothing has ever been posted'));
+      expect(said, isNot(contains('books start on')));
+    });
+
+    test('a server that does not send the count keeps the old sentence', () {
+      // An app talking to a deployment older than `0716`. A guess here
+      // would be a confident wrong answer.
+      final said = whyItIsOut({'unmatched_lines': 2});
+
+      expect(said, contains('a line nobody has matched'));
+    });
+
+    test('one line reads as one line', () {
+      expect(whyItIsOut({'unmatched_lines': 1, 'posted_entries': 4}),
+          contains('1 statement line is still unmatched'));
+      expect(whyItIsOut({'unmatched_lines': 1, 'posted_entries': 0}),
+          contains('the statement line has'));
+    });
+  });
+
+  group('which way round a posting goes', () {
+    test('money in credits the account chosen', () {
+      expect(postingSideNote(900), contains('credited'));
+      expect(postingSideNote(900), contains('Money in'));
+    });
+
+    test('and money out debits it', () {
+      // The sign is the whole rule. `0712` made a credit card obey it
+      // by storing the card negated, so there is no type branch here.
+      expect(postingSideNote(-400), contains('debited'));
+      expect(postingSideNote(-400), contains('Money out'));
+    });
+  });
+}
+
 class _FakeRepo implements Repo {
   _FakeRepo(this.status);
 
@@ -474,11 +733,39 @@ class _FakeRepo implements Repo {
     return status;
   }
 
+  /// Lines the screen will list. Empty unless a test supplies them.
+  List<Map<String, dynamic>> lines = const [];
+
   @override
   Future<List<Map<String, dynamic>>> bankStatementLines(
     String bankAccountId, {
     bool onlyOpen = false,
   }) async =>
+      lines;
+
+  /// What the last posting was handed. Null until something posts,
+  /// which is the assertion in the case where nothing should.
+  Map<String, Object?>? posted;
+
+  @override
+  Future<String> postBankTransaction({
+    required String transactionId,
+    required String accountId,
+    String? description,
+    String? contactId,
+  }) async {
+    posted = {
+      'transactionId': transactionId,
+      'accountId': accountId,
+      'description': description,
+    };
+    return 'entry-1';
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> suggestBankMatches(
+    String transactionId,
+  ) async =>
       const [];
 
   /// What the last import was handed, kept so a test can read it.

@@ -1861,7 +1861,16 @@ Stated plainly so nothing here is mistaken for finished:
   will read — and opening a file rather than pasting one. Both are in
   now; `parseStatement` works out which format arrived from the content,
   because the extension is `.csv`, `.txt`, `.sta` or `.940` depending on
-  the bank and is missing entirely from a paste
+  the bank and is missing entirely from a paste. And `0717` added the
+  half that was genuinely absent: **posting a line that was never
+  entered**. `suggest_bank_matches` can only offer documents that are
+  ALREADY posted, so a statement imported into a ledger with nothing in
+  it had no way forward at all — every line answered "record the
+  receipt first" and no screen would record one.
+  `post_bank_transaction` enters the line against one chosen account,
+  with the sign of `amount` deciding which way round it goes, and
+  unmatching REVERSES a journal that came from the line so an undo and
+  a redo cannot double the figure
 - Statutory submission files. The **EA form is built** — `0608` computes
   C.P.8A from this employer's posted payslips, by the year of the pay
   date, with what a previous employer paid reported separately and in no

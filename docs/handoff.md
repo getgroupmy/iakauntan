@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Telling somebody the file is already here |
+| Head at time of writing | Nothing in the books is not a difference |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0711` is the highest. CI applies on green — see below |
+| Migrations | `0717` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 370 SQL assertion files, **50 Python gates (+14 gate self-tests)**, **6,156 Flutter tests**, 64 deno tests |
-| API description | 791 functions, 366 tables, version `0710` |
+| Gates | 374 SQL assertion files, **51 Python gates (+15 gate self-tests)**, **6,300+ Flutter tests**, 64 deno tests |
+| API description | 792 functions, 366 tables, version `0717` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -210,6 +210,129 @@ or
 This paragraph previously said the opposite, and a session acting on it
 told the user a migration had gone live when the run said nothing of the
 kind.
+
+## A screenshot that was three defects, not one
+
+Reported as "Why such error", with the bank reconciliation screen
+showing
+
+    Book balance                             RM 0.00
+    Less what the bank has not seen         RM -0.00
+    Statement should read                    RM 0.00
+    Statement says                      RM 11,008.23
+    Out by                             RM -11,008.23
+
+and, in a red bar under it, `PostgrestException(message: The
+reconciliation is out by -11008.23. ..., code: 23514, details: Bad
+Request, hint: null)`.
+
+**The scan was not what failed.** Measured against production, read
+only: the statement is Maybank, October 2025, twenty-four lines from
+09/10 to 31/10, every one carrying a running balance that chains
+without a break from 974.74 to 11,008.23. The closing figure in the box
+is the bank's own, carried through by the import. What was wrong is
+that the ledger of that company **begins on 2026-01-02** — zero posted
+entries on or before the statement date, anywhere in the org. The
+difference was the statement balance itself, to the sen.
+
+Three separate defects, all fixed in this stretch.
+
+### One: the driver's envelope around the sender's sentence
+
+`runWithFeedback` did `Text('$err')`. `PostgrestException.toString()`
+prints its fields, so every careful sentence a migration ever wrote
+arrived wrapped in the wrapper. `AsyncView` did the same on load. Those
+two are how every action button and every screen in this app report a
+failure, so it was every refusal the database has ever made.
+
+`core/error_text.dart` has `errorText()`: the three Supabase envelopes
+unwrapped, `Explained` for the app's own exceptions (which now
+implement it rather than being named in `core/`), a connection that
+never landed reported in words instead of a host name, and Dart's own
+`Exception: ` prefix dropped. **An unrecognised error still prints** —
+swallowing it would be worse than showing it untidily.
+
+112 sites were rewritten. `scripts/check_error_text.py` holds it,
+walking each `catch`/`error:`/`onError:` binding's own BLOCK rather
+than matching the name — `repository.dart` maps a list with `(e) =>
+'$e'` in one place and catches an error called `e` in another, and a
+name-matching scan called the map a defect. `debugPrint` and `print`
+are allowed: a log line may hold the whole object.
+
+`deniedDetail` in `core/denials.dart` deliberately does NOT use it, and
+says so beside the line. That one feeds the SECURITY LOG, which wants
+the type name and the host precisely because a person is working out
+what was refused. Routing it through `errorText` broke
+`denials_test.dart`, correctly.
+
+### Two: three named causes, none of which had happened
+
+The screen said "A difference is a line nobody has matched, a payment
+entered twice, or a charge the books have not heard of." All three are
+discrepancies between two sets of records. There was one set.
+
+`0716` puts two figures on `bank_reconciliation_status`:
+`posted_entries` (how many posted lines the account has BY the
+statement date — a book balance of zero cannot tell "nothing posted"
+from "posted and netted off") and `books_start` (the earliest posting
+at ANY date, deliberately not bounded by the statement date, because
+the whole use of it is to say the books start after).
+
+`whyItIsOut` in the screen writes the sentence; the function returns
+facts. **No date has to be passed to it**: `posted_entries == 0`
+already means every posting falls after the statement, so comparing the
+two dates would ask a question the pair has answered. A server that
+does not send `posted_entries` gets the sentence that was always there
+rather than a guess.
+
+`complete_bank_reconciliation` names it too, because the refusal is the
+only explanation somebody gets at the moment they are stopped.
+
+And `RM -0.00`: `-Fmt.toDouble(x)` on a double zero gives NEGATIVE zero.
+It is `0 - Fmt.toDouble(x)` now, with the reason beside it.
+
+### Three: import had no verb for "this was never entered"
+
+The largest of the three. `suggest_bank_matches` can only offer
+documents that are ALREADY posted, so against that ledger every one of
+the twenty-four lines answered "Nothing posted matches that amount and
+date. Record the receipt or payment first" — and no screen would record
+one. Import brought lines in; nothing turned a line into a posting.
+
+`0717` adds `post_bank_transaction(line, account, description?,
+contact?)`. Two sides: the bank's own GL account and one account
+somebody chooses. **`bank_transactions.amount` is already a GL-signed
+movement** — `0085` fixed the meaning and `0712` made a credit card
+obey it by storing the card negated — so there is no account-type
+branch: `amount > 0` debits the bank, `amount < 0` credits it, and a
+card purchase raises the liability for free. It posts through
+`app.create_gl_entry_internal` like every other route, as source
+`bank_transaction`, which `0004` has held in the enum since the
+beginning and nothing had ever written.
+
+**The part that would have rotted:** `unmatch_bank_transaction` used to
+clear `gl_entry_id` and stop. For a line matched to a receipt that is
+right. For a line posted FROM ITSELF it is wrong twice — the journal is
+orphaned in the ledger and the line is free to post a second one, so an
+undo and a redo double the figure silently. Unmatching now REVERSES an
+entry whose source is the line it is detaching (reversed, not deleted;
+`0102`'s rule), and leaves alone one somebody has already reversed by
+hand.
+
+### What is deliberately not in this
+
+**Category suggestions.** The posting dialog asks which account and
+offers no opinion. Suggesting one — 21 categories, transfers matched
+before P&L, a card payment that must not duplicate the card's own
+expenses — is the separate piece of work still waiting on the user's
+word, and guessing quietly in a dialog is a worse place for a first
+attempt than a screen that says what it is doing.
+
+### And a note on the account in the screenshot
+
+It belongs to a DEMO organisation (`organizations.is_demo`), so
+`app.demo_rebuild()` deletes and recreates it, taking those 24 imported
+lines with it. Worth saying to the user if the work in it matters.
 
 ## The reported bug, and the three things that had to be true
 

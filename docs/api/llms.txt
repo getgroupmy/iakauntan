@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0715` (the highest applied migration).
-791 functions and 366 readable tables, of which
+Schema version `0717` (the highest applied migration).
+792 functions and 366 readable tables, of which
 310 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**649 of 791 functions carry a `comment on
+**651 of 792 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (579)
+### general (580)
 
 Not gated on any module.
 
@@ -414,7 +414,7 @@ Not gated on any module.
 - `audit_view_payslip(p_payslip_id uuid)` *(writes)* — One payslip in full for a granted reader, logged against the grant that permitted it.
 - `bank_feed_status(p_bank_account_id uuid)` — What a screen may know about a feed: everything except the secret.
 - `bank_lines_unexplained(p_org_id uuid, p_bank_account_id uuid)` — Unreconciled bank lines that no rule describes and nothing is matched to -- the ones still to be typed.
-- `bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)`
+- `bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)` — Where a reconciliation stands, as figures.
 - `bank_rule_coverage(p_org_id uuid, p_bank_account_id uuid)` — How many unreconciled lines each rule would claim, counting only the ones no earlier rule takes first.
 - `beta_testers_list()` — The beta list with names attached, newest first.
 - `bill_credit_remaining(p_bill uuid)` — What is left uncredited on each line of a bill, matched on item and description together so that two lines for the same item are two different things to credit.
@@ -485,7 +485,7 @@ Not gated on any module.
 - `company_export_manifest(p_org_id uuid)` *(writes)* — Every table holding this company's data, with a row count.
 - `company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` *(writes)* — Returns one page of one table of the whole company, for somebody taking their data out.
 - `company_transfer_history(p_org_id uuid)`
-- `complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` *(writes)* — Closes a reconciliation, and refuses two things in an order that matters.
+- `complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` *(writes)* — Closes a reconciliation, and refuses one that does not balance — naming, since `0716`, whether the difference is a discrepancy to hunt or an account with nothing posted to it at all.
 - `confirm_manufacturing_order(p_mo_id uuid)` *(writes)* — Turns a drafted works order into one the floor can work to, by EXPLODING ITS BILL OF MATERIALS into the order: every component and every operation, scaled by how many times over the recipe is being made.
 - `connect_bank_feed(p_bank_account_id uuid, p_provider text, p_api_key text, p_api_secret text, p_account_ref text)` *(writes)* — Connect or re-credential a bank feed.
 - `contact_duplicates(p_org_id uuid)` — Live records of one company carrying the same registration number, ID or TIN and not yet linked.
@@ -726,6 +726,7 @@ Not gated on any module.
 - `platform_update_setting(p_key text, p_value jsonb)` *(writes)* — Writes one row of `platform_settings`.
 - `portal_document_token(p_token text, p_document_id uuid)` *(writes)* — Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 0414's payment work unchanged.
 - `pos_report_fields(p_source app.pos_report_source)` — What this source can be cut by and what it can add up.
+- `post_bank_transaction(p_transaction_id uuid, p_account_id uuid, p_description text, p_contact_id uuid)` *(writes)* — Turns an unmatched statement line into a journal against one chosen account, and matches the line to it.
 - `post_bank_transfer(p_id uuid)` *(writes)* — Posts a transfer between two of the company's own bank accounts, with the fee to its own account and any residual as exchange difference.
 - `post_client_transaction(p_id uuid)` *(writes)* — Posts money through a legal practice's CLIENT account -- money the firm holds and does not own.
 - `post_expense(p_id uuid)` *(writes)* — Posts a recorded expense.
@@ -932,7 +933,7 @@ Not gated on any module.
 - `transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` *(writes)* — The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion.
 - `transfer_outstanding(p_source_id uuid, p_target_type text)`
 - `unlink_contact_record(p_contact_id uuid)` *(writes)* — Takes one record out of its company, for a link made on a number that turned out to be a typing mistake.
-- `unmatch_bank_transaction(p_transaction_id uuid)` *(writes)* — Breaks the link between a statement line and what it was matched to, leaving the line on the statement and the document alone.
+- `unmatch_bank_transaction(p_transaction_id uuid)` *(writes)* — Detaches a statement line from what it was matched to — reversing the journal first where that journal was posted FROM this line, so that an undo and a redo cannot double the figure.
 - `unread_notifications(p_org uuid)`
 - `unregister_device(p_token text)` *(writes)* — Stops sending to one device.
 - `unregistered_bank_accounts(p_org_id uuid)` — Chart accounts money can sit in that no bank account points at -- the ones somebody added under Bank on the chart and then went looking for in a bank dropdown.
