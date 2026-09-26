@@ -269,7 +269,24 @@ Future<void> _send(
       // one — so there is nothing to create first, and the import
       // screen is where the lines are checked before they land.
       ref.read(pendingStatementProvider.notifier).park(staged);
-      if (context.mounted) context.go('/banking');
+      // `/reconcile?import=1`, and both halves matter.
+      //
+      // `/banking` is not a route and never was, so this went to the
+      // "No page at /banking" screen -- a statement read, paid for, and
+      // then dropped on the floor at the last step. `check_routes.py`
+      // exists because nothing here could tell.
+      //
+      // `import=1` opens the import panel, and the panel is what takes
+      // the parked reading: `_takeParkedStatement` runs in ITS
+      // initState, not the screen's. Landing on the screen alone would
+      // show the reconciliation and leave the statement parked and
+      // invisible.
+      //
+      // The path stays a LITERAL here. `check_routes.py` finds these by
+      // matching `.go('...')`, so lifting it into a named constant --
+      // which looks tidier -- would take it out of the sweep's sight
+      // and quietly remove the only thing protecting it.
+      if (context.mounted) context.go('/reconcile?import=1');
 
     case ScanDestination.bill:
     case ScanDestination.purchaseOrder:

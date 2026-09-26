@@ -1095,6 +1095,20 @@ jobs:
       - name: Check every repository method and provider is reached
         run: python3 scripts/check_unreachable.py
 
+      # And that every screen it navigates TO exists. `context.go`
+      # takes a string, so a typo compiles, analyses clean and passes
+      # every test -- and appears only as "No page at /banking" under
+      # somebody's finger, after the work that led there was done and
+      # paid for. Its own assertions run beside it: this sweep was
+      # wrong twice before it was committed, and a gate that is wrong
+      # is worse than no gate, because it is believed.
+      #
+      # No database needed: it reads the Dart.
+      - name: Check every navigation literal names a real route
+        run: |
+          python3 scripts/check_routes_test.py
+          python3 scripts/check_routes.py
+
       # The same question of the SCHEMA, which on a project whose first
       # rule is that the database IS the application is the layer that
       # matters most. It found twenty columns nothing mentioned at all,
