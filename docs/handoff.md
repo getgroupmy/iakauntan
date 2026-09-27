@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Five switches for the scanning surfaces |
+| Head at time of writing | Users, companies and support access in the console |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0718` is the highest. CI applies on green — see below |
+| Migrations | `0721` is the highest. `0716`–`0720` are applied live and verified against production; `0721` goes live on this push's green run. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 375 SQL assertion files, **51 Python gates (+15 gate self-tests)**, **6,300+ Flutter tests**, 64 deno tests |
-| API description | 794 functions, 366 tables, version `0718` |
+| Gates | 380 SQL assertion files, **53 Python gates (+17 gate self-tests)**, **6,300+ Flutter tests**, 38 deno test invocations |
+| API description | 807 functions, 367 tables, version `0721` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -210,6 +210,224 @@ or
 This paragraph previously said the opposite, and a session acting on it
 told the user a migration had gone live when the run said nothing of the
 kind.
+
+## Users, companies and support access in the console
+
+Asked for, in the user's words: *"Add option to view add and with users /
+Add option to add and edit organisation / Add option to access user and
+organisation"*, then *"Also allow assign or remove a organisation access
+for user"*, then **"Complete all of it"**.
+
+Two choices were the user's, made through `AskUserQuestion` and not to be
+re-litigated:
+
+- **Support access — enter their account**, rather than a read-only
+  detail view of somebody else's data in the console.
+- **Create with a password the admin sets**, rather than invite by
+  e-mail.
+
+Three migrations and one edge function: `0719` (support access, and a
+company made for somebody), `0720` (who can open which company), `0721`
+(the people on this platform), and `supabase/functions/platform-users`.
+
+### The three things that are not SQL
+
+Creating an account, setting a password and suspending one live in
+`auth.users`. There is no supported way to write them from SQL — not from
+a SECURITY DEFINER function, not from RLS — only the Admin API with the
+service role key. So `platform-users` exists, and the key is in it and
+nowhere else.
+
+Its own shape matters:
+
+- `callerOrThrow` calls `am_i_platform_admin` **through the caller's own
+  client**, with the caller's JWT, BEFORE the admin client is
+  constructed. Checking with the admin client would be checking with the
+  key that already answers yes to everything.
+- `MIN_PASSWORD = 10`, `email_confirm: true`, and
+  `ban_duration: suspended ? "876000h" : "none"` — Supabase has no
+  "suspend forever", so a hundred years is what that is.
+- **An operator cannot suspend themselves.** That is the one mistake that
+  locks the platform's own staff out of the platform.
+- The password is never logged, never returned, and never written into
+  `audit_logs`. `note()` writes the audit row with `org_id: null`,
+  because none of this belongs to a company.
+
+`_callPlatformUsers` in `repository.dart` unwraps
+`FunctionException.details['error']` into `PlatformUserException`, which
+`implements Explained`, so "A user with this email address has already
+been registered" reaches the dialog as itself rather than as
+`FunctionException(status: 400, ...)`.
+
+**Every decision the function makes before it touches that key is in
+`platform-users/rules.ts`, which imports nothing**, and
+`rules_test.ts` asserts them: the ten-character floor and its exact
+boundary, `banDuration` (`"none"` lifts a ban — NOT `"0h"`, which some
+GoTrue versions read as a ban of no length), refusing self-suspension
+while allowing self-restore, lower-casing an address so one person is not
+two rows in the console, `text()` turning a non-string into `""` rather
+than `[object Object]`, and `action()` being a CLOSED list — "call the
+method named in the request" is how a service role key gets used for
+something nobody wrote. Split out for the reason `ask/wire.ts` is:
+`index.ts` imports `jsr:@supabase/supabase-js` and `jsr.io` is
+unreachable from some of the machines this gets worked on, so a test that
+needed it would be a test only CI could run. Registered in `ci.yml`; the
+local check now runs **39** deno tests and all of them pass.
+
+`supabase/config.toml` gains `[functions.platform-users] verify_jwt =
+true`. The CLI defaults to true and most functions are not listed, but
+this one is, with the reason written next to it: with no JWT there is no
+caller to check `am_i_platform_admin` against, and the function would
+become an unauthenticated endpoint that can create accounts and set
+passwords.
+
+### `audit_logs.action` is a CLOSED vocabulary
+
+`insert, update, delete, post, void, submit`. `'granted'`, `'ended'` and
+`'platform_update'` were all refused by `audit_logs_action_check`. **The
+event name goes in `new_data`**; the action is the shape of the write.
+Cost three failed applies to learn, and it is written here so it costs
+nobody else any.
+
+### `app.org_role` is the seam, and `coalesce` is the order
+
+Support access grants `auditor` and nothing more:
+
+```sql
+select coalesce(
+         (select m.role from public.org_members m
+           where m.org_id = p_org_id and m.user_id = auth.uid()),
+         (select 'auditor'::app.member_role
+            where app.support_access_active(p_org_id)))
+```
+
+**Real membership first.** Reversed, a support session over a company the
+operator actually owns would DEMOTE them for its duration — and then
+expire, silently restoring them. Every one of `can_write`, `can_post`,
+`can_admin`, `can_read_ledger`, `can_manage_hr` and `can_run_payroll`
+reads `has_org_role`, which reads this, so the whole refusal surface came
+from those four lines. `app.is_org_member` and `public.my_organizations`
+needed the same seam — without the second, the company never appears in
+the switcher and the access is unreachable.
+
+### `hand_company_over` steps an admin down, not out
+
+`platform_create_organization` composes `create_organization` with
+`app.hand_company_over`, and that leaves the caller as `admin` — "steps
+down rather than out", which is right when a real member hands a company
+over and wrong here. An operator who made a hundred companies for
+customers would have held standing access to all hundred. The function
+now ends with an explicit
+
+```sql
+delete from public.org_members
+ where org_id = v_org and user_id = auth.uid();
+```
+
+and `platform_org_access.sql` asserts the operator is not a member
+afterwards. **This is the single most important line in `0719`.**
+
+### Three existing SQL gates caught three omissions
+
+None of them was found by thinking about it:
+
+- `table_grants.sql` — a policy on `support_access` with no `grant
+  select` behind it. A policy without a privilege is a policy that
+  refuses everybody.
+- `live_change_feed.sql` — the `live_change_*` triggers, missing, so a
+  session opened on one device would not have appeared on another.
+- `a_colleague_not_a_stranger.sql` — `support_access.admin_id` needed a
+  named exemption with a reason.
+
+Run `supabase/tests/run_locally.sh` before pushing. It is two minutes and
+it found all three.
+
+### The fixtures collapse if you assume two users
+
+`pg_temp.test_user()` returns ONE fixed user (`fixture@iakauntan.test`),
+and the `add_creator_as_owner` trigger makes them owner of EVERY test
+org. So "a platform admin who is not a member" and "an ordinary user" are
+the same row unless you make another one — and `pg_temp.another_user()`
+**always INSERTs**, so calling it twice for the same address violates the
+unique constraint. `platform_users.sql`, `support_access.sql` and
+`platform_org_access.sql` each wrap it in a lookup-first helper. Also:
+`v_admin` is a platform admin from its declaration onward, so a test that
+wants "an ordinary user is refused" has to run as the customer.
+
+`support_access_window_ck` refuses winding `expires_at` backwards on its
+own — a test that expires a session has to move `granted_at` back too.
+
+### The screens, and what the widget tests are for
+
+`/admin/users` (`UsersAdminTab`) and `/admin/support-access`
+(`SupportAccessAdminTab`) are registered in `platformConsoleSections`;
+creating a company, editing one, granting support access and assigning a
+role are dialogs in `organization_admin_dialogs.dart`, reached from the
+Organizations page — a reason typed next to a name is a reason about that
+company.
+
+`platform_people_test.dart` (31 tests) asserts the SCREEN half: which
+call each button makes and with what. The rules are in the three SQL
+files. Two things it found that reading would not have:
+
+- **The role dropdown overflowed by 49 pixels.** `'Auditor — reads
+  everything, changes nothing'` did not fit a 460-wide dialog, and
+  Flutter paints that as a striped bar over the words it could not fit.
+  The names are names now (`niceRole`) and what each one can do is a line
+  under the picker (`roleMeans`), read off the `app.can_*` guards.
+- **Two `link_off` icons, no keys.** The companies list in the person
+  sheet had an unkeyed remove button per row, so no test could tap a
+  specific one. Keyed `person-org-remove-<org_id>`.
+
+`shell_support_banner_test.dart` covers the banner being in the SHELL:
+`auditor` reads everything the owner reads, so every screen looks normal,
+and the banner is the only thing that says whose books these are. It also
+asserts a failed lookup draws no banner and breaks no shell —
+`valueOrNull`, never `.value`, which throws and takes the whole app's
+build with it.
+
+Mutation runs: `support_access_admin.dart`, `users_admin.dart` and
+`organization_admin_dialogs.dart`, each against
+`platform_people_test.dart`. One equivalent survivor is written down next
+to the assertion it belongs to.
+
+### Three gates the console's own screens tripped
+
+None was a gate I thought about; all three are now permanently better.
+
+- **`check_routes.py` could not see a single console route.** The router
+  builds them in a loop (`for (final section in platformConsoleSections)`
+  → `GoRoute(path: section.path)`), so `path:` is not a literal and
+  `declared_routes` found none of the thirty-odd console pages. Every one
+  of them was a route the gate believed did not exist, and it only bit
+  when something first navigated to one by name — the banner's
+  `context.go('/admin/support-access')`. `console_routes()` now reads the
+  paths out of the section table, conditional on the router still looping
+  over it, with four cases in `check_routes_test.py`. 179 routes, up from
+  ~147.
+- **`dropdown_census_test.dart` caught the role picker twice**: once for
+  not being on the census (the ten `app.member_role` values are a fixed
+  set — a new one is a migration that changes what `can_write` and
+  friends admit), and once for missing `isExpanded: true`, which is
+  exactly the 49-pixel overflow the widget test had already found. Two
+  independent gates on the same defect, and both were right.
+- **`shell_rail_scroll_test.dart` broke for the fourth time.** Two new
+  console sections pushed the ungated rail past the 2000px window the
+  test used, so it silently started measuring a rail that scrolls — the
+  opposite of the case it asserts. Its own comment said a fourth time
+  meant deriving the number instead of guessing, so **it now measures**:
+  probe at 800, read `maxScrollExtent` off the rail's scroll position (an
+  ANCESTOR of `NavigationRail` — the rail itself does not scroll), add
+  that back plus 120 of headroom, and assert the overflow is then zero.
+  A destination added tomorrow moves the probe and the test follows. Its
+  killing power was re-checked by mutation: remove the `minHeight:
+  constraints.maxHeight` and it still fails.
+
+### Either side can close the door
+
+`end_support_access` accepts the administrator who holds the session, any
+platform administrator, **and `app.can_admin(s.org_id)`** — the
+customer's own admin. A door only we can shut is not support access.
 
 ## Five switches for the scanning surfaces
 

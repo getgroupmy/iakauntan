@@ -486,6 +486,52 @@ final accountsProvider = FutureProvider<List<Account>>((ref) {
   return requireRepo(ref).accounts();
 });
 
+// ---------------------------------------------------------------------
+// The console: people, companies, and who can open which
+//
+// `0719`–`0721`. All on `platformRepoProvider`, because none of them
+// takes an organization and a console pane must not wait on one.
+// ---------------------------------------------------------------------
+
+/// Who is on this platform, filtered by whatever is in the search box.
+final platformUsersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, query) {
+  return ref.watch(platformRepoProvider).platformUsers(query: query);
+});
+
+/// Which companies one person can open, and as what.
+final platformUserOrgsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, userId) {
+  return ref.watch(platformRepoProvider).platformUserOrganizations(userId);
+});
+
+/// Who can open one company.
+final platformOrgMembersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, orgId) {
+  return ref.watch(platformRepoProvider).platformOrgMembers(orgId);
+});
+
+/// Every support session, open and closed.
+final platformSupportAccessProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(platformRepoProvider).platformSupportAccess();
+});
+
+/// The support sessions the signed-in administrator holds right now.
+///
+/// NOT autoDispose: the banner that reads it is drawn on every screen,
+/// and a provider thrown away between routes would flicker the banner
+/// off and on as somebody navigates -- which on a banner that says
+/// "you are reading somebody else's books" is the wrong way round.
+final mySupportAccessProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  // Only platform staff can hold one, and asking costs a round trip on
+  // every screen for everybody else.
+  final staff = await ref.watch(isPlatformAdminProvider.future);
+  if (!staff) return const [];
+  return ref.watch(platformRepoProvider).mySupportAccess();
+});
+
 /// The five scanning surface switches the platform holds. `0718`.
 ///
 /// Platform-wide, so it is built on `platformRepoProvider` and waits on

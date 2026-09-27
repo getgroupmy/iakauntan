@@ -215,6 +215,18 @@ const dropdownCensus = <String, int>{
   // platform operator would type rather than look, this comes off and
   // a `SearchablePicker` goes in.
   'features/admin/ocr_catalog_admin.dart': 1,
+  // `0720`. The ten access types, which are `app.member_role` and are
+  // not a list that grows: a new one is a migration that changes what
+  // `can_write`, `can_post`, `can_admin` and `can_read_ledger` admit,
+  // and whoever writes that migration has to come here anyway. Somebody
+  // choosing between Owner, Administrator, Accountant and Auditor is
+  // reading all ten, which is what a dropdown is for.
+  //
+  // The explanation of each role is a line UNDER the picker rather than
+  // part of the item: 'Auditor — reads everything, changes nothing'
+  // overflowed the 460-wide dialog by 49 pixels, which is the very thing
+  // the ellipsis test below is about.
+  'features/admin/organization_admin_dialogs.dart': 1,
   'features/settings/sub_account_dialog.dart': 1,
   'features/settings/tax_code_dialog.dart': 2,
   // The four kinds of entity SSM registers: Company, Business, Audit

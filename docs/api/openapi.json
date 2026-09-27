@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0720",
+    "version": "0721",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -49706,6 +49706,66 @@
         }
       }
     },
+    "/rpc/platform_update_user": {
+      "post": {
+        "operationId": "platform_update_user",
+        "summary": "Edits the parts of a person that live in `profiles`",
+        "description": "Edits the parts of a person that live in `profiles`. The e-mail address is the sign-in identity and lives in `auth.users`; the edge function owns that one. `0721`.\n\n`public.platform_update_user(p_user_id uuid, p_full_name text, p_phone text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_user_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_full_name": {
+                    "type": "string"
+                  },
+                  "p_phone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_user_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_user_organizations": {
       "post": {
         "operationId": "platform_user_organizations",
@@ -49765,6 +49825,102 @@
                         "format": "date-time"
                       },
                       "is_demo": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_users": {
+      "post": {
+        "operationId": "platform_users",
+        "summary": "Who is on this platform, for the console: when they last signed in, whether they confirmed their address\u2026",
+        "description": "Who is on this platform, for the console: when they last signed in, whether they confirmed their address, whether they are suspended, and how many companies they can open. `search_platform_users` answers the narrower question \"who do I mean\" and is kept. `0721`.\n\n`public.platform_users(p_query text, p_limit integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_query": {
+                    "type": "string"
+                  },
+                  "p_limit": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "user_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "full_name": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "phone": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "last_sign_in_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "confirmed": {
+                        "type": "boolean"
+                      },
+                      "suspended": {
+                        "type": "boolean"
+                      },
+                      "deleted": {
+                        "type": "boolean"
+                      },
+                      "company_count": {
+                        "type": "integer",
+                        "format": "int32"
+                      },
+                      "is_platform_admin": {
                         "type": "boolean"
                       }
                     }

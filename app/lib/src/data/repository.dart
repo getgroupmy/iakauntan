@@ -5946,6 +5946,18 @@ class MyInvoisException implements Exception, Explained {
 /// organization to be filed under -- `report_denied` takes an org_id and
 /// checks membership -- and "somebody who is not platform staff tried the
 /// console" is not a tenant's event to hold.
+/// A refusal from the `platform-users` edge function, carrying the
+/// sentence it wrote rather than the driver's envelope. `0721`.
+class PlatformUserException implements Exception, Explained {
+  PlatformUserException(this.message);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class PlatformRepo {
   PlatformRepo(this.client);
 
@@ -5955,6 +5967,223 @@ class PlatformRepo {
     final data = await client.rpc('am_i_platform_admin');
     return data == true;
   }
+
+  // ------------------------------------------------------------------
+  // The console: people, companies, and who can open which
+  //
+  // `0719`, `0720`, `0721` and the `platform-users` edge function.
+  // Every one of these takes no organization, which is why they are
+  // here and not on [Repo]: a console pane hung off a tenant
+  // repository shows a platform administrator who belongs to no
+  // company "Your company has not finished loading" and no way past it.
+  // ------------------------------------------------------------------
+
+  /// Who is on this platform. `0721`.
+  Future<List<Map<String, dynamic>>> platformUsers({
+    String? query,
+    int limit = 50,
+  }) async {
+    final data = await client.rpc('platform_users',
+        params: {'p_query': query, 'p_limit': limit});
+    return _platformRows(data);
+  }
+
+  /// Edits the parts of a person that live in `profiles`. The e-mail
+  /// address is the sign-in identity and belongs to the edge function.
+  Future<void> platformUpdateUser({
+    required String userId,
+    String? fullName,
+    String? phone,
+  }) =>
+      client.rpc('platform_update_user', params: {
+        'p_user_id': userId,
+        'p_full_name': fullName,
+        'p_phone': phone,
+      });
+
+  /// Which companies one person can open, and as what. `0720`.
+  Future<List<Map<String, dynamic>>> platformUserOrganizations(
+          String userId) async =>
+      _platformRows(await client.rpc('platform_user_organizations',
+          params: {'p_user_id': userId}));
+
+  /// Who can open one company. `0720`.
+  Future<List<Map<String, dynamic>>> platformOrgMembers(String orgId) async =>
+      _platformRows(await client
+          .rpc('platform_org_members', params: {'p_org_id': orgId}));
+
+  /// Gives somebody access to a company, or changes what they have.
+  /// The same request arriving twice, so the database upserts. `0720`.
+  Future<void> platformAssignOrgAccess({
+    required String orgId,
+    required String email,
+    required String role,
+  }) =>
+      client.rpc('platform_assign_org_access', params: {
+        'p_org_id': orgId,
+        'p_user_email': email,
+        'p_role': role,
+      });
+
+  Future<void> platformRemoveOrgAccess({
+    required String orgId,
+    required String userId,
+  }) =>
+      client.rpc('platform_remove_org_access',
+          params: {'p_org_id': orgId, 'p_user_id': userId});
+
+  /// Makes a fully seeded company and hands it to the named owner.
+  /// `0719`.
+  Future<String> platformCreateOrganization({
+    required String ownerEmail,
+    required String name,
+    String entityType = 'sdn_bhd',
+    String? registrationNo,
+    String? tin,
+    String? stateCode,
+    String? city,
+    String? phone,
+    String? email,
+  }) async {
+    final id = await client.rpc('platform_create_organization', params: {
+      'p_owner_email': ownerEmail,
+      'p_name': name,
+      'p_entity_type': entityType,
+      'p_registration_no': registrationNo,
+      'p_tin': tin,
+      'p_state_code': stateCode,
+      'p_city': city,
+      'p_phone': phone,
+      'p_email': email,
+    });
+    return '$id';
+  }
+
+  /// Name and contact details only. Not the tax defaults, the fiscal
+  /// year or the books start date — those change what the ledger does.
+  Future<void> platformUpdateOrganization({
+    required String orgId,
+    String? name,
+    String? legalName,
+    String? registrationNo,
+    String? tin,
+    String? phone,
+    String? email,
+    String? city,
+    String? stateCode,
+  }) =>
+      client.rpc('platform_update_organization', params: {
+        'p_org_id': orgId,
+        'p_name': name,
+        'p_legal_name': legalName,
+        'p_registration_no': registrationNo,
+        'p_tin': tin,
+        'p_phone': phone,
+        'p_email': email,
+        'p_city': city,
+        'p_state_code': stateCode,
+      });
+
+  /// Opens a support session over one company: read-only, expiring,
+  /// and written into that company's own audit trail. `0719`.
+  Future<String> grantSupportAccess({
+    required String orgId,
+    required String reason,
+    int minutes = 60,
+  }) async {
+    final id = await client.rpc('grant_support_access', params: {
+      'p_org_id': orgId,
+      'p_reason': reason,
+      'p_minutes': minutes,
+    });
+    return '$id';
+  }
+
+  Future<void> endSupportAccess(String id) =>
+      client.rpc('end_support_access', params: {'p_id': id});
+
+  /// The sessions this administrator currently holds, for the banner.
+  Future<List<Map<String, dynamic>>> mySupportAccess() async =>
+      _platformRows(await client.rpc('my_support_access'));
+
+  /// Every session, open and closed, for the console.
+  Future<List<Map<String, dynamic>>> platformSupportAccess({
+    int limit = 100,
+  }) async =>
+      _platformRows(
+          await client.rpc('platform_support_access', params: {'p_limit': limit}));
+
+  // ------------------------------------------------------------------
+  // The three that are not SQL
+  //
+  // Creating an account, setting a password and suspending one live in
+  // `auth.users`, and the only supported way to write them is the Admin
+  // API with the service role key. That key is in the edge function and
+  // nowhere else — not here, not in the schema, not in any payload a
+  // client can read.
+  // ------------------------------------------------------------------
+
+  /// Creates an account with a password the administrator sets.
+  Future<String> platformCreateUser({
+    required String email,
+    required String password,
+    String? fullName,
+  }) async {
+    final data = await _callPlatformUsers({
+      'action': 'create',
+      'email': email,
+      'password': password,
+      'full_name': fullName,
+    });
+    return '${data['user_id']}';
+  }
+
+  Future<void> platformSetPassword({
+    required String userId,
+    required String password,
+  }) =>
+      _callPlatformUsers({
+        'action': 'password',
+        'user_id': userId,
+        'password': password,
+      });
+
+  Future<void> platformSetSuspended({
+    required String userId,
+    required bool suspended,
+  }) =>
+      _callPlatformUsers({
+        'action': 'suspend',
+        'user_id': userId,
+        'suspended': suspended,
+      });
+
+  /// The edge function, with its refusal turned into one this app shows
+  /// like any other.
+  ///
+  /// `FunctionException` carries the body in `details`, and the message
+  /// inside it is written for a person — "A user with this email
+  /// address has already been registered" is the one that matters, and
+  /// it tells an administrator to go and look for them.
+  Future<Map<String, dynamic>> _callPlatformUsers(
+      Map<String, dynamic> body) async {
+    try {
+      final res = await client.functions.invoke('platform-users', body: body);
+      final data = res.data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return const {};
+    } on FunctionException catch (e) {
+      final said = e.details;
+      final message = said is Map ? '${said['error'] ?? ''}'.trim() : '';
+      throw PlatformUserException(
+          message.isEmpty ? 'That did not work.' : message);
+    }
+  }
+
+  List<Map<String, dynamic>> _platformRows(dynamic data) =>
+      (data as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
 
   /// The five scanning surface switches. `0718`.
   ///

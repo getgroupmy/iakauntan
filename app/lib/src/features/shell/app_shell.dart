@@ -16,6 +16,7 @@ import '../landing/landing_content.dart';
 import '../chat/call_incoming.dart';
 import '../chat/chat_live.dart';
 import '../admin/platform_console_screen.dart';
+import '../admin/support_access_admin.dart';
 import 'notification_bell.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
@@ -1191,11 +1192,37 @@ class AppShell extends ConsumerWidget {
   /// screen somebody is on when the shutter comes down is not
   /// predictable.
   Widget _underTheNotice(WidgetRef ref, Widget shell) {
+    final under = _onSomebodyElsesBooks(ref, shell);
     final notice = ref.watch(maintenanceNoticeProvider).valueOrNull;
-    if (notice == null) return shell;
+    if (notice == null) return under;
     return Column(
       children: [
         MaintenanceBanner(message: notice),
+        Expanded(child: under),
+      ],
+    );
+  }
+
+  /// The support-access banner, for as long as one is open. `0719`.
+  ///
+  /// Here rather than on the console, because the console is the one
+  /// screen where nobody needs telling. Support access exists to let
+  /// staff open a customer's ordinary screens, and `app.org_role` hands
+  /// them `auditor` — which reads everything the owner can read, so the
+  /// sales list, the ledger and the payslips all look exactly as they
+  /// would to somebody who belongs there. Nothing else on the screen
+  /// says whose books these are.
+  ///
+  /// `valueOrNull`, and a failed load draws nothing: this banner must
+  /// never be the reason the shell throws. `mySupportAccessProvider`
+  /// answers `const []` for everybody who is not platform staff without
+  /// a round trip, so this costs nothing for a customer.
+  Widget _onSomebodyElsesBooks(WidgetRef ref, Widget shell) {
+    final open = ref.watch(mySupportAccessProvider).valueOrNull;
+    if (open == null || open.isEmpty) return shell;
+    return Column(
+      children: [
+        SupportAccessBanner(sessions: open),
         Expanded(child: shell),
       ],
     );

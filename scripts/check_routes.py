@@ -43,6 +43,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ROUTER = ROOT / 'app/lib/src/core/router.dart'
+CONSOLE = ROOT / 'app/lib/src/features/admin/platform_console_screen.dart'
 LIB = ROOT / 'app/lib'
 
 NAV = re.compile(r"\.(?:go|push|replace|pushReplacement)\(\s*'([^']*)'")
@@ -159,6 +160,31 @@ def declared_routes(src: str) -> set[str]:
     return {p for p in out if '$' not in p}
 
 
+def console_routes(router: str, console: str) -> set[str]:
+    """The platform console's routes, which the router does not spell.
+
+    `router.dart` declares one `GoRoute` per console section out of
+    `platformConsoleSections`:
+
+        for (final section in platformConsoleSections)
+          GoRoute(path: section.path, ...)
+
+    so `path:` is not a literal and `declared_routes` above sees none of
+    them. Every one of the thirty-odd console pages was therefore a route
+    this gate believed did not exist -- and it only bit when something
+    first navigated to one by name, which `0719`'s support-access banner
+    does.
+
+    The paths are literals in the SECTION TABLE instead, so they are read
+    from there. Conditional on the router actually looping over the
+    table: if that loop is ever replaced by hand-written routes, they are
+    literals and this stops being needed rather than going stale.
+    """
+    if 'for (final section in platformConsoleSections)' not in router:
+        return set()
+    return set(re.findall(r"path:\s*'(/admin(?:/[^']*)?)'", console))
+
+
 def matches(target: str, route: str) -> bool:
     t = [s for s in target.split('/') if s]
     r = [s for s in route.split('/') if s]
@@ -179,6 +205,8 @@ def main() -> int:
         print(f'FAIL no router at {ROUTER}', file=sys.stderr)
         return 1
     routes = declared_routes(ROUTER.read_text())
+    if CONSOLE.exists():
+        routes |= console_routes(ROUTER.read_text(), CONSOLE.read_text())
     if len(routes) < 50:
         # A parser that silently matched nothing would pass every file.
         print(f'FAIL only {len(routes)} routes found; the router did not parse',

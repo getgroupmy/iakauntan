@@ -26,11 +26,14 @@ import 'scan_settings_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'promotions_admin.dart';
 import 'feedback_admin.dart';
+import 'organization_admin_dialogs.dart';
 import 'platform_trail_admin.dart';
 import 'reservations_admin.dart';
 import 'site_pages_admin.dart';
 import 'ssm_lookup_admin.dart';
 import 'statutory_rates_admin.dart';
+import 'support_access_admin.dart';
+import 'users_admin.dart';
 
 /// One section of the platform console.
 ///
@@ -78,6 +81,39 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/organizations',
     primary: true,
     page: _OrganizationsTab(),
+  ),
+  // Asked for as "view, add and edit users". The list is the platform's
+  // own register of people: `platform_users` reads `auth.users`, which
+  // no tenant call can see, and the three things that need the service
+  // role -- making an account, setting a password, suspending one --
+  // go through the `platform-users` edge function rather than the
+  // browser's own client, which does not hold that key and must not.
+  (
+    group: 'Platform',
+    label: 'Users',
+    // Not `people`, `groups` or `person_search`: all three are already
+    // rows in this one menu (Team, People, the SSM register), and the
+    // Scan log entry below records what sharing a glyph costs.
+    icon: Icons.recent_actors_outlined,
+    selectedIcon: Icons.recent_actors,
+    path: '/admin/users',
+    primary: false,
+    page: UsersAdminTab(),
+  ),
+  // The record of every time platform staff went INTO a customer's
+  // books, and not the control: access is granted from the company's
+  // own row under Organizations, which is where somebody is when they
+  // decide they need it. This page is what it left behind -- who, whose
+  // books, why, and until when -- and it is the reason support access
+  // is a different thing from a standing membership.
+  (
+    group: 'Platform',
+    label: 'Support access',
+    icon: Icons.lock_clock_outlined,
+    selectedIcon: Icons.lock_clock,
+    path: '/admin/support-access',
+    primary: false,
+    page: SupportAccessAdminTab(),
   ),
   (
     group: 'Platform',
@@ -571,10 +607,37 @@ class _OrganizationsTab extends ConsumerWidget {
           );
         }
 
-        return ListView.separated(
-          itemCount: list.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) => _OrgTile(org: list[i], modules: modules),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  Space.lg, Space.md, Space.lg, Space.sm),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  key: const ValueKey('org-add'),
+                  onPressed: () async {
+                    final made = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => const NewOrganizationDialog(),
+                    );
+                    if (made == true) ref.invalidate(platformOrgsProvider);
+                  },
+                  icon: const Icon(Icons.add_business_outlined, size: 18),
+                  label: const Text('Add a company'),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, i) =>
+                    _OrgTile(org: list[i], modules: modules),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -677,6 +740,62 @@ class _OrgTile extends ConsumerWidget {
                 ),
                 icon: const Icon(Icons.gavel_outlined, size: 18),
                 label: const Text('Force a handover'),
+              ),
+              const SizedBox(height: 16),
+              const SectionHeader(
+                'Details',
+                subtitle: 'The name and contact details. Not the tax '
+                    'defaults or the year end — those change what the '
+                    'ledger does and have their own screens.',
+              ),
+              OutlinedButton.icon(
+                key: ValueKey('org-edit-${org.id}'),
+                onPressed: () async {
+                  final saved = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => EditOrganizationDialog(
+                      orgId: org.id,
+                      name: org.name,
+                      registrationNo: org.registrationNo,
+                    ),
+                  );
+                  if (saved == true) ref.invalidate(platformOrgsProvider);
+                },
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Edit this company'),
+              ),
+              const SizedBox(height: 16),
+              const SectionHeader(
+                'Who can open it',
+                subtitle: 'Permanent access, and the customer\u2019s own. '
+                    'A company always keeps at least one owner.',
+              ),
+              OrgMembersPanel(orgId: org.id, orgName: org.name),
+              const SizedBox(height: 16),
+              // Last, and kept apart from everything above it: the
+              // others change what a customer has. This one lets us
+              // READ IT, and that is a different kind of act.
+              const SectionHeader(
+                'Support access',
+                subtitle: 'Read this company\u2019s books for a while. '
+                    'Read-only, it expires on its own, and it appears in '
+                    'the customer\u2019s own audit trail.',
+              ),
+              OutlinedButton.icon(
+                key: ValueKey('org-support-${org.id}'),
+                onPressed: () async {
+                  final started = await showDialog<bool>(
+                    context: context,
+                    builder: (_) =>
+                        GrantSupportDialog(orgId: org.id, orgName: org.name),
+                  );
+                  if (started == true) {
+                    ref.invalidate(mySupportAccessProvider);
+                    ref.invalidate(platformSupportAccessProvider);
+                  }
+                },
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: const Text('Read this company\u2019s books'),
               ),
             ],
           ),

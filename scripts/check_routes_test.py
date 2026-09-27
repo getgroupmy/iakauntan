@@ -122,5 +122,57 @@ class TheRealRouter(unittest.TestCase):
         self.assertNotIn('/banking', routes)
 
 
+class TheConsolesOwnRoutes(unittest.TestCase):
+    """The console's paths are literals in the section table, not the router.
+
+    `router.dart` builds one `GoRoute` per section out of
+    `platformConsoleSections`, so `path:` interpolates and
+    `declared_routes` sees none of the thirty-odd console pages. They were
+    therefore all routes this gate believed did not exist, which only bit
+    when something first navigated to one by name.
+    """
+
+    LOOP = 'for (final section in platformConsoleSections)'
+
+    def test_the_paths_come_off_the_section_table(self):
+        console = """
+          const platformConsoleSections = <ConsoleSection>[
+            (group: 'Platform', label: 'Users', path: '/admin/users',
+             primary: false, page: UsersAdminTab()),
+            (group: 'Platform', label: 'Overview', path: '/admin',
+             primary: true, page: _OverviewTab()),
+          ];
+        """
+        found = sweep.console_routes(self.LOOP, console)
+        self.assertEqual(found, {'/admin/users', '/admin'})
+
+    def test_nothing_outside_the_console_is_collected(self):
+        # A path on some other screen in the same file must not become a
+        # route just for being a string.
+        console = "path: '/settings', path: '/admin/users'"
+        self.assertEqual(sweep.console_routes(self.LOOP, console),
+                         {'/admin/users'})
+
+    def test_without_the_loop_it_claims_nothing(self):
+        # If the router ever spells the console's routes out by hand they
+        # are literals, and this stops being needed rather than going
+        # stale under a router that changed.
+        self.assertEqual(
+            sweep.console_routes('GoRoute(path: /admin)', "path: '/admin/users'"),
+            set())
+
+    def test_the_real_console_is_read(self):
+        root = Path(__file__).resolve().parent.parent
+        router = (root / 'app/lib/src/core/router.dart').read_text()
+        console = (root
+                   / 'app/lib/src/features/admin/platform_console_screen.dart'
+                   ).read_text()
+        found = sweep.console_routes(router, console)
+        self.assertGreater(len(found), 20)
+        for want in ('/admin', '/admin/users', '/admin/support-access',
+                     '/admin/organizations', '/admin/scan-settings'):
+            self.assertIn(want, found)
+
+
 if __name__ == '__main__':
     unittest.main()
