@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0719",
+    "version": "0720",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -45562,6 +45562,68 @@
         }
       }
     },
+    "/rpc/platform_assign_org_access": {
+      "post": {
+        "operationId": "platform_assign_org_access",
+        "summary": "Gives somebody access to a company, or changes the access they have \u2014 the same request arriving twice, so it\u2026",
+        "description": "Gives somebody access to a company, or changes the access they have \u2014 the same request arriving twice, so it is an upsert. Refuses to demote the last owner. Unlike a support grant this is PERMANENT and is the customer's own access. `0720`.\n\n`public.platform_assign_org_access(p_org_id uuid, p_user_email text, p_role text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_user_email": {
+                    "type": "string"
+                  },
+                  "p_role": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_user_email",
+                  "p_role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_audit_trail": {
       "post": {
         "operationId": "platform_audit_trail",
@@ -46802,6 +46864,85 @@
         }
       }
     },
+    "/rpc/platform_org_members": {
+      "post": {
+        "operationId": "platform_org_members",
+        "summary": "Who can open one company, for the console",
+        "description": "Who can open one company, for the console. `org_team` answers the same question from inside and needs membership; this one does not. `0720`.\n\n`public.platform_org_members(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "user_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "full_name": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "joined_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_organizations": {
       "post": {
         "operationId": "platform_organizations",
@@ -47209,6 +47350,65 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_remove_org_access": {
+      "post": {
+        "operationId": "platform_remove_org_access",
+        "summary": "Takes somebody's access to a company away",
+        "description": "Takes somebody's access to a company away. Refuses the last owner, for the reason a company with no owner is a company nobody can open. `0720`.\n\n`public.platform_remove_org_access(p_org_id uuid, p_user_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_user_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_user_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
                 }
               }
             }
@@ -49490,6 +49690,85 @@
               "application/json": {
                 "schema": {
                   "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_user_organizations": {
+      "post": {
+        "operationId": "platform_user_organizations",
+        "summary": "Which companies one person can open, and as what",
+        "description": "Which companies one person can open, and as what. The console's answer to \"what does this user have access to\". `0720`.\n\n`public.platform_user_organizations(p_user_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_user_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_user_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "org_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_name": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "joined_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "is_demo": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
                 }
               }
             }
