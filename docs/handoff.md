@@ -83,13 +83,62 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Every screen and every dialog is built by a test |
-| CI | **green through run 2150 (`cc179f48`)**, confirmed by reading the run rather than inferring it — and 2150 also proved the authenticated docker pull works, see below. 2146 (`0ba8b12c`) applied `0721` live and deployed `platform-users`; both were verified against production — the two functions exist and the edge function is ACTIVE at `verify_jwt: true`. Do NOT take a green run as proof a migration landed: the apply job SKIPS when a newer commit is at the branch tip, which nearly had a `0719` reported live in this session when it was not. Check the database. | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0721` is the highest. `0716`–`0720` are applied live and verified against production; `0721` goes live on this push's green run. CI applies on green — see below |
+| Head at time of writing | `4a04963f`, the ninth commit of this session. What each one did is the table under **What this session shipped** below |
+| CI | **green through run 2154 (`4a04963f`)** — every one of this session's nine commits green, four of them on the first attempt after the pull fix. Confirmed by reading the runs rather than inferring them; 2150 is the one that proved the authenticated docker pull works, see below. 2146 (`0ba8b12c`) applied `0721` live and deployed `platform-users`; both were verified against production — the two functions exist and the edge function is ACTIVE at `verify_jwt: true`. Do NOT take a green run as proof a migration landed: the apply job SKIPS when a newer commit is at the branch tip, which nearly had a `0719` reported live in this session when it was not. Check the database. | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| Migrations | `0721` is the highest, and `0716`–`0721` are ALL applied live and verified against production — `platform_users` and `platform_update_user` were read back out of the hosted database, not inferred from a green run. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 380 SQL assertion files, **53 Python gates (+17 gate self-tests)**, **6,439 Flutter tests**, 39 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test |
 | API description | 807 functions, 367 tables, version `0721` |
+
+## What this session shipped
+
+Nine commits, all green. The first two are the product work; the rest came
+out of watching CI and reading its logs, which is where most of the
+interesting findings were.
+
+| Commit | Run | What |
+| --- | --- | --- |
+| `0ba8b12c` | 2146 | **Console: the people on this platform.** `0721`, the `platform-users` edge function, Users and Support access as console pages, support-access banner on every screen. Live and verified in production |
+| `8c5ea0c4` | 2147 | **Every screen and every dialog built by a test.** Both backlogs to zero — dialogs 105 → 50 → 0, screens 38 → 2 → 0 |
+| `56149eb6` | 2148 | The CI line in this table, 24 runs stale |
+| `5ad922bd` | 2149 | Diagnosis of the edge-runtime image quota |
+| `cc179f48` | 2150 | **The authenticated docker pull**, with the old registry kept as a fallback |
+| `da2495b2` | 2151 | What 2150 proved about it |
+| `4ab9f77f` | 2152 | One registry per job; the local dump does pull after all |
+| `8b9d390e` | 2153 | Confirmation that the double pull is gone |
+| `4a04963f` | 2154 | The container restart, and a wait-loop that watched itself |
+
+**What found what**, which is more useful than a count:
+
+- `check_routes.py` refused the banner's `context.go('/admin/support-access')`
+  — and investigating showed the gate had never been able to see ANY
+  console route, because the router builds them in a loop. It reads them
+  off the section table now: 179 routes, up from ~147.
+- `dropdown_census_test.dart` caught the role picker twice over: not on the
+  census, and missing `isExpanded: true`. The second was the same 49-pixel
+  overflow a widget test had already found, from a different direction.
+- `shell_rail_scroll_test.dart` broke for the fourth time. Its own comment
+  said a fourth time meant deriving the height rather than guessing, so it
+  measures the rail's overflow now and follows a destination added tomorrow.
+- A **new** test found the `credit_ledger_dialog` overflow, once it was fed
+  one realistic row. Nothing pre-existing could have: the totals line does
+  not exist in the empty state the dialog had been "tested" with.
+- Reading CI's own logs found the rest — `db dump --local` pulling when a
+  comment said it did not, and the same image coming down twice.
+
+And one lesson rather than a defect, now the eleventh way a green widget
+test asserts nothing: fifty dialogs opened cleanly with every provider
+answering `const []`, fifty passes, nothing learned.
+
+**Three things I got wrong and corrected**, each written up where it
+belongs rather than only here: `db dump --local` does pull (a comment in
+this workflow had said otherwise for a long time, and I repeated it);
+`cc179f48` made the same postgres image download twice under two names;
+and escaping a `pgrep` pattern does not stop a wait-loop matching itself.
+
+**Still yours to decide**, unchanged: CP39, KWSP Form A and PERKESO
+Lampiran 1 need their published layout specifications, not more code.
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
