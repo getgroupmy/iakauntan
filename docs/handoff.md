@@ -35,7 +35,7 @@ it has to be committed.
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | Every screen and every dialog is built by a test |
-| CI | **green through run 2147 (`8c5ea0c4`)**, confirmed by reading the run rather than inferring it. 2146 (`0ba8b12c`) applied `0721` live and deployed `platform-users`; both were verified against production — the two functions exist and the edge function is ACTIVE at `verify_jwt: true`. Do NOT take a green run as proof a migration landed: the apply job SKIPS when a newer commit is at the branch tip, which nearly had a `0719` reported live in this session when it was not. Check the database. | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
+| CI | **green through run 2150 (`cc179f48`)**, confirmed by reading the run rather than inferring it — and 2150 also proved the authenticated docker pull works, see below. 2146 (`0ba8b12c`) applied `0721` live and deployed `platform-users`; both were verified against production — the two functions exist and the edge function is ACTIVE at `verify_jwt: true`. Do NOT take a green run as proof a migration landed: the apply job SKIPS when a newer commit is at the branch tip, which nearly had a `0719` reported live in this session when it was not. Check the database. | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0721` is the highest. `0716`–`0720` are applied live and verified against production; `0721` goes live on this push's green run. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
@@ -213,10 +213,14 @@ kind.
 
 ## The image quota is not a backoff problem, it is an anonymity problem
 
+**Fixed in `cc179f48`, and proved by run 2150 — see the end of this
+section.** The diagnosis is kept in full because it took two wrong
+remedies to reach, and because the shape of it generalises: a quota bound
+to the runner cannot be waited out.
+
 Run 2148's **"Deploy the edge functions" failed on attempt 1** and passed
 on attempt 2, which nobody in this session asked for — the re-run's actor
-is the account, and I did not trigger it. The branch is green; this is
-written down because the cause is still there and will bite the next push.
+is the account, and I did not trigger it.
 
     public.ecr.aws/supabase/edge-runtime:v1.74.3
     Error response from daemon: toomanyrequests: Data limit exceeded
@@ -231,7 +235,7 @@ identically. The comment above the registry swap says "a backoff has to
 outlast the thing it is backing off from"; here there is nothing to
 outlast.
 
-**And it is the second registry to refuse the same pull.** `0097`–`2100`
+**And it was the second registry to refuse the same pull.** 2097–2100
 went red on `ghcr.io` refusing anonymous pulls, and the remedy chosen was
 to move to `public.ecr.aws`. Both failures have one cause — **the pull is
 ANONYMOUS** — and swapping buckets treats the symptom. There is a third
@@ -276,12 +280,40 @@ above it in this very workflow says `supabase start` has already fetched
 the image. A wrapper that reads as a pull needing a fallback and is a
 no-op is worse than none.
 
-**What is NOT proven here.** `docker login` was exercised locally only in
-its failure path — a bogus token exits non-zero, so the `else` branch
-fires and the primary stays at `public.ecr.aws`, which is today's
-behaviour. That a *real* `GITHUB_TOKEN` login lifts the quota is the one
-claim only a CI run can settle. If it does not, the fallback carries the
-run and the symptom is a `::warning::` rather than a red job.
+**Run 2150 settled the one claim that could not be tested here.** Before
+it, `docker login` had been exercised locally only in its FAILURE path — a
+bogus token exits non-zero, the `else` branch fires, and the primary stays
+at `public.ecr.aws`, which is what CI did anyway. Whether a real
+`GITHUB_TOKEN` lifts the quota needed a run.
+
+It does. `cc179f48`, run 2150, **green on the first attempt** where 2148
+had needed two, and the deploy job's log says which registry answered:
+
+    Status: Downloaded newer image for ghcr.io/supabase/edge-runtime:v1.74.3
+    ghcr.io/supabase/edge-runtime:v1.74.3
+
+`ghcr.io` — the authenticated primary. No `toomanyrequests`, no
+`::warning::` about the login, no fallback to `public.ecr.aws`, and all
+twenty functions deployed. So the fix addresses the cause rather than
+moving to a third bucket, and the fallback sat unused, which is where it
+should sit.
+
+**What was read, and what was not.** The deploy job's log in full, because
+that is where 2148 failed. The database and migrate jobs are green and
+their login steps succeeded, but their pull lines were not read
+individually — a login step exits 0 in the fallback branch too, so "the
+step succeeded" is not by itself evidence that `ghcr.io` answered in those
+two. If that distinction ever matters, grep a run's database job for
+`Downloaded newer image for` and read the registry off it.
+
+**How this fails in future, and what it looks like.** A `::warning::
+Could not log in to ghcr.io` means the token was refused, and
+`packages: read` on the job is the first thing to try — the jobs declare
+no `permissions:` block today, so they take the workflow default. A
+`::warning::` naming `public.ecr.aws` means the login worked and the
+authenticated pull was refused anyway. Either way the run stays green off
+the fallback, so **these are warnings to go looking for rather than
+failures that will announce themselves.**
 
 ## Every screen and every dialog is built by a test
 
