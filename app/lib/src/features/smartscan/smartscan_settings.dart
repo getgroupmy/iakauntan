@@ -44,6 +44,27 @@ import '../shared/ocr_key_pool_editor.dart';
 /// because a receipt carries a supplier, an amount and sometimes a
 /// person's movements, and sending that to a third party is a decision
 /// rather than something to discover afterwards.
+/// Whether to offer the choice between platform credit and a key of
+/// the company's own.
+///
+/// Two conditions, and the second is `0718`'s.
+///
+/// A reader that takes no key has nothing to choose between -- Local
+/// Read costs nothing and calls nobody.
+///
+/// And the PLATFORM may withdraw the option. A company ALREADY on its
+/// own key still gets the control, because taking it away would strand
+/// them on a key they could no longer move off, and moving them to
+/// platform credit unasked would spend their money for them.
+///
+/// This only stops OFFERING a refusal. `set_ocr_settings` is what
+/// enforces it, because a rule enforced in a build method is not
+/// enforced at all.
+bool offerKeySourceChoice(OcrSettings ocr, String keySource) {
+  if (!(ocr.current?.takesKey ?? true)) return false;
+  return ocr.ownKeyAllowed || keySource == 'own';
+}
+
 class SmartScanSettingsCard extends ConsumerStatefulWidget {
   const SmartScanSettingsCard({super.key, required this.canEdit});
 
@@ -360,7 +381,15 @@ class SmartScanSettingsCardState extends ConsumerState<SmartScanSettingsCard> {
                     ),
                   ),
                 ],
-                if (ocr.current?.takesKey ?? true) ...[
+                // `0718`: the platform may withdraw the option. A
+                // company ALREADY on its own key still gets the choice,
+                // because taking it away would strand them on a key
+                // they could no longer move off -- and moving them to
+                // platform credit unasked would spend their money.
+                // `set_ocr_settings` is what enforces this; here it
+                // only stops offering a refusal.
+                if ((ocr.current?.takesKey ?? true) &&
+                    (ocr.ownKeyAllowed || _keySource(ocr) == 'own')) ...[
                   const SizedBox(height: 12),
                   SegmentedButton<String>(
                     showSelectedIcon: false,

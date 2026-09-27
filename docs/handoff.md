@@ -34,13 +34,13 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Nothing in the books is not a difference |
+| Head at time of writing | Five switches for the scanning surfaces |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0717` is the highest. CI applies on green — see below |
+| Migrations | `0718` is the highest. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 374 SQL assertion files, **51 Python gates (+15 gate self-tests)**, **6,300+ Flutter tests**, 64 deno tests |
-| API description | 792 functions, 366 tables, version `0717` |
+| Gates | 375 SQL assertion files, **51 Python gates (+15 gate self-tests)**, **6,300+ Flutter tests**, 64 deno tests |
+| API description | 794 functions, 366 tables, version `0718` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
 
@@ -210,6 +210,83 @@ or
 This paragraph previously said the opposite, and a session acting on it
 told the user a migration had gone live when the run said nothing of the
 kind.
+
+## Five switches for the scanning surfaces
+
+Asked for: a Settings page under Console → Document scanning, with a
+toggle for the Scan button, the Upload button and "My own key" on AI
+SmartScan, "Send a document to reader — on by default", and the Upload
+button on Bank statements. `0718`, and `/admin/scan-settings`.
+
+### They are not five of the same thing, and are not built the same way
+
+THREE ARE PRESENTATION. Hiding the Scan button stops nobody scanning —
+`ocr_begin` decides that, off the company's own switch and its module —
+and hiding either Upload button stops no file reaching storage. They
+exist to take a surface off the product while it is being worked on.
+The console page says so in as many words, because an operator who
+believes a hidden button is a safeguard has been misled by a screen.
+
+TWO ARE RULES and are enforced in the database. "My own key" decides
+whose money pays for a reading, so `set_ocr_settings` refuses the
+choice; hiding the segmented button alone would leave the RPC working.
+
+### The default had to be true in three places at once
+
+`org_ocr_settings` has one row per company and NO ROW means off. Three
+functions read that absence: `ocr_status` (what the screen draws),
+`ocr_begin` (what lets a document go to a reader) and
+`ocr_record_local` (what files a reading made on the device).
+
+Changing only the first would have put a switch reading "on" above a
+server refusing every document. All three now call
+`app.scan_surface('scan_reader_on_by_default')`, and
+`supabase/tests/scan_surfaces.sql` walks all three in both positions.
+
+`ocr_begin` needed two more lines for the same reason: a company running
+on the default has no row, so it has no provider and no `key_source`
+either, and the first company to use it would have been told **"There
+is no reader called <null>"**.
+
+**A ROW IS A CHOICE; ITS ABSENCE IS NOT.** A company that turned
+scanning on and then off keeps its answer whatever the platform default
+becomes. That is what makes this a default rather than an override, and
+it is why nothing is backfilled. Asserted.
+
+### Restated from `pg_get_functiondef`, not by hand
+
+Four functions had to be reproduced whole — `ocr_status`,
+`set_ocr_settings`, `ocr_begin`, `ocr_record_local`. They were dumped
+out of the local database with `pg_get_functiondef`, edited by exact
+string replacement in a script that asserts each pattern matches ONCE,
+and pasted in. Worth repeating for the next restatement of this size:
+hand-copying nine kilobytes of plpgsql is how a body drifts.
+
+### Everything ships in the state the product is already in
+
+Four switches ship ON because those surfaces are on;
+`scan_reader_on_by_default` ships **OFF** because scanning is off for a
+new company today. Applying the migration changes nothing for anybody.
+
+Turning that one on is a real decision: it sends documents a company
+has not asked to have read to a third-party model and spends platform
+credit doing it. The row's description says so, the console draws a
+warning while it is on, and the handover pack's standing note — *do not
+send bank statements to arbitrary third-party OCR services by default*
+— is the reason it was not shipped on.
+
+### A function, not a wider read policy
+
+`platform_settings` is readable by platform staff and by nobody else,
+except `nav_grouping`, which `0298` named in the policy. Five more
+names in that `using` clause would be five more chances to open a table
+that also holds `maintenance_mode` and `signup_enabled`.
+`scan_surfaces()` is SECURITY DEFINER, granted to `authenticated`, and
+returns those five and nothing else.
+
+`set_scan_surface` refuses a key that is not one of the five — `0678`'s
+lesson in another corner, where a setter that took any string wrote a
+row nothing read.
 
 ## A screenshot that was three defects, not one
 

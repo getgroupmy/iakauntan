@@ -117,6 +117,18 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
   @override
   Widget build(BuildContext context) {
     final canWrite = ref.watch(canWriteProvider);
+    // `0718`. Both default to PRESENT while the call is in flight or if
+    // it fails: a platform switch nobody has touched must not blank the
+    // screen, and the two buttons are presentation rather than a
+    // permission -- `ocr_begin` and the company's own switch decide
+    // whether anything can actually be read.
+    // `valueOrNull`, not `.value`: `.value` THROWS on an error state, so
+    // a switch lookup that failed would have taken this whole screen
+    // down rather than falling back to the buttons being present --
+    // which is the exact defect `check_async_value.py` exists for, and
+    // it caught this one.
+    final surfaces =
+        ref.watch(scanSurfacesProvider).valueOrNull ?? const ScanSurfaces();
     // Enough room for two labelled buttons in one app bar, or not.
     final wide = MediaQuery.sizeOf(context).width >= 600;
     // Never asked for while the setup chip is selected: `setup` is not
@@ -139,7 +151,7 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
           // yellow-and-black bar and which means part of a control
           // cannot be reached. The icon keeps its tooltip, so what it
           // does is still sayable.
-          if (canWrite)
+          if (canWrite && surfaces.uploadButton)
             if (wide)
               OutlinedButton.icon(
                 key: const ValueKey('smartscan-keep'),
@@ -154,7 +166,7 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
                 onPressed: _keeping ? null : () => _keep(),
                 icon: const Icon(Icons.upload_file_outlined),
               ),
-          if (canWrite)
+          if (canWrite && surfaces.scanButton)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
               child: FilledButton.icon(

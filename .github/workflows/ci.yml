@@ -975,6 +975,7 @@ jobs:
                    supabase/tests/named_kinds.sql \
                    supabase/tests/scan_target_fields.sql \
                    supabase/tests/scan_document_kinds.sql \
+                   supabase/tests/scan_surfaces.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
                    supabase/tests/claim_attachments.sql \

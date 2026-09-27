@@ -31,6 +31,15 @@ class BankStatementsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final accounts = ref.watch(bankAccountsProvider);
     final canPost = ref.watch(canPostProvider);
+    // `0718`. Present unless the platform has taken it off, including
+    // while the call is in flight: this is a shortcut to a screen that
+    // stays reachable either way, so its absence must never be the
+    // answer to a question nobody has asked yet.
+    // `valueOrNull` rather than `.value`, which throws on an error
+    // state and would take the account list down over a switch.
+    final showUpload = (ref.watch(scanSurfacesProvider).valueOrNull ??
+            const ScanSurfaces())
+        .statementsUpload;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Bank statements')),
@@ -68,7 +77,11 @@ class BankStatementsScreen extends ConsumerWidget {
                 return Column(
                   children: [
                     for (final a in rows)
-                      _AccountTile(account: a, canPost: canPost),
+                      _AccountTile(
+                        account: a,
+                        canPost: canPost,
+                        showUpload: showUpload,
+                      ),
                   ],
                 );
               },
@@ -86,10 +99,17 @@ class BankStatementsScreen extends ConsumerWidget {
 }
 
 class _AccountTile extends StatelessWidget {
-  const _AccountTile({required this.account, required this.canPost});
+  const _AccountTile({
+    required this.account,
+    required this.canPost,
+    required this.showUpload,
+  });
 
   final Map<String, dynamic> account;
   final bool canPost;
+
+  /// Whether this platform offers the shortcut at all. `0718`.
+  final bool showUpload;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +137,7 @@ class _AccountTile extends StatelessWidget {
         // chosen. Hidden rather than disabled for somebody who cannot
         // post: a greyed button is a question the screen will not
         // answer.
-        trailing: canPost
+        trailing: canPost && showUpload
             ? FilledButton.icon(
                 key: ValueKey('bank-statement-upload-$id'),
                 icon: const Icon(Icons.upload_file_outlined, size: 18),

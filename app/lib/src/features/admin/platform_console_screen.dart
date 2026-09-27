@@ -22,6 +22,7 @@ import 'ocr_catalog_admin.dart';
 import 'ocr_keys_admin.dart';
 import 'scan_log_admin.dart';
 import 'scan_kinds_admin.dart';
+import 'scan_settings_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'promotions_admin.dart';
 import 'feedback_admin.dart';
@@ -125,6 +126,25 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/scan-log',
     primary: false,
     page: ScanLogAdminTab(),
+  ),
+  (
+    group: 'Document scanning',
+    // "Scanning settings" rather than "Settings", which is what was
+    // asked for. The console's sections are NOT drawn in a menu of
+    // their own -- they join the one side menu this app has, beside
+    // the tenant destinations, and `/settings` is already called
+    // Settings there. Two rows reading the same word in one menu is
+    // two rows nobody can tell apart, which is the same objection the
+    // Scan log entry below records about sharing a glyph.
+    //
+    // `shell_rail_scroll_test.dart` found it, by looking for the text
+    // "Settings" and getting two.
+    label: 'Scanning settings',
+    icon: Icons.tune_outlined,
+    selectedIcon: Icons.tune,
+    path: '/admin/scan-settings',
+    primary: false,
+    page: ScanSettingsAdminTab(),
   ),
   (
     group: 'Document scanning',

@@ -142,6 +142,7 @@ class OcrSettings {
     this.fallback,
     this.fallbackName,
     this.hasModule = true,
+    this.ownKeyAllowed = true,
   });
 
   final bool enabled;
@@ -208,6 +209,16 @@ class OcrSettings {
   /// console, both were handed a reader the save would refuse.
   final bool chosen;
 
+  /// Whether this PLATFORM offers reading on a key of the company's
+  /// own. `0718`.
+  ///
+  /// Defaults true, like every other switch whose absence must not take
+  /// a control off the screen. `set_ocr_settings` is what enforces it;
+  /// this is here so the card can stop offering a choice that would be
+  /// refused — and so it can go on offering it to a company already on
+  /// its own key, which still needs a way back.
+  final bool ownKeyAllowed;
+
   OcrProvider? get current =>
       providers.where((p) => p.code == provider).firstOrNull;
 
@@ -255,6 +266,7 @@ class OcrSettings {
         enabled: j['enabled'] == true,
         provider: j['provider']?.toString() ?? 'claude',
         keySource: j['key_source']?.toString() ?? 'platform',
+        ownKeyAllowed: j['own_key_allowed'] != false,
         hasOwnKey: j['has_own_key'] == true,
         keys: ((j['keys'] as Map?) ?? const {})
             .entries

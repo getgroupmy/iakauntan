@@ -486,6 +486,71 @@ final accountsProvider = FutureProvider<List<Account>>((ref) {
   return requireRepo(ref).accounts();
 });
 
+/// The five scanning surface switches the platform holds. `0718`.
+///
+/// Platform-wide, so it is built on `platformRepoProvider` and waits on
+/// no organization. The console page that MOVES these is under
+/// `features/admin/`, and a console pane hung off a tenant repository
+/// shows a platform administrator who belongs to no company "Your
+/// company has not finished loading" with no way past it.
+/// `platform_console_wiring_test.dart` enumerates rather than lists,
+/// and it caught this.
+final scanSurfacesProvider = FutureProvider<ScanSurfaces>((ref) async {
+  return ScanSurfaces.from(
+      await ref.watch(platformRepoProvider).scanSurfaces());
+});
+
+/// Which scanning surfaces this platform offers.
+///
+/// A class rather than the raw map, so that a typo in a key name is a
+/// compile error rather than a switch that silently reads false and
+/// takes a button off the product.
+///
+/// EVERY FIELD DEFAULTS TO THE SURFACE BEING PRESENT. A call that has
+/// not answered yet, or a platform that has never been asked, must not
+/// blank the screen — `readerOnByDefault` is the exception, because it
+/// is the only one whose wrong answer sends somebody's paperwork to a
+/// third-party model.
+class ScanSurfaces {
+  const ScanSurfaces({
+    this.scanButton = true,
+    this.uploadButton = true,
+    this.ownKey = true,
+    this.readerOnByDefault = false,
+    this.statementsUpload = true,
+  });
+
+  factory ScanSurfaces.from(Map<String, dynamic> row) => ScanSurfaces(
+        scanButton: _on(row['scan_button'], true),
+        uploadButton: _on(row['upload_button'], true),
+        ownKey: _on(row['own_key'], true),
+        readerOnByDefault: _on(row['reader_on_default'], false),
+        statementsUpload: _on(row['statements_upload'], true),
+      );
+
+  /// The Scan button on AI SmartScan.
+  final bool scanButton;
+
+  /// The Upload button on AI SmartScan, which keeps a file unread.
+  final bool uploadButton;
+
+  /// Whether a company may read on a key of its own. Presentation
+  /// here; `set_ocr_settings` is what enforces it.
+  final bool ownKey;
+
+  /// Whether a company that has never touched the switch has
+  /// "Send documents to a reader" on. Read from the database on every
+  /// path that matters, so this copy is only for what the console
+  /// draws.
+  final bool readerOnByDefault;
+
+  /// The Upload button beside each account on Bank statements.
+  final bool statementsUpload;
+
+  static bool _on(Object? value, bool fallback) =>
+      value is bool ? value : fallback;
+}
+
 final fiscalYearsProvider = FutureProvider.autoDispose<List<FiscalYear>>((ref) {
   return requireRepo(ref).fiscalYears();
 });

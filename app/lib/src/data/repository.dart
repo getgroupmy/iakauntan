@@ -5956,6 +5956,33 @@ class PlatformRepo {
     return data == true;
   }
 
+  /// The five scanning surface switches. `0718`.
+  ///
+  /// On `PlatformRepo` and not on [Repo], although ordinary screens
+  /// read it: neither call takes an organization, and the console page
+  /// that MOVES these must not wait on one — a platform administrator
+  /// who belongs to no company would otherwise get "Your company has
+  /// not finished loading" and no way past it, which is the failure
+  /// `platform_console_wiring_test.dart` exists to stop coming back.
+  ///
+  /// Read through a function of its own rather than off
+  /// `platform_settings`, whose read policy is platform staff plus one
+  /// named key, and which also holds `maintenance_mode` and
+  /// `signup_enabled`. `scan_surfaces()` is granted to `authenticated`
+  /// and returns those five and nothing else.
+  Future<Map<String, dynamic>> scanSurfaces() async {
+    final data = await client.rpc('scan_surfaces');
+    return Map<String, dynamic>.from((data as Map?) ?? const {});
+  }
+
+  /// Moves one of them. Platform administrators only, and the database
+  /// refuses a key that is not one of the five.
+  Future<void> setScanSurface({
+    required String key,
+    required bool on,
+  }) =>
+      client.rpc('set_scan_surface', params: {'p_key': key, 'p_on': on});
+
   /// Whether this person sees the floating report button.
   ///
   /// Asked once per session and cheap: `0663`'s function takes no

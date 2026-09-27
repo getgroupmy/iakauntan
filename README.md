@@ -291,6 +291,22 @@ somebody creates one and no row means off. A receipt carries a supplier,
 an amount and sometimes a person's movements; sending that to a third
 party is a decision, not a default to discover afterwards.
 
+`0718` lets the PLATFORM move that starting position, under Console →
+Document scanning → *Settings*, alongside four other switches: the Scan
+and Upload buttons on AI SmartScan, the Upload button on Bank
+statements, and whether a company may read on a key of its own. The
+first three are presentation — they take a control off a screen and
+stop nothing, which is said on the page itself, because an operator who
+believes a hidden button is a safeguard has been misled by a screen.
+The other two are rules and are enforced in the database:
+`set_ocr_settings` refuses a company's own key when the platform has
+withdrawn it, and the reader default is read by `ocr_status`,
+`ocr_begin` **and** `ocr_record_local`, so a switch saying "on" can
+never sit above a server refusing every document. A row is a choice and
+its absence is not: a company that has answered — on or off — keeps its
+answer whatever the platform default becomes. It ships off, which is
+today's behaviour.
+
 **Capture first.** Where the device has a document scanner — ML Kit on
 Android, VisionKit on iOS — the **Scan** button opens it rather than the
 plain shutter: edge detection, perspective correction and glare removal
