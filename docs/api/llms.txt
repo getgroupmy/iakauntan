@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0718` (the highest applied migration).
-794 functions and 366 readable tables, of which
-311 functions only read.
+Schema version `0719` (the highest applied migration).
+801 functions and 367 readable tables, of which
+314 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**653 of 794 functions carry a `comment on
+**660 of 801 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (582)
+### general (589)
 
 Not gated on any module.
 
@@ -561,6 +561,7 @@ Not gated on any module.
 - `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a sales document and returns the outbox row.
 - `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a receipt and returns the outbox row.
 - `employee_directory(p_org_id uuid)` — Who works here: name, department, role and contact.
+- `end_support_access(p_id uuid)` *(writes)* — Ends a support session.
 - `ensure_default_warehouse(p_org_id uuid)` *(writes)* — Returns the company's default store, creating one if it has none.
 - `ensure_pay_period(p_org_id uuid, p_year integer, p_month integer)` *(writes)* — Returns the pay period for a month, creating it if it is not there.
 - `exchange_rate_board(p_org_id uuid, p_on_date date)`
@@ -584,6 +585,7 @@ Not gated on any module.
 - `fs_set_entity(p_filing_id uuid, p_entity_id uuid)` *(writes)* — Says which corporate entity a set of accounts belongs to, which is what carries the company number and particulars onto the MBRS submission.
 - `fs_unfreeze(p_filing_id uuid)` *(writes)* — Reopens frozen accounts for further work.
 - `fx_revaluation_preview(p_org_id uuid, p_as_at date)`
+- `grant_support_access(p_org_id uuid, p_reason text, p_minutes integer)` *(writes)* — Lets a platform administrator read one organisation for a while.
 - `hire_applicant(p_applicant uuid, p_employee_no text, p_hire_date date, p_basic_salary numeric, p_date_of_birth date, p_department uuid, p_position uuid, p_manager uuid, p_early_start_note text)` *(writes)* — Turns an applicant into an employee and links the two.
 - `import_accounts(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)* — Brings a chart of accounts in from a file.
 - `import_bank_transactions(p_bank_account_id uuid, p_rows jsonb)` *(writes)* — Imports statement lines and checks them against their own running balance.
@@ -637,6 +639,7 @@ Not gated on any module.
 - `my_notifications(p_org uuid, p_include_read boolean)` — What is waiting for the caller, in one company or in all of them.
 - `my_organizations()`
 - `my_payslip_access(p_org_id uuid)`
+- `my_support_access()` — The support sessions the caller currently holds, so the app can say so on every screen while one is open.
 - `next_contact_code(p_org_id uuid, p_type app.contact_type)` *(writes)* — The next code in the series for a contact of this type -- C-2026-00013, S-2026-00001, P-2026-00343.
 - `next_document_number(p_org_id uuid, p_doc_type text)` *(writes)* — Allocates the next number for a document type, e.g.
 - `ocr_begin(p_org_id uuid, p_attachment_id uuid, p_provider text)` *(writes)* — Opens a scan: decides which reader, takes the charge, and hands the edge function everything it needs to make the call.
@@ -661,6 +664,7 @@ Not gated on any module.
 - `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
 - `org_payment_gateway_status(p_org_id uuid)` — Lists this company's payment gateway set-up, one row per gateway and mode, so an administrator can see what is configured without being shown the credentials.
 - `org_save_login_page(p_org_id uuid, p_title text, p_body text)` *(writes)* — Writes the heading and body shown on this company's own sign-in page, creating the row on first save.
+- `org_support_access(p_org_id uuid)` — Who is reading this company's books right now, for the company to see.
 - `org_team(p_org_id uuid)`
 - `pay_from_client_account(p_matter uuid, p_amount numeric, p_payee text, p_date date, p_description text, p_reference text, p_payment_mode text, p_refund boolean)` *(writes)* — A disbursement paid out of client money for a matter, or the refund of what is left at the end of one.
 - `payment_batch_lines(p_batch uuid)`
@@ -674,6 +678,7 @@ Not gated on any module.
 - `platform_audit_trail(p_table text, p_limit integer)` *(writes)* — The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate tables may write.
 - `platform_close_account(p_kind text, p_subject_id uuid, p_reason text)` *(writes)* — Closes a login, a company or a ledger account on the operator's side -- the half of 0619 that answers a request made by email rather than pressed in Settings.
 - `platform_closed_accounts(p_kind text, p_include_restored boolean)` — Every closed login, company and ledger account, with the identity the product no longer shows.
+- `platform_create_organization(p_owner_email text, p_name text, p_entity_type text, p_registration_no text, p_tin text, p_state_code text, p_city text, p_phone text, p_email text)` *(writes)* — Creates a fully seeded company and hands it to the named owner.
 - `platform_credit_summary()`
 - `platform_delete_entity_type(p_code text)` *(writes)* — Removes a kind of business that nothing is filed as.
 - `platform_delete_landing_app_link(p_store_code text)` *(writes)* — Removes one download button from the landing page.
@@ -721,7 +726,9 @@ Not gated on any module.
 - `platform_set_org_status(p_org_id uuid, p_status text)` *(writes)* — Sets a company to active, trial, suspended or archived.
 - `platform_set_schedule_verified(p_schedule_id uuid, p_verified boolean, p_source text, p_notes text)` *(writes)* — Marks a statutory rate table as checked against its published source, with the source and a note.
 - `platform_stats()`
+- `platform_support_access(p_limit integer)` — Every support session, open and closed, for the console.
 - `platform_topup_credit(p_org_id uuid, p_amount numeric, p_note text)` *(writes)* — Adds credit to a company's platform account and raises the invoice for it, returning both.
+- `platform_update_organization(p_org_id uuid, p_name text, p_legal_name text, p_registration_no text, p_tin text, p_phone text, p_email text, p_city text, p_state_code text)` *(writes)* — Edits a company's name and contact details from the console, and writes the before and after into that company's own audit trail.
 - `platform_update_reservation(p_kind text, p_id uuid, p_org_id uuid, p_name text, p_module_code text, p_landing_path text, p_release boolean, p_purpose text)` *(writes)* — Moves a reserved name between companies, repoints it, or releases it.
 - `platform_update_setting(p_key text, p_value jsonb)` *(writes)* — Writes one row of `platform_settings`.
 - `portal_document_token(p_token text, p_document_id uuid)` *(writes)* — Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 0414's payment work unchanged.
@@ -1298,6 +1305,7 @@ inconsistent.
 - `strata_charge_rates`
 - `strata_charge_runs`
 - `strata_schemes`
+- `support_access`
 - `tax_adjustments`
 - `tax_brackets`
 - `tax_codes`

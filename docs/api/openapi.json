@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0718",
+    "version": "0719",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -34961,6 +34961,60 @@
         }
       }
     },
+    "/rpc/end_support_access": {
+      "post": {
+        "operationId": "end_support_access",
+        "summary": "Ends a support session",
+        "description": "Ends a support session. The administrator holding it, any platform administrator, or an administrator of the company being read \u2014 seeing somebody in your books without being able to show them out is a notification, not a control. `0719`.\n\n`public.end_support_access(p_id uuid)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/enrol_loyalty_member": {
       "post": {
         "operationId": "enrol_loyalty_member",
@@ -36978,6 +37032,69 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/grant_support_access": {
+      "post": {
+        "operationId": "grant_support_access",
+        "summary": "Lets a platform administrator read one organisation for a while",
+        "description": "Lets a platform administrator read one organisation for a while. Requires a reason, expires within eight hours, grants `auditor` and nothing more, and is written into the CUSTOMER's audit trail. `0719`.\n\n`public.grant_support_access(p_org_id uuid, p_reason text, p_minutes integer)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_reason": {
+                    "type": "string"
+                  },
+                  "p_minutes": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -42451,6 +42568,79 @@
         }
       }
     },
+    "/rpc/my_support_access": {
+      "post": {
+        "operationId": "my_support_access",
+        "summary": "The support sessions the caller currently holds, so the app can say so on every screen while one is open",
+        "description": "The support sessions the caller currently holds, so the app can say so on every screen while one is open. `0719`.\n\n`public.my_support_access()` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_name": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "granted_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/name_pos_sale_customer": {
       "post": {
         "operationId": "name_pos_sale_customer",
@@ -44259,6 +44449,83 @@
         }
       }
     },
+    "/rpc/org_support_access": {
+      "post": {
+        "operationId": "org_support_access",
+        "summary": "Who is reading this company's books right now, for the company to see",
+        "description": "Who is reading this company's books right now, for the company to see. `0719`.\n\n`public.org_support_access(p_org_id uuid)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "admin_name": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "granted_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/org_team": {
       "post": {
         "operationId": "org_team",
@@ -45522,6 +45789,85 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_create_organization": {
+      "post": {
+        "operationId": "platform_create_organization",
+        "summary": "Creates a fully seeded company and hands it to the named owner",
+        "description": "Creates a fully seeded company and hands it to the named owner. Composed from `create_organization` and `app.hand_company_over` so there is one chart of accounts to seed and one handover to record. `0719`.\n\n`public.platform_create_organization(p_owner_email text, p_name text, p_entity_type text, p_registration_no text, p_tin text, p_state_code text, p_city text, p_phone text, p_email text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_owner_email": {
+                    "type": "string"
+                  },
+                  "p_name": {
+                    "type": "string"
+                  },
+                  "p_entity_type": {
+                    "type": "string"
+                  },
+                  "p_registration_no": {
+                    "type": "string"
+                  },
+                  "p_tin": {
+                    "type": "string"
+                  },
+                  "p_state_code": {
+                    "type": "string"
+                  },
+                  "p_city": {
+                    "type": "string"
+                  },
+                  "p_phone": {
+                    "type": "string"
+                  },
+                  "p_email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_owner_email",
+                  "p_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               }
             }
@@ -48806,6 +49152,91 @@
         }
       }
     },
+    "/rpc/platform_support_access": {
+      "post": {
+        "operationId": "platform_support_access",
+        "summary": "Every support session, open and closed, for the console",
+        "description": "Every support session, open and closed, for the console. `0719`.\n\n`public.platform_support_access(p_limit integer)` Reads only. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_limit": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "org_name": {
+                        "type": "string"
+                      },
+                      "admin_name": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "granted_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "ended_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/rpc/platform_topup_credit": {
       "post": {
         "operationId": "platform_topup_credit",
@@ -48850,6 +49281,84 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/platform_update_organization": {
+      "post": {
+        "operationId": "platform_update_organization",
+        "summary": "Edits a company's name and contact details from the console, and writes the before and after into that\u2026",
+        "description": "Edits a company's name and contact details from the console, and writes the before and after into that company's own audit trail. Not the tax defaults, the fiscal year or the books start date \u2014 those change what the ledger does. `0719`.\n\n`public.platform_update_organization(p_org_id uuid, p_name text, p_legal_name text, p_registration_no text, p_tin text, p_phone text, p_email text, p_city text, p_state_code text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_name": {
+                    "type": "string"
+                  },
+                  "p_legal_name": {
+                    "type": "string"
+                  },
+                  "p_registration_no": {
+                    "type": "string"
+                  },
+                  "p_tin": {
+                    "type": "string"
+                  },
+                  "p_phone": {
+                    "type": "string"
+                  },
+                  "p_email": {
+                    "type": "string"
+                  },
+                  "p_city": {
+                    "type": "string"
+                  },
+                  "p_state_code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
               }
             }
           },
@@ -79147,6 +79656,70 @@
         }
       }
     },
+    "/support_access": {
+      "get": {
+        "operationId": "select_support_access",
+        "summary": "Read support_access",
+        "description": "A platform administrator temporarily reading one organisation, with a reason and an expiry. Grants the `auditor` role and nothing more, so a support session can look at anything and change nothing. `0719`.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "tags": [
+          "tables"
+        ],
+        "parameters": [
+          {
+            "name": "select",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "PostgREST column list, e.g. `id,name`. Embeds are resolved against the foreign keys."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "e.g. `created_at.desc`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/support_access"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/tax_adjustments": {
       "get": {
         "operationId": "select_tax_adjustments",
@@ -101961,6 +102534,48 @@
         "required": [
           "org_id",
           "site_id"
+        ]
+      },
+      "support_access": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "admin_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "granted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_by": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "org_id",
+          "admin_id",
+          "reason",
+          "expires_at"
         ]
       },
       "tax_adjustments": {
