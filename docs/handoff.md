@@ -340,6 +340,29 @@ What the tail did show is worth more than the line it was looking for:
    **the whole job agrees on one registry** and the second dump hits the
    cache. One registry per job, or the cache never hits.
 
+### Confirmed in run 2152: one pull where there were two
+
+Same job, same grep, before and after:
+
+| | 2150 (before) | 2152 (after) |
+| --- | --- | --- |
+| `Pulling from supabase/postgres` | 2 | **1** |
+| images downloaded | `public.ecr.aws/…:17.6.1.155` **and** `ghcr.io/…:17.6.1.155` | `ghcr.io/…:17.6.1.155` |
+| anonymous-registry pulls | 1 | **0** |
+| refusals, fallbacks | none | none |
+
+The step env carries `SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io` beside
+`IMAGE_REGISTRY_PRIMARY: ghcr.io`, so the job and the wrapper now agree
+rather than contradict each other. One `Pulling from` serves BOTH dumps —
+the linked one produces no pull at all — and a layer reports `Already
+exists`, shared with the postgres 15 image `supabase start` brought up.
+
+**Still not claimed:** `supabase start`'s own pull. Both dumps are inside
+the 5,000-line tail; `start` is not, and no argument to `get_job_logs`
+will return it. To settle that one, read the step's live log in the web UI
+while a run is going, or have the workflow echo the registry it is about
+to use.
+
 **How this fails in future, and what it looks like.** A `::warning::
 Could not log in to ghcr.io` means the token was refused, and
 `packages: read` on the job is the first thing to try — the jobs declare
