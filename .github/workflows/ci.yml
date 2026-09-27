@@ -576,6 +576,14 @@ jobs:
                | docker login ghcr.io -u "$ACTOR" --password-stdin
           then
             echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+            # And the job's own default, so a command NOT wrapped in
+            # `with_image_registry.sh` asks the same registry. Run 2150
+            # showed what happens otherwise: `db dump --local` (unwrapped,
+            # so public.ecr.aws) and `db dump --linked` (wrapped, so
+            # ghcr.io) pulled the SAME postgres bits twice under two
+            # names, 14 seconds apiece. One registry per job, or the cache
+            # never hits.
+            echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
           else
             echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
             echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
@@ -1629,9 +1637,15 @@ jobs:
       # file is what everyone reads. 0159 to 0173 were applied that way.
       #
       # Checked here rather than in a job of its own because this is the
-      # only place a stack built from the migrations already exists, and
-      # `supabase start` has already pulled the Postgres image the dump
-      # needs.
+      # only place a stack built from the migrations already exists.
+      #
+      # It used to add "and `supabase start` has already pulled the
+      # Postgres image the dump needs", which was NOT TRUE and went
+      # unchecked for as long as the sentence existed. `config.toml` sets
+      # `major_version = 15`; `db dump` runs the CLI's pinned
+      # `postgres:17.6.1.155` for a matching `pg_dump`. Different tags, so
+      # the dump pulls its own image every time -- 14 seconds of it,
+      # measured in run 2150.
       # -----------------------------------------------------------------
       - name: Is the hosted project level with this commit?
         id: level
@@ -1703,12 +1717,18 @@ jobs:
           # Timed separately, because when this is slow it matters which
           # half is slow: one is a container on this runner, the other is
           # the network.
-          # NOT wrapped in `with_image_registry.sh`, and that is the
-          # point of saying so: `supabase start` ran in this same job and
-          # the Postgres image is already local, which the comment above
-          # this section states. Wrapping it would read as a pull that
-          # needs a fallback and be a no-op.
-          time supabase db dump --local -f /tmp/schema-local.sql
+          # THIS PULLS, and the comment above this section said it does
+          # not. Both were wrong, and run 2150 settled it: the dump spent
+          # 14 seconds downloading `supabase/postgres:17.6.1.155` after a
+          # `supabase start` that had already run.
+          #
+          # Because they are DIFFERENT TAGS. `config.toml` sets
+          # `major_version = 15`, so `start` brings up a postgres 15
+          # image, while `db dump` runs the CLI's own pinned `17.6.1.155`
+          # for a matching `pg_dump`. Nothing `start` pulls is ever the
+          # image the dump wants.
+          time scripts/ci/with_image_registry.sh \
+            supabase db dump --local -f /tmp/schema-local.sql
           # This one pulls. `db dump --linked` still runs `pg_dump`
           # inside a container of the matching version -- it is the
           # reason this job sets the registry at all -- so it gets the
@@ -2705,6 +2725,14 @@ jobs:
                | docker login ghcr.io -u "$ACTOR" --password-stdin
           then
             echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+            # And the job's own default, so a command NOT wrapped in
+            # `with_image_registry.sh` asks the same registry. Run 2150
+            # showed what happens otherwise: `db dump --local` (unwrapped,
+            # so public.ecr.aws) and `db dump --linked` (wrapped, so
+            # ghcr.io) pulled the SAME postgres bits twice under two
+            # names, 14 seconds apiece. One registry per job, or the cache
+            # never hits.
+            echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
           else
             echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
             echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
@@ -3016,6 +3044,14 @@ jobs:
                | docker login ghcr.io -u "$ACTOR" --password-stdin
           then
             echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+            # And the job's own default, so a command NOT wrapped in
+            # `with_image_registry.sh` asks the same registry. Run 2150
+            # showed what happens otherwise: `db dump --local` (unwrapped,
+            # so public.ecr.aws) and `db dump --linked` (wrapped, so
+            # ghcr.io) pulled the SAME postgres bits twice under two
+            # names, 14 seconds apiece. One registry per job, or the cache
+            # never hits.
+            echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
           else
             echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
             echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"

@@ -298,13 +298,47 @@ twenty functions deployed. So the fix addresses the cause rather than
 moving to a third bucket, and the fallback sat unused, which is where it
 should sit.
 
-**What was read, and what was not.** The deploy job's log in full, because
-that is where 2148 failed. The database and migrate jobs are green and
-their login steps succeeded, but their pull lines were not read
-individually — a login step exits 0 in the fallback branch too, so "the
-step succeeded" is not by itself evidence that `ghcr.io` answered in those
-two. If that distinction ever matters, grep a run's database job for
-`Downloaded newer image for` and read the registry off it.
+### Then the other two jobs were read, and found two things
+
+**The migrate job: confirmed, whole log** (2,017 lines, all of it).
+`Login Succeeded`, and `db dump --linked` pulled
+`ghcr.io/supabase/postgres:17.6.1.155`. No refusal, no fallback. The one
+`Could not log in to ghcr.io` line in it is the SHELL ECHOING the
+untaken `else` branch — `[36;1m` colour on the line is how you tell. The
+run's only real `##[warning]` is the pre-existing Node 20 deprecation.
+
+**The database job: `supabase start` still unread, and it cannot be read
+this way.** Its log is 25,578 lines and `get_job_logs` caps at 5,000, so
+the `start` step is in the 20,578 lines the API will not return. Asking
+for 40,000 returns the same 5,000; `original_length` in the response is
+what says so, and comparing it against the lines returned is the only way
+to know a "whole log" is a tail. **A 5,000-line answer to a 5,000-line
+request is a truncation, not a complete log** — read while writing this
+section, having first said the opposite.
+
+What the tail did show is worth more than the line it was looking for:
+
+    13:50:45  time supabase db dump --local -f /tmp/schema-local.sql
+    13:51:00  Downloaded newer image for public.ecr.aws/supabase/postgres:17.6.1.155
+    13:51:11  Downloaded newer image for ghcr.io/supabase/postgres:17.6.1.155
+
+**Two things wrong there, and one of them was mine.**
+
+1. **`db dump --local` pulls.** The workflow has said for a long time that
+   `supabase start` "has already pulled the Postgres image the dump
+   needs", and `cc179f48` repeated it as the reason not to wrap it.
+   Untrue: `config.toml` sets `major_version = 15`, so `start` brings up a
+   postgres 15 image while `db dump` runs the CLI's pinned `17.6.1.155`
+   for a matching `pg_dump`. **Different tags — nothing `start` pulls is
+   ever the image the dump wants**, and the dump spends 14 seconds
+   downloading its own. Both comments corrected, and the dump is wrapped.
+2. **The same bits came down twice, because of `cc179f48`.** The local
+   dump was unwrapped, so it took the job env (`public.ecr.aws`); the
+   linked dump was wrapped, so it took the primary (`ghcr.io`). Two names
+   for one image is two cache misses. The login step now sets
+   `SUPABASE_INTERNAL_IMAGE_REGISTRY` to the chosen primary as well, so
+   **the whole job agrees on one registry** and the second dump hits the
+   cache. One registry per job, or the cache never hits.
 
 **How this fails in future, and what it looks like.** A `::warning::
 Could not log in to ghcr.io` means the token was refused, and
