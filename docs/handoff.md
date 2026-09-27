@@ -29,6 +29,55 @@ It is not a transcript, and cannot be:
 The repository is the only thing that crosses accounts. If it matters,
 it has to be committed.
 
+### The container restarts without warning, and that rule is why
+
+It happened in this session, after `8b9d390e` and with no prompting.
+**Nothing was lost**, and the reason is the paragraph above rather than
+luck: the tree was clean and `HEAD` matched `origin` exactly. A restart
+costs nothing if every push has landed, and costs whatever is uncommitted
+if one has not. Check with
+
+    git status --porcelain && git rev-parse HEAD origin/<branch>
+
+**Background work does NOT survive it, and no notification arrives for
+what was running.** A session waiting on a backgrounded `mutate.py` sweep,
+a `flutter test` run or a timer simply never hears back. So a long sweep's
+findings want writing down — into a commit, or at least into this file —
+as they arrive rather than at the end. What the restart took here was only
+a stale wait-loop whose sweep had finished several commits earlier.
+
+### A `pgrep` wait-loop matches itself
+
+Paid for twice in one session, and it looks exactly like work in progress:
+
+    until ! pgrep -f mutate.py >/dev/null; do sleep 20; done   # never exits
+
+`pgrep -f` matches the full command line, and the loop's own shell has
+`mutate.py` in its command line. So the condition is true forever, the
+loop reports `RUNNING` long after the sweep has finished, and further
+copies of the same loop keep each other alive. Three of them were still
+spinning when the container went.
+
+**Escaping the pattern is NOT the fix, and that was checked rather than
+assumed.** A test written to compare `mutate.py` against
+`"scripts/mutate\.py"` hung on BOTH, including with no such process
+running at all — because the probe's own `bash -c "until ! pgrep -f
+<pattern> ..."` command line embeds whatever pattern it is probing with.
+That is the same effect one level up, and it means a self-referential
+test cannot tell the two apart. Whether quoting saves a given loop depends
+on which escape characters survive into its command line, which is not
+something to rely on.
+
+**Wait on what the job WRITES instead**, which has no self-reference in it:
+
+    until grep -q "restored:" out.log 2>/dev/null; do sleep 20; done
+
+Verified both ways: it exits once the marker appears, and it keeps waiting
+while the file exists but is empty. `mutate.py` always ends with
+`restored:`, `flutter test` with `All tests passed!` or `Some tests
+failed`, and the gate sweep with `FAILURES=`. Pick the line the job cannot
+finish without printing.
+
 ## Where things stand
 
 | | |
