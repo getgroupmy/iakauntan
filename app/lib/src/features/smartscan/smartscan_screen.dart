@@ -131,6 +131,24 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
         ref.watch(scanSurfacesProvider).valueOrNull ?? const ScanSurfaces();
     // Enough room for two labelled buttons in one app bar, or not.
     final wide = MediaQuery.sizeOf(context).width >= 600;
+
+    // Which of the two the platform is offering at all. `0718` made
+    // that a question -- before it, both were always drawn.
+    final keepHere = canWrite && surfaces.uploadButton;
+    final scanHere = canWrite && surfaces.scanButton;
+
+    // Whether Upload can afford to say "Upload".
+    //
+    // The narrow-screen rule below was written when BOTH buttons were
+    // always present: two labelled buttons overflowed a phone's app bar
+    // by 54 pixels. `0718` let the platform take the Scan button away,
+    // and the moment it does, the premise of that rule is false -- one
+    // labelled button fits a phone easily, and what was left was an
+    // unexplained icon alone in an empty bar.
+    //
+    // Reported as "why the upload button has no label", on a phone with
+    // the Scan button switched off in the console.
+    final labelKeep = wide || !scanHere;
     // Never asked for while the setup chip is selected: `setup` is not
     // a value `scan_inbox` knows, and sending it would be a filter the
     // database quietly reads as `all`.
@@ -145,14 +163,14 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
           // "read this now" costs a call to a model, and "keep this"
           // costs nothing and can wait until Tuesday.
           //
-          // The label goes away on a narrow screen. Two labelled
-          // buttons need more than a phone's app bar has -- they
-          // overflowed it by 54 pixels, which Flutter draws as the
-          // yellow-and-black bar and which means part of a control
-          // cannot be reached. The icon keeps its tooltip, so what it
-          // does is still sayable.
-          if (canWrite && surfaces.uploadButton)
-            if (wide)
+          // The label goes away only when it has to: on a narrow
+          // screen with the Scan button beside it. Two labelled buttons
+          // need more than a phone's app bar has -- they overflowed it
+          // by 54 pixels, which Flutter draws as the yellow-and-black
+          // bar and which means part of a control cannot be reached.
+          // Alone, it is labelled at any width.
+          if (keepHere)
+            if (labelKeep)
               OutlinedButton.icon(
                 key: const ValueKey('smartscan-keep'),
                 onPressed: _keeping ? null : () => _keep(),
@@ -166,7 +184,7 @@ class _SmartScanScreenState extends ConsumerState<SmartScanScreen> {
                 onPressed: _keeping ? null : () => _keep(),
                 icon: const Icon(Icons.upload_file_outlined),
               ),
-          if (canWrite && surfaces.scanButton)
+          if (scanHere)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
               child: FilledButton.icon(

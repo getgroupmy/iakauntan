@@ -144,6 +144,74 @@ void main() {
       expect(find.byKey(const ValueKey('smartscan-keep')), findsOneWidget);
     });
 
+    testWidgets('Upload says Upload once it is the only button there',
+        (tester) async {
+      // Reported as "why the upload button has no label", on a phone
+      // with the Scan button switched off in the console. The
+      // narrow-screen rule was written when both buttons were always
+      // drawn; alone, one labelled button fits a phone easily.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(412, 900);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(wrap(const SmartScanScreen(),
+          surfaces: const ScanSurfaces(scanButton: false)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('and it fits at the narrowest width this app draws',
+        (tester) async {
+      // An overflow is not a failed test by itself -- Flutter paints
+      // the yellow-and-black bar and carries on -- so the exception is
+      // what has to be checked.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(320, 900);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(wrap(const SmartScanScreen(),
+          surfaces: const ScanSurfaces(scanButton: false)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('but goes back to an icon beside the Scan button',
+        (tester) async {
+      // Both labelled on a phone is the 54-pixel overflow this rule
+      // exists for, so the label is given up when it has to be.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(412, 900);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(wrap(const SmartScanScreen(),
+          surfaces: const ScanSurfaces()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload'), findsNothing);
+      expect(find.byKey(const ValueKey('smartscan-keep')), findsOneWidget);
+      expect(find.text('Scan'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('and stays labelled on a wide screen either way',
+        (tester) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(wrap(const SmartScanScreen(),
+          surfaces: const ScanSurfaces()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upload'), findsOneWidget);
+      expect(find.text('Scan a document'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('and the Upload button on its own', (tester) async {
       await tester.pumpWidget(wrap(const SmartScanScreen(),
           surfaces: const ScanSurfaces(uploadButton: false)));
