@@ -237,19 +237,51 @@ to move to `public.ecr.aws`. Both failures have one cause — **the pull is
 ANONYMOUS** — and swapping buckets treats the symptom. There is a third
 bucket and it will run out too.
 
-The fix that addresses the cause, NOT YET DONE and deliberately not
-guessed at: authenticate the docker pull. `GITHUB_TOKEN` exists in every
-run, and `docker login ghcr.io -u $GITHUB_ACTOR --password-stdin` lifts
-ghcr's anonymous limit without a new secret.
+### Done: the pull is authenticated, with the old path as the fallback
 
-Read the existing comment before trying it, because it forecloses the
-wrong version of this: passing the per-run token to `supabase/setup-cli`
-was tried and did not help. **That is a different thing** — it was about
-the action's GitHub *API* lookup for a release, not about a *docker*
-pull, and nothing has yet authenticated the pull itself. Whoever does it
-should keep `public.ecr.aws` reachable as the fallback rather than
-replacing it, since a change at this spot has already cost four red runs
-once by being confident.
+`docker login ghcr.io` with the `GITHUB_TOKEN` every run already carries —
+no new secret — in each of the three jobs that pull an image, and
+`scripts/ci/with_image_registry.sh` runs the command against `ghcr.io`
+first and against `public.ecr.aws` if that fails for any reason.
+
+**Its worst case is what CI did before it**, which is the whole argument
+for making the change at a spot that has already cost four red runs by
+being confident, and it is asserted rather than claimed:
+`with_image_registry_test.sh` covers the primary answering (one attempt,
+fallback untouched), the fallback rescuing a refused primary (exit 0 —
+the non-regression property), both refusing (non-zero, not swallowed),
+one registry configured twice, no command at all, and a `bash -c` payload
+seeing the registry. Registered in `ci.yml` beside the other gates' own
+assertions, and the file was mutated twice to prove the test bites.
+
+`RETRY_ATTEMPTS=2` wherever it wraps `retry.sh`, so the worst case stays
+four attempts — **two registries at two attempts rather than one at
+four.** That is faster as well as broader: the old shape spent 60 + 120 +
+240 seconds waiting out a cap that a fresh runner cleared in under a
+minute.
+
+Which commands actually pull, since three of the five candidates do not:
+
+| Command | Pulls | Wrapped |
+| --- | --- | --- |
+| `supabase start` (database) | yes, the whole stack | yes |
+| `supabase db dump --linked` (×2) | yes — `pg_dump` runs in a container of the matching version | yes |
+| `supabase functions deploy` | yes, `edge-runtime` | yes |
+| `supabase db dump --local` | **no** — `supabase start` in the same job already cached it | no, and the line says why |
+| `link`, `migration list`, `db push` | no, network only | no |
+
+The `--local` one is worth the sentence: it was wrapped in the first pass
+on the assumption that a local dump pulls, and the comment eight lines
+above it in this very workflow says `supabase start` has already fetched
+the image. A wrapper that reads as a pull needing a fallback and is a
+no-op is worse than none.
+
+**What is NOT proven here.** `docker login` was exercised locally only in
+its failure path — a bogus token exits non-zero, so the `else` branch
+fires and the primary stays at `public.ecr.aws`, which is today's
+behaviour. That a *real* `GITHUB_TOKEN` login lifts the quota is the one
+claim only a CI run can settle. If it does not, the fallback carries the
+run and the symptom is a `::warning::` rather than a red job.
 
 ## Every screen and every dialog is built by a test
 

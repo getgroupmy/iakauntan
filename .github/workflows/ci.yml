@@ -550,6 +550,38 @@ jobs:
       - name: Pull the images from a registry that is not refusing
         run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
 
+      # AND STOP BEING ANONYMOUS, which is what both refusals were.
+      #
+      # `public.ecr.aws` then answered run 2148 with `toomanyrequests:
+      # Data limit exceeded` -- a second bucket, same shape, and the
+      # third would go the same way. An authenticated pull is quota'd to
+      # the ACCOUNT rather than to the runner's shared address, and the
+      # `GITHUB_TOKEN` every run already carries is enough for it. No new
+      # secret.
+      #
+      # Not the token note above: that one is `supabase/setup-cli` asking
+      # the GitHub API which release is newest, which it does not read the
+      # token for. This is the DOCKER pull, which nothing had ever
+      # authenticated.
+      #
+      # `|| true` in effect, and the primary stays at the fallback when
+      # login fails: a run must not go red because a login did, and
+      # anonymous `public.ecr.aws` is exactly what this job does today.
+      - name: Pull the images as somebody rather than as anybody
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if printf '%s' "$GH_TOKEN" \
+               | docker login ghcr.io -u "$ACTOR" --password-stdin
+          then
+            echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
+            echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE_REGISTRY_FALLBACK=public.ecr.aws" >> "$GITHUB_ENV"
+
       # The list below is hand-kept, and a hand-kept list of tests goes
       # stale in the one direction that is invisible: a file added to
       # `supabase/tests/` and not added here is never run, and reads
@@ -630,7 +662,13 @@ jobs:
       # time at all.
       - name: Start the throwaway local stack
         run: |
-          RETRY_DELAY=60 scripts/ci/retry.sh bash -c 'supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector || { supabase stop --no-backup || true; exit 1; }'
+          # Two registries at two attempts, not one at four: a quota
+          # refusal is immediate and identical however long you wait, so
+          # the back half of a four-deep backoff against one bucket buys
+          # nothing. `with_image_registry.sh` sets out the argument and
+          # asserts that its worst case is this line's old behaviour.
+          RETRY_ATTEMPTS=2 RETRY_DELAY=60 scripts/ci/with_image_registry.sh \
+            scripts/ci/retry.sh bash -c 'supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector || { supabase stop --no-backup || true; exit 1; }'
       - name: Run the database assertions
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
@@ -1665,8 +1703,18 @@ jobs:
           # Timed separately, because when this is slow it matters which
           # half is slow: one is a container on this runner, the other is
           # the network.
+          # NOT wrapped in `with_image_registry.sh`, and that is the
+          # point of saying so: `supabase start` ran in this same job and
+          # the Postgres image is already local, which the comment above
+          # this section states. Wrapping it would read as a pull that
+          # needs a fallback and be a no-op.
           time supabase db dump --local -f /tmp/schema-local.sql
-          time scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-hosted.sql
+          # This one pulls. `db dump --linked` still runs `pg_dump`
+          # inside a container of the matching version -- it is the
+          # reason this job sets the registry at all -- so it gets the
+          # second registry too.
+          time RETRY_ATTEMPTS=2 scripts/ci/with_image_registry.sh \
+            scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-hosted.sql
           wc -l /tmp/schema-local.sql /tmp/schema-hosted.sql
 
       # Red, deliberately. Softening this to a warning would mean a drift
@@ -2374,6 +2422,13 @@ jobs:
       # mutant then ran against a compiler this repository no longer
       # uses, and the run reported the control killed along with
       # everything else. A harness that lies is worse than no harness.
+      # The image-registry fallback's own assertions. Its whole argument
+      # is that its worst case is what CI did before it, and a property
+      # nobody checks is a claim -- which is what the two previous
+      # changes at that spot were.
+      - name: The image-registry fallback's own assertions
+        run: bash scripts/ci/with_image_registry_test.sh
+
       - name: The mutation harness's own assertions
         run: python3 scripts/mutate_test.py
 
@@ -2623,6 +2678,39 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
 
+      # AND STOP BEING ANONYMOUS, which is what both refusals were.
+      #
+      # `public.ecr.aws` then answered run 2148 with `toomanyrequests:
+      # Data limit exceeded` -- a second bucket, same shape, and the
+      # third would go the same way. An authenticated pull is quota'd to
+      # the ACCOUNT rather than to the runner's shared address, and the
+      # `GITHUB_TOKEN` every run already carries is enough for it. No new
+      # secret.
+      #
+      # Not the token note above: that one is `supabase/setup-cli` asking
+      # the GitHub API which release is newest, which it does not read the
+      # token for. This is the DOCKER pull, which nothing had ever
+      # authenticated.
+      #
+      # `|| true` in effect, and the primary stays at the fallback when
+      # login fails: a run must not go red because a login did, and
+      # anonymous `public.ecr.aws` is exactly what this job does today.
+      - name: Pull the images as somebody rather than as anybody
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if printf '%s' "$GH_TOKEN" \
+               | docker login ghcr.io -u "$ACTOR" --password-stdin
+          then
+            echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
+            echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE_REGISTRY_FALLBACK=public.ecr.aws" >> "$GITHUB_ENV"
+
       - name: Link
         if: steps.creds.outputs.ready == 'true'
         run: scripts/ci/retry.sh supabase link --project-ref "$SUPABASE_PROJECT_REF"
@@ -2686,7 +2774,11 @@ jobs:
         id: snapshot
         if: steps.creds.outputs.ready == 'true'
         continue-on-error: true
-        run: scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-before.sql
+        # Pulls a Postgres container for `pg_dump`, same as the drift
+        # job's, so it gets the second registry as well.
+        run: |
+          RETRY_ATTEMPTS=2 scripts/ci/with_image_registry.sh \
+            scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-before.sql
 
       - uses: actions/upload-artifact@v4
         if: steps.creds.outputs.ready == 'true' && steps.snapshot.outcome == 'success'
@@ -2897,6 +2989,39 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
 
+      # AND STOP BEING ANONYMOUS, which is what both refusals were.
+      #
+      # `public.ecr.aws` then answered run 2148 with `toomanyrequests:
+      # Data limit exceeded` -- a second bucket, same shape, and the
+      # third would go the same way. An authenticated pull is quota'd to
+      # the ACCOUNT rather than to the runner's shared address, and the
+      # `GITHUB_TOKEN` every run already carries is enough for it. No new
+      # secret.
+      #
+      # Not the token note above: that one is `supabase/setup-cli` asking
+      # the GitHub API which release is newest, which it does not read the
+      # token for. This is the DOCKER pull, which nothing had ever
+      # authenticated.
+      #
+      # `|| true` in effect, and the primary stays at the fallback when
+      # login fails: a run must not go red because a login did, and
+      # anonymous `public.ecr.aws` is exactly what this job does today.
+      - name: Pull the images as somebody rather than as anybody
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if printf '%s' "$GH_TOKEN" \
+               | docker login ghcr.io -u "$ACTOR" --password-stdin
+          then
+            echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
+            echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE_REGISTRY_FALLBACK=public.ecr.aws" >> "$GITHUB_ENV"
+
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
         run: |
@@ -2941,11 +3066,19 @@ jobs:
           # retry fired 241 milliseconds after the first attempt: a
           # backoff has to outlast the thing it is backing off from.
           #
+          # RUN 2148 THEN SHOWED THE LIMIT OF THAT. `public.ecr.aws`
+          # refused four times, 60, 120 and 240 seconds apart, and a
+          # fresh runner then succeeded within a minute: the cap is
+          # bound to the RUNNER, not to the clock, and there was no
+          # amount of waiting that would have helped. Hence a second
+          # registry and an authenticated pull instead of a longer wait.
+          #
           # Safe to retry: deploying a function is an upload of a
           # bundle, and the second one replaces whatever the first left.
           for name in "${names[@]}"; do
             echo "== $name"
-            RETRY_DELAY=60 scripts/ci/retry.sh \
+            RETRY_ATTEMPTS=2 RETRY_DELAY=60 \
+              scripts/ci/with_image_registry.sh scripts/ci/retry.sh \
               supabase functions deploy "$name" \
               --project-ref "$SUPABASE_PROJECT_REF"
             echo "- \`$name\`" >> "$GITHUB_STEP_SUMMARY"
