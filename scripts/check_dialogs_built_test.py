@@ -202,13 +202,24 @@ class TheRealTree(unittest.TestCase):
             code = gate.main()
         self.assertEqual(code, 0, out.getvalue())
 
-    def test_the_exemptions_are_not_empty_and_not_everything(self):
-        # Empty means the backlog is done and this assertion should be
-        # deleted along with the list. Everything means the gate found
-        # nothing and is passing by doing nothing.
+    def test_the_backlog_is_empty_and_stays_that_way(self):
+        # It reached zero: 105, then 50, then none. The previous version
+        # of this said the backlog must NOT be empty -- "empty means the
+        # backlog is done and this assertion should be deleted along with
+        # the list" -- so it failed the moment the list emptied, which is
+        # the assertion doing its job on the way out.
+        self.assertEqual(gate.EXEMPT, {})
+
+    def test_every_opener_in_the_app_is_opened_by_a_test(self):
+        # The other half of the same fact, from the gate's own data
+        # rather than from its exit code: with no exemptions left, the
+        # untested set has to be empty.
         found = gate.openers()
-        self.assertGreater(len(gate.EXEMPT), 0)
-        self.assertLess(len(gate.EXEMPT), len(found))
+        tested = gate.opened_by_tests(set(found))
+        self.assertGreater(len(found), 100)
+        self.assertEqual(
+            sorted(n for n in found if n not in tested), [],
+            'an opener nothing opens, and no backlog left to put it in')
 
     def test_and_it_looked_at_more_than_nothing(self):
         self.assertGreater(len(gate.openers()), 100)

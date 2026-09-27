@@ -690,6 +690,142 @@ void main() {
     });
   });
 
+  group('on a phone', () {
+    // The console is used from a laptop, but "used from" is not "only
+    // ever opened on". These dialogs carry fixed widths — 420, 460, 520
+    // — and every one of them was written while thinking about a desktop
+    // modal, which is the exact failure `dialogs_build_batch2_test.dart`
+    // found in the credit ledger. A long Malaysian company name in an
+    // unflexed Row is what shows it.
+    const long = 'Perniagaan Sinar Teknologi Maju Bersatu Sdn Bhd';
+
+    Future<void> onAPhone(WidgetTester tester, Widget dialog) async {
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            platformRepoProvider.overrideWithValue(_FakePlatform(people: [
+              {
+                'user_id': 'u1',
+                'full_name': long,
+                'email': 'accounts@sinar-teknologi-maju-bersatu.example.com',
+                'phone': '0123456789',
+                'company_count': 12,
+                'suspended': true,
+                'is_platform_admin': true,
+                'last_sign_in_at': '2026-09-26T02:00:00Z',
+              },
+            ])),
+            isPlatformAdminProvider.overrideWith((_) async => true),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () =>
+                        showDialog<void>(context: context, builder: (_) => dialog),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the new-company dialog fits', (tester) async {
+      await onAPhone(tester, const NewOrganizationDialog());
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the edit-company dialog fits, with a long name',
+        (tester) async {
+      await onAPhone(
+        tester,
+        const EditOrganizationDialog(
+            orgId: 'o1', name: long, registrationNo: '202601012345 (1234567-X)'),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the support-access dialog fits', (tester) async {
+      await onAPhone(
+        tester,
+        const GrantSupportDialog(orgId: 'o1', orgName: long),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the assign-access dialog fits', (tester) async {
+      await onAPhone(
+        tester,
+        const AssignAccessDialog(orgId: 'o1', orgName: long),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the register of people fits', (tester) async {
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(wrap(
+        const UsersAdminTab(),
+        platform: _FakePlatform(people: [
+          {
+            'user_id': 'u1',
+            'full_name': long,
+            'email': 'accounts@sinar-teknologi-maju-bersatu.example.com',
+            'company_count': 12,
+            'suspended': true,
+            'is_platform_admin': true,
+            'last_sign_in_at': null,
+          },
+        ]),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('and so does the record of support sessions', (tester) async {
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+          wrap(const SupportAccessAdminTab(), platform: _FakePlatform()));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('and the banner, which is drawn on a phone most of all',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(wrap(
+        SupportAccessBanner(sessions: [
+          {
+            'id': 's1',
+            'org_name': long,
+            'expires_at': DateTime.now()
+                .add(const Duration(minutes: 30))
+                .toIso8601String(),
+          },
+        ]),
+        platform: _FakePlatform(),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('both pages are reachable', () {
     // A console page nothing routes to is a page nobody finds, and that
     // failure is silent: the file compiles, the tests pass, and the menu

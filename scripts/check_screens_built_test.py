@@ -38,7 +38,8 @@ SPEC.loader.exec_module(gate)
 
 
 def run_on(lib: dict[str, str], tests: dict[str, str],
-           exempt: dict[str, str] | None = None):
+           exempt: dict[str, str] | None = None,
+           covered: dict[str, tuple[str, str, str]] | None = None):
     """Run `main` over a made-up app, returning (code, output)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -50,8 +51,10 @@ def run_on(lib: dict[str, str], tests: dict[str, str],
         for name, body in tests.items():
             (root / 'test' / name).write_text(body)
         saved_app, saved_exempt = gate.APP, gate.EXEMPT
+        saved_covered = gate.COVERED_VIA
         gate.APP = root
         gate.EXEMPT = {} if exempt is None else exempt
+        gate.COVERED_VIA = {} if covered is None else covered
         try:
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -59,6 +62,7 @@ def run_on(lib: dict[str, str], tests: dict[str, str],
             return code, out.getvalue()
         finally:
             gate.APP, gate.EXEMPT = saved_app, saved_exempt
+            gate.COVERED_VIA = saved_covered
 
 
 SCREEN = 'class %s extends StatelessWidget {}\n'
@@ -159,11 +163,103 @@ class TheRealTree(unittest.TestCase):
             code = gate.main()
         self.assertEqual(code, 0, out.getvalue())
 
-    def test_the_exemptions_are_not_empty_and_not_everything(self):
-        # If the backlog ever reaches zero this assertion is the thing
-        # that says so -- delete it and the EXEMPT dict together.
-        self.assertGreater(len(gate.EXEMPT), 0)
-        self.assertLess(len(gate.EXEMPT), len(gate.screens()))
+    def test_the_backlog_is_empty_and_stays_that_way(self):
+        # It reached zero. The previous version of this asserted the
+        # opposite -- that the backlog was NOT empty -- which was right
+        # while there was one and would now pass only by there being
+        # work left to do.
+        self.assertEqual(gate.EXEMPT, {})
+
+    def test_the_two_private_screens_are_covered_through_their_hosts(self):
+        # Not a backlog: a private class cannot be NAMED from another
+        # library at all, so these are reached the way the app reaches
+        # them and the gate checks that the test still does it.
+        self.assertEqual(len(gate.COVERED_VIA), 2)
+        for name, (source, test, host) in gate.COVERED_VIA.items():
+            self.assertTrue(name.startswith('_'), name)
+            self.assertIn(name, gate.screens())
+            self.assertTrue((gate.APP / test).exists(), test)
+            self.assertIn(host, (gate.APP / test).read_text())
+
+
+class PrivateScreensCoveredThroughAHost(unittest.TestCase):
+    """The half that replaced a backlog entry, and the ways it can rot.
+
+    A prose note saying "this one is covered elsewhere" is exactly the
+    kind of claim that stops being true without anybody noticing, which
+    is why each of these is a case rather than a comment.
+    """
+
+    HOST = ('class HostTab extends StatelessWidget {}\n'
+            'class _HiddenScreen extends StatelessWidget {}\n')
+
+    def test_a_private_screen_reached_through_its_host_passes(self):
+        code, out = run_on(
+            {'a.dart': self.HOST},
+            {'host_test.dart': 'void main() { HostTab(); }'},
+            covered={'_HiddenScreen': ('lib/a.dart', 'test/host_test.dart',
+                                       'HostTab')})
+        self.assertEqual(code, 0, out)
+
+    def test_a_test_file_that_has_gone_is_refused(self):
+        code, out = run_on(
+            {'a.dart': self.HOST},
+            {},
+            covered={'_HiddenScreen': ('lib/a.dart', 'test/host_test.dart',
+                                       'HostTab')})
+        self.assertEqual(code, 1)
+        self.assertIn('is not there', out)
+
+    def test_a_test_that_no_longer_builds_the_host_is_refused(self):
+        code, out = run_on(
+            {'a.dart': self.HOST},
+            {'host_test.dart': 'void main() { SomethingElse(); }'},
+            covered={'_HiddenScreen': ('lib/a.dart', 'test/host_test.dart',
+                                       'HostTab')})
+        self.assertEqual(code, 1)
+        self.assertIn('no longer builds HostTab', out)
+
+    def test_a_renamed_host_is_not_matched_by_its_own_prefix(self):
+        # `HostTabX` contains `HostTab` and builds nothing. A substring
+        # check passed this, which is how it was found.
+        code, out = run_on(
+            {'a.dart': self.HOST},
+            {'host_test.dart': 'void main() { HostTabX(); }'},
+            covered={'_HiddenScreen': ('lib/a.dart', 'test/host_test.dart',
+                                       'HostTab')})
+        self.assertEqual(code, 1)
+        self.assertIn('no longer builds HostTab', out)
+
+    def test_a_host_named_only_in_a_comment_does_not_count(self):
+        code, out = run_on(
+            {'a.dart': self.HOST},
+            {'host_test.dart': '// HostTab is what shows it\nvoid main() {}'},
+            covered={'_HiddenScreen': ('lib/a.dart', 'test/host_test.dart',
+                                       'HostTab')})
+        self.assertEqual(code, 1)
+        self.assertIn('no longer builds HostTab', out)
+
+    def test_an_entry_for_a_screen_that_is_gone_is_refused(self):
+        code, out = run_on(
+            {'a.dart': 'class HostTab extends StatelessWidget {}\n'},
+            {'host_test.dart': 'void main() { HostTab(); }'},
+            covered={'_GoneScreen': ('lib/a.dart', 'test/host_test.dart',
+                                     'HostTab')})
+        self.assertEqual(code, 1)
+        self.assertIn('no longer exists', out)
+
+    def test_an_entry_for_a_screen_a_test_names_directly_is_refused(self):
+        # It became public, or grew a test in its own library. Either
+        # way the indirection is no longer needed and the entry would
+        # only go stale.
+        code, out = run_on(
+            {'a.dart': 'class HostTab extends StatelessWidget {}\n'
+                       'class PlainScreen extends StatelessWidget {}\n'},
+            {'host_test.dart': 'void main() { HostTab(); PlainScreen(); }'},
+            covered={'PlainScreen': ('lib/a.dart', 'test/host_test.dart',
+                                     'HostTab')})
+        self.assertEqual(code, 1)
+        self.assertIn('named by a test directly now', out)
 
 
 if __name__ == '__main__':

@@ -34,12 +34,12 @@ it has to be committed.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | Users, companies and support access in the console |
+| Head at time of writing | Every screen and every dialog is built by a test |
 | CI | **green through run 2123 (`faa23d90`)**; 2124 (`95e08146`) was still running when this was written, and this push is behind it | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
 | Migrations | `0721` is the highest. `0716`–`0720` are applied live and verified against production; `0721` goes live on this push's green run. CI applies on green — see below |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 380 SQL assertion files, **53 Python gates (+17 gate self-tests)**, **6,300+ Flutter tests**, 38 deno test invocations |
+| Gates | 380 SQL assertion files, **53 Python gates (+17 gate self-tests)**, **6,439 Flutter tests**, 39 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test |
 | API description | 807 functions, 367 tables, version `0721` |
 
 ### `currentOrgIdProvider` is the SWITCHER, not the current company
@@ -210,6 +210,82 @@ or
 This paragraph previously said the opposite, and a session acting on it
 told the user a migration had gone live when the run said nothing of the
 kind.
+
+## Every screen and every dialog is built by a test
+
+Asked for as **"Also build all screens"**. Read as the two gates' own
+backlogs, because the other reading has nothing in it: README's `Not
+built yet` is struck through except CP39, KWSP Form A and PERKESO
+Lampiran 1 — all three blocked on layout specifications this machine
+cannot fetch, not on code — and `Built, but not reachable from the app`
+is empty.
+
+**Both backlogs are now zero.** `check_dialogs_built.py` went 105 → 50 →
+0; `check_screens_built.py` went 38 → 2 → 0.
+
+### An empty list proves nothing, and fifty tests proved it
+
+All fifty remaining dialogs opened cleanly at 412x900 with every
+provider answering `const []`. Fifty passes, nothing learned: an empty
+list draws an `EmptyState`, which is an icon and two centred sentences
+that cannot overflow anything.
+
+Feeding each one ONE realistic row broke two immediately:
+
+- **`credit_ledger_dialog.dart` overflowed by 46 pixels.** Its totals
+  line — `Expanded(Text(...))` beside an unflexed `Text` of two money
+  figures — *does not exist at all* in the empty state that had been
+  "tested". Now `Flexible`. Honest limit, stated because it would
+  otherwise be over-claimed: the test font draws every glyph at a full
+  em, so this fits on a real phone today. It would not with two
+  five-figure totals and a large system font scale, which is why the fix
+  is worth making rather than arguing with.
+- **The collections sheet threw `Null is not a subtype of String`**,
+  because the test invented `attempted_at`/`note` where
+  `collectionHistory` selects `attempted_on`/`notes` — a dialog fed a
+  shape the database never sends. A test bug, and the kind that would
+  have sat there passing if the cast had been defensive.
+
+So: a long Malaysian company name, the column names the repository
+actually selects, and figures with digits in them. Written up as the
+eleventh way in `docs/widget-tests.md`.
+
+The console's own dialogs from the previous commit were checked the same
+way — 412x900, long name, suspended and platform-admin both set — and all
+six fit. They had only ever been pumped at the default 800x600.
+
+### The two private screens were never a backlog
+
+`_PreviewScreen` and `_RequestAccessScreen` are private, so **no test in
+another library can name them, ever**. Listing them as a backlog implied
+nothing built them, and in both cases something did:
+`_RequestAccessScreen` through `PayrollScreen` with an auditor who has no
+grant, already asserted in `screens_build_batch_test.dart`.
+
+`_PreviewScreen` genuinely was unbuilt, and so was its host:
+**`LandingCmsTab` is neither a `*Screen` nor a dialog opener, so it fell
+between both gates entirely.** `landing_cms_preview_test.dart` now builds
+the editor, asserts it says the page is a draft, presses Preview, and
+lands on the private screen — reached by the door the app uses rather
+than by naming a constructor, which also proves the door works.
+
+`EXEMPT` is replaced by `COVERED_VIA`: screen → (source, test, the public
+host). The gate refuses an entry whose test has gone, whose test no
+longer builds that host, whose screen no longer exists, or which a test
+names directly now. **Verified by breaking it**, and the first version of
+the host check was too weak — `in` passed a test renamed to
+`LandingCmsTabX`, which builds nothing and contains the old name. It is
+`\bhost\b` now, with a case for that exact rot among seven new
+self-tests.
+
+### Both gates' self-tests asserted their own backlogs were NOT empty
+
+`test_the_exemptions_are_not_empty_and_not_everything`, in both files,
+with a comment saying to delete it when the list emptied. Each failed the
+moment its list did — which is the assertion doing its job on the way
+out. Replaced with the opposite: the backlog is empty and stays that way,
+plus, for dialogs, the same fact read off the gate's own data rather than
+its exit code.
 
 ## Users, companies and support access in the console
 
@@ -4276,7 +4352,9 @@ key. `CardRowsSkeleton`'s leading bone is keyed
 purpose and watch it fail — `python3 scripts/mutate.py <source> <test>
 <mutants.py>`, always with a no-op control, because a harness that
 errors on every run reports a clean sweep. `docs/widget-tests.md` lists
-ten ways a green test covers a broken screen. For Deno there is no
+eleven ways a green test covers a broken screen — the eleventh is
+opening it with every provider answering an empty list, which is how
+fifty dialogs passed while proving nothing. For Deno there is no
 equivalent harness; do it by hand with `sed`/`python3` and restore
 afterwards.
 

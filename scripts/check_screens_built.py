@@ -58,22 +58,45 @@ APP = ROOT / 'app'
 # Screens nobody has written a build test for yet. A BACKLOG, not a
 # decision -- see the docstring. The value is the file, so a reader can
 # go straight to it.
-#: What is left, and why it is the floor rather than a backlog.
+#: Screens nobody has written a build test for yet.
 #:
-#: Thirty-eight when this gate went in, and every one of them was work
-#: somebody had not got to. These two are not: a private class cannot
-#: be named by a test in another library at all, so no amount of
-#: effort takes them off. They are listed rather than skipped so the
-#: count says 115 of 117 honestly instead of 117 of 117 by omission.
+#: **EMPTY.** Thirty-eight when this gate went in, and every one of them
+#: was work somebody had not got to. Keep it that way: a screen added
+#: without a test that builds it belongs here with a reason, and "nobody
+#: got to it" is what the other thirty-eight said.
+EXEMPT: dict[str, str] = {}
+
+#: Private screens, built THROUGH the widget that shows them.
 #:
-#: If one of them ever becomes public, or grows a test inside its own
-#: library, the staleness check below refuses the entry and this list
-#: empties itself.
-EXEMPT: dict[str, str] = {
-    # Private, so no test outside its own library can name it at all.
-    # Listed rather than skipped so the count is honest about them.
-    '_PreviewScreen': 'lib/src/features/admin/landing_cms.dart',
-    '_RequestAccessScreen': 'lib/src/features/hr/payroll_screen.dart',
+#: A private class cannot be named by a test in another library, so the
+#: name-matching above can never see these two however much effort goes
+#: in. Listing them as a backlog said something false — that nothing
+#: builds them — when in both cases something does, by the same door the
+#: app uses.
+#:
+#: So each one names the test and the PUBLIC host it is reached through,
+#: and the check below refuses an entry whose test file has gone or no
+#: longer mentions that host. A prose claim nobody revisits is how
+#: `docs/gaps-against-autocount.md` came to be wrong about four of its
+#: own entries; this one is checked.
+#:
+#: screen -> (source file, test file, the public widget that builds it)
+COVERED_VIA: dict[str, tuple[str, str, str]] = {
+    # Pushed by the Preview button on the landing CMS tab — which was
+    # itself built by nothing, being neither a `*Screen` nor a dialog
+    # opener, and so fell between both gates.
+    '_PreviewScreen': (
+        'lib/src/features/admin/landing_cms.dart',
+        'test/landing_cms_preview_test.dart',
+        'LandingCmsTab',
+    ),
+    # What an auditor with no live grant sees instead of an empty list
+    # they cannot explain. Same route, different screen.
+    '_RequestAccessScreen': (
+        'lib/src/features/hr/payroll_screen.dart',
+        'test/screens_build_batch_test.dart',
+        'PayrollScreen',
+    ),
 }
 
 _LINE_COMMENT = re.compile(r'//.*')
@@ -116,7 +139,7 @@ def main() -> int:
     unbuilt = {n: p for n, p in all_screens.items() if n not in constructed}
 
     for name, path in sorted(unbuilt.items()):
-        if name not in EXEMPT:
+        if name not in EXEMPT and name not in COVERED_VIA:
             problems.append(
                 f'  {path}\n'
                 f'    {name} is never constructed by a test, so nothing '
@@ -142,19 +165,62 @@ def main() -> int:
                 f'Remove the entry.'
             )
 
+    # And a private screen covered through its host: the entry has to
+    # still point at a test that still builds that host.
+    for name, (source, test, host) in sorted(COVERED_VIA.items()):
+        if name not in all_screens:
+            problems.append(
+                f'  {source}\n'
+                f'    {name} is recorded as covered through {host} and no '
+                f'longer exists. Remove the entry.'
+            )
+            continue
+        if name in constructed:
+            problems.append(
+                f'  {source}\n'
+                f'    {name} is named by a test directly now, so it does '
+                f'not need this entry. Remove it.'
+            )
+            continue
+        path = APP / test
+        if not path.exists():
+            problems.append(
+                f'  {source}\n'
+                f'    {name} is recorded as covered by {test}, which is '
+                f'not there.'
+            )
+            continue
+        # WORD BOUNDARIES, not `in`. A substring check passed a test
+        # that had renamed the host to `LandingCmsTabX` — which builds
+        # nothing — because the old name is still inside the new one.
+        # Caught by breaking this check on purpose.
+        if not re.search(rf'\b{re.escape(host)}\b',
+                         strip_comments(path.read_text())):
+            problems.append(
+                f'  {source}\n'
+                f'    {name} is recorded as covered through {host} by '
+                f'{test},\n'
+                f'    and that test no longer builds {host}. The private '
+                f'screen behind it\n'
+                f'    is unbuilt again, silently, which is the whole '
+                f'failure this gate is for.'
+            )
+
     if problems:
         print('Screens that nothing builds:\n')
         print('\n\n'.join(problems))
         print(
             f'\n{len(all_screens)} screens, '
             f'{len(all_screens) - len(unbuilt)} built by a test, '
+            f'{len(COVERED_VIA)} through a host, '
             f'{len(EXEMPT)} exempted.'
         )
         return 1
 
     print(
-        f'All {len(all_screens)} screens are constructed by a test, '
-        f'or named as a backlog ({len(EXEMPT)}).'
+        f'All {len(all_screens)} screens are constructed by a test '
+        f'({len(COVERED_VIA)} of them through the widget that shows them), '
+        f'backlog {len(EXEMPT)}.'
     )
     return 0
 

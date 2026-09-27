@@ -76,63 +76,24 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent / 'app'
 
-#: Openers no test opens yet. A BACKLOG: the number should go down.
+#: Openers no test opens yet.
 #:
-#: 105 when this gate went in, which is nearly every one of them --
-#: the screens list started at 38 of 117 and this one starts at 105 of
-#: 122, because nothing has ever asked the question here at all.
-EXEMPT: dict[str, str] = {
-    'assignTable': 'lib/src/features/pos/assign_table.dart',
-    'createAccountFromPicker': 'lib/src/features/settings/new_account_dialog.dart',
-    'createBankAccountFromPicker': 'lib/src/features/banking/new_bank_account_dialog.dart',
-    'createContactFromPicker': 'lib/src/features/contacts/new_contact_dialog.dart',
-    'createSupplierFromScan': 'lib/src/features/shared/supplier_from_scan.dart',
-    'pickMsicCode': 'lib/src/features/settings/msic_picker.dart',
-    'pickedTaxCode': 'lib/src/features/settings/tax_code_dialog.dart',
-    'resolveSupplier': 'lib/src/features/shared/supplier_from_scan.dart',
-    'showActivityDialog': 'lib/src/features/documents/email_dialog.dart',
-    'showApplicantEditor': 'lib/src/features/hr/applicant_editor.dart',
-    'showAppraisalCycles': 'lib/src/features/hr/appraisal_cycles_dialog.dart',
-    'showAppraisalGoals': 'lib/src/features/hr/appraisal_goals_dialog.dart',
-    'showAppraisalReview': 'lib/src/features/hr/appraisal_review.dart',
-    'showApprovalRuleEditor': 'lib/src/features/approvals/rule_editor.dart',
-    'showAttendanceMonth': 'lib/src/features/hr/attendance_month.dart',
-    'showBillMatterSheet': 'lib/src/features/legal/matter_billing.dart',
-    'showBillingRateSheet': 'lib/src/features/timesheets/billing_rate_sheet.dart',
-    'showBudgetLineEditor': 'lib/src/features/reports/budget_line_editor.dart',
-    'showCloseDealDialog': 'lib/src/features/crm/close_deal_dialog.dart',
-    'showCompose': 'lib/src/features/mail/compose_dialog.dart',
-    'showCreditLedger': 'lib/src/features/settings/credit_ledger_dialog.dart',
-    'showDeliveryDay': 'lib/src/features/pos/delivery_day_dialog.dart',
-    'showDeliveryFeeDialog': 'lib/src/features/pos/delivery_sheet.dart',
-    'showEditLeaveContact': 'lib/src/features/hr/who_is_away.dart',
-    'showEmailDialog': 'lib/src/features/documents/email_dialog.dart',
-    'showFilingDetails': 'lib/src/features/financials/filing_details.dart',
-    'showForecastLineSheet': 'lib/src/features/forecasting/forecast_screen.dart',
-    'showForecastSettings': 'lib/src/features/forecasting/forecast_settings_dialog.dart',
-    'showInterviews': 'lib/src/features/hr/interviews_dialog.dart',
-    'showItemForecastParams': 'lib/src/features/forecasting/item_params_dialog.dart',
-    'showLogAttemptSheet': 'lib/src/features/collections/log_attempt_sheet.dart',
-    'showMiaVerifyDialog': 'lib/src/features/mia/mia_verify_dialog.dart',
-    'showModifierGroups': 'lib/src/features/items/modifier_groups_dialog.dart',
-    'showNotificationsSheet': 'lib/src/features/shell/notification_bell.dart',
-    'showProjectBudgets': 'lib/src/features/timesheets/project_budget.dart',
-    'showProjectEditor': 'lib/src/features/timesheets/project_budget.dart',
-    'showQueueDay': 'lib/src/features/pos/queue_day_dialog.dart',
-    'showReceiptEmailDialog': 'lib/src/features/documents/receipts_screen.dart',
-    'showRecurringTemplateDialog': 'lib/src/features/documents/recurring_template_dialog.dart',
-    'showReferralHires': 'lib/src/features/hr/referrals_dialog.dart',
-    'showRequisitionEditor': 'lib/src/features/hr/requisition_editor.dart',
-    'showSettlementDetail': 'lib/src/features/documents/receipts_screen.dart',
-    'showShareDialog': 'lib/src/features/documents/share_dialog.dart',
-    'showStallItems': 'lib/src/features/pos/stall_items_dialog.dart',
-    'showSubAccountDialog': 'lib/src/features/settings/sub_account_dialog.dart',
-    'showTaxInputs': 'lib/src/features/financials/tax_computation_screen.dart',
-    'showTemplateItems': 'lib/src/features/hr/onboarding_template_dialog.dart',
-    'showTenderSheet': 'lib/src/features/pos/tender_sheet.dart',
-    'showTicketShareDialog': 'lib/src/features/ticketing/ticket_share_dialog.dart',
-    'showTimeEntrySheet': 'lib/src/features/timesheets/time_entry_sheet.dart',
-}
+#: **EMPTY, and it took two goes to get here.** 105 when this gate went
+#: in -- nearly every one of them, because nothing had ever asked the
+#: question here at all -- then 50, then 0.
+#:
+#: The list is gone, not satisfied: every opener in this app is called by
+#: a test, so the next one added has to be too. Keep it that way. If an
+#: entry ever goes back in it wants a reason beside it, because "nobody
+#: got to it" is what the other 105 said.
+#:
+#: Worth knowing before adding one: opening a dialog with every provider
+#: answering an EMPTY LIST proves almost nothing. All fifty opened
+#: cleanly that way. Feeding one realistic row -- a long Malaysian
+#: company name, two five-figure totals -- is what found the overflow in
+#: `credit_ledger_dialog.dart`, whose totals line does not exist at all
+#: in the empty state that had been "tested".
+EXEMPT: dict[str, str] = {}
 
 _LINE_COMMENT = re.compile(r'//[^\n]*')
 _BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)

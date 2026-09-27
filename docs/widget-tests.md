@@ -35,7 +35,7 @@ The harness mutates **one file**. Logic that lives in `models.dart` —
 `LeaveBalance.available`, `Todo.isOverdue`, `EinvoiceDocument.canCancel`
 — needs its own run against that file.
 
-## The ten
+## The eleven
 
 ### 1. `find.byType` matches the exact runtime type
 
@@ -159,6 +159,44 @@ text, which reads as a failure of the code rather than of the test.
 Put every case on one screen as separate rows instead. It is also the
 stronger assertion: each must be distinguishable from the others beside
 it.
+
+### 11. Opening it with nothing in it
+
+The eleventh way, and it is the newest because it was found emptying
+`check_dialogs_built.py`'s backlog. **All fifty remaining dialogs opened
+cleanly at 412x900 with every provider answering `const []`.** Fifty
+tests, fifty passes, and nothing learned: an empty list draws an
+`EmptyState`, and an `EmptyState` is one icon and two centred sentences
+that cannot overflow anything.
+
+Feeding each one **a single realistic row** broke two of them
+immediately. `credit_ledger_dialog.dart` has a totals line —
+`Expanded(Text(...))` beside an unflexed `Text` of two money figures —
+that *does not exist at all* in the empty state that had been "tested";
+with one movement in the ledger it overflowed by 46 pixels. And the
+collections sheet threw `Null is not a subtype of String` on a cast,
+because the test had invented `attempted_at` where the query selects
+`attempted_on` — a dialog fed a shape the database never sends.
+
+What "realistic" has to mean:
+
+- **A long name.** `'Perniagaan Sinar Teknologi Maju Bersatu Sdn Bhd'`,
+  not `'Test'`. Malaysian company names run like that, and a short
+  string is the same lie as an empty list.
+- **The column names the repository actually selects.** Read the method,
+  do not guess from the screen. A wrong key is a null, a null is either
+  a silent blank or a cast that throws, and neither tells you anything
+  about the dialog.
+- **Figures with digits in them.** Two five-figure totals are wider than
+  two zeros, and the width is the thing under test.
+
+One caveat, stated because it would otherwise be over-claimed: the test
+font draws every glyph at a full em, so text in a widget test is wider
+than the same text in Roboto. The credit-ledger totals line fits on a
+real phone *today*; it would not with two five-figure totals and a large
+system font scale. Treat an overflow found this way as a latent
+fragility to make unbreakable — `Flexible` costs nothing — rather than
+as a bug already in front of a customer.
 
 ## Before you write the test, read the SQL it has to agree with
 
