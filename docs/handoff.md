@@ -211,6 +211,46 @@ This paragraph previously said the opposite, and a session acting on it
 told the user a migration had gone live when the run said nothing of the
 kind.
 
+## The image quota is not a backoff problem, it is an anonymity problem
+
+Run 2148's **"Deploy the edge functions" failed on attempt 1** and passed
+on attempt 2, which nobody in this session asked for — the re-run's actor
+is the account, and I did not trigger it. The branch is green; this is
+written down because the cause is still there and will bite the next push.
+
+    public.ecr.aws/supabase/edge-runtime:v1.74.3
+    Error response from daemon: toomanyrequests: Data limit exceeded
+
+**All four retries failed — 60s, 120s, 240s apart — and then a fresh
+runner succeeded within a minute.** That is the whole diagnosis: the cap
+is bound to the RUNNER, not to the clock, so no backoff on the same
+machine can ever clear it. `retry.sh`'s widening delays are the right
+shape for `ghcr.io`'s per-minute request limit and the wrong shape for
+this one, and making them longer would burn more minutes to fail
+identically. The comment above the registry swap says "a backoff has to
+outlast the thing it is backing off from"; here there is nothing to
+outlast.
+
+**And it is the second registry to refuse the same pull.** `0097`–`2100`
+went red on `ghcr.io` refusing anonymous pulls, and the remedy chosen was
+to move to `public.ecr.aws`. Both failures have one cause — **the pull is
+ANONYMOUS** — and swapping buckets treats the symptom. There is a third
+bucket and it will run out too.
+
+The fix that addresses the cause, NOT YET DONE and deliberately not
+guessed at: authenticate the docker pull. `GITHUB_TOKEN` exists in every
+run, and `docker login ghcr.io -u $GITHUB_ACTOR --password-stdin` lifts
+ghcr's anonymous limit without a new secret.
+
+Read the existing comment before trying it, because it forecloses the
+wrong version of this: passing the per-run token to `supabase/setup-cli`
+was tried and did not help. **That is a different thing** — it was about
+the action's GitHub *API* lookup for a release, not about a *docker*
+pull, and nothing has yet authenticated the pull itself. Whoever does it
+should keep `public.ecr.aws` reachable as the fallback rather than
+replacing it, since a change at this spot has already cost four red runs
+once by being confident.
+
 ## Every screen and every dialog is built by a test
 
 Asked for as **"Also build all screens"**. Read as the two gates' own
