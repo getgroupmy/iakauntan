@@ -331,10 +331,85 @@ jobs:
       # repository to match the runner: that file came from a developer
       # machine running `updateDaemonJvm`, and changing it here would
       # move the disagreement rather than remove it.
+      # Tried twice, because this step has now failed twice on things
+      # that have nothing to do with this repository: once with `read
+      # ECONNRESET`, and once with
+      #
+      #     Error: API rate limit exceeded for 20.55.222.80.
+      #
+      # `jetbrains` is not one of the JDKs baked into the runner image,
+      # so unlike `temurin` it is RESOLVED OVER THE NETWORK every run —
+      # from the GitHub API, from a shared runner IP whose rate limit
+      # is spent by whoever else is on it. Nothing in the repository
+      # can make that quota bigger; the only cheap defence is to not
+      # lose a whole run to one 403.
+      #
+      # `continue-on-error` on the first attempts and conditional
+      # retries, rather than a retry action: one fewer third party in
+      # the supply chain, for a step whose whole job is to fetch a JDK.
+      # `scripts/ci/retry.sh` cannot help here — it wraps a shell
+      # command, and this is an action.
+      #
+      # THE WAITS ARE THE POINT, and their absence is why the defence
+      # above did nothing on run 2084. Both attempts ran, both failed,
+      # and the timestamps say why:
+      #
+      #     12:31:41.0586  API rate limit exceeded for 20.112.122.53
+      #     12:31:41.2999  API rate limit exceeded for 20.112.122.53
+      #
+      # 241 milliseconds apart. A spent quota does not refill in a
+      # quarter of a second, so the second attempt was not a retry --
+      # it was the same request again, and it could only ever fail.
+      # `ECONNRESET`, the other thing this has caught, is the failure
+      # an immediate retry DOES fix, and writing the defence against
+      # that one is how it came to have no wait in it.
+      #
+      # So: minutes, not milliseconds. GitHub's unauthenticated limit
+      # is per IP and resets on the hour, and this runner shares its IP
+      # with whoever else is on it -- so the wait is a bet that the
+      # window rolls over or the neighbour finishes, and three minutes
+      # is a bet worth making inside a 40-minute job. The token IS
+      # passed and the quota is still the anonymous one: the error
+      # names an IP address rather than an account, which is GitHub's
+      # unauthenticated answer, so `setup-java` is not putting it on
+      # this request.
+      #
+      # The distribution itself is not negotiable; see above.
       - uses: actions/setup-java@v4
+        id: java
+        continue-on-error: true
         with:
           distribution: jetbrains
           java-version: '21'
+          token: ${{ github.token }}
+
+      - name: Wait, rather than ask again in the same second
+        if: steps.java.outcome == 'failure'
+        run: sleep 60
+
+      - uses: actions/setup-java@v4
+        id: java2
+        if: steps.java.outcome == 'failure'
+        continue-on-error: true
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
+
+      - name: Wait longer
+        if: steps.java.outcome == 'failure' && steps.java2.outcome == 'failure'
+        run: sleep 180
+
+      # The last one, and NOT `continue-on-error`: if the JDK is not
+      # here after three tries over four minutes, the Android build
+      # cannot run and the job should say so rather than fail later
+      # with a Gradle message about toolchain provisioning.
+      - uses: actions/setup-java@v4
+        if: steps.java.outcome == 'failure' && steps.java2.outcome == 'failure'
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
 
       # The Gradle wrapper's PROPERTIES are committed and the `gradlew`
       # script is not, which is deliberate and worth stating because it
@@ -397,8 +472,28 @@ jobs:
       # Kit, `flutter_webrtc` brings its own native libraries -- any of
       # them can demand a higher minSdk than this app declares, and the
       # manifest merger is the only thing that says so.
+      # RELEASE, not debug, and the two minutes it costs bought
+      # themselves the first time it ran.
+      #
+      # A debug build does not run R8. So everything R8 decides —
+      # shrinking, and in particular whether every class the code
+      # REFERENCES actually exists — was unchecked here, and the first
+      # thing that ever exercised it was the first attempt to publish
+      # to Play. It failed at `:app:minifyReleaseWithR8` on four ML Kit
+      # script recognizers the text-recognition plugin names and this
+      # app does not depend on.
+      #
+      # That is a whole class of failure that a debug build cannot
+      # reach by construction, on the job whose entire purpose is to
+      # answer "does the Android app build". It answers that properly
+      # now.
+      #
+      # No signing config is needed: with no key.properties the release
+      # build falls back to the debug key, loudly, and this job only
+      # asks whether it BUILDS. `android-release.yml` is what checks
+      # the signer, and it refuses a debug-signed bundle.
       - name: Build
-        run: flutter build apk --debug
+        run: flutter build apk --release
 
   database:
     name: Statutory engine and ledger rules
@@ -427,6 +522,73 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.114.0
+
+      # AND PULL THE IMAGES FROM SOMEWHERE THAT IS NOT REFUSING.
+      #
+      # `supabase/setup-cli` exports `SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io`
+      # itself -- it is not set anywhere in this file -- and ghcr.io has
+      # spent this afternoon answering every anonymous pull with
+      #
+      #     toomanyrequests: retry-after: 937.64µs, allowed: 44000/minute
+      #
+      # An Actions runner shares its address with every other runner on
+      # the host, so that budget is not ours to stay inside. Run 2100
+      # proved the backoff was not the problem: four attempts, a minute
+      # and then two and then four apart, all four refused.
+      #
+      # `public.ecr.aws` is a different bucket and Supabase mirrors the
+      # whole stack there. CHECKED, not assumed -- postgres, gotrue,
+      # realtime, postgrest, storage-api, postgres-meta, supavisor,
+      # kong, logflare and studio all answer, and the three exact tags
+      # this run asked ghcr for (postgres-meta:v0.97.0,
+      # storage-api:v1.69.0, edge-runtime:v1.74.3) return a manifest.
+      #
+      # Written to `$GITHUB_ENV` AFTER the action rather than declared
+      # as a job `env:`, because the action exports the same name and
+      # the last writer before the step wins. A job-level `env:` would
+      # be a change that reads correct and does nothing.
+      - name: Pull the images from a registry that is not refusing
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
+
+      # AND STOP BEING ANONYMOUS, which is what both refusals were.
+      #
+      # `public.ecr.aws` then answered run 2148 with `toomanyrequests:
+      # Data limit exceeded` -- a second bucket, same shape, and the
+      # third would go the same way. An authenticated pull is quota'd to
+      # the ACCOUNT rather than to the runner's shared address, and the
+      # `GITHUB_TOKEN` every run already carries is enough for it. No new
+      # secret.
+      #
+      # Not the token note above: that one is `supabase/setup-cli` asking
+      # the GitHub API which release is newest, which it does not read the
+      # token for. This is the DOCKER pull, which nothing had ever
+      # authenticated.
+      #
+      # `|| true` in effect, and the primary stays at the fallback when
+      # login fails: a run must not go red because a login did, and
+      # anonymous `public.ecr.aws` is exactly what this job does today.
+      - name: Pull the images as somebody rather than as anybody
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if printf '%s' "$GH_TOKEN" \
+               | docker login ghcr.io -u "$ACTOR" --password-stdin
+          then
+            echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+            # And the job's own default, so a command NOT wrapped in
+            # `with_image_registry.sh` asks the same registry. Run 2150
+            # showed what happens otherwise: `db dump --local` (unwrapped,
+            # so public.ecr.aws) and `db dump --linked` (wrapped, so
+            # ghcr.io) pulled the SAME postgres bits twice under two
+            # names, 14 seconds apiece. One registry per job, or the cache
+            # never hits.
+            echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
+            echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE_REGISTRY_FALLBACK=public.ecr.aws" >> "$GITHUB_ENV"
 
       # The list below is hand-kept, and a hand-kept list of tests goes
       # stale in the one direction that is invisible: a file added to
@@ -484,7 +646,37 @@ jobs:
       # space, and a space inside a comma-separated argument makes the
       # tail of the list a second argument. That was this change's own
       # first draft.
-      - run: supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector
+      #
+      # WRAPPED IN `retry.sh`, WITH A MINUTE BETWEEN ATTEMPTS. Run 2098
+      # died here, on the pull rather than on the ports:
+      #
+      #     error pulling image configuration: download failed after
+      #     attempts=1: toomanyrequests: retry-after: 301.539µs
+      #     failed to pull docker image from all registries:
+      #     ghcr.io/supabase/postgres-meta:v0.97.0
+      #
+      # Read the retry-after: THREE HUNDRED MICROSECONDS. The CLI took
+      # it at face value and spent all three of its attempts inside a
+      # millisecond, against a quota counted per minute. Same shape as
+      # run 2097 on the edge deploy and run 2084 on the Android JDK,
+      # which is three in one month: a backoff has to outlast the thing
+      # it is backing off from, and none of these three did.
+      #
+      # `stop` on the way out of a FAILED attempt, not before the next
+      # one. That is the port race this job already knows about --
+      # Docker does not release a host port the instant the container
+      # goes -- and stopping at the point of failure puts the whole
+      # backoff between the release and the next bind, instead of no
+      # time at all.
+      - name: Start the throwaway local stack
+        run: |
+          # Two registries at two attempts, not one at four: a quota
+          # refusal is immediate and identical however long you wait, so
+          # the back half of a four-deep backoff against one bucket buys
+          # nothing. `with_image_registry.sh` sets out the argument and
+          # asserts that its worst case is this line's old behaviour.
+          RETRY_ATTEMPTS=2 RETRY_DELAY=60 scripts/ci/with_image_registry.sh \
+            scripts/ci/retry.sh bash -c 'supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector || { supabase stop --no-backup || true; exit 1; }'
       - name: Run the database assertions
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
@@ -658,6 +850,20 @@ jobs:
                    supabase/tests/collections.sql \
                    supabase/tests/approvals.sql \
                    supabase/tests/year_end_close.sql \
+                   supabase/tests/feedback_attachments.sql supabase/tests/previous_fiscal_year.sql \
+                   supabase/tests/beta_testers.sql \
+                   supabase/tests/capital_allowances.sql \
+                   supabase/tests/tax_computation.sql \
+                   supabase/tests/tax_forms_b_and_p.sql \
+                   supabase/tests/tax_estimates.sql \
+                   supabase/tests/tax_estimate_cp500.sql \
+                   supabase/tests/tax_estimate_first_period.sql \
+                   supabase/tests/tax_estimate_revision_spread.sql \
+                   supabase/tests/tax_estimate_payments.sql \
+                   supabase/tests/tax_dashboard_tile.sql \
+                   supabase/tests/tax_stack_end_to_end.sql \
+                   supabase/tests/tax_filing_calendar.sql \
+                   supabase/tests/tax_filings_recorded.sql \
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/fs_mapping_is_total.sql \
@@ -740,6 +946,7 @@ jobs:
                    supabase/tests/email_receipt.sql \
                    supabase/tests/aging_shapes.sql \
                    supabase/tests/aged_balances.sql \
+                   supabase/tests/attachment_content_hash.sql \
                    supabase/tests/statement_of_account.sql \
                    supabase/tests/recurring_documents.sql \
                    supabase/tests/recurring_shapes.sql \
@@ -788,7 +995,36 @@ jobs:
                    supabase/tests/stock_value_returns_to_zero.sql \
                    supabase/tests/malaysian_clock.sql \
                    supabase/tests/ocr_credit.sql \
+                   supabase/tests/ocr_key_pool.sql \
+                   supabase/tests/ocr_default_reader.sql \
+                   supabase/tests/scan_log.sql \
+                   supabase/tests/scan_targets.sql \
+                   supabase/tests/smartscan_module.sql \
+                   supabase/tests/bank_statement_scan.sql \
+                   supabase/tests/credit_card_statement_import.sql \
+                   supabase/tests/statement_span_check.sql \
+                   supabase/tests/kept_files_in_the_inbox.sql \
+                   supabase/tests/scan_corrections.sql \
+                   supabase/tests/reader_failures.sql \
+                   supabase/tests/matter_trial_balance.sql \
+                   supabase/tests/unregistered_bank_accounts.sql \
+                   supabase/tests/matter_on_a_document.sql \
+                   supabase/tests/scan_inbox.sql \
+                   supabase/tests/reader_reads_pdf.sql \
+                   supabase/tests/ocr_rescan.sql \
+                   supabase/tests/local_rescue.sql \
+                   supabase/tests/scan_exchanges.sql \
+                   supabase/tests/scan_totals.sql \
+                   supabase/tests/document_rounding.sql \
+                   supabase/tests/entry_source.sql \
+                   supabase/tests/attachment_is_evidence.sql \
+                   supabase/tests/named_kinds.sql \
+                   supabase/tests/scan_target_fields.sql \
                    supabase/tests/scan_document_kinds.sql \
+                   supabase/tests/scan_surfaces.sql \
+                   supabase/tests/support_access.sql \
+                   supabase/tests/platform_org_access.sql \
+                   supabase/tests/platform_users.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
                    supabase/tests/claim_attachments.sql \
@@ -909,6 +1145,53 @@ jobs:
       - name: Check every repository method and provider is reached
         run: python3 scripts/check_unreachable.py
 
+      # And that every screen it navigates TO exists. `context.go`
+      # takes a string, so a typo compiles, analyses clean and passes
+      # every test -- and appears only as "No page at /banking" under
+      # somebody's finger, after the work that led there was done and
+      # paid for. Its own assertions run beside it: this sweep was
+      # wrong twice before it was committed, and a gate that is wrong
+      # is worse than no gate, because it is believed.
+      #
+      # No database needed: it reads the Dart.
+      - name: Check every navigation literal names a real route
+        run: |
+          python3 scripts/check_routes_test.py
+          python3 scripts/check_routes.py
+
+      # And that a private document is never handed to another
+      # application. Four screens used to mint a SIGNED URL and open it
+      # with `LaunchMode.externalApplication`, which puts a working link
+      # to somebody's bank statement into a different app's address bar
+      # and history for the life of the signature. Reading one goes
+      # through `showFileInApp`, which takes the bytes, so no URL is
+      # created and there is nothing to leak.
+      #
+      # No database needed: it reads the Dart.
+      - name: Check no screen mints a link to a private document
+        run: |
+          python3 scripts/check_files_open_in_app_test.py
+          python3 scripts/check_files_open_in_app.py
+
+      # And that a failure is shown as the sentence the sender wrote,
+      # not as the driver's envelope around it. Reported with a
+      # screenshot: the database refused to close a bank reconciliation
+      # that was out by RM 11,008.23, in a sentence written for exactly
+      # that moment, and the phone showed it wrapped in
+      # `PostgrestException(message: ..., code: 23514, details: Bad
+      # Request, hint: null)`. `runWithFeedback` and `AsyncView` are how
+      # every action and every screen in this app report a failure, and
+      # both did it, so this was every refusal the database has ever
+      # made.
+      #
+      # The self-test runs first and includes the real tree, because a
+      # scan that matched nothing after somebody renamed `errorText`
+      # would go on printing `ok`.
+      - name: Check a caught error is shown as its message
+        run: |
+          python3 scripts/check_error_text_test.py
+          python3 scripts/check_error_text.py
+
       # The same question of the SCHEMA, which on a project whose first
       # rule is that the database IS the application is the layer that
       # matters most. It found twenty columns nothing mentioned at all,
@@ -1025,6 +1308,23 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_undocumented_writes.py "$DB"
 
+      # `0690` added a second `transfer_between_matters` beside the one
+      # `0358` had carried for a year. Different signatures, so `create
+      # or replace` replaced nothing -- and because PostgREST calls by
+      # NAME and the newer one's last argument had a default, the five
+      # names the app sent fitted both. The matter screen's transfer
+      # stopped working in every client the moment it applied.
+      #
+      # `matter_transfer.sql` went on passing throughout, because it
+      # called POSITIONALLY and Postgres resolves that without
+      # complaint. A whole file of assertions, green, over a dead
+      # feature. `0696` removed the overload; this is what stops the
+      # next one.
+      - name: Check no two functions answer to one named call
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_ambiguous_overloads.py "$DB"
+
       # The seam `0618` came in through: a function whose caller cannot
       # reach it, which is invisible everywhere else. PostgREST answers
       # 42501, the edge function catches it with everything else, and
@@ -1113,6 +1413,9 @@ jobs:
       # while doing it, and are further from anybody noticing: a
       # MyInvois submission that stops working fails on a schedule
       # rather than in front of a user.
+      - name: Check nothing a person typed goes raw into an or() filter
+        run: python3 scripts/check_or_filters.py
+
       - name: Check the column names are columns
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
@@ -1166,6 +1469,26 @@ jobs:
       - name: Check no dialog action asks for a flex
         run: python3 scripts/check_dialog_actions.py
 
+      # The same grey rectangle from the other direction. `Fmt.dateTime`
+      # takes a `DateTime?`; a `timestamptz` arrives from PostgREST as a
+      # JSON string, and the rows are `Map<String, dynamic>` -- so the
+      # call compiles, the analyzer says nothing, and it throws during
+      # build. Reported as "why when key added it goes grey", and both
+      # instances sat behind `if (hasKey ...)`, which is why neither had
+      # ever been seen.
+      - name: Check no date formatter is handed a row value
+        run: python3 scripts/check_date_arguments.py
+
+      # And the third silent screen of the same week, with no rectangle
+      # to see at all. `currentOrgIdProvider` is the company SWITCHER's
+      # selection and is null until somebody switches company, which
+      # most people never do -- so thirteen call sites that read it as
+      # "the current company" were inert, and the Save button on the
+      # assistant sheet returned without calling anything or saying so.
+      # Reported as "Why can't save".
+      - name: Check nothing mistakes the switcher for the current company
+        run: python3 scripts/check_current_org.py
+
       # A setState whose arrow body assigns a Future returns that Future,
       # and Flutter asserts against exactly that -- so the widget throws
       # on every load and every refresh in any build with asserts on.
@@ -1206,6 +1529,57 @@ jobs:
       - name: Check no loading arm draws a spinner
         run: python3 scripts/check_loading_spinners.py
 
+      # And the other half of the same question. The gate above catches a
+      # spinner somebody wrote out; this one catches the spinner nobody
+      # wrote -- an AsyncView that passed neither `skeleton:` nor
+      # `loading:` and got the fallback circle by saying nothing. That is
+      # how all thirty-seven of the last batch arrived.
+      - name: Check every AsyncView has chosen bones or a circle
+        run: python3 scripts/check_async_skeletons.py
+
+      # A screen nothing ever constructs cannot be known to build. Five
+      # were written with a full set of tests underneath them, all of
+      # them on the models, and nothing put any of the five on screen.
+      - name: Check every screen is built by a test
+        run: python3 scripts/check_screens_built.py
+
+      # The other half of the app. A dialog body is not a `*Screen`, so
+      # the gate above never asked about it -- and there are 272 of
+      # them, 242 private. The way in is the public opener function,
+      # which is what this counts.
+      - name: Check every dialog and sheet is opened by a test
+        run: python3 scripts/check_dialogs_built.py
+
+      # A document somebody photographed and then thought about was
+      # deleted out from under them: backing out of the "what is this?"
+      # sheet called `deleteAttachmentById` on the capture, leaving a
+      # scan row with figures on it and no page they came off. The
+      # reading is already paid for and stays; the file must stay with
+      # it until somebody asks for it to go.
+      - name: Check a capture is kept until somebody asks for it to go
+        run: |
+          python3 scripts/check_capture_is_kept_test.py
+          python3 scripts/check_capture_is_kept.py
+
+      # And the fault that gate found the moment it was obeyed. A
+      # ListView expands along the axis it scrolls, so one inside a
+      # scroll view on that axis is offered infinity and asserts in
+      # performResize before it draws. It had shipped: the leads
+      # filter bar put a horizontal ListView inside `FilterBar`, which
+      # is a horizontal scroll view, so it threw on every build and
+      # had never once drawn.
+      - name: Check no expanding viewport is nested on the axis it scrolls
+        run: python3 scripts/check_nested_scrollables.py
+
+      # `Uri.base.origin` throws on every scheme but http and https,
+      # and on Android, iOS, macOS and Windows `Uri.base` is a file:
+      # URI -- so an unguarded call is a crash on a phone, not a wrong
+      # string. Four had shipped, one of them inside a `build`, which
+      # made the published-menus list a column of grey error boxes on
+      # the phone and perfect in a browser.
+      - name: Check no web-only API is called where a phone reaches it
+        run: python3 scripts/check_web_only_apis.py
+
       # The app icons, which nothing else looks at. The analyser does
       # not read an asset catalogue, no test renders one, and a build
       # succeeds with a wrong-sized image, half a rename, or a "dark"
@@ -1213,6 +1587,42 @@ jobs:
       # hears is a home screen.
       - name: Check the app icons are whole on both phones
         run: python3 scripts/check_app_icons.py
+
+      # A missing purpose string is not a refused permission on iOS, it
+      # is the app being terminated — so this is a crash on a phone
+      # after release, and never on a run that does not reach the
+      # screen.
+      - name: Check every permission the plugins need is explained
+        run: python3 scripts/check_ios_purpose_strings.py
+
+      # A secret used but not gated is a release that reports itself
+      # ready, builds, and fails at the step that needed it — which is
+      # the failure the readiness gate exists to prevent, and on the
+      # iOS side costs ten times an Ubuntu build to discover.
+      - name: Check the release workflows check for what they use
+        run: python3 scripts/check_release_secrets.py
+
+      # Two copies of each destination list: the workflow's `choice`
+      # options, and the allow-list the function checks against before
+      # it ever reaches GitHub. Drift either way is a button that fails
+      # with a 422 naming neither the input nor the value.
+      - name: Check the release destinations agree
+        run: python3 scripts/check_release_choices.py
+
+      # `-dontwarn` does not make a class exist. A script the Dart asks
+      # for AND the R8 rules suppress builds cleanly and throws
+      # NoClassDefFoundError on a device, in the one code path that
+      # reaches it — and never in debug, which does not run R8.
+      - name: Check no ML Kit script is asked for and suppressed
+        run: python3 scripts/check_mlkit_scripts.py
+
+      # Offered and not permitted is a save that fails; permitted and
+      # not offered is a feature nobody can reach. Both were true of
+      # `bank_accounts.account_type` at once.
+      - name: Check the account kinds offered are the ones taken
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_bank_account_types.py "$DB"
 
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
@@ -1227,9 +1637,15 @@ jobs:
       # file is what everyone reads. 0159 to 0173 were applied that way.
       #
       # Checked here rather than in a job of its own because this is the
-      # only place a stack built from the migrations already exists, and
-      # `supabase start` has already pulled the Postgres image the dump
-      # needs.
+      # only place a stack built from the migrations already exists.
+      #
+      # It used to add "and `supabase start` has already pulled the
+      # Postgres image the dump needs", which was NOT TRUE and went
+      # unchecked for as long as the sentence existed. `config.toml` sets
+      # `major_version = 15`; `db dump` runs the CLI's pinned
+      # `postgres:17.6.1.155` for a matching `pg_dump`. Different tags, so
+      # the dump pulls its own image every time -- 14 seconds of it,
+      # measured in run 2150.
       # -----------------------------------------------------------------
       - name: Is the hosted project level with this commit?
         id: level
@@ -1301,8 +1717,24 @@ jobs:
           # Timed separately, because when this is slow it matters which
           # half is slow: one is a container on this runner, the other is
           # the network.
-          time supabase db dump --local -f /tmp/schema-local.sql
-          time scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-hosted.sql
+          # THIS PULLS, and the comment above this section said it does
+          # not. Both were wrong, and run 2150 settled it: the dump spent
+          # 14 seconds downloading `supabase/postgres:17.6.1.155` after a
+          # `supabase start` that had already run.
+          #
+          # Because they are DIFFERENT TAGS. `config.toml` sets
+          # `major_version = 15`, so `start` brings up a postgres 15
+          # image, while `db dump` runs the CLI's own pinned `17.6.1.155`
+          # for a matching `pg_dump`. Nothing `start` pulls is ever the
+          # image the dump wants.
+          time scripts/ci/with_image_registry.sh \
+            supabase db dump --local -f /tmp/schema-local.sql
+          # This one pulls. `db dump --linked` still runs `pg_dump`
+          # inside a container of the matching version -- it is the
+          # reason this job sets the registry at all -- so it gets the
+          # second registry too.
+          time RETRY_ATTEMPTS=2 scripts/ci/with_image_registry.sh \
+            scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-hosted.sql
           wc -l /tmp/schema-local.sql /tmp/schema-hosted.sql
 
       # Red, deliberately. Softening this to a warning would mean a drift
@@ -1407,7 +1839,7 @@ jobs:
           missing=()
           while IFS= read -r f; do
             grep -qF "$f" .github/workflows/ci.yml || missing+=("$f")
-          done < <(find supabase/functions cloudflare -name '*_test.ts' -o -name '*_test.js' | sort)
+          done < <(find supabase/functions cloudflare scripts -name '*_test.ts' -o -name '*_test.js' | sort)
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::%s is not run by CI. Add it to the list in the edge job.\n' "${missing[@]}"
             exit 1
@@ -1454,8 +1886,8 @@ jobs:
       # Apple under this company's name. Everything it takes from a
       # browser is checked against a list, and these run rather than
       # only type-check for the same reason the two above do.
-      - run: deno check supabase/functions/ios-release/dispatch_test.ts
-      - run: deno test supabase/functions/ios-release/dispatch_test.ts
+      - run: deno check supabase/functions/_shared/release_test.ts
+      - run: deno test supabase/functions/_shared/release_test.ts
 
       # Which of an iPhone's two Apple tokens a given notification may
       # go to. `0658`.
@@ -1493,6 +1925,48 @@ jobs:
       # fetching cannot be tested here; the reading can, and is.
       - run: deno check supabase/functions/places/parse_test.ts
       - run: deno test supabase/functions/places/parse_test.ts
+
+      # Why a pool of reader keys had nothing to give. Three states that
+      # look identical from the scan's side -- no key, no scan -- and
+      # are three different things to do next: add a key, switch one on
+      # or wait for a window to roll. The message is the only thing
+      # anybody sees and it is seen at the moment scanning has stopped,
+      # so sending somebody to add a key when the keys are merely busy
+      # is an hour spent on the wrong thing at the worst time.
+      - run: deno check supabase/functions/ocr/pool_message_test.ts
+      - run: deno test supabase/functions/ocr/pool_message_test.ts
+
+      # `0681`. What the console configures becomes part of the schema
+      # every reader is sent, and three things go wrong quietly there:
+      # a target with no fields is a choice the model can make and
+      # never fill, a missing `null` in the enum turns "I cannot place
+      # this" into a guess, and a field with no description is a column
+      # name answered from the name alone.
+      - run: deno check supabase/functions/ocr/targets_test.ts
+      - run: deno test supabase/functions/ocr/targets_test.ts
+
+      # From a report: a scan came back "the reader refused the
+      # document: HTTP 503" -- a model at capacity, nothing to do with
+      # the document -- and was written off and refunded, because
+      # nothing in the scan path retried anything. An overloaded vendor
+      # and an unreadable file were handled identically.
+      #
+      # The line these draw is the whole of the fix: ask again about
+      # what will be different a second later, and nothing else. A 400
+      # is a malformed schema and a 401 is a dead key, and both will be
+      # just as true on a second call -- so retrying them spends a
+      # second to be told the same thing, and on a 429 it is one more
+      # request against the limit that is already the problem.
+      - run: deno check supabase/functions/ocr/retry_test.ts
+      - run: deno test supabase/functions/ocr/retry_test.ts
+      # `0701`. The dialect Gemini's `responseSchema` reads, which
+      # differs from JSON Schema in two silent ways.
+      - run: deno check supabase/functions/ocr/gemini_schema_test.ts
+      - run: deno test supabase/functions/ocr/gemini_schema_test.ts
+      - run: deno check supabase/functions/ocr/exchange_test.ts
+      - run: deno test supabase/functions/ocr/exchange_test.ts
+      - run: deno check supabase/functions/ocr/prompt_test.ts
+      - run: deno test supabase/functions/ocr/prompt_test.ts
 
       # Reading an e-mail well enough to file what was in it.
       #
@@ -1764,6 +2238,8 @@ jobs:
       # machines this gets worked on.
       - run: deno check supabase/functions/ask/wire_test.ts
       - run: deno test supabase/functions/ask/wire_test.ts
+      - run: deno check supabase/functions/platform-users/rules_test.ts
+      - run: deno test supabase/functions/platform-users/rules_test.ts
 
       # Reading SSM's register. The network and the database halves are
       # not testable here; `normalise` is, and it is the half that
@@ -1849,6 +2325,16 @@ jobs:
       # round trip and nothing else.
       - run: deno check cloudflare/workspace-proxy/route_test.ts
       - run: deno test cloudflare/workspace-proxy/route_test.ts
+
+      # The Play upload. Everything it decides before it touches the
+      # network: the track allow-list that ends up in a URL path, the
+      # release going out `completed` rather than `draft`, and the
+      # refusals — each of which names the thing to go and do, because
+      # Google's own messages name the wrong end of the problem.
+      # --allow-read because the test imports the shared Google
+      # service-account helper.
+      - run: deno check scripts/play_upload_test.ts
+      - run: deno test --allow-read scripts/play_upload_test.ts
 
       # The functions themselves, type-checked but not run. They cannot
       # be unit tested here — every one of them exists to call somebody
@@ -1956,6 +2442,13 @@ jobs:
       # mutant then ran against a compiler this repository no longer
       # uses, and the run reported the control killed along with
       # everything else. A harness that lies is worse than no harness.
+      # The image-registry fallback's own assertions. Its whole argument
+      # is that its worst case is what CI did before it, and a property
+      # nobody checks is a claim -- which is what the two previous
+      # changes at that spot were.
+      - name: The image-registry fallback's own assertions
+        run: bash scripts/ci/with_image_registry_test.sh
+
       - name: The mutation harness's own assertions
         run: python3 scripts/mutate_test.py
 
@@ -1967,6 +2460,27 @@ jobs:
 
       - name: The loading-spinner gate's own assertions
         run: python3 scripts/check_loading_spinners_test.py
+
+      - name: The AsyncView-skeleton gate's own assertions
+        run: python3 scripts/check_async_skeletons_test.py
+
+      - name: The screens-built gate's own assertions
+        run: python3 scripts/check_screens_built_test.py
+
+      - name: The dialogs-built gate's own assertions
+        run: python3 scripts/check_dialogs_built_test.py
+
+      - name: The switcher-selection gate's own assertions
+        run: python3 scripts/check_current_org_test.py
+
+      - name: The nested-scrollable gate's own assertions
+        run: python3 scripts/check_nested_scrollables_test.py
+
+      - name: The web-only-API gate's own assertions
+        run: python3 scripts/check_web_only_apis_test.py
+
+      - name: The or() gate's own assertions
+        run: python3 scripts/check_or_filters_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py
@@ -2175,6 +2689,56 @@ jobs:
         with:
           version: 2.114.0
 
+      # The registry swap the database job explains at length. Here for
+      # `db dump`, which brings up a Postgres container of its own, and
+      # for `functions deploy`, which pulls the edge runtime -- both
+      # were pulling from ghcr.io for the same reason and neither knew
+      # it.
+      - name: Pull the images from a registry that is not refusing
+        if: steps.creds.outputs.ready == 'true'
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
+
+      # AND STOP BEING ANONYMOUS, which is what both refusals were.
+      #
+      # `public.ecr.aws` then answered run 2148 with `toomanyrequests:
+      # Data limit exceeded` -- a second bucket, same shape, and the
+      # third would go the same way. An authenticated pull is quota'd to
+      # the ACCOUNT rather than to the runner's shared address, and the
+      # `GITHUB_TOKEN` every run already carries is enough for it. No new
+      # secret.
+      #
+      # Not the token note above: that one is `supabase/setup-cli` asking
+      # the GitHub API which release is newest, which it does not read the
+      # token for. This is the DOCKER pull, which nothing had ever
+      # authenticated.
+      #
+      # `|| true` in effect, and the primary stays at the fallback when
+      # login fails: a run must not go red because a login did, and
+      # anonymous `public.ecr.aws` is exactly what this job does today.
+      - name: Pull the images as somebody rather than as anybody
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if printf '%s' "$GH_TOKEN" \
+               | docker login ghcr.io -u "$ACTOR" --password-stdin
+          then
+            echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+            # And the job's own default, so a command NOT wrapped in
+            # `with_image_registry.sh` asks the same registry. Run 2150
+            # showed what happens otherwise: `db dump --local` (unwrapped,
+            # so public.ecr.aws) and `db dump --linked` (wrapped, so
+            # ghcr.io) pulled the SAME postgres bits twice under two
+            # names, 14 seconds apiece. One registry per job, or the cache
+            # never hits.
+            echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
+            echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE_REGISTRY_FALLBACK=public.ecr.aws" >> "$GITHUB_ENV"
+
       - name: Link
         if: steps.creds.outputs.ready == 'true'
         run: scripts/ci/retry.sh supabase link --project-ref "$SUPABASE_PROJECT_REF"
@@ -2238,7 +2802,11 @@ jobs:
         id: snapshot
         if: steps.creds.outputs.ready == 'true'
         continue-on-error: true
-        run: scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-before.sql
+        # Pulls a Postgres container for `pg_dump`, same as the drift
+        # job's, so it gets the second registry as well.
+        run: |
+          RETRY_ATTEMPTS=2 scripts/ci/with_image_registry.sh \
+            scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-before.sql
 
       - uses: actions/upload-artifact@v4
         if: steps.creds.outputs.ready == 'true' && steps.snapshot.outcome == 'success'
@@ -2440,6 +3008,56 @@ jobs:
         with:
           version: 2.114.0
 
+      # The registry swap the database job explains at length. Here for
+      # `db dump`, which brings up a Postgres container of its own, and
+      # for `functions deploy`, which pulls the edge runtime -- both
+      # were pulling from ghcr.io for the same reason and neither knew
+      # it.
+      - name: Pull the images from a registry that is not refusing
+        if: steps.creds.outputs.ready == 'true'
+        run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws" >> "$GITHUB_ENV"
+
+      # AND STOP BEING ANONYMOUS, which is what both refusals were.
+      #
+      # `public.ecr.aws` then answered run 2148 with `toomanyrequests:
+      # Data limit exceeded` -- a second bucket, same shape, and the
+      # third would go the same way. An authenticated pull is quota'd to
+      # the ACCOUNT rather than to the runner's shared address, and the
+      # `GITHUB_TOKEN` every run already carries is enough for it. No new
+      # secret.
+      #
+      # Not the token note above: that one is `supabase/setup-cli` asking
+      # the GitHub API which release is newest, which it does not read the
+      # token for. This is the DOCKER pull, which nothing had ever
+      # authenticated.
+      #
+      # `|| true` in effect, and the primary stays at the fallback when
+      # login fails: a run must not go red because a login did, and
+      # anonymous `public.ecr.aws` is exactly what this job does today.
+      - name: Pull the images as somebody rather than as anybody
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if printf '%s' "$GH_TOKEN" \
+               | docker login ghcr.io -u "$ACTOR" --password-stdin
+          then
+            echo "IMAGE_REGISTRY_PRIMARY=ghcr.io" >> "$GITHUB_ENV"
+            # And the job's own default, so a command NOT wrapped in
+            # `with_image_registry.sh` asks the same registry. Run 2150
+            # showed what happens otherwise: `db dump --local` (unwrapped,
+            # so public.ecr.aws) and `db dump --linked` (wrapped, so
+            # ghcr.io) pulled the SAME postgres bits twice under two
+            # names, 14 seconds apiece. One registry per job, or the cache
+            # never hits.
+            echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not log in to ghcr.io; pulls stay anonymous against public.ecr.aws."
+            echo "IMAGE_REGISTRY_PRIMARY=public.ecr.aws" >> "$GITHUB_ENV"
+          fi
+          echo "IMAGE_REGISTRY_FALLBACK=public.ecr.aws" >> "$GITHUB_ENV"
+
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
         run: |
@@ -2469,9 +3087,35 @@ jobs:
           # command line — the CLI takes it from supabase/config.toml,
           # which is where it should be read and reviewed.
           echo "### Edge functions" >> "$GITHUB_STEP_SUMMARY"
+          #
+          # Wrapped in `retry.sh`, and with a MINUTE between attempts
+          # rather than the default ten seconds. Run 2097 died here:
+          #
+          #     failed to pull ghcr.io/supabase/edge-runtime:v1.74.3:
+          #     toomanyrequests
+          #
+          # The CLI does retry that itself -- 4 seconds, then 8 -- and
+          # ghcr.io's anonymous pull quota is counted per minute, so
+          # three attempts inside twelve seconds are three attempts
+          # against the same exhausted window. It is the same shape as
+          # the Android JDK failure in run 2084, where the existing
+          # retry fired 241 milliseconds after the first attempt: a
+          # backoff has to outlast the thing it is backing off from.
+          #
+          # RUN 2148 THEN SHOWED THE LIMIT OF THAT. `public.ecr.aws`
+          # refused four times, 60, 120 and 240 seconds apart, and a
+          # fresh runner then succeeded within a minute: the cap is
+          # bound to the RUNNER, not to the clock, and there was no
+          # amount of waiting that would have helped. Hence a second
+          # registry and an authenticated pull instead of a longer wait.
+          #
+          # Safe to retry: deploying a function is an upload of a
+          # bundle, and the second one replaces whatever the first left.
           for name in "${names[@]}"; do
             echo "== $name"
-            supabase functions deploy "$name" \
+            RETRY_ATTEMPTS=2 RETRY_DELAY=60 \
+              scripts/ci/with_image_registry.sh scripts/ci/retry.sh \
+              supabase functions deploy "$name" \
               --project-ref "$SUPABASE_PROJECT_REF"
             echo "- \`$name\`" >> "$GITHUB_STEP_SUMMARY"
           done

@@ -15,6 +15,8 @@ import 'package:mediasfu_mediasoup_client/src/handlers/handler_interface.dart'
     show RTCIceCredentialType, RTCIceServer;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../core/error_text.dart';
+
 /// Where the media server is, and what this person may do there.
 ///
 /// Minted by the `call-token` edge function, which holds the SFU's
@@ -246,7 +248,7 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
       await socket.ready.timeout(_timeout);
       _frames = socket.stream.listen(
         _onFrame,
-        onError: (Object e) => _fail('Lost the call server: $e'),
+        onError: (Object e) => _fail('Lost the call server: ${errorText(e)}'),
         onDone: () => _hangUpFromTheOtherEnd(),
       );
 

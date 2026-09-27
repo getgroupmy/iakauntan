@@ -177,10 +177,22 @@ begin
        -- Reads. Somebody looking at an invoice when the shutter comes
        -- down goes on looking at it.
        'can_read_ledger', 'can_read_module', 'can_read_attachment',
-       -- `0460`'s bug-report path is deliberately open: maintenance is
-       -- when people file them, and the rest of this function already
-       -- routes through `can_write`.
-       'can_attach_to');
+       -- `0118`'s claim-receipt guard, which already routes through
+       -- `can_write` and is therefore shut by that.
+       'can_attach_to',
+       -- `0660`'s two, and this list is the mechanism for saying so
+       -- rather than a way around this assertion.
+       --
+       -- `can_see_feedback` is a READ, and belongs with the three
+       -- above for the same reason they do.
+       --
+       -- `can_attach_to_feedback` is a write and is open ON PURPOSE.
+       -- The bug-report path already is: `report_feedback` asks
+       -- `in_maintenance` nowhere, because maintenance is precisely
+       -- when people have something to report. A report that could be
+       -- filed but could not carry its screenshot would be half a
+       -- report at the one moment the screenshot matters most.
+       'can_see_feedback', 'can_attach_to_feedback');
 
   perform pg_temp.check_eq(
     'and no other write guard stays open with the shutter down',

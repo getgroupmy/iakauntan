@@ -10,8 +10,12 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../smartscan/scan_availability.dart';
+import '../smartscan/scan_blocked_dialog.dart';
 import 'doc_scanner.dart';
+import 'scan_progress.dart';
 import 'scan_runner.dart';
+import 'text_reader.dart';
 
 /// Whether there is plausibly a camera, which is the question
 /// `defaultTargetPlatform` actually answers: on the web it reports the
@@ -143,10 +147,26 @@ class StagedReceipt {
     required this.attachmentId,
     required this.placeholderId,
     required this.read,
+    this.alreadyHere,
   });
 
   final String attachmentId;
   final String placeholderId;
+
+  /// A file this organization had ALREADY FILED with these exact bytes.
+  ///
+  /// `0711`. Null when there is nothing to say — no match, or a match
+  /// that predates the hash and therefore cannot be recognised. Never
+  /// proof that a file is new.
+  ///
+  /// The upload happens anyway and this is carried out beside it, on
+  /// purpose. An `attachments` row is not only a file: it carries
+  /// `entity_table`, `entity_id` and `0708`'s evidence lock, so handing
+  /// a new document somebody else's attachment would re-file their
+  /// paper against a record they did not choose. Telling them costs a
+  /// duplicate object; reusing silently could cost them the audit
+  /// trail.
+  final Attachment? alreadyHere;
 
   /// Null when the capture was filed but the reading failed or was
   /// declined — the paper is still worth keeping.
@@ -163,70 +183,219 @@ Future<StagedReceipt?> captureAndRead(
   WidgetRef ref, {
   required CaptureSource source,
   required String table,
+
+  /// A file already in hand, instead of asking for one.
+  ///
+  /// The bank statement importer picks the file ITSELF, because it has
+  /// to look at the bytes before it knows whether this is a reader's
+  /// job at all: a CSV is parsed here for nothing and must never reach
+  /// a scan. Asking again would be a second file dialog over a file
+  /// somebody has already chosen.
+  ///
+  /// Everything after the pick is the same, and deliberately so -- the
+  /// PDF refusal that happens before the upload, the progress modal,
+  /// the attachment that is kept when the reading fails.
+  CapturedFile? picked,
+
+  /// The destination this capture is already known to have, as
+  /// `module.action`. Passed to the reader so it is not asked to guess
+  /// what a screen has already been told. See `narrowToTarget`.
+  String? target,
 }) async {
-  final file = switch (source) {
-    CaptureSource.scanner => await scanReceipt(),
-    CaptureSource.camera => await photographReceipt(),
-    CaptureSource.file => await pickReceipt(),
-  };
+  final file = picked ??
+      switch (source) {
+        CaptureSource.scanner => await scanReceipt(),
+        CaptureSource.camera => await photographReceipt(),
+        CaptureSource.file => await pickReceipt(),
+      };
   if (file == null || !context.mounted) return null;
+
+  // Before the upload, not after it. `2f012feb` moved the "scanning is
+  // switched off" refusal ahead of the camera; this is the same
+  // argument one step further in, for the refusal that needs the FILE
+  // to be answerable.
+  //
+  // A PDF handed to a chat-completions reader is refused by name in
+  // `supabase/functions/ocr/index.ts` — correctly — but that refusal
+  // arrives after an upload, after a charge and after the refund of
+  // it. Everything it turns on is known here: `reads_pdf` comes off
+  // `ocr_status` (`0697`) and the first four bytes of the file are in
+  // hand.
+  //
+  // Awaited rather than read off the cache, for the reason the read
+  // below is: nothing watches this provider on some of the screens
+  // that reach here, and `valueOrNull` would come back null — which
+  // this function reads as "nobody has said", and would let the PDF
+  // through to the refusal it exists to predict.
+  //
+  // And caught, because this await now happens BEFORE the upload. A
+  // status call that will not answer used to surface as "could not
+  // read it" over a file that had been kept; throwing here would lose
+  // the capture entirely over a question that is only ever an
+  // optimisation. Null is exactly what `pdfBlock` treats as "nobody
+  // has said", so it lets the scan go on to the edge function, which
+  // is the real gate.
+  OcrSettings? known;
+  try {
+    known = await ref.read(ocrStatusProvider.future);
+  } catch (_) {
+    known = null;
+  }
+  if (!context.mounted) return null;
+  final block = pdfBlock(
+    known,
+    isPdf: looksLikePdf(file.mimeType, file.bytes),
+    canAdmin: ref.read(canAdminProvider),
+    deviceReadsPdf: onDeviceReadsPdf,
+  );
+  if (block != null) {
+    await showScanBlocked(context, block);
+    return null;
+  }
 
   final repo = ref.read(repoProvider)!;
   final placeholder = newUuid();
   final messenger = ScaffoldMessenger.of(context);
 
-  String attachmentId;
-  try {
-    attachmentId = await repo.uploadAttachment(
-      table: table,
-      recordId: placeholder,
-      fileName: file.name,
-      bytes: file.bytes,
-      mimeType: file.mimeType,
-    );
-  } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Could not attach it: $e')));
+  // Both halves inside one modal. Asked for as "once a document is
+  // uploaded for scanning it should have a progress popup and block all
+  // activity till its 100% completed".
+  //
+  // Between the two there was NOTHING on screen. The upload and the
+  // read are one press and a wait of several seconds — longer when the
+  // chosen reader is having a bad afternoon and `0703`'s fallback gets
+  // a turn — and the whole of it looked like a button that had not
+  // worked. Which invites the second press, and the second press is a
+  // second upload and a second charge.
+  //
+  // Nothing is SAID from inside the modal. A snackbar raised under a
+  // barrier is a sentence nobody reads, so the outcome comes back as a
+  // value and every message happens below, once the dialog has gone.
+  final outcome = await whileScanning<_Capture>(
+    context,
+    action: (report) async {
+      // Has this exact file been here before? `0711`.
+      //
+      // Asked BEFORE the upload and inside the modal, because it is a
+      // round trip and the modal is already saying "uploading". It
+      // never blocks: a lookup that fails is a lookup that found
+      // nothing, and the capture carries on. The one thing worse than
+      // not noticing a duplicate is refusing a document over a query
+      // that went wrong.
+      Attachment? alreadyHere;
+      try {
+        alreadyHere = await repo.identicalFile(file.bytes);
+      } catch (_) {
+        alreadyHere = null;
+      }
+
+      final String attachmentId;
+      try {
+        attachmentId = await repo.uploadAttachment(
+          table: table,
+          recordId: placeholder,
+          fileName: file.name,
+          bytes: file.bytes,
+          mimeType: file.mimeType,
+        );
+      } catch (e) {
+        return (
+          attachmentId: null,
+          read: null,
+          error: e,
+          alreadyHere: alreadyHere,
+        );
+      }
+
+      report(ScanStage.reading);
+      try {
+        // Awaited, not read off the cache. On the expenses screen
+        // something watches this provider so it is warm; on the
+        // document list nothing does, and `valueOrNull` came back null
+        // there — which read as "not on the device" and sent a browser
+        // scan to the server, where the server correctly refused it.
+        final read = await readDocument(
+          ref,
+          // The same answer the PDF question above was asked of, rather
+          // than a second round trip that could disagree with it. Asked
+          // again only where that one did not come back, and inside
+          // this try, where a refusal reaches the snackbar over a file
+          // that is already attached.
+          ocr: known ?? await ref.read(ocrStatusProvider.future),
+          attachmentId: attachmentId,
+          mimeType: file.mimeType,
+          // Already on this device, so the on-device reader reads what
+          // is here rather than fetching back the copy just uploaded. A
+          // phone capture has a path; a browser capture has only bytes,
+          // and passing both means neither platform falls back to
+          // storage.
+          localPath: file.path,
+          localBytes: file.bytes,
+          onLocalFallback: () => report(ScanStage.readingHere),
+          target: target,
+        );
+        return (
+          attachmentId: attachmentId,
+          read: read,
+          error: null,
+          alreadyHere: alreadyHere,
+        );
+      } catch (e) {
+        return (
+          attachmentId: attachmentId,
+          read: null,
+          error: e,
+          alreadyHere: alreadyHere,
+        );
+      }
+    },
+  );
+
+  final attachmentId = outcome.attachmentId;
+  if (attachmentId == null) {
+    messenger.showSnackBar(
+        SnackBar(content: Text('Could not attach it: ${outcome.error}')));
     return null;
   }
 
-  try {
-    // Awaited, not read off the cache. On the expenses screen something
-    // watches this provider so it is warm; on the document list nothing
-    // does, and `valueOrNull` came back null there — which read as "not
-    // on the device" and sent a browser scan to the server, where the
-    // server correctly refused it.
-    final read = await readDocument(
-      ref,
-      ocr: await ref.read(ocrStatusProvider.future),
-      attachmentId: attachmentId,
-      mimeType: file.mimeType,
-      // Already on this device, so the on-device reader reads what is
-      // here rather than fetching back the copy just uploaded. A phone
-      // capture has a path; a browser capture has only bytes, and
-      // passing both means neither platform falls back to storage.
-      localPath: file.path,
-      localBytes: file.bytes,
-    );
-    ref.invalidate(ocrStatusProvider);
-    return StagedReceipt(
-      attachmentId: attachmentId,
-      placeholderId: placeholder,
-      read: read,
-    );
-  } catch (e) {
-    ref.invalidate(ocrStatusProvider);
+  // A scan row exists and the balance may have moved whichever way the
+  // reading went, so what is drawn off those has to be asked again. Not
+  // on the upload failure above, where nothing was read and nothing was
+  // spent.
+  ref.invalidate(ocrStatusProvider);
+
+  final failure = outcome.error;
+  if (failure != null) {
     messenger.showSnackBar(SnackBar(
-      content: Text(e is OcrException
-          ? '${e.message} The file is attached; type the figures in.'
-          : 'Could not read it: $e'),
+      content: Text(failure is OcrException
+          ? '${failure.message} The file is attached; type the figures in.'
+          : 'Could not read it: $failure'),
     ));
-    return StagedReceipt(
-      attachmentId: attachmentId,
-      placeholderId: placeholder,
-      read: null,
-    );
   }
+  return StagedReceipt(
+    attachmentId: attachmentId,
+    placeholderId: placeholder,
+    read: outcome.read,
+    alreadyHere: outcome.alreadyHere,
+  );
 }
+
+/// What one capture came to, carried out of the modal rather than acted
+/// on inside it.
+///
+/// A null [attachmentId] is an upload that failed, which is the one
+/// outcome with no file to keep. An error WITH an id is a file that is
+/// attached and was not read — still handed back, because the paper is
+/// worth keeping whatever the reader made of it.
+typedef _Capture = ({
+  String? attachmentId,
+  OcrExtraction? read,
+  Object? error,
+
+  /// A file this organization had already filed with these exact bytes,
+  /// found before the upload. `0711`.
+  Attachment? alreadyHere,
+});
 
 /// A version 4 UUID, for parking an attachment against a record that
 /// does not exist yet. `entity_id` is a uuid column, so this cannot be
@@ -241,4 +410,120 @@ String newUuid() {
       .map((v) => v.toRadixString(16).padLeft(2, '0'))
       .join();
   return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
+}
+
+/// A file put somewhere safe, and nothing else done to it.
+///
+/// `0714`. The other half of what `StagedReceipt` describes: that one
+/// is a document that was read, this one is a document that was not.
+class KeptFile {
+  const KeptFile({
+    required this.attachmentId,
+    required this.fileName,
+    this.alreadyHere,
+  });
+
+  final String attachmentId;
+  final String fileName;
+
+  /// A file this organization had ALREADY filed with these exact bytes.
+  /// `0711`, and null when there is nothing to say — no match, or a
+  /// match that predates the hash and therefore cannot be recognised.
+  final Attachment? alreadyHere;
+}
+
+/// Upload a document and keep it. Do not read it.
+///
+/// ## The door that did not exist
+///
+/// Every way into AI SmartScan ran `captureAndRead`, which uploads and
+/// then spends money on a model in the same breath. Somebody holding a
+/// month of statements could not simply put them somewhere safe and
+/// come back on Tuesday — the only offer was "read this now", at a
+/// price, one document at a time.
+///
+/// So: the upload, and none of the rest of it. No reader, no charge, no
+/// `ocr_scans` row, and no `pdfBlock` — that refusal exists to predict
+/// a reader that cannot open a PDF, and there is no reader here.
+///
+/// ## It is kept, and it is FINDABLE
+///
+/// `keepForLater: true` sets `attachments.kept_at`, which is what puts
+/// the file in `scan_inbox` beside the readings. Without it the bytes
+/// are in the bucket and the file appears nowhere in the product at
+/// all, which is not saving it for later; it is losing it with extra
+/// steps. `0714` is that column and that union.
+///
+/// Returns null if nothing was picked. Throws nothing the caller has to
+/// catch except a failed upload, which is the one failure worth saying
+/// out loud — the file did not arrive.
+Future<KeptFile?> keepFileForLater(
+  BuildContext context,
+  WidgetRef ref, {
+  /// Which table the file is parked against until it belongs to
+  /// something. Passed in rather than decided here, exactly as
+  /// `captureAndRead` takes it.
+  required String table,
+
+  /// A file already in hand — dropped onto the window rather than
+  /// chosen from a dialog. Asking again would be a file dialog over a
+  /// file somebody has already handed over.
+  CapturedFile? picked,
+}) async {
+  final file = picked ?? await pickReceipt();
+  if (file == null || !context.mounted) return null;
+
+  final repo = ref.read(repoProvider)!;
+  final placeholder = newUuid();
+
+  // The same modal the scan uses, and it stops at `attaching` because
+  // that is all there is. Its words already fit: "Keeping a copy before
+  // anything else happens to it" is precisely the promise.
+  return whileScanning<KeptFile>(
+    context,
+    action: (report) async {
+      // Has this exact file been here before? `0711`. Never blocks: a
+      // lookup that fails is a lookup that found nothing, and the file
+      // is uploaded either way.
+      Attachment? alreadyHere;
+      try {
+        alreadyHere = await repo.identicalFile(file.bytes);
+      } catch (_) {
+        alreadyHere = null;
+      }
+
+      // `keepAttachment`, not `uploadAttachment(keepForLater: true)`.
+      // There is no flag here to get wrong, and getting it wrong would
+      // be silent: the file would upload, the button would say it was
+      // kept, and it would appear in no list at all.
+      final id = await repo.keepAttachment(
+        table: table,
+        recordId: placeholder,
+        fileName: file.name,
+        bytes: file.bytes,
+        mimeType: file.mimeType,
+      );
+
+      return KeptFile(
+        attachmentId: id,
+        fileName: file.name,
+        alreadyHere: alreadyHere,
+      );
+    },
+  );
+}
+
+/// What to say once a file has been kept.
+///
+/// Pure so it can be asserted, and one sentence rather than two: the
+/// thing a person needs to know is that it is safe AND that nothing was
+/// read, because "uploaded" on a screen called AI SmartScan reads as
+/// "scanned" unless it is contradicted.
+String keptFileMessage(KeptFile kept) {
+  final already = kept.alreadyHere;
+  final base = '${kept.fileName} is kept. It has not been read — open it '
+      'from the list when you want that.';
+  if (already == null) return base;
+  return '$base This organization had already filed a file with exactly '
+      'these contents, as ${already.fileName}.';
 }

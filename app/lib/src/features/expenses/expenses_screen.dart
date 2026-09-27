@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/skeletons.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart';
 import '../../core/providers.dart';
+import '../../core/picker_options.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -22,30 +24,30 @@ import 'expense_split.dart';
 import 'expense_voucher_pdf.dart';
 import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
-import '../shared/scan_intake.dart';
 import '../shared/scan_result_dialog.dart';
 import '../settings/tax_code_dialog.dart';
 
-/// Photograph a receipt, then finish what the paper could not say.
+/// Opens the expense form on a capture that has already been made and
+/// read. `0686`.
 ///
-/// The reading fills the description, the date, the reference and the
-/// amount. What is left is what no receipt carries: which expense
-/// account it belongs to, which tax code, and what it was paid from —
-/// so the form opens with those empty and everything else already in.
-Future<void> _scanExpense(BuildContext context, WidgetRef ref) async {
-  final staged = await showScanIntake(
-    context,
-    ref,
-    table: 'expenses',
-    title: 'Scan an expense',
-  );
-  if (staged == null || !context.mounted) return;
-
-  await showDialog<void>(
-    context: context,
-    builder: (_) => _ExpenseDialog(scanned: staged),
-  );
-}
+/// Public because the Bills screen needs it: a page photographed into
+/// Bills that turns out to have no supplier on it — a payment voucher,
+/// the company's own record of money going out — is an expense, and the
+/// person should not have to go and photograph it a second time
+/// somewhere else.
+///
+/// The capture is parked against whichever table it was scanned from,
+/// and that is fine: `refileAttachment` re-points the table as well as
+/// the record when the expense posts, so nothing is re-uploaded and
+/// nothing is left behind.
+Future<void> showExpenseFromScan(
+  BuildContext context,
+  StagedReceipt staged,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => _ExpenseDialog(scanned: staged),
+    );
 
 /// Money already spent, captured and posted in one step — there is no
 /// useful draft state for an expense that has already left the bank.
@@ -57,29 +59,33 @@ class ExpensesScreen extends ConsumerWidget {
     final expenses = ref.watch(expensesProvider);
     final canPost = ref.watch(canPostProvider);
 
+    // Two labelled buttons and a title do not fit a phone: this bar
+    // overflowed by 104 pixels at 412 wide, which Flutter reports as
+    // an error in debug and simply CLIPS in release. The same shape as
+    // the invoice editor's, and collapsed the same way — the primary
+    // action keeps its button with a shorter label and the secondary
+    // one goes into the overflow menu.
+    //
+    // 640 is the threshold `document_editor.dart` uses. One number,
+    // because two screens disagreeing about what "narrow" means is how
+    // one of them ends up wrong on a tablet.
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
-          // Scan first, and before the blank form, because that is the
-          // order the work happens in: somebody is holding a receipt and
-          // has not yet decided which account it belongs to.
-          if (canPost)
-            TextButton.icon(
-              onPressed: () => _scanExpense(context, ref),
-              icon: const Icon(Icons.document_scanner_outlined, size: 18),
-              label: const Text('Scan expense'),
-            ),
           if (canPost)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: FilledButton.icon(
+                key: const ValueKey('record-expense'),
                 onPressed: () => showDialog<void>(
                   context: context,
                   builder: (_) => const _ExpenseDialog(),
                 ),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Record expense'),
+                label: Text(narrow ? 'Record' : 'Record expense'),
               ),
             ),
         ],
@@ -155,6 +161,10 @@ class ExpensesScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 10),
                         StatusChip(e['status']?.toString() ?? 'draft',
+                            compact: true),
+                        // `0707`. An expense a reader filled in off a
+                        // receipt, beside the state it is in.
+                        EntrySourceChip(e['entry_source']?.toString(),
                             compact: true),
                       ]),
                       subtitle: Text(
@@ -240,6 +250,12 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   /// reporting error nobody reports.
   String? _projectCode;
   String? _departmentCode;
+
+  /// And which matter, on a law firm's books. `0692`, and the reason is
+  /// sharper than a reporting hole: a disbursement that never reaches
+  /// the file is a disbursement that never gets billed to the client,
+  /// so the firm pays the land office and absorbs it.
+  String? _matterId;
 
   String _paymentMode = '03';
   DateTime _date = DateTime.now();
@@ -429,6 +445,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
           taxAmount: _tax,
           projectCode: _projectCode,
           departmentCode: _departmentCode,
+          matterId: _matterId,
           reference: _reference.text.trim().isEmpty
               ? null
               : _reference.text.trim(),
@@ -489,6 +506,11 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
     final departments =
         ref.watch(departmentsProvider).valueOrNull ?? const [];
+    // Open matters only, for the reason `matter_closing.dart` exists: a
+    // file closed last year is not one anybody means to spend on today.
+    final matters =
+        ref.watch(mattersProvider((status: 'open', search: ''))).valueOrNull ??
+            const <Matter>[];
     // Suppliers, because that is what a payee is: the same list the
     // purchase side picks from, so a bill and the cash paid for it end
     // up against one contact rather than two spellings of one.
@@ -799,6 +821,26 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                     onChanged: (v) => setState(() => _departmentCode = v),
                   ),
                 ],
+                // Shown only once a matter exists, the same rule the two
+                // above follow. That is also what keeps it off every
+                // company that is not a law firm without anything having
+                // to ask whether the module is switched on.
+                if (matters.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SearchablePicker<String>(
+                    key: const ValueKey('expense-matter'),
+                    options: matterPickerOptions(matters),
+                    value: _matterId,
+                    allowEmpty: true,
+                    emptyLabel: 'No matter',
+                    label: 'Matter',
+                    helperText:
+                        'Which file this cost is on. Leave blank for the '
+                        "firm's own costs — rent, salaries, its own bank "
+                        'charges.',
+                    onChanged: (v) => setState(() => _matterId = v),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _reference,
@@ -1081,6 +1123,7 @@ class _ExpenseDetail extends ConsumerWidget {
       title: Row(children: [
         Expanded(child: Text(no)),
         StatusChip(expense['status']?.toString() ?? 'draft', compact: true),
+        EntrySourceChip(expense['entry_source']?.toString(), compact: true),
       ]),
       content: SizedBox(
         width: 620,
@@ -1182,7 +1225,7 @@ class _ExpenseDetail extends ConsumerWidget {
         );
       }
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(err))));
     }
   }
 }

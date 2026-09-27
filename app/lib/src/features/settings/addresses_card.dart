@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
@@ -247,7 +247,7 @@ class _DoorWordsState extends ConsumerState<_DoorWords> {
   }
 
   Future<void> _save() async {
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
     setState(() {
       _busy = true;
@@ -268,7 +268,7 @@ class _DoorWordsState extends ConsumerState<_DoorWords> {
       ref.invalidate(orgLoginPageProvider);
       if (mounted) setState(() => _saved = 'Saved.');
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -486,7 +486,7 @@ class _AskForState extends ConsumerState<_AskFor> {
   }
 
   Future<void> _send() async {
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
 
     final problem = checkName(
@@ -517,7 +517,7 @@ class _AskForState extends ConsumerState<_AskFor> {
       // The database's own sentence, which is the one worth showing:
       // it knows about names taken since this screen loaded.
       if (mounted) {
-        setState(() => _problem = e is PostgrestException ? e.message : '$e');
+        setState(() => _problem = errorText(e));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -691,7 +691,7 @@ class _HandOverState extends ConsumerState<_HandOver> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _problem = e is PostgrestException ? e.message : '$e';
+          _problem = errorText(e);
         });
       }
     }

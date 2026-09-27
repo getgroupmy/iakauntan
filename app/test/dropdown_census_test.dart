@@ -34,11 +34,22 @@ const dropdownCensus = <String, int>{
   // here anyway. The module and the company beside it are pickers:
   // both of those lists grow.
   'features/admin/promotions_admin.dart': 1,
-  // 0614. Where a kind of scanned document goes. The list is a `const`
-  // in `scan_kinds_repository.dart` -- six screens this app knows how
-  // to open -- so it cannot grow without somebody editing Dart, and a
-  // seventh would arrive beside a screen to open.
-  'features/admin/scan_kinds_admin.dart': 1,
+  // 0681. Two now, and neither grows the way a picker's list grows.
+  // Which MODULE a scanned paper goes into: the modules are a table
+  // `0018` seeded and a handful of migrations have added to -- eleven
+  // today, and a twelfth is a migration, not a row somebody types. And
+  // which ACTION within it, which is shorter still: one module's worth,
+  // three at the most, and it is not drawn at all when the module has
+  // only one. Both are read all the way through by whoever is choosing.
+  //
+  // `0614`'s free-text destination dropdown is GONE from this file --
+  // it named a screen and nothing more, and these two name the record,
+  // which is what lets the console list the fields it has.
+  //
+  // Same trigger for undoing either: the day somebody would type
+  // rather than read the list, it comes off here and a
+  // `SearchablePicker` goes in.
+  'features/admin/scan_kinds_admin.dart': 2,
   // Four since the paste path. The fourth is which amount column comes
   // first in a pasted contribution table — two options, and the whole
   // difference between them has to be readable at a glance, because
@@ -60,6 +71,26 @@ const dropdownCensus = <String, int>{
   // for "Sdn Bhd". If that list ever reaches the size where somebody
   // would, this entry comes off and a `SearchablePicker` goes in.
   'features/auth/sign_in_screen.dart': 1,
+  // Two on Form B, and both are fixed sets rather than growing ones.
+  //
+  // The KIND of other income is the Act's list -- employment, rent,
+  // interest, a share of a partnership -- eight of them, closed, and
+  // shown all at once so somebody can see there is no ninth.
+  //
+  // The RELIEF is `0025`'s catalogue, a dozen rows that move with a
+  // Budget and not with anything a user does. It also carries a
+  // "Something else" entry, because a Form B can claim reliefs PCB
+  // does not model -- so the list is fixed and the escape hatch is a
+  // text field rather than a search.
+  'features/financials/form_b_screen.dart': 2,
+  // The Schedule 3 class on a fixed asset. A statutory set of eight,
+  // fixed by the Act and moved by a Budget rather than by anybody
+  // using this app -- there is no "add a class" and there must not be,
+  // since a company that could invent a capital allowance class could
+  // invent a rate. It shows all eight at once with their rates beside
+  // them, which is exactly the comparison somebody choosing one is
+  // making, and there is nothing to search.
+  'features/assets/asset_editor.dart': 1,
   'features/banking/new_bank_account_dialog.dart': 1,
   'features/collections/log_attempt_sheet.dart': 2,
   'features/contacts/contact_editor.dart': 4,
@@ -135,22 +166,67 @@ const dropdownCensus = <String, int>{
   'features/secretarial/person_editor.dart': 2,
   'features/secretarial/resolution_sheet.dart': 1,
   'features/secretarial/share_event_sheet.dart': 1,
-  'features/settings/chart_of_accounts_card.dart': 2,
+  // Three now: the account's kind, where it sits, and -- added with
+  // `0665` -- how a tax computation treats it. The third is a fixed
+  // statutory set read from `tax_treatments`, moved by a Budget rather
+  // than by anybody using this app, and it is shown only on an expense
+  // or revenue account because it can mean nothing on the others.
+  // There is nothing to search: ten rows, each already a sentence.
+  'features/settings/chart_of_accounts_card.dart': 3,
   'features/settings/company_card.dart': 2,
   'features/settings/document_numbering_card.dart': 1,
   'features/settings/landing_settings.dart': 1,
   'features/settings/new_account_dialog.dart': 2,
-  // Two since 0615. The second is the e-Invoice VERSION — 1.0 or 1.1,
-  // which is LHDN's list and not ours, and a third member would arrive
-  // by gazette. The choice is between two things whose whole
-  // difference has to be readable at a glance, which is what a
-  // dropdown of two labelled options is for.
-  'features/settings/settings_screen.dart': 2,
+  // One since the scanning card moved to `smartscan_settings.dart`.
+  // The one left is the e-Invoice VERSION — 1.0 or 1.1, which is
+  // LHDN's list and not ours, and a third member would arrive by
+  // gazette. The choice is between two things whose whole difference
+  // has to be readable at a glance, which is what a dropdown of two
+  // labelled options is for.
+  'features/settings/settings_screen.dart': 1,
+  // The other half of that move: which READER this company sends its
+  // documents to. A fixed set off `ocr_providers`, five today, and it
+  // grows only when a platform operator adds one in the console — so
+  // it is a list somebody reads rather than searches, which is what a
+  // dropdown is for. It was on the census under `settings_screen`
+  // until the controls moved onto the AI SmartScan screen.
+  'features/smartscan/smartscan_settings.dart': 1,
   // `0655`. One: which subtype a sub-account is filed as. A FIXED set
   // -- the subtypes of its parent's type, at most eight, straight out
   // of `accountSubtypes` -- and it cannot grow, because a new subtype
   // is an enum value in a migration. The TYPE itself is not asked at
   // all: a sub-account is always the same kind as its parent.
+  // 0675. Which reader's key pool the console is looking at. Five
+  // rows today and it grows by one when a platform operator adds a
+  // reader -- which is a thing that happens a handful of times in the
+  // life of the product, not a list anybody would search. `Claude`,
+  // `ChatGPT`, `Grok`, `Gemini`, `Document AI`: somebody choosing
+  // between those is reading all five, which is what a dropdown is
+  // for. The same argument as the kinds of paper below, and the same
+  // trigger for undoing it: if this ever reaches the size where
+  // somebody would type rather than look, the entry comes off and a
+  // `SearchablePicker` goes in.
+  'features/admin/ocr_keys_admin.dart': 1,
+  // 0679. The same five readers again, asked a different question:
+  // which one a company that has chosen nothing is handed -- and, when
+  // that one is free, which one a failed scan is retried on. Only the
+  // usable ones are offered, so it is shorter than the pool picker
+  // above, never longer. Same trigger for undoing it: the day a
+  // platform operator would type rather than look, this comes off and
+  // a `SearchablePicker` goes in.
+  'features/admin/ocr_catalog_admin.dart': 1,
+  // `0720`. The ten access types, which are `app.member_role` and are
+  // not a list that grows: a new one is a migration that changes what
+  // `can_write`, `can_post`, `can_admin` and `can_read_ledger` admit,
+  // and whoever writes that migration has to come here anyway. Somebody
+  // choosing between Owner, Administrator, Accountant and Auditor is
+  // reading all ten, which is what a dropdown is for.
+  //
+  // The explanation of each role is a line UNDER the picker rather than
+  // part of the item: 'Auditor — reads everything, changes nothing'
+  // overflowed the 460-wide dialog by 49 pixels, which is the very thing
+  // the ellipsis test below is about.
+  'features/admin/organization_admin_dialogs.dart': 1,
   'features/settings/sub_account_dialog.dart': 1,
   'features/settings/tax_code_dialog.dart': 2,
   // The four kinds of entity SSM registers: Company, Business, Audit

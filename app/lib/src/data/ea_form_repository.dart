@@ -308,7 +308,7 @@ class EaFormsRepo {
 }
 
 final eaFormsRepoProvider = Provider<EaFormsRepo?>((ref) {
-  final org = ref.watch(currentOrgIdProvider);
+  final org = ref.watch(orgIdProvider);
   if (org == null) return null;
   return EaFormsRepo(ref.watch(supabaseProvider), org);
 });

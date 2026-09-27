@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
@@ -71,7 +72,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

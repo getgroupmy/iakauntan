@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/row_actions.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -147,27 +148,45 @@ class _BodyTile extends ConsumerWidget {
         ].join(' · '),
         style: TextStyle(color: overdue ? context.colors.danger : null),
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            Fmt.money((row['total_amount'] as num?)?.toDouble() ?? 0),
-            style: const TextStyle(fontWeight: FontWeight.w600),
+      // `RowActions`, so the figure keeps its room. A total plus a
+      // labelled "Mark sent" left about 98 pixels for the name of the
+      // contribution on a 360px phone, which is not enough for "EPF
+      // employee + employer" to read as anything.
+      //
+      // The tick stays a tick at every width: it is not an action, it
+      // is the answer to whether this one has gone, and burying it in
+      // a menu would hide the only thing most rows have to say.
+      trailing: RowActions(
+        menuKey: 'remittance-menu-${row['name']}',
+        leading: Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                Fmt.money((row['total_amount'] as num?)?.toDouble() ?? 0),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              if (paidOn != null) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 18,
+                  color: context.colors.success,
+                ),
+              ],
+            ],
           ),
-          const SizedBox(width: 8),
-          if (paidOn != null)
-            Icon(
-              Icons.check_circle_outline,
-              size: 18,
-              color: context.colors.success,
-            )
-          else if (canRun)
-            TextButton(
-              onPressed: () => showDialog<void>(
+        ),
+        actions: [
+          if (paidOn == null && canRun)
+            RowAction(
+              label: 'Mark sent',
+              actionKey: 'mark-sent-${row['name']}',
+              onTap: () => showDialog<void>(
                 context: context,
                 builder: (_) => _SendDialog(row: row),
               ),
-              child: const Text('Mark sent'),
             ),
         ],
       ),

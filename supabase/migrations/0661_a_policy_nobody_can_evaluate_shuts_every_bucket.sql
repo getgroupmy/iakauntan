@@ -1,0 +1,74 @@
+-- =====================================================================
+-- The two grants `0660` did not write
+--
+-- `0660` added a policy on `storage.objects` calling
+-- `app.can_see_feedback`, and never granted EXECUTE on it to
+-- `authenticated`. The result:
+--
+--     ERROR: permission denied for function can_see_feedback
+--     CONTEXT: select count(*) from storage.objects
+--              where bucket_id = 'mail'
+--
+-- Read that context line twice. The query is about the **mail**
+-- bucket. It has nothing to do with feedback, and it failed.
+--
+-- ---------------------------------------------------------------------
+-- Why one bucket's policy breaks all of them
+--
+-- RLS on `storage.objects` is per TABLE, not per bucket. Every policy
+-- on that table is evaluated for every row a client touches, and a
+-- policy whose `using` clause the client cannot even CALL does not
+-- evaluate to false — it raises. A raise is not a row that fails to
+-- match; it is the whole statement failing.
+--
+-- So an ungranted function in one bucket's policy shuts every bucket
+-- in the project: chat, logos, attachments, mail. For everybody.
+--
+-- This is `0405` again in a worse shape. There, one badly named object
+-- closed one bucket because a CAST raised. Here, one missing grant
+-- closes ALL of them, and it does so the moment the migration lands
+-- rather than waiting for a bad object to arrive.
+-- `supabase/tests/bucket_survives_a_bad_path.sql` — written for 0405 —
+-- is what caught it, on its `mail` assertion, which is exactly the
+-- collateral this note is about.
+--
+-- ---------------------------------------------------------------------
+-- The asymmetry that produced the mistake
+--
+-- These two schemas default in OPPOSITE directions on a hosted
+-- Supabase project, and `0659` had just taught me the other half:
+--
+--   * **`public`** — a new function is granted EXECUTE to `anon` and
+--     `authenticated` DIRECTLY, by the project's default privileges.
+--     So a `public` function must be REVOKED from, or it is reachable
+--     by anybody with the anon key. `0657` learned this by being
+--     refused in CI, and `0660`'s own `attach_feedback_file` and
+--     `feedback_files` revoke correctly for that reason.
+--   * **`app`** — nothing is granted. A function here is callable only
+--     by the owner and by SECURITY DEFINER functions running as it, so
+--     it must be GRANTED to or a client role cannot use it.
+--
+-- `0660` did the `public` half and forgot the `app` half, which is an
+-- easy mistake to make in exactly that order: having just written two
+-- `revoke` lines, the absence of a `grant` looks deliberate.
+--
+-- Every other `app` function used in a storage policy already has this
+-- grant — `app.is_chat_participant` (0135), `app.can_read_attachment`
+-- (0068), `app.uuid_or_null` (0291). They are the pattern; these two
+-- were the exception, and only by omission.
+--
+-- ---------------------------------------------------------------------
+-- Why these are safe to grant
+--
+-- Granting EXECUTE does not grant what the function decides. Both are
+-- SECURITY DEFINER predicates that answer a question about the CALLER
+-- — `auth.uid()` against a report's reporter, org and the platform
+-- admin list. A signed-in user being able to ASK "may I see report X"
+-- is the point; the answer is still no.
+-- =====================================================================
+
+revoke all on function app.can_see_feedback(uuid) from public, anon;
+grant execute on function app.can_see_feedback(uuid) to authenticated;
+
+revoke all on function app.can_attach_to_feedback(uuid) from public, anon;
+grant execute on function app.can_attach_to_feedback(uuid) to authenticated;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
@@ -148,7 +149,7 @@ class TimeTerminalsTab extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('$e')));
+      ).showSnackBar(SnackBar(content: Text(errorText(e))));
     }
   }
 }

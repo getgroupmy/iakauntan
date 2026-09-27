@@ -31,8 +31,18 @@ const List<String> chargeTypes = [
 /// missing it does not produce a late fee: an unregistered charge is
 /// **void against the liquidator**, so the security a bank thinks it
 /// holds is not there at the only moment it matters.
+///
+/// Calendar arithmetic, not `add(Duration(days: 30))`, and
+/// character-for-character what `CorpCharge.registrationDue` does --
+/// the same statutory date is worked out in both places, and this one
+/// used to do it the other way. `created_on` is a `date` column and
+/// arrives as local midnight; adding a fixed duration to a local
+/// `DateTime` in a daylight-saving zone lands at 23:00 or 01:00 on the
+/// wrong side of the boundary, so the sheet's sentence and the
+/// register's badge would name different days. Malaysia keeps no
+/// daylight saving, which is why nothing here had ever caught it.
 DateTime registrationDeadline(DateTime createdOn) =>
-    createdOn.add(const Duration(days: 30));
+    DateTime(createdOn.year, createdOn.month, createdOn.day + 30);
 
 /// Whether the thirty days have run out with nothing lodged.
 bool registrationOverdue(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/theme.dart';
 import 'tax_details.dart';
 
@@ -201,7 +202,7 @@ class TaxDetailsFormState extends State<TaxDetailsForm> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('$e')));
+      ).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) setState(() => _sending = false);
     }

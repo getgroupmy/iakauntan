@@ -268,14 +268,14 @@ final reservedNamesProvider = Provider<ReservedNames>(
 /// This company's subdomain, requested or granted, or null for neither.
 final orgSubdomainProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return null;
   return ref.watch(reservedNamesProvider).subdomainFor(orgId);
 });
 
 final orgMailboxesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return const [];
   return ref.watch(reservedNamesProvider).mailboxesFor(orgId);
 });
@@ -359,7 +359,7 @@ final workspaceHostProvider =
 /// Mail that arrived at this company's addresses, newest first.
 final inboxProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return const [];
   return Repo.rows(
     await ref
@@ -382,7 +382,7 @@ final inboxProvider =
 /// changes on one side only.
 final myMailboxesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return const [];
   return Repo.rows(
     await ref
@@ -431,7 +431,7 @@ typedef MailSearch = ({String? mailboxId, String query});
 /// somebody clears the field.
 final mailSearchProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, MailSearch>((ref, search) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null || search.query.trim().isEmpty) return const [];
   return Repo.rows(
     await ref.watch(supabaseProvider).rpc('search_mail', params: {
@@ -506,16 +506,19 @@ final inboundAttachmentsProvider = FutureProvider.autoDispose
   );
 });
 
-/// A link to one, good for an hour.
+/// The file itself, for showing it INSIDE the app.
 ///
-/// Signed rather than public, and short-lived, for the reason the chat
-/// bucket gives: the object is private and the policy that guards it
-/// asks whether you work there *now*.
-Future<String> inboundAttachmentUrl(
+/// This used to mint an hour-long signed link and hand it to the
+/// external browser, which left a working URL into somebody else's
+/// post sitting in another application's history. Downloaded through
+/// the same authenticated client instead, so the same policy answers
+/// the same question -- do you work there *now* -- and no URL exists
+/// to leak.
+Future<Uint8List> inboundAttachmentBytes(
   SupabaseClient client,
   String storagePath,
 ) =>
-    client.storage.from('mail').createSignedUrl(storagePath, 60 * 60);
+    client.storage.from('mail').download(storagePath);
 
 /// The words this company has written over its own door.
 ///
@@ -529,7 +532,7 @@ Future<String> inboundAttachmentUrl(
 /// it has written, and it is behind RLS.
 final orgLoginPageProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return null;
   final rows = Repo.rows(
     await ref

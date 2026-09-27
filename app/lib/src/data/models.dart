@@ -200,12 +200,17 @@ class Contact {
     this.customFields = const {},
     this.isActive = true,
     this.entityType = 'sdn_bhd',
+    this.entrySource,
   });
 
   final String id;
   final String code;
   final String name;
   final String contactType;
+
+  /// Where this contact came from. `0707`. Null is a person typed it;
+  /// `'ai_smartscan'` is a reader made it from a letterhead.
+  final String? entrySource;
   final String? legalName;
   final String? tin;
   final String? registrationNo;
@@ -288,6 +293,7 @@ class Contact {
     code: j['code']?.toString() ?? '',
     name: j['name'] as String,
     contactType: j['contact_type']?.toString() ?? 'customer',
+    entrySource: j['entry_source']?.toString(),
     legalName: j['legal_name'] as String?,
     tin: j['tin'] as String?,
     registrationNo: j['registration_no'] as String?,
@@ -327,6 +333,7 @@ class Contact {
     code: value,
     name: name,
     contactType: contactType,
+    entrySource: entrySource,
     legalName: legalName,
     tin: tin,
     registrationNo: registrationNo,
@@ -527,6 +534,8 @@ class FixedAsset {
     this.depreciatedTo,
     this.serialNo,
     this.location,
+    this.caClassCode,
+    this.caNotes,
     this.status = 'active',
     this.disposalDate,
     this.disposalProceeds,
@@ -560,6 +569,16 @@ class FixedAsset {
   final DateTime? depreciatedTo;
   final String? serialNo;
   final String? location;
+
+  /// The Schedule 3 class, or null for an asset that attracts no
+  /// capital allowance at all — land, goodwill. Null is a real answer
+  /// rather than a gap, and `0664` says so on the column.
+  final String? caClassCode;
+
+  /// Why it is in the class it is in — the reasoning a reviewer would
+  /// otherwise reconstruct from the cost and the label.
+  final String? caNotes;
+
   final String status;
   final DateTime? disposalDate;
   final double? disposalProceeds;
@@ -608,6 +627,8 @@ class FixedAsset {
     depreciatedTo: Fmt.parseDate(j['depreciated_to']),
     serialNo: j['serial_no'] as String?,
     location: j['location'] as String?,
+    caClassCode: j['ca_class_code'] as String?,
+    caNotes: j['ca_notes'] as String?,
     status: j['status']?.toString() ?? 'active',
     disposalDate: Fmt.parseDate(j['disposal_date']),
     disposalProceeds: j['disposal_proceeds'] == null
@@ -645,6 +666,8 @@ class FixedAsset {
     'rate_percent': method == 'reducing_balance' ? ratePercent : null,
     'serial_no': serialNo,
     'location': location,
+    'ca_class_code': caClassCode,
+    'ca_notes': caNotes,
     'notes': notes,
   };
 }
@@ -938,6 +961,7 @@ class Account {
     required this.name,
     required this.accountType,
     required this.accountSubtype,
+    this.taxTreatment,
     this.isGroup = false,
     this.currentBalance = 0,
     this.isActive = true,
@@ -948,6 +972,11 @@ class Account {
   final String name;
   final String accountType;
   final String accountSubtype;
+
+  /// How a tax computation treats it. Null means ordinary — an expense
+  /// is deductible, revenue is taxable — which is what almost every
+  /// account is. Not a to-do.
+  final String? taxTreatment;
   final bool isGroup;
   final double currentBalance;
   final bool isActive;
@@ -958,6 +987,7 @@ class Account {
     name: j['name']?.toString() ?? '',
     accountType: j['account_type']?.toString() ?? 'asset',
     accountSubtype: j['account_subtype']?.toString() ?? 'current_asset',
+    taxTreatment: j['tax_treatment'] as String?,
     isGroup: j['is_group'] == true,
     currentBalance: Fmt.toDouble(j['current_balance']),
     isActive: j['is_active'] != false,
@@ -1032,6 +1062,8 @@ class BusinessDocument {
     this.shippingAmount = 0,
     this.serviceChargeAmount = 0,
     this.roundingAmount = 0,
+    this.roundingMethod,
+    this.entrySource,
     this.totalAmount = 0,
     this.paidAmount = 0,
     this.balanceAmount = 0,
@@ -1045,6 +1077,7 @@ class BusinessDocument {
     this.termsConditions,
     this.paymentTermId,
     this.salespersonId,
+    this.matterId,
     this.lines = const [],
     this.customFields = const {},
   });
@@ -1086,6 +1119,23 @@ class BusinessDocument {
   /// and it posts to 4250 rather than to sales.
   final double serviceChargeAmount;
   final double roundingAmount;
+
+  /// How THIS document rounds, where it says so itself. `0706`.
+  ///
+  /// Null is the ordinary case and means the company's own setting
+  /// applies, which is what every document raised before `0706` has.
+  /// Set from a scanned paper's stated total: Bank Negara's mechanism
+  /// rounds CASH, and a supplier's invoice settled by transfer is paid
+  /// to the sen.
+  final String? roundingMethod;
+
+  /// Where this document's contents came from. `0707`.
+  ///
+  /// Null is a person typed it, which is nearly everything.
+  /// `'ai_smartscan'` is a model read it off a supplier's paperwork —
+  /// shown as "AI Scan" beside the status, because a figure nobody
+  /// keyed is the one worth looking at twice.
+  final String? entrySource;
   final double totalAmount;
   final double paidAmount;
   final double balanceAmount;
@@ -1115,6 +1165,14 @@ class BusinessDocument {
   /// businesses never attribute a sale to anyone, and the report says so
   /// out loud rather than quietly dropping what nobody was credited with.
   final String? salespersonId;
+
+  /// Which matter this document belongs to, on a law firm's books.
+  /// `sales_documents` has carried one since `0021` and
+  /// `bill_matter_time` sets it on every fee note raised from a
+  /// matter's time entries; `purchase_documents` has none, so this is
+  /// always null on the buying side. The LINE's is what reaches the
+  /// ledger, and `0691` falls back to this where the line has none.
+  final String? matterId;
   final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
@@ -1173,6 +1231,8 @@ class BusinessDocument {
       shippingAmount: Fmt.toDouble(j['shipping_amount']),
       serviceChargeAmount: Fmt.toDouble(j['service_charge_amount']),
       roundingAmount: Fmt.toDouble(j['rounding_amount']),
+      roundingMethod: j['rounding_method'] as String?,
+      entrySource: j['entry_source'] as String?,
       totalAmount: Fmt.toDouble(j['total_amount']),
       paidAmount: Fmt.toDouble(j['paid_amount']),
       balanceAmount: Fmt.toDouble(j['balance_amount']),
@@ -1186,6 +1246,7 @@ class BusinessDocument {
       termsConditions: j['terms_conditions'] as String?,
       paymentTermId: j['payment_term_id'] as String?,
       salespersonId: j['salesperson_id'] as String?,
+      matterId: j['matter_id'] as String?,
       lines:
           (rawLines ?? const [])
               .map((e) => DocumentLine.fromJson(e as Map<String, dynamic>))
@@ -1217,6 +1278,7 @@ class DocumentLine {
     this.sourceLineId,
     this.projectCode,
     this.departmentCode,
+    this.matterId,
     this.serviceStart,
     this.serviceEnd,
     this.customFields = const {},
@@ -1252,6 +1314,13 @@ class DocumentLine {
   /// by-dimension P&L reads, and it can only hold what the document line
   /// put there.
   final String? departmentCode;
+
+  /// Which matter this line was billed for or bought for, on a law
+  /// firm's books, or null for work that belongs to no file. Carried
+  /// for the same reason as the two above: `gl_lines.matter_id` is what
+  /// a matter's own trial balance reads, and it can only hold what the
+  /// document line put there. 0691.
+  final String? matterId;
 
   /// The period this line is earned over, or null for a line earned on
   /// the invoice date. 0309 defers a line that carries one: it credits
@@ -1292,6 +1361,7 @@ class DocumentLine {
     sourceLineId: j['source_line_id'] as String?,
     projectCode: j['project_code'] as String?,
     departmentCode: j['department_code'] as String?,
+    matterId: j['matter_id'] as String?,
     serviceStart: Fmt.parseDate(j['service_start']),
     serviceEnd: Fmt.parseDate(j['service_end']),
   );
@@ -2092,6 +2162,1176 @@ class PlatformOrg {
         .map((e) => e.toString())
         .toList(),
     createdAt: Fmt.parseDate(j['created_at']),
+  );
+}
+
+/// The Form C working for one basis period.
+///
+/// Every figure derived from the ledger, the Schedule 3 schedule and
+/// the rates — nothing here is stored. A computation opened a year
+/// later still agrees with the books it came from, which is the whole
+/// reason it is computed rather than typed.
+class TaxComputation {
+  TaxComputation({
+    required this.yearOfAssessment,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.profitBeforeTax,
+    required this.addBacks,
+    required this.deductions,
+    required this.balancingCharge,
+    required this.adjustedIncome,
+    required this.adjustedLoss,
+    required this.caCurrent,
+    required this.caBroughtForward,
+    required this.caUsed,
+    required this.caCarriedForward,
+    required this.statutoryIncome,
+    required this.lossBroughtForward,
+    required this.lossUsed,
+    required this.lossCarriedForward,
+    required this.chargeableIncome,
+    required this.isSme,
+    required this.smeKnown,
+    required this.taxCharged,
+    required this.zakatRebate,
+    required this.s110TaxDeducted,
+    required this.cp204Paid,
+    required this.taxPayable,
+  });
+
+  final int yearOfAssessment;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+
+  final double profitBeforeTax;
+  final double addBacks;
+  final double deductions;
+
+  /// Taxable, and reported on its own rather than folded into the
+  /// add-backs: it comes from a disposal rather than from an account,
+  /// and a reviewer looking for it looks for it by name.
+  final double balancingCharge;
+
+  final double adjustedIncome;
+
+  /// A loss is reported as a positive number under its own name. The
+  /// adjusted income is nothing in that case, not a negative, because
+  /// nothing downstream may be computed from a negative income.
+  final double adjustedLoss;
+
+  final double caCurrent;
+  final double caBroughtForward;
+  final double caUsed;
+
+  /// Unabsorbed capital allowance. NOT a loss: it carries forward under
+  /// its own rules and the two must never be added together.
+  final double caCarriedForward;
+
+  final double statutoryIncome;
+  final double lossBroughtForward;
+  final double lossUsed;
+  final double lossCarriedForward;
+  final double chargeableIncome;
+
+  /// Whether the preferential band applies.
+  final bool isSme;
+
+  /// Whether the test could be taken at all. False means the two
+  /// figures it needs have not both been given — and the computation
+  /// then charges the standard rate while SAYING it does not know,
+  /// rather than quietly assuming the company does not qualify.
+  final bool smeKnown;
+
+  final double taxCharged;
+  final double zakatRebate;
+  final double s110TaxDeducted;
+  final double cp204Paid;
+
+  /// Negative means refundable. Not clamped at zero: a refund is a real
+  /// answer and rounding it away hides money the company is owed.
+  final double taxPayable;
+
+  bool get isRefund => taxPayable < 0;
+  bool get hasLoss => adjustedLoss > 0;
+
+  factory TaxComputation.fromMap(Map<String, dynamic> j) => TaxComputation(
+    yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+    periodFrom: Fmt.parseDate(j['period_from']),
+    periodTo: Fmt.parseDate(j['period_to']),
+    profitBeforeTax: Fmt.toDouble(j['profit_before_tax']),
+    addBacks: Fmt.toDouble(j['add_backs']),
+    deductions: Fmt.toDouble(j['deductions']),
+    balancingCharge: Fmt.toDouble(j['balancing_charge']),
+    adjustedIncome: Fmt.toDouble(j['adjusted_income']),
+    adjustedLoss: Fmt.toDouble(j['adjusted_loss']),
+    caCurrent: Fmt.toDouble(j['ca_current']),
+    caBroughtForward: Fmt.toDouble(j['ca_brought_forward']),
+    caUsed: Fmt.toDouble(j['ca_used']),
+    caCarriedForward: Fmt.toDouble(j['ca_carried_forward']),
+    statutoryIncome: Fmt.toDouble(j['statutory_income']),
+    lossBroughtForward: Fmt.toDouble(j['loss_brought_forward']),
+    lossUsed: Fmt.toDouble(j['loss_used']),
+    lossCarriedForward: Fmt.toDouble(j['loss_carried_forward']),
+    chargeableIncome: Fmt.toDouble(j['chargeable_income']),
+    isSme: j['is_sme'] == true,
+    smeKnown: j['sme_known'] == true,
+    taxCharged: Fmt.toDouble(j['tax_charged']),
+    zakatRebate: Fmt.toDouble(j['zakat_rebate']),
+    s110TaxDeducted: Fmt.toDouble(j['s110_tax_deducted']),
+    cp204Paid: Fmt.toDouble(j['cp204_paid']),
+    taxPayable: Fmt.toDouble(j['tax_payable']),
+  );
+}
+
+/// One instalment of a CP204 estimate.
+class TaxInstalment {
+  TaxInstalment({
+    required this.number,
+    required this.dueOn,
+    required this.amount,
+    this.setByRevision = false,
+    this.paidOn,
+    this.paidAmount,
+    this.paidLate = false,
+    this.outstanding = 0,
+  });
+
+  final int number;
+  final DateTime? dueOn;
+  final double amount;
+
+  /// This instalment's amount was set by a revision rather than by the
+  /// original estimate. A revision does not re-open what has already
+  /// fallen due — it spreads the balance over what remains — so a
+  /// revised schedule has two kinds of row in it, and "this changed
+  /// after you started paying" is what somebody needs to see.
+  final bool setByRevision;
+
+  /// When it was paid, and what was actually sent — which LHDN
+  /// accepts whether or not it is the scheduled figure. Null means
+  /// nothing has been recorded, never that nothing was paid.
+  final DateTime? paidOn;
+  final double? paidAmount;
+
+  /// Paid AFTER the due date. Computed on the server, because it is
+  /// what s.107C(9) charges 10% on and a second opinion here could
+  /// disagree with the one the penalty is assessed on.
+  final bool paidLate;
+
+  /// Scheduled less paid, floored at nothing. An overpayment is not a
+  /// negative outstanding: LHDN keeps it against the assessment.
+  final double outstanding;
+
+  /// A remaining instalment a downward revision has reduced to
+  /// nothing. Not the same as an estimate of zero: the year owes less
+  /// than has already been billed, and the excess comes back at
+  /// assessment rather than through the schedule.
+  bool get isWaived => setByRevision && amount == 0;
+
+  /// Somebody has recorded a payment against it.
+  bool get isPaid => paidOn != null;
+
+  /// Paid, but not all of it. LHDN accepts a short payment and adds
+  /// the shortfall to what is owed, so this is a state worth showing
+  /// rather than rounding into "paid".
+  bool get isPartlyPaid => isPaid && outstanding > 0;
+
+  factory TaxInstalment.fromMap(Map<String, dynamic> j) => TaxInstalment(
+    number: Fmt.toInt(j['instalment_no']),
+    dueOn: Fmt.parseDate(j['due_on']),
+    amount: Fmt.toDouble(j['amount']),
+    setByRevision: j['set_by_revision'] == true,
+    paidOn: Fmt.parseDate(j['paid_on']),
+    paidAmount:
+        j['paid_amount'] == null ? null : Fmt.toDouble(j['paid_amount']),
+    paidLate: j['paid_late'] == true,
+    outstanding: Fmt.toDouble(j['outstanding']),
+  );
+}
+
+/// Where the instalment year stands.
+///
+/// [latePenalty] is what s.107C(9) comes to on the instalments already
+/// paid late — a charge separate from under-estimating, and one a
+/// taxpayer can incur in a year they estimated perfectly. It says what
+/// the charge amounts to, never that LHDN raised it.
+class TaxInstalmentSummary {
+  TaxInstalmentSummary({
+    required this.scheduledTotal,
+    required this.paidTotal,
+    required this.outstandingTotal,
+    required this.instalments,
+    required this.instalmentsPaid,
+    required this.overdueCount,
+    required this.overdueTotal,
+    required this.lateCount,
+    required this.latePenalty,
+    this.nextDueOn,
+    this.nextDueAmount,
+  });
+
+  final double scheduledTotal;
+  final double paidTotal;
+  final double outstandingTotal;
+
+  final int instalments;
+  final int instalmentsPaid;
+
+  /// Due, unpaid, and the date has gone. An instalment of nothing —
+  /// which a downward revision leaves behind — is never overdue,
+  /// because there was nothing to pay.
+  final int overdueCount;
+  final double overdueTotal;
+
+  final int lateCount;
+  final double latePenalty;
+
+  /// The next instalment with something to pay. Null once there is
+  /// nothing left worth sending, which is not the same as the year
+  /// being over.
+  final DateTime? nextDueOn;
+  final double? nextDueAmount;
+
+  bool get isBehind => overdueCount > 0;
+  bool get allPaid => instalments > 0 && instalmentsPaid >= instalments;
+
+  factory TaxInstalmentSummary.fromMap(Map<String, dynamic> j) =>
+      TaxInstalmentSummary(
+        scheduledTotal: Fmt.toDouble(j['scheduled_total']),
+        paidTotal: Fmt.toDouble(j['paid_total']),
+        outstandingTotal: Fmt.toDouble(j['outstanding_total']),
+        instalments: Fmt.toInt(j['instalments']),
+        instalmentsPaid: Fmt.toInt(j['instalments_paid']),
+        overdueCount: Fmt.toInt(j['overdue_count']),
+        overdueTotal: Fmt.toDouble(j['overdue_total']),
+        lateCount: Fmt.toInt(j['late_count']),
+        latePenalty: Fmt.toDouble(j['late_penalty']),
+        nextDueOn: Fmt.parseDate(j['next_due_on']),
+        nextDueAmount: j['next_due_amount'] == null
+            ? null
+            : Fmt.toDouble(j['next_due_amount']),
+      );
+}
+
+/// One income tax obligation, against one period, with its date.
+///
+/// Three things here are decisions rather than data, and each is the
+/// answer to a mistake `0668` was written to prevent:
+///
+///   * [dueDate] is the STATUTORY date. [efilingDueDate] is a
+///     concession LHDN republishes every year and has changed, so it
+///     is beside the deadline and never instead of it.
+///   * [periodFrom] and [periodTo] are not always the company's own
+///     financial year. Form E covers a calendar year whatever the year
+///     end is, and the server labels it accordingly.
+///   * [daysLeft] goes negative rather than stopping at zero. An
+///     obligation already missed is the one somebody most needs to
+///     see.
+class TaxFiling {
+  TaxFiling({
+    required this.filingType,
+    required this.name,
+    required this.formLabel,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.yearOfAssessment,
+    required this.dueDate,
+    required this.daysLeft,
+    required this.isOverdue,
+    required this.status,
+    this.statuteRef,
+    this.efilingDueDate,
+    this.description,
+    this.fiscalYearId,
+    this.computationId,
+    this.estimateId,
+    this.filingId,
+  });
+
+  final String filingType;
+  final String name;
+
+  /// What somebody looks for on LHDN's site: 'C', 'B', 'E', 'CP204'.
+  final String formLabel;
+  final String? statuteRef;
+
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+  final int yearOfAssessment;
+
+  final DateTime? dueDate;
+
+  /// Null where the Filing Programme grants nothing for this form —
+  /// which is not the same as granting nothing this year.
+  final DateTime? efilingDueDate;
+
+  final int daysLeft;
+  final bool isOverdue;
+  final String? description;
+
+  /// `not_started`, or `in_preparation` where somebody has begun it.
+  /// `filed` and `not_applicable` never appear here — `0669` takes
+  /// those off the list, which is the whole point of recording one.
+  final String status;
+  final String? filingId;
+
+  final String? fiscalYearId;
+
+  /// The working already opened for this period, where there is one.
+  /// A deadline with nothing behind it is a deadline nobody has
+  /// started.
+  final String? computationId;
+  final String? estimateId;
+
+  /// Close enough to interrupt somebody about. A month is the point
+  /// at which a Form C still has time to be prepared and a CP204 does
+  /// not — so it is a warning rather than a countdown.
+  bool get isImminent => !isOverdue && daysLeft <= 30;
+
+  /// Whether the work behind it has been started at all.
+  bool get hasWorking => computationId != null || estimateId != null;
+
+  /// Somebody has said they are on it. NOT that it is done: a Form C
+  /// in preparation is still on the list, and a screen that treated
+  /// the two the same would clear a deadline on the intention to meet
+  /// it.
+  bool get isStarted => status == 'in_preparation';
+
+  factory TaxFiling.fromMap(Map<String, dynamic> j) => TaxFiling(
+    filingType: j['filing_type']?.toString() ?? '',
+    name: j['filing_name']?.toString() ?? '',
+    formLabel: j['form_label']?.toString() ?? '',
+    statuteRef: j['statute_ref']?.toString(),
+    periodFrom: Fmt.parseDate(j['period_from']),
+    periodTo: Fmt.parseDate(j['period_to']),
+    yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+    dueDate: Fmt.parseDate(j['due_date']),
+    efilingDueDate: Fmt.parseDate(j['efiling_due_date']),
+    daysLeft: Fmt.toInt(j['days_left']),
+    isOverdue: j['is_overdue'] == true,
+    status: j['status']?.toString() ?? 'not_started',
+    description: j['description']?.toString(),
+    fiscalYearId: j['fiscal_year_id']?.toString(),
+    computationId: j['computation_id']?.toString(),
+    estimateId: j['estimate_id']?.toString(),
+    filingId: j['filing_id']?.toString(),
+  );
+}
+
+/// What somebody recorded against an obligation, after the fact.
+///
+/// The counterpart to [TaxFiling]: that is what is still owed, this is
+/// what was done about one. Nothing disappears when a deadline comes
+/// off the calendar — it moves here, including a dismissal and the
+/// reason given for it.
+class TaxFilingRecord {
+  TaxFilingRecord({
+    required this.id,
+    required this.filingType,
+    required this.name,
+    required this.formLabel,
+    required this.periodTo,
+    required this.yearOfAssessment,
+    required this.status,
+    required this.wasLate,
+    this.periodFrom,
+    this.dueDate,
+    this.filedOn,
+    this.reference,
+    this.notes,
+  });
+
+  final String id;
+  final String filingType;
+  final String name;
+  final String formLabel;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+  final int yearOfAssessment;
+
+  final DateTime? dueDate;
+  final String status;
+  final DateTime? filedOn;
+
+  /// LHDN's acknowledgement, which is the only thing that proves any
+  /// of this happened.
+  final String? reference;
+  final String? notes;
+
+  /// Recorded as filed after the date it was due. Computed on the
+  /// server rather than here, because the two dates sit in different
+  /// columns of the same row and whether one is after the other is
+  /// what a penalty is assessed on.
+  final bool wasLate;
+
+  /// Somebody said this obligation does not apply. It carries a reason
+  /// and stays readable, because a CP58 clicked away has to be
+  /// findable when LHDN asks about it.
+  bool get isDismissed => status == 'not_applicable';
+  bool get isFiled => status == 'filed';
+
+  factory TaxFilingRecord.fromMap(Map<String, dynamic> j) => TaxFilingRecord(
+    id: j['filing_id']?.toString() ?? '',
+    filingType: j['filing_type']?.toString() ?? '',
+    name: j['filing_name']?.toString() ?? '',
+    formLabel: j['form_label']?.toString() ?? '',
+    periodFrom: Fmt.parseDate(j['period_from']),
+    periodTo: Fmt.parseDate(j['period_to']),
+    yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+    dueDate: Fmt.parseDate(j['due_date']),
+    status: j['status']?.toString() ?? '',
+    filedOn: Fmt.parseDate(j['filed_on']),
+    reference: j['reference']?.toString(),
+    notes: j['notes']?.toString(),
+    wasLate: j['was_late'] == true,
+  );
+}
+
+/// How a first basis period differs, and whether anybody has said so.
+///
+/// Two answers that look like details and are each worth money: when
+/// the estimate is actually due, and whether a qualifying new SME owes
+/// instalments at all.
+///
+/// [exemptionKnown] is the one to read carefully. It is FALSE both
+/// when this is not a first period and when the two figures the test
+/// needs have not been typed — and in the second case the instalments
+/// are scheduled anyway. That is the safe direction: skipping
+/// instalments that were due is a penalty, paying ones that were not
+/// is recoverable. The screen says the test could not be taken rather
+/// than letting it look like the test was failed.
+class TaxFirstPeriod {
+  TaxFirstPeriod({
+    required this.isFirstPeriod,
+    required this.form,
+    required this.filingDueKnown,
+    required this.exemptInstalments,
+    required this.exemptionKnown,
+    this.commencedOn,
+    this.filingDue,
+    this.ordinaryFilingDue,
+    this.exemptUntilYa,
+    this.paidUpCapital,
+    this.grossBusinessIncome,
+    this.capitalLimit,
+    this.turnoverLimit,
+  });
+
+  final bool isFirstPeriod;
+  final String form;
+
+  /// When the business commenced operations — not the incorporation
+  /// date. A company incorporated in March may commence in September,
+  /// and the first CP204 is counted from the second.
+  final DateTime? commencedOn;
+
+  /// Three months from commencing. Null where nobody has said when
+  /// that was: a deadline computed from a date nobody supplied is a
+  /// deadline somebody will trust.
+  final DateTime? filingDue;
+
+  /// What it would have been under the ordinary rule. Shown beside
+  /// [filingDue] rather than instead of it, because for a company
+  /// incorporated partway through a year the ordinary one has usually
+  /// already passed — and seeing that is the point.
+  final DateTime? ordinaryFilingDue;
+  final bool filingDueKnown;
+
+  final bool exemptInstalments;
+  final bool exemptionKnown;
+
+  /// The last year of assessment the exemption covers.
+  final int? exemptUntilYa;
+
+  final double? paidUpCapital;
+  final double? grossBusinessIncome;
+  final double? capitalLimit;
+  final double? turnoverLimit;
+
+  /// A first period whose SME test nobody has been able to take. The
+  /// state worth asking about, as distinct from one that was taken and
+  /// failed.
+  bool get exemptionUntested => isFirstPeriod && !exemptionKnown;
+
+  /// The ordinary deadline has already gone by the time the real one
+  /// arrives — which is the ordinary case for a company incorporated
+  /// partway through a year, and the reason both dates are shown.
+  bool get ordinaryDateHasPassed =>
+      filingDue != null &&
+      ordinaryFilingDue != null &&
+      ordinaryFilingDue!.isBefore(filingDue!);
+
+  factory TaxFirstPeriod.fromMap(Map<String, dynamic> j) => TaxFirstPeriod(
+    isFirstPeriod: j['is_first_period'] == true,
+    form: j['form']?.toString() ?? 'CP204',
+    commencedOn: Fmt.parseDate(j['commenced_on']),
+    filingDue: Fmt.parseDate(j['filing_due']),
+    ordinaryFilingDue: Fmt.parseDate(j['ordinary_filing_due']),
+    filingDueKnown: j['filing_due_known'] == true,
+    exemptInstalments: j['exempt_instalments'] == true,
+    exemptionKnown: j['exemption_known'] == true,
+    exemptUntilYa:
+        j['exempt_until_ya'] == null ? null : Fmt.toInt(j['exempt_until_ya']),
+    paidUpCapital: j['paid_up_capital'] == null
+        ? null
+        : Fmt.toDouble(j['paid_up_capital']),
+    grossBusinessIncome: j['gross_business_income'] == null
+        ? null
+        : Fmt.toDouble(j['gross_business_income']),
+    capitalLimit:
+        j['capital_limit'] == null ? null : Fmt.toDouble(j['capital_limit']),
+    turnoverLimit:
+        j['turnover_limit'] == null ? null : Fmt.toDouble(j['turnover_limit']),
+  );
+}
+
+/// Whether an estimate is allowed, and whether it is high enough.
+///
+/// Two different questions with two different answers, and conflating
+/// them is the mistake this exists to prevent. The FLOOR is about last
+/// year — an estimate below the required share of it is not low, it is
+/// invalid. The EXPOSURE is about this year, and an estimate can clear
+/// the floor comfortably and still be penalised.
+class TaxEstimateExposure {
+  TaxEstimateExposure({
+    required this.form,
+    required this.estimatedTax,
+    required this.meetsFloor,
+    required this.floorKnown,
+    required this.floorApplies,
+    required this.actualKnown,
+    required this.revisionOpen,
+    required this.revisionMonths,
+    this.priorEstimate,
+    this.floorRequired,
+    this.actualTax,
+    this.shortfall,
+    this.toleranceAmount,
+    this.excessOverTolerance,
+    this.penalty,
+  });
+
+  /// `CP204` for a company under s.107C, `CP500` for a person under
+  /// s.107B. Not the same document, not the same rhythm, and not the
+  /// same rules — `0670` decides it from the entity type so nobody has
+  /// to.
+  final String form;
+
+  final double estimatedTax;
+
+  /// Null means nobody has said what last year's estimate was.
+  final double? priorEstimate;
+  final double? floorRequired;
+
+  /// False when the floor is unknown as well as when it is missed,
+  /// AND when there is no floor at all. Read it with [floorKnown] and
+  /// [floorApplies]: a tick beside a figure nobody has checked is
+  /// worse than an honest question mark, and a red mark against a rule
+  /// that does not exist is worse than either.
+  final bool meetsFloor;
+  final bool floorKnown;
+
+  /// Whether this form HAS a floor. CP500 does not: LHDN issues it
+  /// from the preceding year's assessment rather than the taxpayer
+  /// proposing a figure, so there is nothing to fall short of.
+  ///
+  /// Three states, not two — `!floorApplies` is "does not arise",
+  /// `floorApplies && !floorKnown` is "cannot be checked yet", and
+  /// only `floorApplies && floorKnown` makes [meetsFloor] mean
+  /// anything.
+  final bool floorApplies;
+
+  /// All of these are null until there is a computation to measure
+  /// against — which there is not, for most of the year.
+  final double? actualTax;
+  final bool actualKnown;
+  final double? shortfall;
+  final double? toleranceAmount;
+  final double? excessOverTolerance;
+
+  /// Null is "not yet known", which is NOT the same as zero. A penalty
+  /// of nothing is a promise; a penalty of null is a question.
+  final double? penalty;
+
+  /// Whether today falls in a month a revision is allowed in.
+  final bool revisionOpen;
+  final List<int> revisionMonths;
+
+  /// Under-estimated far enough to cost money. False while unknown,
+  /// because the screen must not cry wolf in the second month.
+  bool get isExposed => actualKnown && (penalty ?? 0) > 0;
+
+  /// The one state worth interrupting somebody for: money is at stake
+  /// AND there is still a month in which to fix it.
+  bool get canStillFix => isExposed && revisionOpen;
+
+  /// The floor was checkable and was missed — which is not the same
+  /// as [meetsFloor] being false, and is the only state worth showing
+  /// as a failure.
+  bool get missesFloor => floorApplies && floorKnown && !meetsFloor;
+
+  factory TaxEstimateExposure.fromMap(Map<String, dynamic> j) =>
+      TaxEstimateExposure(
+        form: j['form']?.toString() ?? 'CP204',
+        estimatedTax: Fmt.toDouble(j['estimated_tax']),
+        priorEstimate: j['prior_estimate'] == null
+            ? null
+            : Fmt.toDouble(j['prior_estimate']),
+        floorRequired: j['floor_required'] == null
+            ? null
+            : Fmt.toDouble(j['floor_required']),
+        meetsFloor: j['meets_floor'] == true,
+        floorKnown: j['floor_known'] == true,
+        floorApplies: j['floor_applies'] == true,
+        actualTax:
+            j['actual_tax'] == null ? null : Fmt.toDouble(j['actual_tax']),
+        actualKnown: j['actual_known'] == true,
+        shortfall:
+            j['shortfall'] == null ? null : Fmt.toDouble(j['shortfall']),
+        toleranceAmount: j['tolerance_amount'] == null
+            ? null
+            : Fmt.toDouble(j['tolerance_amount']),
+        excessOverTolerance: j['excess_over_tolerance'] == null
+            ? null
+            : Fmt.toDouble(j['excess_over_tolerance']),
+        penalty: j['penalty'] == null ? null : Fmt.toDouble(j['penalty']),
+        revisionOpen: j['revision_open'] == true,
+        revisionMonths: [
+          for (final m in (j['revision_months'] as List? ?? const []))
+            Fmt.toInt(m),
+        ],
+      );
+}
+
+/// The Form B working: a person with business income.
+///
+/// The business is ONE source. Employment, rent and a share of a
+/// partnership join it at aggregate income, approved donations come
+/// off, personal reliefs come off after that, and the resident
+/// individual scale applies — the same scale PCB uses, so the monthly
+/// estimate and the annual return cannot disagree.
+class IndividualTaxComputation {
+  IndividualTaxComputation({
+    required this.yearOfAssessment,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.profitBeforeTax,
+    required this.addBacks,
+    required this.deductions,
+    required this.balancingCharge,
+    required this.adjustedIncome,
+    required this.adjustedLoss,
+    required this.caCurrent,
+    required this.caUsed,
+    required this.caCarriedForward,
+    required this.statutoryBusiness,
+    required this.otherIncome,
+    required this.aggregateIncome,
+    required this.approvedDonations,
+    required this.donationsAllowed,
+    required this.totalIncome,
+    required this.reliefsClaimed,
+    required this.chargeableIncome,
+    required this.taxCharged,
+    required this.rebate,
+    required this.zakatRebate,
+    required this.s110TaxDeducted,
+    required this.instalmentsPaid,
+    required this.taxPayable,
+  });
+
+  final int yearOfAssessment;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+
+  final double profitBeforeTax;
+  final double addBacks;
+  final double deductions;
+  final double balancingCharge;
+  final double adjustedIncome;
+  final double adjustedLoss;
+  final double caCurrent;
+  final double caUsed;
+  final double caCarriedForward;
+  final double statutoryBusiness;
+
+  final double otherIncome;
+  final double aggregateIncome;
+
+  /// What was claimed, which is not always what was allowed.
+  final double approvedDonations;
+
+  /// s.44(6) cannot take aggregate income below nothing, so a donation
+  /// larger than the income is allowed only up to it and the excess is
+  /// simply lost — not carried anywhere.
+  final double donationsAllowed;
+
+  final double totalIncome;
+  final double reliefsClaimed;
+  final double chargeableIncome;
+  final double taxCharged;
+
+  /// The flat rebate for a chargeable income at or under the
+  /// threshold. A cliff, not a taper.
+  final double rebate;
+
+  final double zakatRebate;
+  final double s110TaxDeducted;
+  final double instalmentsPaid;
+  final double taxPayable;
+
+  bool get isRefund => taxPayable < 0;
+  bool get hasLoss => adjustedLoss > 0;
+
+  /// Whether a donation was cut down to fit the income. Worth saying on
+  /// the screen: the claimed figure and the allowed one differ, and
+  /// nobody expects that.
+  bool get donationsRestricted => donationsAllowed < approvedDonations;
+
+  factory IndividualTaxComputation.fromMap(Map<String, dynamic> j) =>
+      IndividualTaxComputation(
+        yearOfAssessment: Fmt.toInt(j['year_of_assessment']),
+        periodFrom: Fmt.parseDate(j['period_from']),
+        periodTo: Fmt.parseDate(j['period_to']),
+        profitBeforeTax: Fmt.toDouble(j['profit_before_tax']),
+        addBacks: Fmt.toDouble(j['add_backs']),
+        deductions: Fmt.toDouble(j['deductions']),
+        balancingCharge: Fmt.toDouble(j['balancing_charge']),
+        adjustedIncome: Fmt.toDouble(j['adjusted_income']),
+        adjustedLoss: Fmt.toDouble(j['adjusted_loss']),
+        caCurrent: Fmt.toDouble(j['ca_current']),
+        caUsed: Fmt.toDouble(j['ca_used']),
+        caCarriedForward: Fmt.toDouble(j['ca_carried_forward']),
+        statutoryBusiness: Fmt.toDouble(j['statutory_business']),
+        otherIncome: Fmt.toDouble(j['other_income']),
+        aggregateIncome: Fmt.toDouble(j['aggregate_income']),
+        approvedDonations: Fmt.toDouble(j['approved_donations']),
+        donationsAllowed: Fmt.toDouble(j['donations_allowed']),
+        totalIncome: Fmt.toDouble(j['total_income']),
+        reliefsClaimed: Fmt.toDouble(j['reliefs_claimed']),
+        chargeableIncome: Fmt.toDouble(j['chargeable_income']),
+        taxCharged: Fmt.toDouble(j['tax_charged']),
+        rebate: Fmt.toDouble(j['rebate']),
+        zakatRebate: Fmt.toDouble(j['zakat_rebate']),
+        s110TaxDeducted: Fmt.toDouble(j['s110_tax_deducted']),
+        instalmentsPaid: Fmt.toDouble(j['instalments_paid']),
+        taxPayable: Fmt.toDouble(j['tax_payable']),
+      );
+}
+
+/// What one partner carries into their own Form B.
+class PartnerAllocation {
+  PartnerAllocation({
+    required this.partnerId,
+    required this.name,
+    required this.sharePercent,
+    required this.salary,
+    required this.interestOnCapital,
+    required this.shareOfDivisible,
+    required this.capitalAllowances,
+    required this.statutoryIncome,
+    this.taxReference,
+  });
+
+  final String partnerId;
+  final String name;
+  final String? taxReference;
+  final double sharePercent;
+
+  /// Appropriations, which belong to this partner alone. A salary to a
+  /// partner is not an expense of the partnership — a partner cannot
+  /// employ themselves — so it is added back and handed to them here.
+  final double salary;
+  final double interestOnCapital;
+
+  final double shareOfDivisible;
+  final double capitalAllowances;
+  final double statutoryIncome;
+
+  factory PartnerAllocation.fromMap(Map<String, dynamic> j) =>
+      PartnerAllocation(
+        partnerId: j['partner_id'] as String,
+        name: j['name']?.toString() ?? '',
+        taxReference: j['tax_reference'] as String?,
+        sharePercent: Fmt.toDouble(j['share_percent']),
+        salary: Fmt.toDouble(j['salary']),
+        interestOnCapital: Fmt.toDouble(j['interest_on_capital']),
+        shareOfDivisible: Fmt.toDouble(j['share_of_divisible']),
+        capitalAllowances: Fmt.toDouble(j['capital_allowances']),
+        statutoryIncome: Fmt.toDouble(j['statutory_income']),
+      );
+}
+
+/// The head of a Form P, and the two figures that catch a half-entered
+/// one.
+class PartnershipSummary {
+  PartnershipSummary({
+    required this.adjustedIncome,
+    required this.appropriations,
+    required this.divisibleIncome,
+    required this.partnershipAdjusted,
+    required this.totalAllocated,
+    required this.sharesTotal,
+    required this.partnerCount,
+  });
+
+  final double adjustedIncome;
+  final double appropriations;
+  final double divisibleIncome;
+
+  /// The partnership's real adjusted income: what the accounts showed
+  /// plus the appropriations added back.
+  final double partnershipAdjusted;
+
+  final double totalAllocated;
+  final double sharesTotal;
+  final int partnerCount;
+
+  /// A partnership whose ratios come to ninety allocates nine tenths of
+  /// its income and the missing tenth appears nowhere — the allocation
+  /// still adds up, down its own column, to the wrong number.
+  ///
+  /// A tolerance, not equality, and 0.05 rather than something
+  /// tighter. A deed that splits three ways writes 33.33 and comes to
+  /// 99.99; six ways at 16.67 comes to 100.02. Both are right and a
+  /// stricter check would put a red warning on most partnerships in
+  /// the country.
+  ///
+  /// Loose enough to admit the rounding, tight enough that a whole per
+  /// cent missing — which is a partner somebody forgot — still shows.
+  bool get sharesBalance =>
+      partnerCount > 0 && (sharesTotal - 100).abs() <= 0.05;
+
+  bool get isEmpty => partnerCount == 0;
+
+  factory PartnershipSummary.fromMap(Map<String, dynamic> j) =>
+      PartnershipSummary(
+        adjustedIncome: Fmt.toDouble(j['adjusted_income']),
+        appropriations: Fmt.toDouble(j['appropriations']),
+        divisibleIncome: Fmt.toDouble(j['divisible_income']),
+        partnershipAdjusted: Fmt.toDouble(j['partnership_adjusted']),
+        totalAllocated: Fmt.toDouble(j['total_allocated']),
+        sharesTotal: Fmt.toDouble(j['shares_total']),
+        partnerCount: Fmt.toInt(j['partner_count']),
+      );
+}
+
+/// One add-back or deduction, and where it came from.
+class TaxComputationLine {
+  TaxComputationLine({
+    required this.kind,
+    required this.label,
+    required this.source,
+    required this.gross,
+    required this.fraction,
+    required this.amount,
+    this.code,
+    this.reference,
+  });
+
+  /// 'add_back' or 'deduct'.
+  final String kind;
+  final String label;
+
+  /// The account this came from, or the reason somebody typed.
+  final String source;
+
+  /// The account's whole balance, before the fraction.
+  final double gross;
+
+  /// How much of it the treatment applies to. Half, for entertainment.
+  final double fraction;
+
+  final double amount;
+  final String? code;
+  final String? reference;
+
+  bool get isAddBack => kind == 'add_back';
+
+  /// Whether only part of the balance was taken, which is worth showing
+  /// beside the figure: "50% of 12,000" answers the question a bare
+  /// 6,000 provokes.
+  bool get isPartial => fraction < 1;
+
+  factory TaxComputationLine.fromMap(Map<String, dynamic> j) =>
+      TaxComputationLine(
+        kind: j['kind']?.toString() ?? 'add_back',
+        label: j['label']?.toString() ?? '',
+        source: j['source']?.toString() ?? '',
+        gross: Fmt.toDouble(j['gross']),
+        fraction: Fmt.toDouble(j['fraction']),
+        amount: Fmt.toDouble(j['amount']),
+        code: j['code'] as String?,
+        reference: j['reference'] as String?,
+      );
+}
+
+/// A Schedule 3 class an asset can be put in.
+///
+/// Read from the database rather than listed in Dart: Budget speeches
+/// move the rates, and a list here would be a second copy to forget.
+class CapitalAllowanceClass {
+  CapitalAllowanceClass({
+    required this.code,
+    required this.label,
+    required this.initialRate,
+    required this.annualRate,
+    this.costCap,
+    this.smallValueThreshold,
+    this.notes,
+    this.isVerified = false,
+  });
+
+  final String code;
+  final String label;
+  final double initialRate;
+  final double annualRate;
+  final double? costCap;
+  final double? smallValueThreshold;
+  final String? notes;
+
+  /// False means the figures came from published percentages rather
+  /// than from the Act. `0025` uses the same flag for the payroll
+  /// schedules and means the same thing by it.
+  final bool isVerified;
+
+  /// "20% then 14%", which is what somebody choosing a class is
+  /// actually comparing.
+  ///
+  /// `Fmt.qty` rather than `Fmt.rate`: the latter pads to two decimals,
+  /// so every class in the dropdown would read "20.00% then 14.00%".
+  /// This drops the zeros on a whole percentage and keeps them on a
+  /// fractional one, which is what an industrial building's 3% and a
+  /// hypothetical 2.5% both need.
+  /// Rounded before it is formatted, because `0.14 * 100` is
+  /// `14.000000000000002` in binary floating point -- and `Fmt.qty`
+  /// faithfully prints every digit of it. Without this the dropdown
+  /// offers "20% then 14.000000000000002%".
+  static String _pct(double rate) =>
+      Fmt.qty(double.parse((rate * 100).toStringAsFixed(4)));
+
+  String get rates => '${_pct(initialRate)}% then ${_pct(annualRate)}%';
+
+  factory CapitalAllowanceClass.fromMap(Map<String, dynamic> j) =>
+      CapitalAllowanceClass(
+        code: j['code'] as String,
+        label: j['label']?.toString() ?? '',
+        initialRate: Fmt.toDouble(j['initial_rate']),
+        annualRate: Fmt.toDouble(j['annual_rate']),
+        costCap: j['cost_cap'] == null ? null : Fmt.toDouble(j['cost_cap']),
+        smallValueThreshold: j['small_value_threshold'] == null
+            ? null
+            : Fmt.toDouble(j['small_value_threshold']),
+        notes: j['notes'] as String?,
+        isVerified: j['is_verified'] == true,
+      );
+}
+
+/// One line of the Schedule 3 working for a year of assessment.
+///
+/// Not a depreciation row. Accounting depreciation is added back in a
+/// tax computation and replaced by these, so an asset appears in both
+/// schedules with two entirely different figures against it — which is
+/// the point of the exercise rather than a discrepancy.
+class CapitalAllowanceLine {
+  CapitalAllowanceLine({
+    required this.assetId,
+    required this.assetNo,
+    required this.name,
+    required this.classCode,
+    required this.classLabel,
+    required this.acquired,
+    required this.cost,
+    required this.qualifying,
+    required this.initial,
+    required this.annual,
+    required this.priorClaimed,
+    required this.balancingAllowance,
+    required this.balancingCharge,
+    required this.claimed,
+    required this.residual,
+  });
+
+  final String assetId;
+  final String assetNo;
+  final String name;
+  final String classCode;
+  final String classLabel;
+  final DateTime? acquired;
+
+  /// What was paid, which is not always what the allowance is computed
+  /// on — see [qualifying].
+  final double cost;
+
+  /// What the allowance is computed on. Lower than [cost] for a vehicle
+  /// in a restricted class, and the difference is relief nobody gets.
+  final double qualifying;
+
+  final double initial;
+  final double annual;
+  final double priorClaimed;
+  final double balancingAllowance;
+  final double balancingCharge;
+
+  /// The initial and annual allowances for this year, which is what a
+  /// tax computation subtracts. The balancing figures are NOT in here:
+  /// one is an extra deduction and the other is taxable, and adding
+  /// them together would net off two things that go in different
+  /// places on the return.
+  final double claimed;
+
+  final double residual;
+
+  /// Whether the cost was restricted before any allowance was computed.
+  bool get isRestricted => qualifying < cost;
+
+  /// An asset filed in a small-value class that is not a small-value
+  /// asset. It gets nothing at all rather than being written off in
+  /// full, and its residual sits at the whole qualifying expenditure —
+  /// which is what this spots, so the screen can say to reclassify it.
+  /// `qualifying > 0` is stated rather than left to follow from
+  /// `residual > 0`. An asset that cost nothing -- `fixed_assets`
+  /// allows it, the check is `cost >= 0` -- has a qualifying sum of
+  /// zero and a residual of zero, and every other condition here is
+  /// trivially true of it. Without this line it reads as misfiled and
+  /// the screen puts a red notice on a row there is nothing wrong with.
+  bool get looksMisclassified =>
+      qualifying > 0 &&
+      initial == 0 &&
+      annual == 0 &&
+      priorClaimed == 0 &&
+      // These two are EQUIVALENT today and are kept deliberately. A
+      // row with a balancing figure was disposed of, and `0664` sets
+      // its residual to zero -- so `residual == qualifying` already
+      // excludes it unless the qualifying sum is zero, which the line
+      // above now excludes. A mutant that deletes them survives, and
+      // that is written down rather than left for somebody to discover
+      // and mistake for a gap.
+      //
+      // They stay because they say what the predicate MEANS. If the
+      // schedule ever leaves a residual on a disposed asset -- a part
+      // disposal, say -- these are what stop it turning red.
+      balancingAllowance == 0 &&
+      balancingCharge == 0 &&
+      residual == qualifying;
+
+  factory CapitalAllowanceLine.fromMap(Map<String, dynamic> j) =>
+      CapitalAllowanceLine(
+        assetId: j['asset_id'] as String,
+        assetNo: j['asset_no']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        classCode: j['class_code']?.toString() ?? '',
+        classLabel: j['class_label']?.toString() ?? '',
+        acquired: Fmt.parseDate(j['acquired']),
+        cost: Fmt.toDouble(j['cost']),
+        qualifying: Fmt.toDouble(j['qualifying']),
+        initial: Fmt.toDouble(j['initial']),
+        annual: Fmt.toDouble(j['annual']),
+        priorClaimed: Fmt.toDouble(j['prior_claimed']),
+        balancingAllowance: Fmt.toDouble(j['balancing_allowance']),
+        balancingCharge: Fmt.toDouble(j['balancing_charge']),
+        claimed: Fmt.toDouble(j['claimed']),
+        residual: Fmt.toDouble(j['residual']),
+      );
+}
+
+/// The cast down a capital allowance schedule.
+///
+/// An accountant totals a schedule before believing a line of it, and
+/// these four totals are the ones that leave this screen: the
+/// allowances claimed and the balancing allowance are deductions, the
+/// balancing charge is taxable, and the residual is what carries
+/// forward.
+({
+  double qualifying,
+  double claimed,
+  double balancingAllowance,
+  double balancingCharge,
+  double residual,
+})
+capitalAllowanceTotals(List<CapitalAllowanceLine> rows) => (
+  qualifying: rows.fold(0.0, (s, r) => s + r.qualifying),
+  claimed: rows.fold(0.0, (s, r) => s + r.claimed),
+  balancingAllowance: rows.fold(0.0, (s, r) => s + r.balancingAllowance),
+  balancingCharge: rows.fold(0.0, (s, r) => s + r.balancingCharge),
+  residual: rows.fold(0.0, (s, r) => s + r.residual),
+);
+
+/// Somebody on the beta list, as the console shows them.
+///
+/// [addedBy] is a name and is NULLABLE, because `beta_testers.added_by`
+/// is ON DELETE SET NULL: the person who added a tester may have left,
+/// and the tester still has the button.
+class BetaTester {
+  BetaTester({
+    required this.userId,
+    this.fullName,
+    this.email,
+    this.note,
+    this.addedBy,
+    this.createdAt,
+  });
+
+  final String userId;
+  final String? fullName;
+  final String? email;
+  final String? note;
+  final String? addedBy;
+  final DateTime? createdAt;
+
+  /// What to call them on screen.
+  ///
+  /// A name, then an e-mail, then the uuid -- which is not pretty and
+  /// is better than a blank row nobody can act on. A profile with
+  /// neither exists: somebody invited who has not signed in yet.
+  String get label => switch ((fullName?.trim(), email?.trim())) {
+    (final n?, _) when n.isNotEmpty => n,
+    (_, final e?) when e.isNotEmpty => e,
+    _ => userId,
+  };
+
+  factory BetaTester.fromMap(Map<String, dynamic> j) => BetaTester(
+    userId: j['user_id'] as String,
+    fullName: j['full_name'] as String?,
+    email: j['email'] as String?,
+    note: j['note'] as String?,
+    addedBy: j['added_by'] as String?,
+    createdAt: Fmt.parseDate(j['created_at']),
+  );
+}
+
+/// A person the platform console found, and whether they are already on
+/// the beta list.
+///
+/// [isBeta] comes from the search itself rather than from comparing
+/// against the list on this side: the console offers hundreds of people
+/// and holds a dozen, and asking the server once is cheaper than every
+/// row asking the list.
+class PlatformUser {
+  PlatformUser({
+    required this.userId,
+    this.fullName,
+    this.email,
+    this.isBeta = false,
+  });
+
+  final String userId;
+  final String? fullName;
+  final String? email;
+  final bool isBeta;
+
+  String get label => switch ((fullName?.trim(), email?.trim())) {
+    (final n?, _) when n.isNotEmpty => n,
+    (_, final e?) when e.isNotEmpty => e,
+    _ => userId,
+  };
+
+  factory PlatformUser.fromMap(Map<String, dynamic> j) => PlatformUser(
+    userId: j['user_id'] as String,
+    fullName: j['full_name'] as String?,
+    email: j['email'] as String?,
+    isBeta: j['is_beta'] == true,
   );
 }
 

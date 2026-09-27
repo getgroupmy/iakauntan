@@ -77,29 +77,57 @@ void main() {
   });
 
   testWidgets('a short rail still fills the height', (tester) async {
-    // Tall enough that the ungated rail really is shorter than the
-    // window, which is the case being tested. It was 1200 until a
-    // destination that carries no module gate was added and the
-    // ungated rail grew past it — at which point this was measuring a
-    // rail that scrolls, and the assertion below is about one that
-    // does not.
+    // THE HEIGHT IS MEASURED, NOT GUESSED, and that is the fourth
+    // version of this test.
     //
-    // THEN IT HAPPENED AGAIN, at 1600, when `Your details` was added
-    // beside Settings as a door that needs no company. Twice is a
-    // pattern: every ungated destination makes this number too small,
-    // and the failure is not "the rail is broken" but "this test is
-    // now measuring the other case". 2000 with about 360 of headroom.
-    // If it goes again, raise it again — and if it goes a fourth time,
-    // the number wants deriving from the rail's own height rather than
-    // guessed.
-    tester.view.physicalSize = const Size(1400, 2000);
-    tester.view.devicePixelRatio = 1.0;
+    // It was 1200, then 1600, then 2000, and each time a destination
+    // that carries no module gate was added the ungated rail grew past
+    // the number and this test quietly started measuring the OTHER case
+    // — a rail that scrolls, which the assertion at the bottom is not
+    // about. 1200 went when a gateless destination arrived, 1600 when
+    // `Your details` was added beside Settings, and 2000 when `0721`
+    // added Users and Support access to the console. The previous
+    // version of this comment said that a fourth time meant deriving the
+    // number from the rail's own height. This is that.
+    //
+    // Two passes: ask the rail how tall it wants to be, then give it
+    // that much and some. A destination added tomorrow moves the first
+    // measurement and the second follows it.
+    Future<double> overflowAt(double height) async {
+      tester.view.physicalSize = Size(1400, height);
+      tester.view.devicePixelRatio = 1.0;
+      await tester.pumpWidget(harness(const {}));
+      await tester.pumpAndSettle();
+
+      // The scroll view is OUTSIDE the rail, not inside it:
+      // `NavigationRail` does not scroll, so the shell wraps it in a
+      // `SingleChildScrollView` with a minimum height of the viewport.
+      // So this is an ancestor finder, and the nearest one is the rail's.
+      final scrollable = find
+          .ancestor(
+            of: find.byType(NavigationRail),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      // How much of the rail did not fit. Zero means it all did, which
+      // is the case this test is for.
+      return tester.state<ScrollableState>(scrollable).position
+          .maxScrollExtent;
+    }
+
     addTearDown(tester.view.reset);
 
-    // Nothing enabled: only the ungated destinations plus the console.
-    await tester.pumpWidget(harness(const {}));
-    await tester.pumpAndSettle();
+    // Deliberately too short, so there is an overflow to measure. Its
+    // exact value does not matter: whatever did not fit is added back.
+    const probe = 800.0;
+    final missing = await overflowAt(probe);
+    // 120 of headroom on top of what the rail asked for, so the case
+    // being tested is a rail with room to spare rather than one that
+    // exactly fills the window.
+    final tall = probe + missing + 120;
 
+    expect(await overflowAt(tall), 0.0,
+        reason: 'the whole rail fits, which is the case under test');
     expect(tester.takeException(), isNull);
     expect(find.byType(NavigationRail), findsOneWidget);
 
@@ -107,6 +135,6 @@ void main() {
     // wrapping its handful of destinations. That is what `trailing:
     // Expanded` needs a bounded height for, and it is the part the
     // scroll view would otherwise have collapsed.
-    expect(tester.getRect(find.byType(NavigationRail)).bottom, 2000);
+    expect(tester.getRect(find.byType(NavigationRail)).bottom, tall);
   });
 }

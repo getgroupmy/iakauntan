@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
@@ -24,6 +25,34 @@ import 'ssm_query_hints.dart';
 /// somebody has to clean up later. So a missing supplier is a question,
 /// with the details on screen before the press.
 
+/// Which side of the ledger a scan is being filed on, and the words
+/// for it.
+///
+/// `0682`. All of this was written for suppliers and every sentence in
+/// it said so, which is why the Scan action was hidden on the sales
+/// screens: enabling it there would have asked somebody "which
+/// supplier?" about their own customer.
+///
+/// A record rather than two copies of the file. The work is identical —
+/// look the name up, suggest the near ones, offer to create — and the
+/// only difference is the noun and which `contact_type` is searched.
+class ScanContactKind {
+  const ScanContactKind._(this.type, this.one, this.One);
+
+  /// The `contact_type` searched and written.
+  final String type;
+
+  /// Lower case, mid-sentence: "Create this supplier".
+  final String one;
+
+  /// Capitalised, at the start of one: "Supplier not found".
+  // ignore: non_constant_identifier_names
+  final String One;
+
+  static const supplier = ScanContactKind._('supplier', 'supplier', 'Supplier');
+  static const customer = ScanContactKind._('customer', 'customer', 'Customer');
+}
+
 /// What came of trying to find the supplier.
 enum SupplierOutcome {
   /// Found, or created, and the identifier is on [SupplierMatch.contactId].
@@ -34,6 +63,23 @@ enum SupplierOutcome {
 
   /// Nothing decided here — the caller should ask the usual way.
   ask,
+
+  /// The page was read, and nothing on it named a supplier. `0686`.
+  ///
+  /// Not the same as [ask], and the difference is the whole of what a
+  /// payment voucher taught: [ask] means "I could not decide", and
+  /// drops into the ordinary picker, which is the right answer when
+  /// two contacts matched or the lookup failed. THIS means the document
+  /// has no supplier to find — a voucher, a statement, a page of the
+  /// company's own paper — and the ordinary picker is then a question
+  /// the document cannot answer, asked in a dialog indistinguishable
+  /// from the one somebody gets when they press New.
+  ///
+  /// Only where there IS a reading. A scan that failed leaves this
+  /// unknown: the paper may well be a bill and the reader simply broke,
+  /// and saying "this doesn't look like a supplier bill" about it would
+  /// be a guess dressed as a finding.
+  noSupplier,
 }
 
 class SupplierMatch {
@@ -43,15 +89,39 @@ class SupplierMatch {
   final String? contactId;
 }
 
+/// Whether the page was READ and simply has no supplier on it.
+///
+/// `0686`. The distinction this draws is the whole of the payment
+/// voucher fix, and it is easy to collapse by accident: both cases
+/// arrive here as "no name", and treating them alike is what put an
+/// empty supplier picker in front of somebody holding a voucher.
+///
+///   * A reading with no supplier name is a FINDING. The reader saw the
+///     page and there was no supplier on it — a voucher, a statement, a
+///     sheet of the company's own paper.
+///   * No reading at all is the ABSENCE of a finding. The scan failed,
+///     the person has already been told so, and the paper may well be a
+///     bill. Saying "this doesn't look like a supplier bill" about it
+///     would be a guess wearing the clothes of a conclusion.
+bool readingNamesNoSupplier(OcrExtraction? read) =>
+    read != null && (read.supplierName?.trim().isEmpty ?? true);
+
 /// Looks the supplier up, and asks only when it has to.
 Future<SupplierMatch> resolveSupplier(
   BuildContext context,
   WidgetRef ref,
-  OcrExtraction? read,
-) async {
+  OcrExtraction? read, {
+  ScanContactKind kind = ScanContactKind.supplier,
+}) async {
   final name = read?.supplierName?.trim();
   if (name == null || name.isEmpty) {
-    return const SupplierMatch(SupplierOutcome.ask);
+    // Read, and no supplier on it: the caller can say so. Not read at
+    // all: unknown, so the ordinary picker, because the person has
+    // already been told the reading failed and the paper may still be
+    // a bill. `0686`.
+    return SupplierMatch(readingNamesNoSupplier(read)
+        ? SupplierOutcome.noSupplier
+        : SupplierOutcome.ask);
   }
 
   final repo = ref.read(repoProvider);
@@ -64,13 +134,22 @@ Future<SupplierMatch> resolveSupplier(
     // after the name finds nothing — hence the narrowing below rather
     // than a single clever query.
     candidates = await repo.contacts(
-      type: 'supplier',
+      type: kind.type,
       search: _searchable(name),
     );
   } catch (_) {
     // A lookup that failed is not an answer. Ask the usual way rather
     // than offering to create a duplicate of something that is probably
     // already there.
+    //
+    // This arm used to hide a bug rather than a network blip. The
+    // search interpolated the printed name straight into PostgREST's
+    // `or(...)` grammar, so `SHAHARUDIN, SHAM SUNDER & PARTNERS` threw
+    // PGRST100 — and this catch turned the throw into "no match", which
+    // looks exactly like a supplier genuinely not being on file. The
+    // escaping is in `Repo.orValue` now; the catch stays, because a
+    // lookup that fails for a REAL reason should still not offer to
+    // create a duplicate.
     return const SupplierMatch(SupplierOutcome.ask);
   }
 
@@ -80,21 +159,54 @@ Future<SupplierMatch> resolveSupplier(
   }
   if (exact.length > 1) return const SupplierMatch(SupplierOutcome.ask);
 
-  // Nothing that could be called a match. Two of these on screen at once
-  // would be confusing, so the near-misses are shown inside the question
-  // rather than as a second dialog.
+  // Nothing that could be called a match. Before saying so, look
+  // WIDER.
+  //
+  // The search above is a substring match on the printed name, so it
+  // finds nothing whenever the two spellings differ at all — and they
+  // usually do, because one was typed by a person setting the supplier
+  // up and the other was read off a letterhead. "Supplier not found"
+  // with an empty list, next to a Create button, is how a second record
+  // for the same company gets made.
+  //
+  // So: everything on file, ranked against the printed name, and
+  // anything close enough offered by name. Cheap — a company's supplier
+  // list is hundreds of rows, not millions — and it is the difference
+  // between a question somebody can answer and one they can only guess
+  // at.
+  var near = candidates;
+  if (near.isEmpty) {
+    try {
+      near = rankedLikeName(
+        await repo.contacts(type: kind.type),
+        name,
+        read?.supplierRegistrationNo,
+      );
+    } catch (_) {
+      near = const [];
+    }
+  }
+
   if (!context.mounted) return const SupplierMatch(SupplierOutcome.discarded);
-  final answer = await showDialog<_NotFoundAnswer>(
+  // `Object` because the dialog answers with one of two kinds of thing:
+  // a button, or the supplier somebody picked off the suggestions. A
+  // second round trip to re-choose what they have just pointed at would
+  // be the screen asking twice.
+  final answer = await showDialog<Object>(
     context: context,
-    builder: (_) => _SupplierNotFound(read: read!, near: candidates),
+    builder: (_) => _SupplierNotFound(read: read!, near: near, kind: kind),
   );
 
-  switch (answer) {
+  if (answer is Contact) {
+    return SupplierMatch(SupplierOutcome.resolved, answer.id);
+  }
+
+  switch (answer as _NotFoundAnswer?) {
     case _NotFoundAnswer.create:
       if (!context.mounted) {
         return const SupplierMatch(SupplierOutcome.discarded);
       }
-      final id = await createSupplierFromScan(context, ref, read);
+      final id = await createSupplierFromScan(context, ref, read, kind: kind);
       return id == null
           ? const SupplierMatch(SupplierOutcome.discarded)
           : SupplierMatch(SupplierOutcome.resolved, id);
@@ -105,6 +217,86 @@ Future<SupplierMatch> resolveSupplier(
       return const SupplierMatch(SupplierOutcome.discarded);
   }
 }
+
+/// The contacts most like a printed name, closest first.
+///
+/// Pure, and public, because it is the whole of the "did you mean"
+/// answer and a widget test can put a list in and read an order out.
+///
+/// Scored on WORDS rather than characters. Two spellings of one company
+/// share their distinctive words — `SHAHARUDIN`, `SUNDER` — and differ
+/// in punctuation, in `&` against `AND`, in whether `SDN BHD` was typed
+/// at all. A character-distance score on the whole string ranks by
+/// length as much as by likeness; a word overlap does not.
+///
+/// The generic words are dropped before scoring for the same reason a
+/// search for "Sdn Bhd" is useless: `sdn`, `bhd`, `berhad`, `partners`
+/// and the rest are on half the letterheads in the country, and a
+/// scorer that counted them would rank every company against every
+/// other.
+List<Contact> rankedLikeName(
+  List<Contact> all,
+  String printed,
+  String? registrationNo,
+) {
+  // A registration number is an identity, so a match on one is not a
+  // suggestion — it is the answer, and it goes first whatever the names
+  // say.
+  final reg = registrationNo == null || registrationNo.trim().isEmpty
+      ? null
+      : _digits(registrationNo);
+
+  final wanted = _words(printed);
+  if (wanted.isEmpty && reg == null) return const [];
+
+  final scored = <(Contact, double)>[];
+  for (final c in all) {
+    if (reg != null &&
+        c.registrationNo != null &&
+        _digits(c.registrationNo!) == reg) {
+      scored.add((c, 1000));
+      continue;
+    }
+    final theirs = _words(c.name);
+    if (theirs.isEmpty) continue;
+    final shared = wanted.where(theirs.contains).length;
+    if (shared == 0) continue;
+    // Over the SMALLER set, so a two-word supplier matching two words of
+    // a six-word letterhead scores full marks. The long version of a
+    // name is the letterhead's, and the short one is what somebody
+    // typed.
+    final score = shared / (wanted.length < theirs.length
+        ? wanted.length
+        : theirs.length);
+    if (score >= 0.5) scored.add((c, score));
+  }
+
+  scored.sort((a, b) => b.$2.compareTo(a.$2));
+  return [for (final (c, _) in scored.take(5)) c];
+}
+
+/// The words of a name worth comparing.
+///
+/// Everything that is not a letter or a digit becomes a space, so
+/// `SHAHARUDIN, SHAM SUNDER & PARTNERS` and
+/// `Shaharudin Sham Sunder and Partners` reduce to the same list but for
+/// the generic words, which come off.
+Set<String> _words(String s) => s
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+    .split(' ')
+    .where((w) => w.length > 2 && !_generic.contains(w))
+    .toSet();
+
+/// Words on half the letterheads in Malaysia. A scorer that counted
+/// them would rank every company against every other.
+const _generic = {
+  'sdn', 'bhd', 'berhad', 'sendirian', 'enterprise', 'enterprises',
+  'trading', 'holdings', 'group', 'company', 'and', 'the', 'services',
+  'service', 'solutions', 'resources', 'partners', 'partnership',
+  'associates', 'consultancy', 'consultants', 'ventures', 'industries',
+  'marketing', 'supply', 'supplies', 'plt', 'llp', 'inc', 'ltd',
+};
 
 /// Create a supplier, reviewing what was read first.
 ///
@@ -123,16 +315,17 @@ Future<SupplierMatch> resolveSupplier(
 Future<String?> createSupplierFromScan(
   BuildContext context,
   WidgetRef ref,
-  OcrExtraction? read,
-) async {
+  OcrExtraction? read, {
+  ScanContactKind kind = ScanContactKind.supplier,
+}) async {
   // Reviewed and CORRECTED before it is written, not after. See
   // `_SupplierDraft`.
   final draft = await showDialog<_Draft>(
     context: context,
-    builder: (_) => _SupplierDraft(read: read),
+    builder: (_) => _SupplierDraft(read: read, kind: kind),
   );
   if (draft == null || !context.mounted) return null;
-  return _create(context, ref, draft.read, draft.ssm);
+  return _create(context, ref, draft.read, draft.ssm, kind);
 }
 
 /// What the review dialog hands back.
@@ -216,9 +409,14 @@ String _digits(String s) =>
 enum _NotFoundAnswer { create, choose, discard }
 
 class _SupplierNotFound extends StatelessWidget {
-  const _SupplierNotFound({required this.read, required this.near});
+  const _SupplierNotFound({
+    required this.read,
+    required this.near,
+    this.kind = ScanContactKind.supplier,
+  });
 
   final OcrExtraction read;
+  final ScanContactKind kind;
 
   /// Anything the search turned up that was not good enough to call a
   /// match. Shown because "supplier not found" is hard to believe when
@@ -237,7 +435,12 @@ class _SupplierNotFound extends StatelessWidget {
     ].where((row) => row.$2 != null).toList();
 
     return AlertDialog(
-      title: const Text('Supplier not found'),
+      // "Supplier not found" is not true when four of them are listed
+      // underneath it, and a heading that contradicts its own dialog is
+      // how somebody presses Create without reading further.
+      title: Text(
+        near.isEmpty ? '${kind.One} not found' : 'Is it one of these?',
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -246,8 +449,11 @@ class _SupplierNotFound extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Nothing on file matches this document. It can be created '
-                'from what was read:',
+                near.isEmpty
+                    ? 'Nothing on file matches this document. It can be '
+                          'created from what was read:'
+                    : 'No ${kind.one} matches this document exactly. What '
+                          'the document says:',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: Space.md),
@@ -280,6 +486,11 @@ class _SupplierNotFound extends StatelessWidget {
                     ],
                   ),
                 ),
+              // Tappable, not a bulleted list. They were bullets and a
+              // "Choose existing" button that reopened the picker — so
+              // somebody who could SEE the right supplier named in front
+              // of them had to dismiss the dialog and search for it
+              // again. Pointing at it is the answer.
               if (near.isNotEmpty) ...[
                 const SizedBox(height: Space.md),
                 Container(
@@ -293,21 +504,61 @@ class _SupplierNotFound extends StatelessWidget {
                     children: [
                       Text(
                         near.length == 1
-                            ? 'There is a supplier with a similar name:'
-                            : 'There are suppliers with similar names:',
+                            ? 'This one is already on file and looks like '
+                                  'the same company:'
+                            : 'These are already on file and look like the '
+                                  'same company:',
                         style: const TextStyle(fontSize: 13),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: Space.sm),
                       for (final c in near.take(4))
-                        Text(
-                          '• ${c.name}',
-                          style: const TextStyle(fontSize: 13),
+                        InkWell(
+                          key: ValueKey('scan-supplier-near-${c.id}'),
+                          onTap: () => Navigator.pop(context, c),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.north_east, size: 16),
+                                const SizedBox(width: Space.sm),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        c.name,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      // The number, where there is one.
+                                      // Two firms can share a trading
+                                      // name and this is what tells
+                                      // them apart.
+                                      if (c.code.isNotEmpty ||
+                                          c.registrationNo != null)
+                                        Text(
+                                          [
+                                            if (c.code.isNotEmpty) c.code,
+                                            if (c.registrationNo != null)
+                                              c.registrationNo!,
+                                          ].join(' · '),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Choose an existing one instead if this is the same '
-                        'company under another spelling.',
-                        style: TextStyle(fontSize: 12),
+                      Text(
+                        'Tap one to use it. Create a new ${kind.one} only '
+                        'if none of these is the same company.',
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ],
                   ),
@@ -348,6 +599,7 @@ Future<String?> _create(
   WidgetRef ref,
   OcrExtraction read,
   SsmEntity? ssm,
+  ScanContactKind kind,
 ) async {
   final repo = ref.read(repoProvider)!;
   final messenger = ScaffoldMessenger.of(context);
@@ -374,7 +626,7 @@ Future<String?> _create(
         id: '',
         code: '',
         name: clean(read.supplierName) ?? '',
-        contactType: 'supplier',
+        contactType: kind.type,
         registrationNo: clean(read.supplierRegistrationNo),
         // The SSM number is also what identifies the party on an
         // e-Invoice, so it seeds the identity field rather than leaving it
@@ -408,7 +660,7 @@ Future<String?> _create(
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              'Supplier created, but the register check was not '
+              '${kind.One} created, but the register check was not '
               'recorded: ${e.userMessage}',
             ),
           ),
@@ -418,7 +670,7 @@ Future<String?> _create(
     return saved.id;
   } catch (e) {
     messenger.showSnackBar(
-      SnackBar(content: Text('Could not create the supplier: $e')),
+      SnackBar(content: Text('Could not create the ${kind.one}: ${errorText(e)}')),
     );
     return null;
   }
@@ -444,7 +696,12 @@ Future<String?> _create(
 /// everything else can be filled in later from the supplier's own
 /// paperwork.
 class _SupplierDraft extends StatefulWidget {
-  const _SupplierDraft({required this.read});
+  const _SupplierDraft({
+    required this.read,
+    this.kind = ScanContactKind.supplier,
+  });
+
+  final ScanContactKind kind;
 
   /// What the document said, or null when nothing was read. An empty
   /// form is still the right place to be: somebody is holding a bill
@@ -535,7 +792,7 @@ class _SupplierDraftState extends State<_SupplierDraft> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Create this supplier'),
+      title: Text('Create this ${widget.kind.one}'),
       content: SizedBox(
         width: 460,
         child: Form(
@@ -553,7 +810,8 @@ class _SupplierDraftState extends State<_SupplierDraft> {
                       // and then never fill in.
                       ? 'Nothing was read from the document, so this is '
                             'blank. The SSM number goes on every '
-                            'e-Invoice raised against this supplier.'
+                            'e-Invoice raised against this '
+                            '${widget.kind.one}.'
                       : 'Read from the document. Correct anything wrong '
                             'before it is saved — this becomes a '
                             'permanent contact, and the SSM number goes '

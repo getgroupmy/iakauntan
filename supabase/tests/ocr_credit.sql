@@ -377,15 +377,22 @@ begin
     raise notice 'ok   the server will not start an on-device scan';
   end;
 
-  -- The reverse: the local log refuses a reading the organization did
-  -- not choose to make locally.
+  -- The reverse USED to be refused: a company on a server reader could
+  -- not file a reading made on the device. `0703` allows it, because
+  -- `0700` made reading here a per-document choice and the refusal was
+  -- landing after the file had already been read. What the row must
+  -- never say is that the server reader read it -- the money guard is
+  -- that a device reading is filed at zero against the DEVICE reader,
+  -- and that is asserted here rather than in the sentence that used to
+  -- refuse it. `local_rescue.sql` has the rest of it.
   perform public.set_ocr_settings(v_org, true, 'claude', 'platform');
-  begin
-    perform public.ocr_record_local(v_org, v_file, '{}'::jsonb);
-    raise exception 'FAIL: logged a local scan for a server reader';
-  exception when sqlstate '23514' then
-    raise notice 'ok   nor log a local scan against a server reader';
-  end;
+  perform public.ocr_record_local(v_org, v_file, '{}'::jsonb);
+  perform pg_temp.check_eq('a device reading is not filed against claude',
+    (select provider from public.ocr_scans
+      where org_id = v_org order by created_at desc limit 1), 'mlkit');
+  perform pg_temp.check_eq('and claude is not paid for it',
+    (select amount_charged from public.ocr_scans
+      where org_id = v_org order by created_at desc limit 1), 0);
 
   -- A local reading costs nothing and still leaves a row, because
   -- "where did this figure come from" is asked about free readings too.
@@ -457,7 +464,13 @@ begin
 
   -- The anonymous role reaches none of it either.
   perform pg_temp.check_true('and anon reaches none of it',
-    not has_function_privilege('anon', 'public.ocr_begin(uuid, uuid)', 'execute')
+    -- `0698` gave it a third parameter, `p_provider`, with a default.
+    -- Named in full here on purpose: `has_function_privilege` takes a
+    -- SIGNATURE, so a stale one raises "function does not exist"
+    -- rather than quietly passing -- which is how this assertion
+    -- caught the change rather than sleeping through it.
+    not has_function_privilege(
+      'anon', 'public.ocr_begin(uuid, uuid, text)', 'execute')
     and not has_function_privilege('anon',
       'public.platform_topup_credit(uuid, numeric, text)', 'execute'));
 end $$;
@@ -500,6 +513,78 @@ begin
     $q$insert into public.ocr_providers (code, name, kind)
        values ('nonsense', 'Nonsense', 'whatever')$q$,
     '%ocr_providers_kind_check%');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A key for any reader that takes one
+--
+-- `0699`. `set_ocr_credentials` refused every provider but `claude`
+-- and `google` from `0111` until then -- two names hardcoded against
+-- what `0113` had already made a TABLE, and what `0675` later added
+-- Gemini to. So a company could pick Gemini, set its key source to
+-- "my own key" (which `set_ocr_settings` allows, because it asks the
+-- catalog) and then be refused at the save with `23514`.
+--
+-- The rule is the catalog's own now: a reader may hold a key when it
+-- says it takes one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kunci Sdn Bhd');
+
+  -- The bug, stated as the thing that must now work. `gemini` is
+  -- neither of the two names `0111` allowed.
+  perform public.set_ocr_credentials(v_org, 'gemini', 'sk-gemini');
+  perform pg_temp.check_true('a company can hold its own Gemini key',
+    exists (select 1 from public.org_ocr_credentials
+             where org_id = v_org and provider = 'gemini'));
+
+  -- And the two that always worked still do, or the fix is a swap
+  -- rather than a widening.
+  perform public.set_ocr_credentials(v_org, 'claude', 'sk-claude');
+  perform pg_temp.check_true('and its own Claude key',
+    exists (select 1 from public.org_ocr_credentials
+             where org_id = v_org and provider = 'claude'));
+
+  -- `takes_key` is false for the on-device reader, and a key for it
+  -- would be a secret stored for something that never makes a call.
+  begin
+    perform public.set_ocr_credentials(v_org, 'mlkit', 'sk-nothing');
+    raise exception 'a key was stored for the on-device reader';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like '%needs no key%' then
+        raise exception 'refused for the wrong reason: %', sqlerrm;
+      end if;
+  end;
+
+  -- A code that is not on the catalog at all. The check is the table
+  -- now, so this is the same refusal as before and not a weaker one.
+  begin
+    perform public.set_ocr_credentials(v_org, 'no-such-reader', 'sk-x');
+    raise exception 'a key was stored for a reader that does not exist';
+  exception
+    when sqlstate '23514' then null;
+  end;
+
+  -- Document AI is addressed by processor, not by project alone, and
+  -- that is keyed on the KIND rather than on the literal code -- so a
+  -- second Document AI processor added under another name is asked for
+  -- the same three things.
+  begin
+    perform public.set_ocr_credentials(v_org, 'google', '{"type":"x"}');
+    raise exception 'a Document AI key was stored with no processor';
+  exception
+    when sqlstate '23514' then
+      if sqlerrm not like '%processor id%' then
+        raise exception 'refused for the wrong reason: %', sqlerrm;
+      end if;
+  end;
+
+  raise notice 'ocr keys: any reader that takes one may hold one';
 end $$;
 
 rollback;

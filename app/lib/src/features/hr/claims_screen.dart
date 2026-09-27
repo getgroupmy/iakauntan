@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
@@ -454,7 +455,7 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
               const SizedBox(height: Space.md),
               types.when(
                 loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('$e'),
+                error: (e, _) => Text(errorText(e)),
                 data: (list) => SearchablePicker<String>(
                   options: [
                     for (final t in list)

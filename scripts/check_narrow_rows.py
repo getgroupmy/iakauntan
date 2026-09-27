@@ -171,6 +171,22 @@ BUTTON = re.compile(
     r"(?:\.icon|\.tonal|\.tonalIcon)?\(")
 ICON = re.compile(r"\bIconButton\(")
 MONEY_WIDGET = re.compile(r"\bMoney\(")
+
+# A money figure written as a `Text` rather than as the `Money` widget.
+#
+# These render the same string and take the same room, and this counted
+# the second one as ZERO. That is not a rounding error -- it is the
+# whole of two shipped faults. `quote_mismatch_dialog.dart` and
+# `capitalise_dialog.dart` each put `Text(Fmt.money(...))` beside a
+# labelled button in a trailing; both estimated 112px and passed with
+# "200px left for the title", and both tripped Flutter's own
+# "Trailing widget consumes the entire tile width" the first time
+# anybody rendered them at 412.
+#
+# Counted at [MONEY], the same as the widget, because that is what it
+# is. With it, both of those rows measure 222 and leave 90 -- under
+# MIN_TEXT, which is a finding.
+MONEY_TEXT = re.compile(r"\bText\(")
 LABEL = re.compile(r"(?:child|label):\s*(?:const\s+)?Text\(\s*'([^']*)'")
 
 # A row that has been made narrow-aware says so, and says it where the
@@ -296,6 +312,27 @@ def dropdown_width(expr: str) -> float:
     return total
 
 
+def money_texts(expr: str) -> int:
+    """How many `Text(...)` in here render a money figure.
+
+    Counted by looking INSIDE each `Text`, not by the shape of its
+    first argument. `capitalise_dialog.dart` writes
+    `Text(Fmt.money(...))` and `quote_mismatch_dialog.dart` writes
+    `Text('${x >= 0 ? '+' : ''}${Fmt.money(x)}')` -- the same figure
+    taking the same room, and a pattern anchored at the front of the
+    argument matches the first and not the second. That is not a
+    detail: both of those rows shipped and each tripped Flutter's own
+    "Trailing widget consumes the entire tile width", and a rule that
+    caught one of the two would have let the other through again.
+    """
+    count = 0
+    for m in at_depth(expr, MONEY_TEXT, MAX_DEPTH):
+        own = balanced(expr, m.end() - 1)
+        if 'Fmt.money(' in own or 'Fmt.amountAt(' in own:
+            count += 1
+    return count
+
+
 def width_of(expr: str) -> float:
     """Roughly what this trailing will ask for, all of it.
 
@@ -303,11 +340,106 @@ def width_of(expr: str) -> float:
     bracketed expression. Collecting every label in the row and pairing
     them positionally was wrong the moment anything else in the row —
     a `Chip`, a `Tooltip` — carried a `Text` of its own.
+
+    ## A Column is the WIDEST of its children, not the sum of them
+
+    Everything here adds up, which is right for a Row and wrong for a
+    Column. Two money figures stacked one above the other are 110
+    pixels wide, not 220, and summing them reported
+    `filing_screen.dart`'s comparative column — a current figure with
+    last year's under it — as a row with no space left for its label.
+    It has plenty; the arithmetic was measuring a shape that is not
+    there.
+
+    So a trailing that is a Column is measured as the widest of the
+    pieces inside it. This is still rough: a Column of Rows would be
+    measured on its widest Row only by recursing, and this does not
+    recurse. The direction is what matters — a Column cannot be WIDER
+    than its widest child, so taking the maximum never invents a
+    finding, and inventing findings is how a gate gets ignored.
     """
-    return (labelled_width(expr)
-            + ICON_BUTTON * len(at_depth(expr, ICON, MAX_DEPTH))
-            + MONEY * len(at_depth(expr, MONEY_WIDGET, MAX_DEPTH))
-            + dropdown_width(expr))
+    pieces = [
+        labelled_width(expr),
+        ICON_BUTTON * len(at_depth(expr, ICON, MAX_DEPTH)),
+        MONEY * len(at_depth(expr, MONEY_WIDGET, MAX_DEPTH)),
+        MONEY * money_texts(expr),
+        dropdown_width(expr),
+    ]
+    return sum(pieces)
+
+
+#: A widget that stacks its children instead of lining them up. Its
+#: width is the widest child, not the sum.
+STACKS = ('Column', 'Wrap')
+
+
+def children_of(expr: str) -> list[str]:
+    """The `children:` of this widget, split at the commas between them.
+
+    Depth-aware, so a comma inside a nested call or a string stays
+    inside its own child. `if` and `for` elements come back as part of
+    the child they guard, which is what we want -- a conditional child
+    still takes its width when the condition holds, and the pessimistic
+    reading is the safe one for a gate about things not fitting.
+    """
+    start = expr.find('children:')
+    if start == -1:
+        return []
+    bracket = expr.find('[', start)
+    if bracket == -1:
+        return []
+    inner = balanced(expr, bracket)[1:-1]
+
+    out, depth, piece = [], 0, []
+    for char in inner:
+        if char in '([{':
+            depth += 1
+        elif char in ')]}':
+            depth -= 1
+        if char == ',' and depth == 0:
+            out.append(''.join(piece))
+            piece = []
+        else:
+            piece.append(char)
+    if ''.join(piece).strip():
+        out.append(''.join(piece))
+    return [c for c in out if c.strip()]
+
+
+#: The widget a child expression IS, ignoring any `if`/`for` in front.
+_WIDGET = re.compile(r'\b([A-Z]\w*)\s*[(.]')
+
+
+def width_of_slot(name: str, expr: str) -> float:
+    """What this trailing asks for, recursing through Rows and Columns.
+
+    A Row lines its children up and a Column stacks them, so the same
+    pieces mean different widths — and measuring one as the other is
+    how this gate got two rows wrong in opposite directions at once.
+
+    It summed everything. So `filing_screen.dart`'s comparative column,
+    a figure with last year's under it, measured 220 where it occupies
+    110 and was reported as leaving no room for its label. And
+    `assets_screen.dart`'s trailing — a Column of two figures beside
+    two icon buttons — measured 300 where it occupies about 190, and
+    was reported as leaving twelve pixels.
+
+    Neither was true, and a gate that invents a finding is a gate
+    people learn to run with their eyes closed. It recurses now: a Row
+    is the sum of its children, a Column or a Wrap is the widest of
+    them, and anything else is measured flat as before.
+    """
+    kids = children_of(expr) if name in ('Row', *STACKS) else []
+    if not kids:
+        return width_of(expr)
+
+    widths = []
+    for kid in kids:
+        found = _WIDGET.search(kid)
+        widths.append(
+            width_of_slot(found.group(1), kid) if found else width_of(kid))
+
+    return max(widths) if name in STACKS else sum(widths)
 
 
 def text_width(expr: str) -> float:
@@ -373,11 +505,27 @@ def title_width(expr: str) -> float:
 
 def slot(expr: str, name: str) -> str | None:
     """The bracketed value of `name:` directly inside this tile."""
+    found = slot_named(expr, name)
+    return None if found is None else found[1]
+
+
+def slot_named(expr: str, name: str) -> tuple[str, str] | None:
+    """The same, with the WIDGET'S OWN NAME beside its value.
+
+    [width_of_slot] cannot tell a Row from a Column by looking at the
+    brackets, and measuring one as the other is the mistake that
+    reported `assets_screen.dart` as leaving twelve pixels for its
+    title. The title check was reading the trailing flat while the
+    trailing check had been taught to recurse, so the same row passed
+    one half of this script and failed the other.
+    """
     for m in at_depth(expr, re.compile(rf"\b{name}:\s*"), 2):
         rest = expr[m.end():]
         if '(' not in rest[:40]:
             return None
-        return balanced(expr, m.end() + rest.index('('))
+        head = rest[:rest.index('(')]
+        kind = head.replace('const', '').strip()
+        return kind, balanced(expr, m.end() + rest.index('('))
     return None
 
 
@@ -399,9 +547,9 @@ def scan_titles(path: str, source: str) -> list[str]:
             continue
         title = balanced(expr, expr.index('Row(', start) + 3)
 
-        trailing = slot(expr, 'trailing')
+        trailing = slot_named(expr, 'trailing')
         taken = TILE_PADDING
-        taken += width_of(trailing) if trailing else 0.0
+        taken += width_of_slot(*trailing) if trailing else 0.0
         if slot(expr, 'leading') is not None:
             taken += LEADING
 
@@ -448,7 +596,10 @@ def scan(path: str, source: str) -> list[str]:
             if klass and EXEMPT.search(klass.group(0)):
                 continue
 
-        wide = width_of(expr)
+        # The widget's own name, which decides whether the pieces
+        # inside it add up or stack.
+        kind = rest[:rest.index('(')].strip()
+        wide = width_of_slot(kind, expr)
         words = labelled_width(expr)
         left = PHONE - TILE_PADDING - wide
         if words > MAX_LABELLED or left < MIN_TEXT:

@@ -1,7 +1,7 @@
 /**
  * A `createClient` shaped hole, for type-checking without a network.
  *
- * `deno check` resolves `jsr:@supabase/supabase-js@2` over the network,
+ * `deno check` resolves `jsr:@supabase/supabase-js` over the network,
  * and there are machines this repository gets worked on from where
  * jsr.io is unreachable. That left the twelve function entry points
  * type-checked in CI and nowhere else, and a `boolean` handed to a

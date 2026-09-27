@@ -33,7 +33,7 @@
  * are `app.begin_gateway_payment`'s, in 0297, because a rule enforced
  * only here is not enforced.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
 import {

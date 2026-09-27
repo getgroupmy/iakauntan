@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
@@ -83,7 +84,7 @@ class _TaxDetailsCardState extends ConsumerState<TaxDetailsCard> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -103,7 +104,7 @@ class _TaxDetailsCardState extends ConsumerState<TaxDetailsCard> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -133,7 +134,7 @@ class _TaxDetailsCardState extends ConsumerState<TaxDetailsCard> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);

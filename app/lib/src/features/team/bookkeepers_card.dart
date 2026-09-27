@@ -74,7 +74,7 @@ class BookkeepersCard extends ConsumerWidget {
       destructive: true,
     );
     if (!ok || !context.mounted) return;
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
     final repo = ref.read(firmsRepoProvider);
     await runWithFeedback(

@@ -20,7 +20,122 @@
 /// did not look inside.
 library;
 
+import 'dart:convert';
+
 import '../../core/csv.dart';
+import '../../data/ocr_repository.dart';
+
+/// What the import dialog should do with a file somebody chose.
+///
+/// Asked for in one sentence: "bank statement should allow to upload
+/// pdf csv and also image not only csv". Only the CSV half was true.
+/// The dialog's "Open a file" read whatever was picked with
+/// `readAsString`, so a PDF or a photograph -- which is how most people
+/// actually have a statement -- came back as
+/// `FormatException`, reported as "Could not read the file", which
+/// reads as the file being broken rather than the button being for
+/// something else.
+///
+/// Both halves already existed and neither could be reached from here:
+/// `parseStatement` reads CSV and MT940, and `scannedStatement` turns
+/// an AI SmartScan reading into the same rows. This is the switch
+/// between them, and it is deliberately a PURE FUNCTION over the bytes
+/// -- the decision is the rule, and a rule that needs a file dialog to
+/// reach is a rule nothing can assert.
+enum StatementFile {
+  /// CSV or MT940. Read here, costing nothing.
+  text,
+
+  /// A PDF or a photograph. Only a reader turns this into rows, and
+  /// that costs a scan -- so it is never the guess for a file that
+  /// could be text.
+  scan,
+
+  /// Neither, so neither path can do anything with it. A spreadsheet
+  /// or an archive lands here, and saying so is the whole point: the
+  /// alternative is sending it to a reader that will charge for it and
+  /// find nothing.
+  neither,
+}
+
+/// Which of the two importers a chosen file belongs to.
+///
+/// Sniffed from the BYTES first and the mime type second. A browser
+/// hands over whatever the operating system guessed from the
+/// extension, which on the machines this runs on is routinely
+/// `application/octet-stream` for a `.sta` and empty for anything the
+/// system has no association for -- and a statement renamed by the
+/// person who downloaded it is the ordinary case, not the odd one.
+StatementFile statementFileKind({String? mimeType, required List<int> bytes}) {
+  if (_isPdf(mimeType, bytes) || _isImage(mimeType, bytes)) {
+    return StatementFile.scan;
+  }
+  return statementText(bytes) == null
+      ? StatementFile.neither
+      : StatementFile.text;
+}
+
+/// The text of a statement file, or null where its bytes are not text.
+///
+/// A CONTROL BYTE is the test, not just a NUL. CSV and MT940 are both
+/// line-oriented text and carry nothing below space except tab, newline
+/// and carriage return; every binary format this is guarding against
+/// carries them in its first few bytes -- `PK\x03\x04` opens a
+/// spreadsheet, and UTF-16, which is what a spreadsheet writes when
+/// asked for "Unicode text", is half NULs.
+///
+/// NUL alone was the first version of this rule and it let a short zip
+/// header through: `PK\x03\x04` has no NUL in it. A real spreadsheet
+/// has one a few bytes later, which is the worst way for a rule to be
+/// wrong -- right on every file anybody tried and wrong on the small
+/// one nobody did.
+///
+/// UTF-8 first, Latin-1 after. Malaysian statements are ASCII plus the
+/// occasional accented payee name, and a bank that still exports
+/// Latin-1 should not produce a refusal over one character in a
+/// narration nobody reconciles against.
+String? statementText(List<int> bytes) {
+  for (final b in bytes) {
+    if (b < 0x20 && b != 0x09 && b != 0x0A && b != 0x0D) return null;
+  }
+  try {
+    return utf8.decode(bytes);
+  } on FormatException {
+    return latin1.decode(bytes);
+  }
+}
+
+bool _isPdf(String? mimeType, List<int> bytes) =>
+    mimeType == 'application/pdf' ||
+    _startsWith(bytes, const [0x25, 0x50, 0x44, 0x46]); // %PDF
+
+/// The image formats a phone or a scanner actually produces.
+///
+/// By magic number rather than by extension, and the mime type is only
+/// a fallback: a `.jpg` that is really a PDF is a file somebody renamed,
+/// and the bytes are the thing that is true.
+bool _isImage(String? mimeType, List<int> bytes) {
+  if (mimeType != null && mimeType.startsWith('image/')) return true;
+  return _startsWith(bytes, const [0x89, 0x50, 0x4E, 0x47]) || // PNG
+      _startsWith(bytes, const [0xFF, 0xD8, 0xFF]) || // JPEG
+      _startsWith(bytes, const [0x47, 0x49, 0x46, 0x38]) || // GIF8
+      _startsWith(bytes, const [0x42, 0x4D]) || // BMP
+      // RIFF....WEBP and ....ftypheic / ftypheif / ftypmif1, both of
+      // which carry their marker a few bytes in rather than at 0.
+      (_startsWith(bytes, const [0x52, 0x49, 0x46, 0x46]) &&
+          _hasAt(bytes, 8, const [0x57, 0x45, 0x42, 0x50])) ||
+      _hasAt(bytes, 4, const [0x66, 0x74, 0x79, 0x70]);
+}
+
+bool _startsWith(List<int> bytes, List<int> magic) => _hasAt(bytes, 0, magic);
+
+bool _hasAt(List<int> bytes, int at, List<int> magic) {
+  if (bytes.length < at + magic.length) return false;
+  for (var i = 0; i < magic.length; i++) {
+    if (bytes[at + i] != magic[i]) return false;
+  }
+  return true;
+}
 
 /// One statement line, as read out of the paste.
 class StatementRow {
@@ -64,7 +179,31 @@ class StatementRow {
 /// What came back from reading a paste: the rows, and the lines that
 /// could not be read.
 class StatementParse {
-  const StatementParse(this.rows, this.problems);
+  const StatementParse(
+    this.rows,
+    this.problems, [
+    this.notices = const [],
+    int? unreadable,
+  ]) : _unreadable = unreadable;
+
+  final int? _unreadable;
+
+  /// HOW MANY LINES were not imported — which is not how many messages
+  /// say so.
+  ///
+  /// It used to be `problems.length`, and that was right while every
+  /// problem was one line. `95e08146` broke it: fifty-five lines that
+  /// print a day and a month with no year are ONE failure with one
+  /// cause, and saying it fifty-five times filled the dialog with the
+  /// same sentence and buried the reason. So one message now covers
+  /// them all — and the heading above it went on counting messages,
+  /// and announced fifty-five discarded lines as "1 could not be".
+  ///
+  /// A document-level problem counts as none of them. A statement whose
+  /// opening and closing balances do not bridge has a problem with the
+  /// STATEMENT, not with any line, and inflating a line count with it
+  /// would be the same mistake pointing the other way.
+  int get unreadable => _unreadable ?? problems.length;
 
   final List<StatementRow> rows;
 
@@ -72,6 +211,15 @@ class StatementParse {
   /// rather than swallowed: a statement that imports 38 of 40 lines
   /// without saying so reconciles to the wrong number.
   final List<String> problems;
+
+  /// One message per line that was READ and then CHANGED.
+  ///
+  /// Separate from [problems] because they are different sentences to a
+  /// bookkeeper: a problem is a line that will not be imported, and a
+  /// notice is a line that will be, differently from how it was read.
+  /// Counting them together would put "3 could not be read" over three
+  /// lines that were read perfectly well and had their signs put right.
+  final List<String> notices;
 
   bool get isEmpty => rows.isEmpty;
 }
@@ -187,14 +335,71 @@ StatementParse parseCsvStatement(String text) {
   return StatementParse(rows, problems);
 }
 
+/// A figure as a statement prints it.
+///
+/// Four conventions, and a Malaysian statement uses whichever its bank
+/// chose. All four are ordinary and the last was not read at all:
+///
+///   * `1,250.00` and `RM 1,250.00` and `MYR1250.00`;
+///   * `(120.00)`, brackets for a withdrawal;
+///   * `120.00-`, a trailing minus, which is what a mainframe-era core
+///     banking system prints;
+///   * `1,250.00 DR` and `5,000.00 CR`, which is how a statement says
+///     the direction when it prints no sign at all. `DR` is money out
+///     of the account and `CR` is money in.
+///
+/// The last one used to come back NULL — `double.tryParse('1250.00DR')`
+/// — so a statement in that format reported "no amount could be read"
+/// on every line of it.
+///
+/// ## Why reading DR/CR as a sign is safe here
+///
+/// On a current account `DR` is money out, and on a credit card the
+/// same word describes the same movement from the bank's side and the
+/// opposite one from the holder's. Getting that backwards would be the
+/// most expensive mistake available — except that it cannot survive:
+/// `balancesDecideTheSigns` settles every sign against the running
+/// balance afterwards and says so. A hint that the arithmetic checks is
+/// a hint worth taking.
 double? _number(String raw) {
-  var s = raw.replaceAll(RegExp(r'[,\s]'), '').replaceAll('RM', '');
+  var s = raw.replaceAll(RegExp(r'[,\s]'), '');
+  s = s.replaceFirst(RegExp(r'^(RM|MYR)', caseSensitive: false), '');
   if (s.isEmpty) return null;
+
+  // The direction, where the figure carries it as a word. Taken off
+  // before anything else looks at the string, because `1250.00DR`
+  // parses as nothing at all.
+  //
+  // At EITHER END, because banks put it at both: `1,250.00 DR` on a
+  // statement laid out in columns and `DR 1,250.00` on one laid out in
+  // running text. Only one of the two used to be read, and neither was
+  // read before that.
+  bool? outward;
+  final suffix = RegExp(r'(DR|CR)$', caseSensitive: false).firstMatch(s);
+  final prefix = RegExp(r'^(DR|CR)', caseSensitive: false).firstMatch(s);
+  if (suffix != null) {
+    outward = suffix.group(1)!.toUpperCase() == 'DR';
+    s = s.substring(0, suffix.start);
+  } else if (prefix != null) {
+    outward = prefix.group(1)!.toUpperCase() == 'DR';
+    s = s.substring(prefix.end);
+  }
+
   // Statements write a withdrawal either as -120.00 or as (120.00).
   if (s.startsWith('(') && s.endsWith(')')) {
     s = '-${s.substring(1, s.length - 1)}';
   }
-  return double.tryParse(s);
+  // Or as 120.00-, which older core banking systems print.
+  if (s.endsWith('-')) s = '-${s.substring(0, s.length - 1)}';
+
+  // No explicit empty check: `double.tryParse('')` is null, which is
+  // what a bare `DR` with no figure beside it should come to anyway.
+  final value = double.tryParse(s);
+  if (value == null) return null;
+  // A word beats a sign that was probably not printed: where both are
+  // there they agree, and where they do not the word is the one the
+  // bank chose to say.
+  return outward == null ? value : (outward ? -value.abs() : value.abs());
 }
 
 /// Reads the date formats Malaysian banks actually export.
@@ -221,8 +426,9 @@ DateTime? parseStatementDate(String raw) {
     return _date(year, int.parse(dmy.group(2)!), int.parse(dmy.group(1)!));
   }
 
-  // 06 Mar 2026
-  final named = RegExp(r'^(\d{1,2})[\s-]([A-Za-z]{3,})[\s-](\d{2,4})$')
+  // 06 Mar 2026, and `06Mar2026` for the same reason as the partial
+  // form below: a PDF's text layer runs tokens together.
+  final named = RegExp(r'^(\d{1,2})[\s-]?([A-Za-z]{3,})[\s-]?(\d{2,4})$')
       .firstMatch(s);
   if (named != null) {
     const months = [
@@ -237,6 +443,498 @@ DateTime? parseStatementDate(String raw) {
     return _date(year, month, int.parse(named.group(1)!));
   }
 
+  return null;
+}
+
+/// A day and a month with NO YEAR, which is what most statement lines
+/// actually print.
+///
+/// Maybank, CIMB and Public Bank all print `03/09` or `03 SEP` on each
+/// line and put the period in the header once. `parseStatementDate`
+/// returns null for all of them, so a photographed statement in that
+/// format came back as forty lines of "no date could be read" — every
+/// single line of it, on the commonest layout there is.
+///
+/// Returned as a day and a month rather than a date, because a date it
+/// is not: the year has to come from somewhere else on the page, and
+/// guessing one here is how a December transaction gets filed in the
+/// wrong financial year.
+({int day, int month})? parsePartialStatementDate(String raw) {
+  final s = raw.trim();
+  if (s.isEmpty) return null;
+
+  // 03/09, 3-9. Exactly two fields: `6-3-26` is a whole date and is
+  // read by `parseStatementDate` before this is ever asked.
+  final dm = RegExp(r'^(\d{1,2})[/-](\d{1,2})$').firstMatch(s);
+  if (dm != null) {
+    final day = int.parse(dm.group(1)!);
+    final month = int.parse(dm.group(2)!);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return (day: day, month: month);
+  }
+
+  // 03 SEP, 3-Sep, 03 September -- AND `01Jan`, with nothing at all
+  // between them.
+  //
+  // AmBank prints it jammed: `07Dec`, `26Dec`, `01Jan`. Reported with a
+  // screenshot reading "0 lines read, 27 could not be" over
+  // `no date could be read from "01Jan"` -- a complaint about a date
+  // that is perfectly legible, on every line of the statement, because
+  // the separator this insisted on was not there.
+  //
+  // The separator is optional rather than absent: `3-Sep` and
+  // `03 September` are still how most banks print it.
+  final named = RegExp(r'^(\d{1,2})[\s-]?([A-Za-z]{3,})$').firstMatch(s);
+  if (named != null) {
+    final month = _monthNumber(named.group(2)!);
+    if (month == null) return null;
+    final day = int.parse(named.group(1)!);
+    if (day < 1 || day > 31) return null;
+    return (day: day, month: month);
+  }
+
+  return null;
+}
+
+/// Which year a day and a month belong to, given a date on the same
+/// statement.
+///
+/// THE NEAREST OCCURRENCE, which is the only rule that survives a
+/// statement crossing new year. A statement dated 5 January 2027 with a
+/// line reading `28/12` means December 2026, and one reading `03/01`
+/// means January 2027 — and taking the header's year for both would
+/// file a December transaction twelve months out, into a financial year
+/// that may already be closed.
+///
+/// Six months is the cut because it is the half-way point: beyond it
+/// the other year is nearer, and no statement covers more than a year
+/// without printing years on its lines.
+DateTime resolveStatementYear({
+  required int day,
+  required int month,
+  required DateTime near,
+}) {
+  final candidates = [
+    _date(near.year - 1, month, day),
+    _date(near.year, month, day),
+    _date(near.year + 1, month, day),
+  ].whereType<DateTime>();
+
+  DateTime? best;
+  var bestGap = 1 << 30;
+  for (final c in candidates) {
+    final gap = c.difference(near).inDays.abs();
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = c;
+    }
+  }
+  // 29 February in a year that has none leaves nothing to pick, and a
+  // date invented to fill the gap is worse than the line being
+  // reported. The caller treats null as "no date could be read".
+  return best ?? _date(near.year, month, day) ?? near;
+}
+
+/// The statement's own date, read off a PDF's own text layer.
+///
+/// ## The failure this exists for
+///
+/// Found live, and it cost fifty-five lines of somebody's October
+/// statement. RHB exports a TEXT PDF: the period is printed on page one
+/// as selectable text, and this repository has vendored `pdf.js` for
+/// two years. We sent the page to a vision model as a picture instead,
+/// asked it for `document_date`, and it returned null — so
+/// `resolveStatementYear` had no anchor, refused to guess, and every
+/// line of a faultless reading went on the floor.
+///
+/// A model is ASKED. A text layer is READ. Where the evidence is
+/// printed and deterministic it should not be a model's to withhold.
+///
+/// ## What it reads
+///
+/// A LABEL, and the date beside it — `Statement Date`, `Tarikh
+/// Penyata`, and the period forms in both languages, from which it
+/// takes the LATER date, because that is what a statement is named by
+/// and the end a running balance closes at.
+///
+/// ## And what it refuses to read
+///
+/// Loose dates. A statement's text layer is thick with them: a print
+/// date, a payment due date, a "customer since", every transaction
+/// line, and an address whose postcode reads like a year. Taking the
+/// first thing shaped like a date is exactly how a statement gets filed
+/// twelve months out — the failure this whole chain exists to refuse.
+///
+/// With no label it will accept ONE named month and year in the header
+/// and nothing else. Numeric `10/2025` is not enough: it is also the
+/// middle of `01/10/2025`, and a header that offers two different
+/// months is two plausible readings, which is a null and a sentence
+/// rather than a guess.
+({DateTime date, String evidence})? statementPeriodFromText(String text) {
+  final lines = text
+      .split(RegExp(r'[\r\n]+'))
+      .map((l) => l.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((l) => l.isNotEmpty)
+      .toList();
+  if (lines.isEmpty) return null;
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final lower = line.toLowerCase();
+    for (final label in _periodLabels) {
+      final at = lower.indexOf(label);
+      if (at < 0) continue;
+
+      // Normally on the same line, after the label.
+      //
+      // But not on AmBank, which extracts as two COLUMN BLOCKS — every
+      // label, then every value:
+      //
+      //     ACCOUNT NO. / NO. AKAUN
+      //     STATEMENT DATE / TARIKH PENYATA
+      //     : 8881062574767
+      //     : 01/12/2025 - 31/12/2025
+      //
+      // The label is plainly there and its value is three lines down,
+      // behind the account number. Trying only the next line finds
+      // `: 8881062574767`, no date, and gives up on a statement whose
+      // period is printed in full.
+      //
+      // So a short window, and the FIRST line in it that yields a date
+      // wins. Short because the header ends and the transaction lines
+      // begin, and a window long enough to reach those would anchor
+      // the statement to its own first transaction — a guess wearing a
+      // date's clothes, which is what all of this exists to refuse.
+      // CUT AT THE NEXT FIELD. A credit card prints its statement date
+      // and its payment due date side by side, and the due date is
+      // three weeks later -- on a 20 August statement it is 10
+      // September, in the NEXT period. Taking the later of the two
+      // filed the whole statement a month out, which is the failure
+      // this function was written to refuse, arriving by a different
+      // door. `Statement Date : 20 AUG 2026  Payment Due Date : 10 SEP
+      // 2026` now reads as far as `Payment` and no further.
+      var found = _datesIn(_upToTheNextField(line.substring(at + label.length)));
+      if (found.isNotEmpty) {
+        // A period is two dates and a statement date is one. Taking the
+        // later covers both: the end of the period, or the only date
+        // there was.
+        found.sort();
+        return (date: found.last, evidence: line);
+      }
+
+      // The value sits below the label. Which column of it is ours is
+      // settled by the labels on THIS line: a header that names three
+      // fields across and prints three values under them is read by
+      // position, because there is nothing else to read it by.
+      //
+      // `STATEMENT DATE / TARIKH PENYATA` names ONE field twice, in two
+      // languages, so it is not a row of columns and the span below it
+      // is a span -- which is why the fields are counted as fields
+      // rather than as phrases.
+      //
+      // Known limit, written down rather than guessed at: a period
+      // column beside a due-date column gives this the period's FIRST
+      // date rather than its last. That is the right month, which is
+      // what places the lines; the old rule gave the due date, which is
+      // the wrong one.
+      final fields = _fieldsNamedIn(lower);
+      final mine = fields.indexOf(_statementField);
+      for (var ahead = 1; ahead <= _labelWindow; ahead++) {
+        if (i + ahead >= lines.length) break;
+        found = _datesIn(lines[i + ahead]);
+        if (found.isEmpty) continue;
+        if (fields.length > 1 && mine >= 0 && mine < found.length) {
+          return (date: found[mine], evidence: line);
+        }
+        found.sort();
+        return (date: found.last, evidence: line);
+      }
+      continue;
+    }
+  }
+
+  // No label anywhere. The header may still name its month outright —
+  // "PENYATA BAGI OKTOBER 2025" with the words split across cells, or
+  // a plain "October 2025" under the account number.
+  //
+  // The header only. Past it are the transaction lines, and a
+  // description carrying a month and a year would otherwise vote.
+  const header = 40;
+  DateTime? only;
+  String? evidence;
+  final seen = <String>{};
+  for (final line in lines.take(header)) {
+    // A line that names the PAYMENT DUE DATE does not get a vote. It
+    // carries a month and a year like any other, and the month it
+    // carries is the one AFTER the statement's -- so a card whose
+    // statement date failed to extract would otherwise be filed on the
+    // day the money is owed, which is the failure this whole chain
+    // exists to refuse, arriving with a plausible-looking date.
+    if (_fieldsNamedIn(line.toLowerCase()).contains('due')) continue;
+    for (final m in RegExp(r'\b([A-Za-z]{3,9})\.?\s+(\d{4})\b').allMatches(line)) {
+      final month = _monthNumber(m.group(1)!);
+      if (month == null) continue;
+      final year = int.parse(m.group(2)!);
+      // A statement is not from 1904 and not from 2400. A four-digit
+      // number beside a word that happens to start like a month is
+      // otherwise a period.
+      if (year < 1990 || year > 2100) continue;
+      if (seen.add('$year-$month')) {
+        // The last day of the month, because that is where the period
+        // ends and what every line on it is nearest to.
+        only = DateTime(year, month + 1, 0);
+        evidence = line;
+      }
+    }
+  }
+  if (seen.length == 1 && only != null && evidence != null) {
+    return (date: only, evidence: evidence);
+  }
+  return null;
+}
+
+/// What a Malaysian statement calls its own date, in both languages.
+///
+/// Ordered so nothing here is a prefix of a later entry in a way that
+/// would take the wrong half: every one is matched on the whole phrase.
+/// How far below a label its value may sit.
+///
+/// Four, because AmBank's is three down and a statement's header is not
+/// much taller than that. Every line further is a line closer to the
+/// transactions, and taking a date off one of those would place the
+/// whole statement on its own first entry.
+const _labelWindow = 4;
+
+const _periodLabels = <String>[
+  'statement date',
+  'tarikh penyata',
+  'date of statement',
+  'statement period',
+  'penyata bagi tempoh',
+  'tempoh penyata',
+  'bagi tempoh',
+  'for the period',
+  'period covered',
+  'period from',
+  // Last, and bare, so every more specific label above wins first.
+  // A document that says only `Period: 01/08/2026-31/08/2026` is common
+  // enough to matter -- it is what 120 of 120 fixtures in the SmartScan
+  // corpus print, and not one of them was found before this line.
+  'period',
+];
+
+/// The field this reader is after, named once so the two places that
+/// test for it cannot drift apart.
+const _statementField = 'statement';
+
+/// What ELSE a statement header prints, and which field each phrase
+/// belongs to.
+///
+/// ## Why a card needed this and a current account did not
+///
+/// A deposit statement's header says when it is for and very little
+/// else. A credit card's says at least four things at once, and the
+/// handover pack is explicit that they must never be conflated:
+/// statement date, payment due date, statement balance, minimum
+/// payment. The due date is the dangerous one -- it is a real date,
+/// three weeks after the statement, and on a 20 August statement it
+/// reads 10 September. Every rule here that takes "the later date" was
+/// written for a PERIOD, where later means the end of it, and a card
+/// turns that same rule into a statement filed in the wrong month.
+///
+/// So the phrases are grouped by FIELD rather than listed. Two phrases
+/// naming the same field are a bilingual header; two phrases naming
+/// different fields are two columns, and only the second means the
+/// value beside the label is not ours.
+///
+/// The money phrases carry no date and are here anyway: what they do
+/// is END the value before them. `Statement Date 20/08/2026 Credit
+/// Limit 30,000.00` has one date in it and `Statement Date 20/08/2026
+/// Minimum Payment Due 10/09/2026` has two, and nothing but the label
+/// tells them apart.
+const _headerFields = <String, String>{
+  // The date this reader is after, as a point and as a span. Every
+  // entry in `_periodLabels` appears here, because a label that can be
+  // searched for must also be countable as a field.
+  'statement date': _statementField,
+  'tarikh penyata': _statementField,
+  'date of statement': _statementField,
+  'statement period': _statementField,
+  'penyata bagi tempoh': _statementField,
+  'tempoh penyata': _statementField,
+  'bagi tempoh': _statementField,
+  'for the period': _statementField,
+  'period covered': _statementField,
+  'period from': _statementField,
+  'period': _statementField,
+  // The one that is three weeks later and belongs to the next period.
+  'payment due date': 'due',
+  'tarikh akhir pembayaran': 'due',
+  'tarikh bayaran akhir': 'due',
+  'due date': 'due',
+  // Money. None of these is a date; each of them ends a value.
+  'minimum payment': 'amount',
+  'bayaran minimum': 'amount',
+  'statement balance': 'amount',
+  'outstanding balance': 'amount',
+  'current balance': 'amount',
+  'previous balance': 'amount',
+  'baki penyata': 'amount',
+  'credit limit': 'amount',
+  'had kredit': 'amount',
+  'available credit': 'amount',
+  // And the number the statement is for, which on AmBank's layout sits
+  // between the label and its value.
+  'account no': 'account',
+  'no. akaun': 'account',
+  'card number': 'account',
+  'nombor kad': 'account',
+};
+
+/// As much of [rest] as still belongs to the label it came after.
+///
+/// Cut at the first phrase naming a DIFFERENT field. Another phrase for
+/// the same field is a translation, not a new column, and cutting there
+/// would throw away the value it is a translation of.
+String _upToTheNextField(String rest) {
+  final lower = rest.toLowerCase();
+  var end = rest.length;
+  for (final e in _headerFields.entries) {
+    if (e.value == _statementField) continue;
+    final at = lower.indexOf(e.key);
+    if (at >= 0 && at < end) end = at;
+  }
+  return rest.substring(0, end);
+}
+
+/// The fields one line of header names, left to right, each run of the
+/// same field counted once.
+///
+/// `STATEMENT DATE / TARIKH PENYATA` is one field. `Statement Date
+/// Payment Due Date Minimum Payment` is three, and the row beneath it
+/// is three columns in that order.
+List<String> _fieldsNamedIn(String lower) {
+  final hits = <({int at, String field})>[];
+  for (final e in _headerFields.entries) {
+    final at = lower.indexOf(e.key);
+    if (at >= 0) hits.add((at: at, field: e.value));
+  }
+  hits.sort((a, b) => a.at.compareTo(b.at));
+  final out = <String>[];
+  for (final h in hits) {
+    if (out.isEmpty || out.last != h.field) out.add(h.field);
+  }
+  return out;
+}
+
+/// Every whole date in one line of text, in the orders Malaysia writes.
+///
+/// NEVER MM/DD/YYYY. `05/03/2026` is the fifth of March here and the
+/// third of May in an American layout, and there is nothing in the
+/// string to tell them apart — so the rule is the local one, applied
+/// without exception rather than guessed at per document.
+List<DateTime> _datesIn(String text) {
+  // Collected WITH THE OFFSET each was matched at, and returned in the
+  // order they are PRINTED rather than in the order the three patterns
+  // happen to run. The patterns run ISO first so the day-first one
+  // cannot read the tail of an ISO match -- that is about matching, and
+  // it has no business deciding which of `Statement Date` and `Payment
+  // Due Date` sits in the first column of the row below them.
+  final out = <({int at, DateTime date})>[];
+  void add(int at, DateTime? d) {
+    if (d == null) return;
+    if (out.any((e) => e.date == d)) return;
+    out.add((at: at, date: d));
+  }
+
+  // 2025-10-31. Taken first: run after the day-first pattern it would
+  // be reading the tail of its own match.
+  for (final m
+      in RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b').allMatches(text)) {
+    add(m.start, _date(int.parse(m.group(1)!), int.parse(m.group(2)!),
+        int.parse(m.group(3)!)));
+  }
+
+  // 31/10/2025, 31-10-25, 31.10.2025
+  //
+  // NO TRAILING `\b`. A PDF's text layer runs neighbouring cells
+  // together — Hong Leong's header extracts as
+  // `09/12/24 - 08/01/25PERSIARAN SG LONG 2`, with the address welded
+  // to the period's end date. A word boundary between `5` and `P` does
+  // not exist, so the closing date of the statement was invisible and
+  // the OPENING one was taken instead. `(?!\d)` keeps the year from
+  // running on into a reference number, which is the thing the
+  // boundary was actually guarding against.
+  for (final m in RegExp(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?!\d)')
+      .allMatches(text)) {
+    var year = int.parse(m.group(3)!);
+    if (year < 100) year += 2000;
+    add(m.start, _date(year, int.parse(m.group(2)!), int.parse(m.group(1)!)));
+  }
+
+  // 31 OCT 2025, 31 Oktober 2025, 31-Dis-2025
+  for (final m
+      in RegExp(r'\b(\d{1,2})[\s-]?([A-Za-z]{3,9})\.?[\s-]?(\d{2,4})(?!\d)')
+          .allMatches(text)) {
+    final month = _monthNumber(m.group(2)!);
+    if (month == null) continue;
+    var year = int.parse(m.group(3)!);
+    if (year < 100) year += 2000;
+    add(m.start, _date(year, month, int.parse(m.group(1)!)));
+  }
+
+  out.sort((a, b) => a.at.compareTo(b.at));
+  return out.map((e) => e.date).toList();
+}
+
+/// A month name in either of the languages a Malaysian statement is
+/// printed in.
+///
+/// ## Two failures, and they pull in opposite directions
+///
+/// THE MALAY HALF WAS MISSING, silently. A statement printing `03 OGOS`
+/// or `17 DIS` returned null here, which the caller reads as "no date
+/// could be read" — so a Bahasa Melayu statement came back as every
+/// line unreadable, over the language it was printed in. Maybank, CIMB
+/// and Bank Islam all issue them. Five of the twelve differ enough to
+/// matter: MAC, MEI, OGOS, OKTOBER, DISEMBER. The other seven shared
+/// their first three letters with English and were being read by
+/// accident.
+///
+/// AND THE MATCH WAS TOO LOOSE. It took the first three letters and
+/// looked them up, so `DECLINED` was December and `MARGIN` was March.
+/// That was harmless while a separator was required — nothing reads
+/// `03 DECLINED` as a date field — but AmBank prints `01Jan` with
+/// nothing between them, so the separator had to become optional, and
+/// the moment it did, `03DECLINED` became the third of December.
+///
+/// ## The rule
+///
+/// The name must be a PREFIX of a real month name, at least three
+/// letters long — not merely share three letters with one. `DEC` and
+/// `SEPT` and `OGOS` are prefixes. `DECLINED` is not a prefix of
+/// `DECEMBER`; it agrees for three letters and then disagrees, which
+/// is exactly the case that was being waved through.
+///
+/// No two months in the two languages share a prefix of three letters
+/// with different numbers, so there is nothing to disambiguate: `jun`
+/// is June and Jun, `jul` is July and Julai, `mar` is March and `mac`
+/// is Mac, and both mean the same month.
+int? _monthNumber(String name) {
+  final s = name.toLowerCase().replaceAll('.', '').trim();
+  if (s.length < 3) return null;
+  const months = <String, int>{
+    'january': 1, 'february': 2, 'march': 3, 'april': 4,
+    'may': 5, 'june': 6, 'july': 7, 'august': 8,
+    'september': 9, 'october': 10, 'november': 11, 'december': 12,
+    // Bahasa Melayu. `april`, `september` and `november` are spelled
+    // the same and are already above.
+    'januari': 1, 'februari': 2, 'mac': 3, 'mei': 5,
+    'jun': 6, 'julai': 7, 'ogos': 8, 'oktober': 10, 'disember': 12,
+  };
+  for (final e in months.entries) {
+    if (e.key.startsWith(s)) return e.value;
+  }
   return null;
 }
 
@@ -470,3 +1168,546 @@ double? _mt940Amount(String raw) {
   if (v == null || v < 0) return null;
   return v;
 }
+
+
+/// A statement that was PHOTOGRAPHED rather than exported.
+///
+/// `0682` gave a scan target the ability to repeat: a bank statement is
+/// forty records with the same four fields, not one record, so the
+/// reader is asked for an array and answers in
+/// [OcrExtraction.rows] — keyed by the column names a platform
+/// administrator ticked in the console.
+///
+/// Those keys are `bank_transactions` column names, and
+/// `import_bank_transactions` takes `bank_transactions` column names.
+/// So the shapes already match and nothing here translates between
+/// them. What this does is COERCE: the reader is asked for what is
+/// printed, so a date arrives as `03/09/2026` and an amount as
+/// `1,900.00` or `(250.00)`, and both have to become the ISO date and
+/// the plain number the RPC casts.
+///
+/// It reuses `parseStatementDate` and `_number` rather than writing
+/// that again. A photographed statement and a pasted one carry the same
+/// Malaysian conventions — day-first dates, brackets for a withdrawal,
+/// `RM` in front of the figure — and two parsers for one convention is
+/// two parsers that will disagree about 03/04.
+///
+/// ## The sign, and why this does not try harder
+///
+/// A statement with separate Debit and Credit columns gives the reader
+/// no sign, and the admin's field description ("negative for money
+/// out") is the only thing asking for one. A model that gets it wrong
+/// turns a withdrawal into a deposit, which is the most expensive
+/// mistake available here.
+///
+/// Nothing in this function can tell. What CAN tell is the running
+/// balance, and `0369` already checks it line by line inside
+/// `import_bank_transactions`: a wrong sign breaks the chain and the
+/// whole import is refused, naming the line. So the balance is passed
+/// through whenever the reader gave one, and that check is the reason
+/// this parser is allowed to be naive about the sign.
+StatementParse scannedStatement(
+  OcrExtraction? read, {
+  /// The statement's own date, read off the file's text layer rather
+  /// than asked of a model. `statementPeriodFromText`.
+  ///
+  /// It OUTRANKS `document_date`, and that is the point of it: one was
+  /// printed on the page and extracted, the other was a question put to
+  /// a reader that may decline to answer — and did, on two RHB
+  /// statements, taking a hundred and two faultless lines down with it.
+  ({DateTime date, String evidence})? period,
+
+  /// The account number of the bank account this is being imported
+  /// into, so the statement can be checked against it. Null where the
+  /// caller has no account in hand — the parked-photograph path, and
+  /// every test that is not about this.
+  String? intoAccountNumber,
+}) {
+  final rows = <StatementRow>[];
+  final problems = <String>[];
+  final notices = <String>[];
+
+  // The balance printed BEFORE the first line and AFTER the last, where
+  // the statement prints one.
+  double? leading;
+  double? trailing;
+
+  // The first line that carried a whole date, for the lines that carry
+  // only a day and a month. Used only where the statement's own date is
+  // missing -- the header is the better anchor because it is printed
+  // once and read once, where a line's year is one more thing to have
+  // been misread.
+  DateTime? anchorDate;
+
+  // Lines that printed a day and a month and could not be placed in a
+  // year, because neither the statement's own date nor any other line
+  // supplied one. One cause, however many lines it took down.
+  var unplaceable = 0;
+
+  // Lines placed in a year by the file's own text layer. Counted so it
+  // can be SAID: a year that came from somewhere other than the line
+  // itself is a thing somebody checking their statement is entitled to
+  // know about, and to disagree with.
+  var placedFromPeriod = 0;
+
+  // Lines that could not be read, as a COUNT of lines rather than of
+  // messages. One message now covers fifty-five undated lines, and a
+  // document-level problem covers none at all.
+  var perLine = 0;
+
+  // What the document says about itself: its period, the balance it
+  // opens and closes at, the account it belongs to. Asked for since
+  // Phase 1; empty on every reading taken before it, which is why
+  // nothing below is allowed to require it.
+  final header = read?.statement ?? const <String, String>{};
+  final headerEnd = parseStatementDate(header['period_end'] ?? '') ??
+      parseStatementDate(header['period_start'] ?? '');
+
+  final source = read?.rows ?? const <Map<String, String>>[];
+  for (var i = 0; i < source.length; i++) {
+    final row = source[i];
+    // 1-based, and the line number a person would count to on the
+    // photograph rather than an index.
+    final at = i + 1;
+
+    final rawDate = _first(row, const ['transaction_date', 'value_date']);
+    final rawAmount = _first(row, const ['amount']);
+
+    // BAKI DIBAWA KE HADAPAN, B/F, BALANCE BROUGHT FORWARD, OPENING
+    // BALANCE. Nearly every Malaysian statement opens with one and many
+    // close with one, and it is NOT a transaction: a balance, a
+    // description, and no amount at all.
+    //
+    // It used to be reported as "Line 1: no amount could be read",
+    // which is a complaint about the one line on the page that has
+    // nothing wrong with it — on the first line, where it is the first
+    // thing anybody reads about their own statement.
+    //
+    // And the balance on it was thrown away, which is the more
+    // expensive half: it is the anchor the whole chain hangs from, and
+    // without it the FIRST real line is the one line whose sign nothing
+    // can settle.
+    //
+    // Recognised by SHAPE AND POSITION rather than by its words. The
+    // wording is different at every bank and in two languages, and a
+    // keyword list is a list that is missing the one this statement
+    // used. A balance with no amount in the MIDDLE of a statement is a
+    // different thing entirely — a line whose amount was unreadable —
+    // and is still reported.
+    if (rawAmount == null && (i == 0 || i == source.length - 1)) {
+      final marker = _numberOrNull(_first(row, const ['running_balance']));
+      if (marker != null) {
+        if (i == 0) {
+          leading = marker;
+        } else {
+          trailing = marker;
+        }
+        continue;
+      }
+    }
+
+    if (rawDate == null && rawAmount == null) continue;
+
+    var date = rawDate == null ? null : parseStatementDate(rawDate);
+
+    // A line printing only a day and a month, which is most of them.
+    // The year comes off the statement's own date, or off another line
+    // that carried one -- never off today, which would file last
+    // December's transactions into this year.
+    if (date == null && rawDate != null) {
+      final partial = parsePartialStatementDate(rawDate);
+      final anchor =
+          period?.date ?? headerEnd ?? read?.documentDate ?? anchorDate;
+      if (partial != null && anchor != null) {
+        date = resolveStatementYear(
+          day: partial.day,
+          month: partial.month,
+          near: anchor,
+        );
+        if (period != null) placedFromPeriod++;
+      }
+    }
+
+    if (date == null) {
+      // A day and a month that could not be placed in a year is not
+      // forty-three separate failures, it is ONE -- the statement's own
+      // date was not read, and nothing else on the page can supply the
+      // year. Counted here and said once below; saying it per line
+      // fills the dialog with the same sentence and buries the cause.
+      if (rawDate != null && parsePartialStatementDate(rawDate) != null) {
+        unplaceable++;
+      } else {
+        perLine++;
+        problems.add(
+          'Line $at: no date could be read'
+          '${rawDate == null ? '' : ' from "$rawDate"'}.',
+        );
+      }
+      continue;
+    }
+    anchorDate ??= date;
+
+    final amount = rawAmount == null ? null : _number(rawAmount);
+    if (amount == null) {
+      perLine++;
+      problems.add(
+        'Line $at: no amount could be read'
+        '${rawAmount == null ? '' : ' from "$rawAmount"'}.',
+      );
+      continue;
+    }
+
+    rows.add(StatementRow(
+      date: date,
+      amount: amount,
+      description: _first(row, const ['description']),
+      reference: _first(row, const ['reference']),
+      // Passed through rather than dropped, and it is the most
+      // valuable field on the row: it is what `0369` checks the rest
+      // of the reading against.
+      balance: _numberOrNull(_first(row, const ['running_balance'])),
+    ));
+  }
+
+  if (unplaceable > 0) {
+    problems.add(
+      '$unplaceable ${unplaceable == 1 ? 'line prints' : 'lines print'} a '
+      'day and a month with no year, and the statement\'s own date was '
+      'not read — so there is nothing on the page to say which year they '
+      'belong to. Nothing has been guessed. Send the page with the '
+      'statement date or the period on it, or paste the statement in '
+      'instead.',
+    );
+  }
+
+  if (placedFromPeriod > 0 && period != null) {
+    notices.add(
+      '$placedFromPeriod ${placedFromPeriod == 1 ? 'line prints' : 'lines print'} '
+      'a day and a month with no year. They have been placed in the year '
+      'nearest ${_day(period.date)}, which is the statement\'s own date as '
+      'printed on the file — "${period.evidence}". Nothing was guessed from '
+      'today\'s date.',
+    );
+  }
+
+  // Is this even the right account? Four digits, and a notice rather
+  // than a refusal -- see `accountMismatch`.
+  final wrongAccount = accountMismatch(
+    statementTail: header['account_number_tail'],
+    accountNumber: intoAccountNumber,
+  );
+  if (wrongAccount != null) notices.add(wrongAccount);
+
+  final put = balancesDecideTheSigns(rows, leading: leading, trailing: trailing);
+
+  // DOES THE STATEMENT FOOT?
+  //
+  // `import_bank_transactions` walks the running balance from one line
+  // to the next, which catches a line misread BETWEEN two balances. It
+  // cannot catch a line missing from the END, a page never read, or a
+  // first line never returned — each of those closes a chain that was
+  // never the whole statement, and closes it perfectly.
+  //
+  // Opening plus every amount should reach closing. One sen of
+  // tolerance, which is the acceptance matrix's own figure and is what
+  // rounding can legitimately cost across a page of two-decimal money.
+  //
+  // Nothing is adjusted to make it agree. A closing balance worked out
+  // from the rows agrees with the rows by construction and checks
+  // nothing at all, which is why the reader is told to give what is
+  // printed or nothing.
+  final opening = _numberOrNull(header['opening_balance']);
+  final closing = _numberOrNull(header['closing_balance']);
+  if (opening != null && closing != null && put.rows.isNotEmpty) {
+    final sum = put.rows.fold<double>(0, (a, r) => a + r.amount);
+    final reached = opening + sum;
+    final gap = reached - closing;
+    if (gap.abs() > 0.01) {
+      problems.add(
+        'The statement opens at ${_money(opening)} and closes at '
+        '${_money(closing)}. The ${put.rows.length} lines read come to '
+        '${_money(sum)}, which reaches ${_money(reached)} — '
+        '${_money(gap.abs())} out. A line is missing or misread, and '
+        'nothing has been changed to make it agree.',
+      );
+    }
+  }
+
+  return StatementParse(
+    put.rows,
+    [...problems, ...put.problems],
+    [...notices, ...put.notices],
+    perLine + unplaceable,
+  );
+}
+
+/// The sign of every scanned line, settled by the column that proves it.
+///
+/// ## The failure this exists for
+///
+/// A Malaysian retail statement prints two columns, Debit and Credit,
+/// and NO SIGN. So a reader looking at a photograph has to infer the
+/// sign from which column a figure sits in, and it gets that wrong
+/// often enough to matter -- the field description asks for it
+/// ("negative for money out") and a description is not a guarantee.
+///
+/// A wrong sign is the most expensive mistake available here, and until
+/// now the only thing that caught it was `import_bank_transactions`,
+/// which walks the running balance (`0369`) and REFUSES THE WHOLE
+/// IMPORT naming one line. That is the right check and the wrong
+/// remedy: somebody who photographed forty lines gets an error about
+/// line 12 and no way forward but to type all forty in.
+///
+/// ## Why this can be done rather than guessed
+///
+/// The running balance is not an opinion. Where two consecutive lines
+/// both carry one, the amount between them is ARITHMETIC:
+///
+///     oldest-first:  amount[i]   = balance[i] - balance[i-1]
+///     newest-first:  amount[i-1] = balance[i-1] - balance[i]
+///
+/// So the reader's figure is a CHECK on that, not the source of it. If
+/// it agrees, nothing happens. If it agrees in magnitude and disagrees
+/// in sign, the sign is put right and said so. If it disagrees in
+/// magnitude, NOTHING IS TOUCHED -- that is a missing line or a misread
+/// figure, and it must still reach the refusal, because silently
+/// rewriting an amount to make a chain close is how a statement comes
+/// to reconcile against a number nobody printed.
+///
+/// ## Every delta is computed from the ORIGINAL balances
+///
+/// So the repairs cannot cascade: line 12 being wrong does not move
+/// what line 13 is compared against. The balances are read values and
+/// are never rewritten.
+({List<StatementRow> rows, List<String> problems, List<String> notices})
+    balancesDecideTheSigns(
+  List<StatementRow> rows, {
+  /// The balance printed above the first line — a brought-forward row
+  /// on a statement that runs oldest-first.
+  ///
+  /// It matters out of proportion to its size: without it the FIRST
+  /// line is the one line with no pair of balances either side of it,
+  /// so it is the one line whose sign nothing can settle. With it,
+  /// every line on the page is provable.
+  double? leading,
+
+  /// The balance printed below the last line, which is the same
+  /// anchor for a statement that runs newest-first.
+  double? trailing,
+}) {
+  final out = [...rows];
+  final problems = <String>[];
+  final notices = <String>[];
+  if (rows.isEmpty) return (rows: out, problems: problems, notices: notices);
+
+  // Which way the statement runs, off its own dates -- the same
+  // question `import_bank_transactions` asks, answered the same way, so
+  // the two cannot disagree about which line a pair of balances
+  // describes.
+  final newestFirst = rows.length > 1 && rows.last.date.isBefore(rows.first.date);
+
+  // The chain in printed order, with the markers at each end. Index -1
+  // is the leading marker and index `rows.length` the trailing one, so
+  // one loop covers the ordinary pairs and both anchors without a
+  // special case for either.
+  double? balanceAt(int i) {
+    if (i < 0) return leading;
+    if (i >= rows.length) return trailing;
+    return rows[i].balance;
+  }
+
+  for (var i = 0; i <= rows.length; i++) {
+    final before = balanceAt(i - 1);
+    final after = balanceAt(i);
+    if (before == null || after == null) continue;
+
+    // Forwards, a pair of balances describes the LATER line; backwards
+    // it describes the earlier one, because going backwards is undoing
+    // the movement that got you there.
+    final at = newestFirst ? i - 1 : i;
+    if (at < 0 || at >= rows.length) continue;
+    final delta = newestFirst ? before - after : after - before;
+    final was = out[at].amount;
+
+    if ((delta - was).abs() < _sen) continue; // already right
+
+    if ((delta + was).abs() < _sen) {
+      out[at] = StatementRow(
+        date: out[at].date,
+        amount: delta,
+        description: out[at].description,
+        reference: out[at].reference,
+        balance: out[at].balance,
+      );
+      notices.add(
+        'Line ${at + 1}: read as ${_money(was)} but the balance moves by '
+        '${_money(delta)}, so it is ${delta < 0 ? 'money out' : 'money in'}. '
+        'Corrected.',
+      );
+      continue;
+    }
+
+    // Neither. Said here rather than left for the RPC, so it is on
+    // screen BEFORE somebody presses Import -- but not repaired, and
+    // the import will still be refused if they go ahead.
+    problems.add(
+      'Line ${at + 1}: read as ${_money(was)}, but the balance moves by '
+      '${_money(delta)}. A line is missing, or one of these figures was '
+      'misread.',
+    );
+  }
+
+  return (rows: out, problems: problems, notices: notices);
+}
+
+/// Half a sen, which is the right width for a figure carried to two
+/// places: it absorbs the representation error in a difference of
+/// doubles and nothing else. A whole sen would let a real one-sen
+/// transposition through, and a one-sen transposition is a real error.
+const _sen = 0.005;
+
+/// Two places and a sign, for a sentence a person reads rather than a
+/// figure a column aligns. `Fmt` is not imported here on purpose: this
+/// file is parsing, and it is tested without Flutter.
+String _money(double v) => v.toStringAsFixed(2);
+
+/// A date in a sentence somebody reads, rather than in a field.
+///
+/// Day first, because this is Malaysia and the notice sits beside a
+/// statement printed the same way.
+String _day(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/'
+    '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+/// Which of the dialog's three sources is previewed and imported.
+///
+/// A photograph wins over whatever is in the text box, because it is
+/// the thing somebody just did -- and because the two cannot be merged:
+/// they are two readings of what is probably the same statement, and
+/// importing both would put every line in twice under two slightly
+/// different descriptions, which is exactly the case
+/// `import_bank_transactions` deduplicates worst.
+///
+/// Its own function rather than an expression inside `build`, because
+/// the precedence is the rule and a rule inside a widget that needs a
+/// camera to reach cannot be asserted.
+/// The last four digits of an account number, or null if there are not
+/// four digits in it.
+///
+/// Digits only, because the two sides are written differently and
+/// neither spelling is wrong: a statement prints `**** 4001` or
+/// `8881062574767`, and the account was typed into this system as
+/// `3900-0007-994` or `3900 0007 994`. Comparing the strings compares
+/// the punctuation.
+String? accountTail(String? raw) {
+  if (raw == null) return null;
+  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+  return digits.length < 4 ? null : digits.substring(digits.length - 4);
+}
+
+/// Whether this statement looks like it belongs to the account it is
+/// being imported into.
+///
+/// ## Why four digits, and why a notice
+///
+/// The reader is asked for FOUR CHARACTERS of the account number and
+/// never the whole thing — enough to say "this may not be the right
+/// account", not enough to be worth leaking. That is the pack's own
+/// privacy rule and it decides the strength of the answer too: four
+/// digits can collide, so this is a NOTICE and not a refusal.
+///
+/// It is a notice for a second reason. Somebody may be filing a
+/// statement from an account that was renumbered, or an old statement
+/// from before a migration, and the lines on it are still perfectly
+/// importable. A refusal would make this system wrong about a document
+/// the person holding it knows more about than we do.
+///
+/// Null where there is nothing to compare — no tail read, or an account
+/// recorded here without a number. Silence is right for both: an
+/// absence is not a disagreement, and a warning raised whenever a field
+/// is blank is a warning people learn to scroll past.
+String? accountMismatch({
+  required String? statementTail,
+  required String? accountNumber,
+}) {
+  final want = accountTail(accountNumber);
+  final got = accountTail(statementTail);
+  if (want == null || got == null) return null;
+  if (want == got) return null;
+  return 'This statement ends $got and the account you are importing '
+      'into ends $want. The lines will still import — check it is the '
+      'right account before you do.';
+}
+
+/// What to say when this exact file has been filed here before.
+///
+/// ## Why it is said rather than acted on
+///
+/// The upload happens anyway. An `attachments` row is not merely a
+/// file: it carries `entity_table`, `entity_id` and `0708`'s evidence
+/// lock, so handing this document somebody else's attachment would
+/// re-file their paper against a record they did not choose. Telling
+/// them costs one duplicate object in a bucket; reusing silently could
+/// cost them the audit trail.
+///
+/// So this is a NOTICE, next to the sign repairs — something that was
+/// done differently from how it looked, worth knowing and not worth
+/// stopping for. Somebody re-uploading a statement because the first
+/// scan went badly is doing a reasonable thing, and the answer to it is
+/// a sentence, not a refusal.
+///
+/// Null when there is nothing to say. That covers a file genuinely new
+/// AND a file whose match predates `0711` and cannot be recognised —
+/// the two are indistinguishable from here, which is exactly why this
+/// never claims a document IS new.
+String? alreadyHereNotice({String? fileName, DateTime? filedAt}) {
+  if (fileName == null && filedAt == null) return null;
+  final named = (fileName ?? '').trim();
+  return 'This exact file has been filed here before'
+      '${filedAt == null ? '' : ', on ${_day(filedAt)}'}'
+      '${named.isEmpty ? '' : ', as $named'}. '
+      'It has been kept again rather than replacing what is already '
+      'there — the lines below are from this reading.';
+}
+
+/// What stands above the notices in the import dialog.
+///
+/// A pure function for one line of text, because that line was WRONG in
+/// production and nothing could have caught it. It read:
+///
+///     "$n lines were corrected against the running balance"
+///
+/// which was true while a sign repair was the only notice that existed
+/// and false the moment a second kind did. It was wrong twice over. It
+/// named a cause — the running balance — that no longer applied to
+/// every notice under it, so a year taken off the statement header was
+/// announced as an arithmetic correction. And it counted NOTICES as
+/// LINES, which were the same number only by accident: one notice
+/// covering fifty-five undated lines would have introduced itself as
+/// one line.
+///
+/// Both facts belong to the notices themselves, each of which says its
+/// own count and its own cause. So this says neither, and the dialog
+/// has no arithmetic of its own left to get wrong.
+String noticesHeading(int count) => count == 1
+    ? 'One thing worth knowing before you import'
+    : '$count things worth knowing before you import';
+
+StatementParse? statementPreview(StatementParse? scanned, String typed) =>
+    scanned ?? (typed.trim().isEmpty ? null : parseStatement(typed));
+
+/// The first of [keys] the row actually carries, trimmed, or null.
+///
+/// Several keys because the console's checklist is the real columns of
+/// `bank_transactions` and an administrator may reasonably tick
+/// `value_date` rather than `transaction_date` — they are both dates on
+/// the paper and a statement often prints only one.
+String? _first(Map<String, String> row, List<String> keys) {
+  for (final k in keys) {
+    final v = row[k]?.trim();
+    if (v != null && v.isNotEmpty) return v;
+  }
+  return null;
+}
+
+double? _numberOrNull(String? raw) => raw == null ? null : _number(raw);

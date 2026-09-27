@@ -37,11 +37,24 @@ ChargeSettlement settlementOf(Map<String, dynamic> charge) {
   return ChargeSettlement.unpaid;
 }
 
+/// The bill's number, whichever shape the row carries it in.
+///
+/// `propertyStatutoryCharges` selects it as an embedded
+/// `purchase_documents(doc_no)`, and `site_screen` flattens that to
+/// `bill_no` before asking. Reading both here is what stops the answer
+/// depending on which of the two a caller happened to hand over -- and
+/// it did: the sheet's "Bill it" tooltip passed the row as it came back
+/// from the database, so a charge already on BILL-0042 was told only
+/// "Already on a bill.", dropping the number it was carrying.
+String? billNoOf(Map<String, dynamic> charge) =>
+    charge['bill_no'] as String? ??
+    (charge['purchase_documents'] as Map?)?['doc_no'] as String?;
+
 /// A short phrase for the list.
 String describeSettlement(Map<String, dynamic> charge) {
   switch (settlementOf(charge)) {
     case ChargeSettlement.bill:
-      final no = charge['bill_no'] as String?;
+      final no = billNoOf(charge);
       return charge['paid_on'] == null
           ? (no == null ? 'On a bill' : 'On bill $no')
           : (no == null ? 'Paid, on a bill' : 'Paid, on bill $no');
@@ -95,7 +108,7 @@ bool canBill(Map<String, dynamic> charge) {
 /// Why billing is not offered, for the tooltip on the disabled button.
 String whyNotBillable(Map<String, dynamic> charge) {
   if (charge['bill_document_id'] != null) {
-    final no = charge['bill_no'] as String?;
+    final no = billNoOf(charge);
     return no == null
         ? 'Already on a bill.'
         : 'Already on bill $no.';

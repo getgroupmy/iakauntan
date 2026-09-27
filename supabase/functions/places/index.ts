@@ -54,7 +54,7 @@
  * no org to be a member of yet. What it protects is the quota, and a
  * session is enough for that.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
 import {

@@ -148,6 +148,53 @@ void main() {
       expect(json['description'], isNull);
       expect(json.containsKey('project_code'), isFalse);
     });
+
+    /// The matter, which `0687` put on `gl_lines` and `0688` made every
+    /// posting path carry.
+    ///
+    /// Exactly the shape the department arrived in, and exactly the
+    /// shape that was missing for years before it: the column and the
+    /// posting path both exist, and a line that never sends the key
+    /// makes the matter reports answer confidently about a subset.
+    /// `report_matter_trial_balance` would show a matter's documents
+    /// and silently omit everything journalled against it by hand —
+    /// which reads as a matter that cost less, not as a missing figure.
+    test('sends the matter when a line names one', () {
+      final json = JournalDraft(
+        accountId: 'acct',
+        debit: 250,
+        matterId: 'm-1',
+      ).toJson();
+      expect(json['matter_id'], 'm-1');
+    });
+
+    test('and omits the key entirely when it names none', () {
+      // Not null, and not ''. `0688` reads it through
+      // `nullif(..., '')::uuid`, so an empty string survives — but an
+      // absent key is what the other dimensions do, and a line that
+      // sends `'matter_id': null` on every ordinary journal is noise on
+      // the wire that means nothing.
+      final json = JournalDraft(accountId: 'acct', debit: 250).toJson();
+      expect(json.containsKey('matter_id'), isFalse);
+    });
+
+    // A sweep mutant that gives `matterId` a field initializer
+    // (`String? matterId = 'm-1';`) SURVIVES these, and it is an
+    // equivalent mutant rather than a gap: `JournalDraft` takes
+    // `this.matterId` as a constructor parameter, and a parameter
+    // always wins over a field initializer, so the default is
+    // unreachable from every construction path. Written down here so
+    // the next sweep does not spend an afternoon on it.
+    test('two lines can name two different matters', () {
+      // The shape a transfer between client ledgers takes: one entry,
+      // one matter credited and another debited, no bank movement. A
+      // header field could not express it, which is why the matter is
+      // per line.
+      final a = JournalDraft(accountId: 'x', debit: 75, matterId: 'm-1');
+      final b = JournalDraft(accountId: 'y', credit: 75, matterId: 'm-2');
+      expect(a.toJson()['matter_id'], 'm-1');
+      expect(b.toJson()['matter_id'], 'm-2');
+    });
   });
 }
 

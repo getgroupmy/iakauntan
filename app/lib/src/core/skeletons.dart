@@ -397,3 +397,224 @@ class CardRowsSkeleton extends StatelessWidget {
     ),
   );
 }
+
+/// A row of tabs on the way, in the shape of a `TabBar`.
+///
+/// Most tabbed screens put their `TabBar` in the `AppBar`, OUTSIDE the
+/// [AsyncView] — `pos/stalls_screen.dart` is the pattern — so the strip
+/// is already drawn while the body waits and there is nothing here to
+/// outline.
+///
+/// A few build the whole `DefaultTabController` inside the builder,
+/// because how many tabs there are depends on the row: a strata site
+/// has different tabs from a freehold one, and a company's seven tabs
+/// come with it. On those the strip itself is waiting, and a body
+/// skeleton with no strip above it jumps down by the height of a tab
+/// bar the moment the row lands — the reflow a skeleton exists to
+/// remove, in the direction that looks like the page settling.
+///
+/// [tabs] is a count of the tabs the screen will draw. Where the row
+/// decides that too, the usual count is the honest guess: being one tab
+/// out moves nothing vertically, which is the axis this is about.
+class TabStripSkeleton extends StatelessWidget {
+  const TabStripSkeleton({super.key, this.tabs = 3});
+
+  /// How many tabs the real strip has.
+  final int tabs;
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+    child: SizedBox(
+      // The height `TabBar` gives itself for a text-only tab. Hard-coded
+      // rather than measured because the point is to occupy exactly the
+      // space the real strip will, and a strip that sizes itself to its
+      // bones is the wrong height by definition.
+      //
+      // 48 and not 46, which is what this said first and what it was
+      // worth writing a test against a real `TabBar` to find out. Two
+      // pixels is nothing to look at and is still the page moving when
+      // the row lands, which is the whole thing this is for.
+      height: 48,
+      child: Row(
+        children: [
+          for (var i = 0; i < tabs; i++)
+            Expanded(
+              child: Center(
+                // Keyed so a test can count them. `Bone` is abstract and
+                // its concrete classes are private, so `find.byType`
+                // reaches none of them.
+                key: ValueKey('skeleton-tab-$i'),
+                child: Bone.text(words: 1 + i % 2),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A tab strip with a body under it, which is what a tabbed detail
+/// screen is waiting on.
+///
+/// Composed rather than left to each screen because the composition has
+/// a trap in it. A plain `Column` of [TabStripSkeleton] and a body
+/// OVERFLOWS: the body sizes itself to its rows, the column is given
+/// the height of the page, and five card rows plus a 48-pixel strip
+/// came to ten pixels more than `site_screen` had to give. In a debug
+/// build that is the yellow stripe; in a RELEASE build the overflow is
+/// clipped silently, so the screen looks right and the outline is
+/// simply missing its last row.
+///
+/// So the body is [Flexible] and clipped, and it cannot be dragged --
+/// a skeleton is not content, and an outline that scrolls is a gesture
+/// that does nothing.
+class TabbedSkeleton extends StatelessWidget {
+  const TabbedSkeleton({super.key, this.tabs = 3, required this.body});
+
+  /// How many tabs the real strip has.
+  final int tabs;
+
+  /// The outline of whatever the first tab shows.
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      TabStripSkeleton(tabs: tabs),
+      Flexible(
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: body,
+        ),
+      ),
+    ],
+  );
+}
+
+/// The board while the stages and the deals are on the way.
+///
+/// Not one of the shared shapes in `core/skeletons.dart`, because none
+/// of them is a board: this is a horizontal row of fixed-width columns,
+/// and the width is what matters. A column here is 280 wide with a 12
+/// margin because `crm/pipeline_screen.dart`'s stage column is, and a skeleton that let the
+/// columns size themselves would be the wrong shape in the one
+/// direction this screen scrolls.
+///
+/// Four columns rather than the real count, which is not known yet --
+/// being a column out shifts nothing already drawn, and four is what
+/// fits a laptop.
+class BoardSkeleton extends StatelessWidget {
+  const BoardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          // Not scrollable by the person. It is not content, and a
+          // board that can be dragged sideways before there is
+          // anything on it is a gesture that does nothing.
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(Space.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var c = 0; c < 4; c++)
+                Container(
+                  key: ValueKey('skeleton-stage-$c'),
+                  width: 280,
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(Space.md),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // The stage name, and the total underneath it.
+                      const Bone.text(words: 2),
+                      const SizedBox(height: Space.xs),
+                      const Bone.text(words: 1),
+                      const SizedBox(height: Space.md),
+                      // Fewer cards further right: a pipeline narrows,
+                      // and an outline that says otherwise is claiming
+                      // something about the deals it has not seen.
+                      for (var d = 0; d < 3 - (c ~/ 2); d++)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: Space.sm),
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            child: Padding(
+                              padding: EdgeInsets.all(Space.md),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Bone.text(words: 3),
+                                  SizedBox(height: Space.xs),
+                                  Bone.text(words: 2),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// A chart on the way, in the shape of the box it is drawn in.
+///
+/// A chart is the one place where outlining the CONTENT would be a lie:
+/// bones in the shape of a line going up say the line goes up, and
+/// nobody has read the figures yet. So this outlines the frame — the
+/// plot area and the labels under it — and leaves the plot itself a
+/// plain block.
+///
+/// [height] must be the height the real chart is given. A chart sits in
+/// a fixed box on every screen in this app precisely so the page does
+/// not jump when the series arrives, and a skeleton that sized itself
+/// would undo that.
+class ChartSkeleton extends StatelessWidget {
+  const ChartSkeleton({super.key, required this.height, this.labels = 6});
+
+  /// The height of the box the chart is drawn in.
+  final double height;
+
+  /// How many labels run along the bottom.
+  final int labels;
+
+  @override
+  Widget build(BuildContext context) => Skeletonizer(
+    child: SizedBox(
+      height: height,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Bone(
+              key: const ValueKey('skeleton-chart-plot'),
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+          ),
+          const SizedBox(height: Space.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < labels; i++)
+                Bone.text(
+                  key: ValueKey('skeleton-chart-label-$i'),
+                  words: 1,
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}

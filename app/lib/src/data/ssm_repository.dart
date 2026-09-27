@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/error_text.dart';
 import '../core/providers.dart';
 
 /// Asking SSM's register who a company actually is.
@@ -414,10 +415,11 @@ class SsmProbe {
 }
 
 /// What the function refused, in words worth showing somebody.
-class SsmLookupException implements Exception {
+class SsmLookupException implements Exception, Explained {
   const SsmLookupException(this.code, this.message, {this.status = 500});
 
   final String code;
+  @override
   final String message;
   final int status;
 

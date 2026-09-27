@@ -268,6 +268,15 @@ begin
            -- the whole point of it.
            ('company_transfers', 'from_user_id'),
            ('company_transfers', 'to_user_id'),
+           -- `0719`. A support grant names a PLATFORM ADMINISTRATOR,
+           -- who is by definition not a colleague of the company being
+           -- read -- a grant over books you are already a member of
+           -- would be pointless. Guarding it would refuse every row the
+           -- table exists to hold. `grant_support_access` is the only
+           -- writer, it is SECURITY DEFINER, it checks
+           -- `app.is_platform_admin()`, and nothing holds the insert
+           -- privilege through PostgREST.
+           ('support_access',    'admin_id'),
            -- The membership row itself, and rows keyed on whoever did
            -- the thing rather than on somebody work is handed to.
            ('org_members',        'user_id'),

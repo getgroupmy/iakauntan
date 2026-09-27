@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/safe_link.dart';
 import '../../core/skeletons.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -140,7 +141,7 @@ class MenuLinksScreen extends ConsumerWidget {
             itemBuilder: (_, i) {
               final l = rows[i];
               final dead = menuLinkDead(l, now);
-              final url = menuLinkUrl(Uri.base.origin, '${l['token']}');
+              final url = menuLinkUrl(shareOrigin(), '${l['token']}');
               return ListTile(
                 isThreeLine: true,
                 leading: const Icon(Icons.qr_code_2),

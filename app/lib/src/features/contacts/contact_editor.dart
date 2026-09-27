@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/address_field.dart';
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
@@ -351,7 +352,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         setState(() => _loading = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Could not load contact: $e')));
+        ).showSnackBar(SnackBar(content: Text('Could not load contact: ${errorText(e)}')));
       }
     }
   }
@@ -416,7 +417,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) setState(() => _statementBusy = false);
     }
@@ -515,7 +516,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) setState(() => _statementBusy = false);
     }
@@ -731,7 +732,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        ).showSnackBar(SnackBar(content: Text(errorText(e))));
       }
     } finally {
       if (mounted) setState(() => _verifying = false);
@@ -1177,7 +1178,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           onChanged: (v) => setState(() => _stateCode = v),
                         ),
                         loading: () => const LinearProgressIndicator(),
-                        error: (e, _) => Text('$e'),
+                        error: (e, _) => Text(errorText(e)),
                       ),
 
                       const SizedBox(height: 24),

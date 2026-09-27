@@ -291,6 +291,22 @@ somebody creates one and no row means off. A receipt carries a supplier,
 an amount and sometimes a person's movements; sending that to a third
 party is a decision, not a default to discover afterwards.
 
+`0718` lets the PLATFORM move that starting position, under Console →
+Document scanning → *Settings*, alongside four other switches: the Scan
+and Upload buttons on AI SmartScan, the Upload button on Bank
+statements, and whether a company may read on a key of its own. The
+first three are presentation — they take a control off a screen and
+stop nothing, which is said on the page itself, because an operator who
+believes a hidden button is a safeguard has been misled by a screen.
+The other two are rules and are enforced in the database:
+`set_ocr_settings` refuses a company's own key when the platform has
+withdrawn it, and the reader default is read by `ocr_status`,
+`ocr_begin` **and** `ocr_record_local`, so a switch saying "on" can
+never sit above a server refusing every document. A row is a choice and
+its absence is not: a company that has answered — on or off — keeps its
+answer whatever the platform default becomes. It ships off, which is
+today's behaviour.
+
 **Capture first.** Where the device has a document scanner — ML Kit on
 Android, VisionKit on iOS — the **Scan** button opens it rather than the
 plain shutter: edge detection, perspective correction and glare removal
@@ -919,6 +935,98 @@ cross-tenant stats, an organization list, account suspension, module
 toggles and backend service settings.
 
 Verified: a company owner calling any platform function is refused.
+
+### The console's register of people
+
+`0721` adds Console → Platform → *Users*: everybody on the platform, what
+they can open, and the four things an operator does to an account.
+`platform_users` reads `auth.users`, which no tenant call can see, and
+answers a name, an address, a phone number, when they last signed in,
+how many companies they can open and whether they are suspended.
+`banned_until` in the past is somebody whose suspension has run out,
+which is not somebody suspended — the view says so rather than leaving a
+lapsed ban showing as a live one.
+
+Editing a name or a phone number is `platform_update_user`, ordinary SQL.
+The other three are **not**: creating an account, setting a password and
+suspending one live in `auth.users`, and the only supported way to write
+them is the Admin API with the service role key. That key is in the
+`platform-users` edge function and nowhere else — not in the schema, not
+in the app, not in any payload a browser can read. The function checks
+`am_i_platform_admin` **through the caller's own client** before it
+touches the admin client, so a forged body cannot borrow the service
+role; a password is never logged, never returned and never written into
+`audit_logs`; and an operator cannot suspend themselves, which is the one
+mistake that locks the platform's own staff out.
+
+An account made here is created with a password the administrator sets
+and confirmed straight away, so there is no e-mail to wait for. The
+dialog says out loud that the administrator now knows somebody else's
+password — a person typing another person's credentials should be aware
+they are doing it.
+
+### A company made for a customer, and who can open it
+
+`platform_create_organization` composes the ordinary `create_organization`
+with `app.hand_company_over`, so a company made in the console arrives
+with the same chart of accounts, tax codes, payment terms and warehouse
+as one somebody signs up for. Then it **deletes the operator's own
+membership**: `hand_company_over` steps an admin down to `admin` rather
+than out, and an operator who made a hundred companies for customers
+would otherwise hold standing access to all hundred. `0719` is where that
+delete lives, and `platform_org_access.sql` asserts it.
+
+`platform_update_organization` edits the name and the contact details and
+nothing else. Not the tax defaults, the fiscal year or the books start
+date — those change what the ledger does, and a platform operator
+changing them from outside is a company's numbers moving with nobody in
+it having asked.
+
+`0720` adds who can open which company, from both ends:
+`platform_user_organizations` for one person, `platform_org_members` for
+one company, and `platform_assign_org_access` /
+`platform_remove_org_access` to change it. Assigning upserts, because
+"give somebody access" and "change their role" are the same request
+arriving twice. Both refuse to leave a company without an owner — a
+company nobody can administer is a support ticket that cannot be
+answered from inside it — and an unknown role name is answered with the
+ten that exist rather than with a failed enum cast.
+
+### Support access, which is not a membership
+
+Platform staff could read cross-tenant statistics and could not open a
+customer's actual screens, so "your bank reconciliation is out by
+RM 11,008.23" had to be debugged by asking the customer what they could
+see. `0719` adds `support_access`: a row naming who, whose books, why,
+and until when.
+
+Four things make it different from giving yourself a membership.
+
+- **It expires.** Capped at eight hours, and `app.support_access_active`
+  is what every read goes through, so a session that has run out stops
+  working without anybody pressing anything.
+- **It reads and does not write.** `app.org_role` returns `auditor` for
+  a support session — real membership first, via `coalesce`, so it can
+  never *reduce* what somebody already had — and `auditor` is listed by
+  `can_read_ledger` and by none of `can_write`, `can_post` or
+  `can_admin`. The refusals are the same RLS policies that refuse an
+  auditor.
+- **A reason is required**, by the database and not only by the dialog,
+  and the customer can read it. It is the whole difference between
+  support and a back door, and a reason nobody can read afterwards is a
+  reason nobody gave.
+- **Either side can end it.** `end_support_access` accepts the
+  administrator who holds it, any platform administrator, **and**
+  `app.can_admin(org_id)` — so a company's own admin can shut the door
+  from the inside, on their own Security page, without asking us.
+
+It is written into the company's own `audit_logs` rather than only the
+platform's trail, so it appears where the customer already looks. And
+while one is open the app says so on **every screen**, in a banner above
+the shell: `auditor` reads everything the owner can read, so the sales
+list, the ledger and the payslips all look exactly as they would to
+somebody who belongs there. Nothing else on the screen says whose books
+these are.
 
 ### Modules and add-ons
 
@@ -1861,7 +1969,16 @@ Stated plainly so nothing here is mistaken for finished:
   will read — and opening a file rather than pasting one. Both are in
   now; `parseStatement` works out which format arrived from the content,
   because the extension is `.csv`, `.txt`, `.sta` or `.940` depending on
-  the bank and is missing entirely from a paste
+  the bank and is missing entirely from a paste. And `0717` added the
+  half that was genuinely absent: **posting a line that was never
+  entered**. `suggest_bank_matches` can only offer documents that are
+  ALREADY posted, so a statement imported into a ledger with nothing in
+  it had no way forward at all — every line answered "record the
+  receipt first" and no screen would record one.
+  `post_bank_transaction` enters the line against one chosen account,
+  with the sign of `amount` deciding which way round it goes, and
+  unmatching REVERSES a journal that came from the line so an undo and
+  a redo cannot double the figure
 - Statutory submission files. The **EA form is built** — `0608` computes
   C.P.8A from this employer's posted payslips, by the year of the pay
   date, with what a previous employer paid reported separately and in no

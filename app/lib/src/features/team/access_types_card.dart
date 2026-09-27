@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
@@ -185,7 +186,7 @@ class _AccessTypeSheetState extends ConsumerState<_AccessTypeSheet> {
       // database says otherwise is worse than no switch at all.
       setState(() => _modules[code] = previous);
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not save: $e')));
+          .showSnackBar(SnackBar(content: Text('Could not save: ${errorText(e)}')));
     }
   }
 

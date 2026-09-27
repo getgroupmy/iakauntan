@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -382,7 +383,7 @@ class _Breakdown extends ConsumerWidget {
 
     return lines.when(
       loading: () => const LinearProgressIndicator(),
-      error: (e, _) => Text('$e', style: Theme.of(context).textTheme.bodySmall),
+      error: (e, _) => Text(errorText(e), style: Theme.of(context).textTheme.bodySmall),
       data: (rows) {
         if (rows.isEmpty) {
           return Text(

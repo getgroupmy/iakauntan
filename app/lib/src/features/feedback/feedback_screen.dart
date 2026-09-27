@@ -6,6 +6,8 @@ import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'attachment_picker.dart';
+import 'file_drop.dart';
 import '../shared/attachments_card.dart';
 import 'screen_catalogue.dart';
 
@@ -35,7 +37,7 @@ class FeedbackScreen extends ConsumerWidget {
             child: FilledButton.icon(
               onPressed: () => showDialog<void>(
                 context: context,
-                builder: (_) => const _ReportDialog(),
+                builder: (_) => const ReportDialog(),
               ),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('New report'),
@@ -167,16 +169,30 @@ class _ReportTile extends ConsumerWidget {
   }
 }
 
-class _ReportDialog extends ConsumerStatefulWidget {
-  const _ReportDialog();
+/// The "Tell us" form, wherever it is opened from.
+///
+/// Public because it is opened from two places now: the "New report"
+/// button on this screen, and the floating button a beta tester carries
+/// on every other one. A second copy of this form would be a second
+/// place for the screen catalogue and the severity wording to drift.
+///
+/// [initialFiles] is what the floating button hands over: a screenshot
+/// it has already taken. It is seeded into the picker rather than
+/// uploaded separately, so a tester can remove it, add three more, and
+/// see the same five-file limit everybody else sees.
+class ReportDialog extends ConsumerStatefulWidget {
+  const ReportDialog({super.key, this.initialFiles = const []});
+
+  final List<DroppedFile> initialFiles;
 
   @override
-  ConsumerState<_ReportDialog> createState() => _ReportDialogState();
+  ConsumerState<ReportDialog> createState() => _ReportDialogState();
 }
 
-class _ReportDialogState extends ConsumerState<_ReportDialog> {
+class _ReportDialogState extends ConsumerState<ReportDialog> {
   final _title = TextEditingController();
   final _body = TextEditingController();
+  late List<DroppedFile> _files = widget.initialFiles;
   String _kind = 'bug';
   int _severity = 3;
 
@@ -339,6 +355,11 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
                 'other companies.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              const SizedBox(height: Space.md),
+              AttachmentPicker(
+                files: _files,
+                onChanged: (files) => setState(() => _files = files),
+              ),
             ],
           ),
         ),
@@ -353,17 +374,40 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
             if (_title.text.trim().isEmpty) return;
             final repo = ref.read(repoProvider);
             if (repo == null) return;
+            final files = _files;
             final done = await runWithFeedback(
               context,
               doing: 'report a problem',
-              successMessage: 'Sent — thank you',
-              action: () => repo.reportFeedback(
-                title: _title.text.trim(),
-                kind: _kind,
-                body: _body.text.trim().isEmpty ? null : _body.text.trim(),
-                screen: _where,
-                severity: _kind == 'bug' ? _severity : null,
-              ),
+              successMessage: files.isEmpty
+                  ? 'Sent — thank you'
+                  : 'Sent with ${files.length} '
+                      'file${files.length == 1 ? '' : 's'} — thank you',
+              action: () async {
+                final id = await repo.reportFeedback(
+                  title: _title.text.trim(),
+                  kind: _kind,
+                  body:
+                      _body.text.trim().isEmpty ? null : _body.text.trim(),
+                  screen: _where,
+                  severity: _kind == 'bug' ? _severity : null,
+                );
+                // After the report, never before: a file uploaded
+                // against a report that was then not filed is an
+                // object in a bucket with nothing pointing at it, and
+                // `attach_feedback_file` needs the id anyway.
+                //
+                // One at a time rather than `Future.wait`, so a
+                // refusal on the third names the third — wait reports
+                // one error for five attempts and abandons the rest.
+                for (final file in files) {
+                  await repo.attachToFeedback(
+                    reportId: id,
+                    fileName: file.name,
+                    bytes: file.bytes,
+                    mimeType: file.mimeType,
+                  );
+                }
+              },
             );
             ref.invalidate(myFeedbackProvider);
             if (done && context.mounted) Navigator.pop(context);

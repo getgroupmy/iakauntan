@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects, assertStringIncludes } from "jsr:@std/assert@1";
+import { assertEquals, assertRejects, assertStringIncludes } from "jsr:@std/assert@1.0.19";
 import { pemToDer, readCertificate, toBase64 } from "./der.ts";
 import {
   buildQualifyingProperties,

@@ -22,7 +22,7 @@
  * importing it costs `--allow-env`, and this file failed to load at all
  * on the run that first tried it.
  */
-import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1.0.19";
 
 import { originAllowed } from "./origin.ts";
 

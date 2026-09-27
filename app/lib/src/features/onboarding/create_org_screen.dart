@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/address_field.dart';
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
@@ -229,7 +230,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
       final to = widget.returnTo;
       if (to != null && mounted) context.go(to);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -803,7 +804,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                       onChanged: (v) => setState(() => _stateCode = v),
                     ),
                     loading: () => const LinearProgressIndicator(),
-                    error: (e, _) => Text('Could not load states: $e'),
+                    error: (e, _) => Text('Could not load states: ${errorText(e)}'),
                   )
                 else
                   TextFormField(

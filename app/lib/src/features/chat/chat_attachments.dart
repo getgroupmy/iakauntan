@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../shared/file_viewer.dart';
 import '../../core/providers.dart';
 import '../../core/recorded_audio.dart';
 import '../../core/theme.dart';
@@ -316,21 +316,19 @@ class ChatAttachmentView extends ConsumerWidget {
   }
 
   Future<void> _open(BuildContext context, WidgetRef ref) async {
-    // A signed link rather than a public one: the object is private and
-    // the policy behind it asks whether you are in this conversation.
-    await runWithFeedback(
+    // In the app, from the bytes -- see `showFileInApp`. This used to
+    // hand a signed link to the external browser, which left a working
+    // URL into somebody's private conversation in another
+    // application's history for an hour.
+    final path = attachment['storage_path'].toString();
+    await showFileInApp(
       context,
-      action: () async {
-        final url = await ref
-            .read(repoProvider)!
-            .chatFileUrl(attachment['storage_path'].toString());
-        final ok = await launchUrl(
-          Uri.parse(url),
-          mode: LaunchMode.externalApplication,
-        );
-        if (!ok) throw Exception('Could not open ${attachment['file_name']}');
-      },
-      successMessage: null,
+      ref,
+      storagePath: path,
+      fileName: attachment['file_name']?.toString() ?? 'File',
+      mimeType: attachment['mime_type']?.toString(),
+      // Its own bucket, behind its own policy.
+      fetch: () => ref.read(repoProvider)!.chatFileBytes(path),
     );
   }
 }
@@ -375,8 +373,12 @@ class _VoiceNoteState extends ConsumerState<_VoiceNote> {
     final ok = await runWithFeedback(
       context,
       action: () async {
-        final url = await ref.read(repoProvider)!.chatFileUrl(widget.path);
-        await _player.play(UrlSource(url));
+        // Bytes, not a signed URL. A voice note is somebody's private
+        // conversation, and `UrlSource` puts a working link to it into
+        // an `<audio>` element where anything that can read the page
+        // can read it. `BytesSource` keeps it in memory.
+        final bytes = await ref.read(repoProvider)!.chatFileBytes(widget.path);
+        await _player.play(BytesSource(bytes));
         _done ??= _player.onPlayerComplete.listen((_) {
           if (mounted) setState(() => _playing = false);
         });

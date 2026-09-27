@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
@@ -58,7 +58,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
       router.go('/tickets/$id');
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

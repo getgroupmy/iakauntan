@@ -347,4 +347,124 @@ void main() {
       expect(ours, lessThan(tiles * 0.8));
     });
   });
+
+  group('a tab strip, because some screens build their tabs from the row',
+      () {
+    testWidgets('outlines one bone to a tab', (t) async {
+      await t.pumpWidget(wrap(const TabStripSkeleton(tabs: 7)));
+      expect(skeletonizing(t), isTrue);
+      // Keyed, because `Bone` is abstract and its concrete classes are
+      // private -- `find.byType(Bone)` matches nothing at all, and an
+      // assertion written that way passes over an empty strip.
+      expect(find.byKey(const ValueKey('skeleton-tab-6')), findsOneWidget);
+      expect(find.byKey(const ValueKey('skeleton-tab-7')), findsNothing);
+    });
+
+    testWidgets('and stands exactly as tall as the TabBar it replaces',
+        (t) async {
+      // The reason the widget exists. `entity_screen` builds its
+      // DefaultTabController INSIDE the builder, so the strip is part
+      // of what is waiting; an outline that is the wrong height moves
+      // the whole body the moment the row lands.
+      //
+      // Measured against a real TabBar rather than against 46, so that
+      // a Flutter release changing the height fails here instead of
+      // silently moving one of them.
+      await t.pumpWidget(wrap(const TabStripSkeleton(tabs: 3)));
+      final ours = t.getSize(find.byType(TabStripSkeleton)).height;
+
+      await t.pumpWidget(wrap(
+        const DefaultTabController(
+          length: 3,
+          child: TabBar(tabs: [Tab(text: 'a'), Tab(text: 'b'), Tab(text: 'c')]),
+        ),
+      ));
+      final real = t.getSize(find.byType(TabBar)).height;
+
+      expect(ours, real);
+    });
+  });
+
+  group('a tab strip with a body under it', () {
+    testWidgets('does not overflow the page it is given', (t) async {
+      // The bug this widget was extracted for. A plain Column of the
+      // strip and a body overflowed `site_screen` by ten pixels --
+      // which is a yellow stripe in a debug build and NOTHING AT ALL
+      // in a release one, where the overflow is clipped silently and
+      // the outline just quietly loses its last row.
+      //
+      // 200 is far tighter than any real screen, on purpose: the
+      // assertion is that the composition cannot overflow, not that it
+      // happens to fit a laptop.
+      await t.pumpWidget(wrap(
+        const TabbedSkeleton(
+          tabs: 7,
+          body: CardRowsSkeleton(rows: 8, leadingSize: 24, trailing: 1),
+        ),
+        size: const Size(400, 200),
+      ));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('and the body under it cannot be dragged', (t) async {
+      await t.pumpWidget(wrap(
+        const TabbedSkeleton(tabs: 3, body: CardRowsSkeleton(rows: 4)),
+      ));
+      final scroll = t.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(scroll.physics, isA<NeverScrollableScrollPhysics>());
+    });
+  });
+
+  group('a board, which scrolls sideways and must not', () {
+    testWidgets('outlines columns of the width the real stage column is',
+        (t) async {
+      // 280 because `_StageColumn` in pipeline_screen.dart is 280. A
+      // board skeleton whose columns size themselves is the wrong
+      // shape in the one direction this screen scrolls.
+      await t.pumpWidget(wrap(const BoardSkeleton()));
+      expect(skeletonizing(t), isTrue);
+      final first = find.byKey(const ValueKey('skeleton-stage-0'));
+      // 292, which is the 280 plus the 12 of right margin -- the real
+      // column measures the same way, and pinning the outer number
+      // pins both of the ones it is made of.
+      expect(t.getSize(first).width, 292);
+    });
+
+    testWidgets('and cannot be dragged before there is a board', (t) async {
+      await t.pumpWidget(wrap(const BoardSkeleton()));
+      final scroll = t.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(scroll.physics, isA<NeverScrollableScrollPhysics>());
+      expect(scroll.scrollDirection, Axis.horizontal);
+    });
+  });
+
+  group('a chart, where outlining the content would be a lie', () {
+    testWidgets('is the height the real chart is given', (t) async {
+      // Every chart in this app sits in a fixed box so the page does
+      // not jump when the series arrives. A skeleton that sized itself
+      // would undo the one thing the box was for.
+      await t.pumpWidget(wrap(const ChartSkeleton(height: 240)));
+      expect(t.getSize(find.byType(ChartSkeleton)).height, 240);
+    });
+
+    testWidgets('and leaves the plot a plain block', (t) async {
+      // Bones in the shape of a line going up say the line goes up,
+      // and nobody has read the figures yet. So: the frame and the
+      // labels, and nothing that claims a trend.
+      await t.pumpWidget(wrap(const ChartSkeleton(height: 240, labels: 4)));
+      expect(skeletonizing(t), isTrue);
+      expect(
+        find.byKey(const ValueKey('skeleton-chart-plot')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('skeleton-chart-label-3')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('skeleton-chart-label-4')),
+          findsNothing);
+    });
+  });
 }

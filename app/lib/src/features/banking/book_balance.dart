@@ -26,6 +26,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 
@@ -113,7 +114,7 @@ class _BookBalanceState extends ConsumerState<_BookBalanceDialog> {
       ref.invalidate(bankAccountsProvider);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _said = '$e');
+      setState(() => _said = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -185,7 +186,7 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not make the cards: $e')),
+        SnackBar(content: Text('Could not make the cards: ${errorText(e)}')),
       );
     }
   }

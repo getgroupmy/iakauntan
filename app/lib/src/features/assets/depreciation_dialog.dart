@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
@@ -66,7 +67,7 @@ class _DepreciationDialogState extends ConsumerState<_DepreciationDialog> {
               const SizedBox(height: 14),
               preview.when(
                 loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('$e'),
+                error: (e, _) => Text(errorText(e)),
                 data: (lines) {
                   final due = lines.where((l) => l.charge > 0).toList();
                   if (due.isEmpty) {

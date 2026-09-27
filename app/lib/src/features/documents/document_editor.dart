@@ -4,17 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/layout.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../../core/picker_options.dart';
 import '../../core/widgets.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../contacts/new_contact_dialog.dart';
+import 'scan_recheck.dart';
+import 'scan_totals_check.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
@@ -93,6 +97,22 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   DateTime? _deliveryDate;
   String _currency = 'MYR';
 
+  /// How this document rounds, where it says so itself. `0706`.
+  ///
+  /// Null means the company's setting, which is what every document
+  /// raised before `0706` has and what a typed-in one still gets. It is
+  /// set from a SCANNED paper's own stated total — Bank Negara's
+  /// mechanism rounds cash, and a supplier's invoice settled by transfer
+  /// is paid to the sen.
+  String? _roundingMethod;
+
+  /// Where this document's contents came from. `0707`. Null is typed by
+  /// a person, which is nearly everything.
+  String? _entrySource;
+
+  /// A recheck in flight, so the button cannot be pressed twice.
+  bool _rechecking = false;
+
   /// Null means no rate is known. Distinct from 1, which is a rate — and
   /// on a foreign document, the wrong one.
   double? _exchangeRate = 1;
@@ -122,6 +142,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// report reading a column nothing fills is a report that says every
   /// department earned nothing.
   String? _departmentCode;
+
+  /// Which matter this whole document belongs to, on a law firm's books,
+  /// stamped onto every line at save time exactly as the two above are.
+  ///
+  /// Per document rather than per line, which is a real limit and not an
+  /// oversight: `sales_document_lines.matter_id` is per line and a fee
+  /// note covering two files is ordinary, so a firm that needs to split
+  /// one note between matters has to raise two. The journal editor is
+  /// where a per-line matter already exists, and it is what a transfer
+  /// between two files is written as. 0691.
+  String? _matterId;
   String? _salespersonId;
   Map<String, dynamic> _customFields = const {};
   String _status = 'draft';
@@ -204,6 +235,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _validUntil = doc.validUntil;
         _deliveryDate = doc.deliveryDate;
         _currency = doc.currency;
+        _roundingMethod = doc.roundingMethod;
+        _entrySource = doc.entrySource;
         // The stored rate, not today's. This is the figure the ledger
         // posted at and the figure the gain on settlement is measured
         // from; re-resolving it here would rewrite history.
@@ -222,6 +255,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _departmentCode = doc.lines
             .map((l) => l.departmentCode)
             .firstWhere((c) => c != null, orElse: () => null);
+        // The document's first, the lines' second. A fee note raised
+        // by `bill_matter_time` carries the matter on the header and
+        // on no line, and reading the lines alone would open it with
+        // the box empty — then save it with the matter cleared.
+        _matterId =
+            doc.matterId ??
+            doc.lines
+                .map((l) => l.matterId)
+                .firstWhere((c) => c != null, orElse: () => null);
         _salespersonId = doc.salespersonId;
         _customFields = doc.customFields;
         _reference.text = doc.reference ?? '';
@@ -267,7 +309,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Could not load: $e')));
+        ).showSnackBar(SnackBar(content: Text('Could not load: ${errorText(e)}')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -285,14 +327,115 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     // company that failed to load threw out of the getter that
     // computes the invoice total -- from `build`, on a screen whose
     // whole job is the total.
-    return switch (ref.read(currentOrgProvider).valueOrNull?.roundingMethod) {
-      'nearest_5cent' => (raw * 20).round() / 20,
-      'nearest_10cent' => (raw * 10).round() / 10,
-      _ => (raw * 100).round() / 100,
-    };
+    // The document's own answer first, the company's behind it —
+    // `app.recalc_*_totals_for` resolves it in exactly this order, and
+    // a screen that resolved it differently would show one total and
+    // save another. `0706`.
+    final method = _roundingMethod ??
+        ref.read(currentOrgProvider).valueOrNull?.roundingMethod ??
+        'none';
+    return roundedTo(raw, method);
   }
 
-  void _markDirty() => setState(() => _dirty = true);
+  void _markDirty() => setState(() {
+        _dirty = true;
+        _reconsiderRounding();
+      });
+
+  /// Compares this document with the page it was read from.
+  ///
+  /// Asked for beside the "AI Scan" tag: a rescan that says what went
+  /// different or missing, and lets each one be put back on its own or
+  /// left alone. Nothing changes unless somebody ticks it.
+  ///
+  /// It does not read the page AGAIN — the reading is on `ocr_scans`
+  /// and re-reading would charge for it, and would compare against a
+  /// second opinion rather than against what this document was built
+  /// from. "Read it again" is its own button, in the scan inbox.
+  Future<void> _recheck() async {
+    setState(() => _rechecking = true);
+    try {
+      final paperRow = await ref.read(
+        documentScanTotalsProvider((
+          table: _kind.isSales ? 'sales_documents' : 'purchase_documents',
+          recordId: widget.documentId!,
+        )).future,
+      );
+      if (!mounted) return;
+      if (paperRow == null) {
+        _toast('Nothing was read off this document, so there is nothing '
+            'to check it against.');
+        return;
+      }
+
+      final paper = await ref.read(repoProvider)!.scanReading(paperRow.scanId);
+      if (!mounted) return;
+      if (paper == null) {
+        _toast('The reading for ${paperRow.fileName} is no longer there.');
+        return;
+      }
+
+      final found = differencesFromPaper(
+        paper: paper,
+        lines: _lines,
+        supplierDocNo: _supplierDocNo.text,
+        documentDate: _docDate,
+        currency: _currency,
+        setSupplierDocNo: (v) => _supplierDocNo.text = v,
+        setDocumentDate: (v) => _docDate = v,
+        setCurrency: (v) => _currency = v,
+        addLine: _lines.add,
+      );
+      if (found.isEmpty) {
+        _toast('This still matches ${paperRow.fileName}.');
+        return;
+      }
+
+      final take = await askWhatToRestore(
+        context,
+        differences: found,
+        fileName: paperRow.fileName,
+      );
+      if (!mounted || take == null || take.isEmpty) return;
+
+      setState(() {
+        for (final d in found) {
+          if (take.contains(d.id)) d.restore();
+        }
+      });
+      _markDirty();
+    } finally {
+      if (mounted) setState(() => _rechecking = false);
+    }
+  }
+
+  /// What the scanned paper says about rounding, asked again from
+  /// wherever the lines have got to. `0706`.
+  ///
+  /// Here rather than only at the moment of reading, because at that
+  /// moment the lines carry no tax code — `_applyScan` leaves them
+  /// alone on purpose — so a taxed bill cannot tie to the paper yet. It
+  /// ties once somebody has put the codes on, and that is what this
+  /// notices.
+  ///
+  /// Reads the answer `0705` already fetched rather than asking again:
+  /// it is the same figure off the same scan row, and a second source
+  /// for it would be a second thing to drift.
+  void _reconsiderRounding() {
+    if (_isNew) return;
+    final paper = ref
+        .read(documentScanTotalsProvider((
+          table: _kind.isSales ? 'sales_documents' : 'purchase_documents',
+          recordId: widget.documentId!,
+        )))
+        .valueOrNull;
+    if (paper == null) return;
+    _roundingMethod = roundingForLines(
+      paperTotal: paper.total,
+      lines: _lines,
+      current: _roundingMethod,
+    );
+  }
 
   /// Fills this bill in from the supplier's own paperwork.
   ///
@@ -330,20 +473,28 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // A reader that splits a wrapped description into two rows would
       // otherwise put a phantom line at price zero on the bill, with
       // the real charge's detail in it. See `foldOcrContinuations`.
-      final lines = foldOcrContinuations(read.lines)
+      // The printed AMOUNT decides each line, not the quantity and
+      // price beside it -- `lineFromScan` says why, and says so out
+      // loud when the two disagree. The old expression here used the
+      // amount only when no unit price came back, so a misread price
+      // column silently produced a bill that did not equal the paper.
+      final corrections = <String>[];
+      final folded = foldOcrContinuations(read.lines)
           .where((l) => (l.description ?? '').trim().isNotEmpty)
-          .map(
-            (l) => LineDraft(
-              description: l.description!.trim(),
-              quantity: l.quantity ?? 1,
-              unitPrice:
-                  l.unitPrice ??
-                  (l.amount != null && (l.quantity ?? 1) != 0
-                      ? l.amount! / (l.quantity ?? 1)
-                      : 0),
-            ),
-          )
           .toList();
+      final lines = <LineDraft>[];
+      for (var i = 0; i < folded.length; i++) {
+        final l = folded[i];
+        final settled = lineFromScan(l);
+        if (settled.corrected != null) {
+          corrections.add('Line ${i + 1}: ${settled.corrected}');
+        }
+        lines.add(LineDraft(
+          description: l.description!.trim(),
+          quantity: settled.quantity,
+          unitPrice: settled.unitPrice,
+        ));
+      }
 
       // A receipt that prints one total and no breakdown still has to
       // become a line, or there is nothing to post.
@@ -361,9 +512,41 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _lines
         ..clear()
         ..addAll(lines);
+
+      // What rounding the SUPPLIER applied, decided from their own
+      // printed total rather than guessed. `0706`.
+      //
+      // Reported with a Google tax invoice whose total is MYR 1,173.01:
+      // this company rounds to 5 sen because it takes cash over a
+      // counter, so the bill became RM 1,173.00 with a one sen
+      // adjustment nobody on either side of it made. Bank Negara's
+      // mechanism rounds CASH; a bill settled by transfer is paid to
+      // the sen.
+      //
+      // Only where the paper can tell them apart — see
+      // `roundingThePaperApplied`, which answers nothing at all when two
+      // methods produce the same figure or none of them does.
+      _entrySource = 'ai_smartscan';
+
+      _roundingMethod = roundingForLines(
+        paperTotal: read.totalAmount,
+        lines: lines,
+        current: _roundingMethod,
+      );
+
+      _scanCorrections = corrections;
       _dirty = true;
     });
   }
+
+  /// Lines whose printed amount disagreed with their own extension, and
+  /// what was done about it.
+  ///
+  /// Held rather than snackbarred: `_applyScan` runs inside the load,
+  /// before this screen is on the phone, and a snackbar raised there is
+  /// a sentence that has gone by the time anybody is looking at the
+  /// document it is about.
+  List<String> _scanCorrections = const [];
 
   // ------------------------------------------------------------------
   // Currency and rate
@@ -422,7 +605,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // where it would be saved as the euro rate.
       if (mounted) {
         setState(() => _exchangeRate = null);
-        _toast('Could not read the exchange rate: $e', error: true);
+        _toast('Could not read the exchange rate: ${errorText(e)}', error: true);
       }
     } finally {
       if (mounted) setState(() => _resolvingRate = false);
@@ -534,15 +717,32 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
             'supplier_doc_no': _nullIfBlank(_supplierDocNo.text),
           'notes': _nullIfBlank(_notes.text),
           'currency': _currency,
+          // Null is a value here, not an omission: clearing it is how a
+          // document goes back to the company's own rule.
+          'rounding_method': _roundingMethod,
+          // `record_scan_posting` stamps this where a reading BECOMES a
+          // record. This is the other path: a document that already
+          // existed, whose lines a reading filled in. `0707`.
+          'entry_source': _entrySource,
           'exchange_rate': _exchangeRate ?? 1,
           // Sales only. The column is on `sales_documents` alone,
           // and a bill has no salesperson by definition.
           if (_kind.isSales) 'salesperson_id': _salespersonId,
+          // Also sales only, and for the same reason: `0021` put the
+          // matter on `sales_documents` and there is no such column on
+          // `purchase_documents`, so sending the key would have
+          // PostgREST reject every bill. Written as well as the lines
+          // because `bill_matter_time` and the matter screens read the
+          // header, and a document whose header said one file while
+          // its lines said another would be right in the ledger and
+          // wrong in every list.
+          if (_kind.isSales) 'matter_id': _matterId,
           'custom_fields': _customFields,
         },
         lines: validLines.map((l) {
           l.projectCode = _projectCode;
           l.departmentCode = _departmentCode;
+          l.matterId = _matterId;
           return l.toJson();
         }).toList(),
       );
@@ -575,7 +775,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       if (!silent) _toast('Saved', success: true);
       return id;
     } catch (e) {
-      _toast('$e', error: true);
+      _toast(errorText(e), error: true);
       return null;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -710,7 +910,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(e))));
     }
   }
 
@@ -1157,6 +1357,25 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         const SizedBox(width: 12),
       ],
 
+      // Where the contents came from, beside what state they are in.
+      // On the narrow layout too, unlike the status chip above: the
+      // status is repeated by the posted banner and this is not
+      // repeated anywhere. `0707`.
+      if (!_isNew && _entrySource != null) ...[
+        EntrySourceChip(_entrySource),
+        // Check it against the page again. A document filled in from a
+        // reading and edited since — by a person, by assigning an item,
+        // by a rounding rule — was never compared with the page again.
+        // `0705`'s banner says the totals disagree; this says where.
+        IconButton(
+          key: const Key('scan-recheck'),
+          icon: const Icon(Icons.fact_check_outlined, size: 18),
+          tooltip: 'Check this against the paper again',
+          onPressed: _rechecking ? null : _recheck,
+        ),
+        const SizedBox(width: 12),
+      ],
+
       // Only once something has been taken: on a fresh quotation
       // "Pending" would be noise beside every other document in the app.
       if (!_isNew &&
@@ -1440,6 +1659,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         },
                         projectCode: _projectCode,
                         departmentCode: _departmentCode,
+                        matterId: _matterId,
+                        onMatterChanged: (id) {
+                          setState(() => _matterId = id);
+                          _markDirty();
+                        },
                         onDepartmentChanged: (code) {
                           setState(() => _departmentCode = code);
                           _markDirty();
@@ -1541,6 +1765,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         tax: _taxTotal,
                         total: _grandTotal,
                         rounding: _grandTotal - (_subtotal + _taxTotal),
+                        roundingMethod: _roundingMethod,
                         currency: _currency,
                         baseCurrency: _base,
                         exchangeRate: _exchangeRate,
@@ -1548,6 +1773,39 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         editable: editable,
                         onNotesChanged: _markDirty,
                       ),
+
+                      // Lines whose printed amount disagreed with
+                      // their own quantity times price, and what was
+                      // taken instead. Above the totals banner because
+                      // it explains a difference the banner would
+                      // otherwise only report.
+                      //
+                      // On screen rather than in a snackbar: the scan
+                      // is applied while this document is loading, and
+                      // a message raised then is gone before anybody is
+                      // looking at what it is about.
+                      if (_scanCorrections.isNotEmpty)
+                        ScanLineCorrections(_scanCorrections),
+
+                      // What the paper said, where the lines say
+                      // otherwise. Only on a saved document, because
+                      // the reading hangs off an attachment and an
+                      // attachment hangs off a record id.
+                      //
+                      // Beneath the totals rather than above them, so
+                      // that the figures it disputes are on screen with
+                      // it.
+                      if (!_isNew)
+                        ScanTotalsBanner(
+                          table: _kind.isSales
+                              ? 'sales_documents'
+                              : 'purchase_documents',
+                          recordId: widget.documentId!,
+                          subtotal: _subtotal,
+                          tax: _taxTotal,
+                          total: _grandTotal,
+                          currency: _currency,
+                        ),
 
                       // The paper behind the document.
                       //
@@ -1951,10 +2209,12 @@ class _HeaderCard extends ConsumerWidget {
     required this.exchangeRate,
     required this.projectCode,
     required this.departmentCode,
+    required this.matterId,
     required this.salespersonId,
     required this.onSalespersonChanged,
     required this.onProjectChanged,
     required this.onDepartmentChanged,
+    required this.onMatterChanged,
     required this.onCurrencyChanged,
     required this.onRateChanged,
     required this.onStoreRate,
@@ -1990,10 +2250,12 @@ class _HeaderCard extends ConsumerWidget {
   final double? exchangeRate;
   final String? projectCode;
   final String? departmentCode;
+  final String? matterId;
   final String? salespersonId;
   final ValueChanged<String?> onSalespersonChanged;
   final ValueChanged<String?> onProjectChanged;
   final ValueChanged<String?> onDepartmentChanged;
+  final ValueChanged<String?> onMatterChanged;
   final ValueChanged<String> onCurrencyChanged;
   final ValueChanged<String> onRateChanged;
   final VoidCallback onStoreRate;
@@ -2067,7 +2329,7 @@ class _HeaderCard extends ConsumerWidget {
         );
       },
       loading: () => const LinearProgressIndicator(),
-      error: (e, _) => Text('Could not load contacts: $e'),
+      error: (e, _) => Text('Could not load contacts: ${errorText(e)}'),
     );
 
     final isForeign = currency != baseCurrency;
@@ -2210,6 +2472,34 @@ class _HeaderCard extends ConsumerWidget {
             allowEmpty: true,
             label: 'Department',
             onChanged: onDepartmentChanged,
+          ),
+          flex: 1,
+        ),
+      // And the matter, on the same condition as the two above: a
+      // company that has never opened one gets no control rather than an
+      // empty one. That is also what keeps this off every other
+      // company's invoice without anything having to ask whether the
+      // legal module is switched on.
+      //
+      // Open matters only, for the reason `matter_closing.dart` exists:
+      // a file closed last year is not something anybody means to bill
+      // to today.
+      if (ref
+              .watch(mattersProvider((status: 'open', search: '')))
+              .valueOrNull
+              ?.isNotEmpty ??
+          false)
+        (
+          child: SearchablePicker<String>(
+            options: matterPickerOptions(
+              ref.watch(mattersProvider((status: 'open', search: ''))).valueOrNull ??
+                  const [],
+            ),
+            value: matterId,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Matter',
+            onChanged: onMatterChanged,
           ),
           flex: 1,
         ),
@@ -2465,6 +2755,7 @@ class _TotalsAndNotes extends StatelessWidget {
     required this.tax,
     required this.total,
     required this.rounding,
+    required this.roundingMethod,
     required this.currency,
     required this.baseCurrency,
     required this.exchangeRate,
@@ -2477,6 +2768,10 @@ class _TotalsAndNotes extends StatelessWidget {
   final double tax;
   final double total;
   final double rounding;
+
+  /// Set only where the document itself names one, which today means a
+  /// scanned paper decided it. Null is the ordinary case. `0706`.
+  final String? roundingMethod;
   final String currency;
   final String baseCurrency;
   final double? exchangeRate;
@@ -2523,7 +2818,28 @@ class _TotalsAndNotes extends StatelessWidget {
                 label: 'Rounding',
                 value: rounding,
                 currency: currency,
-                caption: 'Nearest 5 sen',
+                // What was actually applied, rather than the words
+                // "Nearest 5 sen" printed over whatever happened. A
+                // company on 10 sen read a caption describing somebody
+                // else's setting.
+                caption: switch (roundingMethod) {
+                  'nearest_10cent' => 'Nearest 10 sen',
+                  _ => 'Nearest 5 sen',
+                },
+              ),
+            ],
+            // Why there is no rounding line on a document that would
+            // otherwise have had one. Silent unless the paper decided
+            // it, so an ordinary typed-in document says nothing. `0706`.
+            if (roundingMethod != null && rounding.abs() < 0.005) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  roundingMethodSaid(roundingMethod!),
+                  key: const Key('rounding-from-the-paper'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             ],
             const Divider(height: 24),

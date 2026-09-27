@@ -488,6 +488,30 @@ void charges() {
       );
     });
 
+    test('and the sheet and the register agree on the day', () {
+      // The same statutory date is worked out twice -- here and in
+      // `CorpCharge.registrationDue` -- and they were not computed the
+      // same way: this one added a fixed `Duration`, which in a
+      // daylight-saving zone lands on the wrong side of midnight. The
+      // sentence on the sheet and the badge in the list would then
+      // name different days, in a register where the day is the whole
+      // point.
+      for (final created in [
+        DateTime(2026, 1, 1),
+        DateTime(2026, 2, 27),
+        DateTime(2026, 3, 29),
+        DateTime(2026, 10, 25),
+        DateTime(2026, 12, 15),
+      ]) {
+        expect(
+          registrationDeadline(created),
+          CorpCharge(id: 'x', chargeeName: 'A bank', createdOn: created)
+              .registrationDue,
+          reason: '$created',
+        );
+      }
+    });
+
     test('thirty days, not a month', () {
       // A month would be 31 days from 1 August and 28 from 1 February.
       // The Act says thirty, and a charge lodged on day 31 in the

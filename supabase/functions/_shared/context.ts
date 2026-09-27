@@ -4,7 +4,7 @@
  * both a user-scoped client (RLS applies) and a service-role client
  * (for credentials the client must never see).
  */
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { requireEnv } from "./env.ts";
 import { ApiCall, MyInvoisEnv } from "./myinvois.ts";
 import { SigningMaterial } from "./xades.ts";

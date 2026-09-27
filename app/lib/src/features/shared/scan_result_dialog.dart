@@ -159,10 +159,11 @@ class _ScanResultDialogState extends ConsumerState<_ScanResultDialog> {
   bool get _allThreeFigures =>
       _subtotalValue != null && _taxValue != null && _totalValue != null;
 
-  bool get _nothing =>
-      read.supplierName == null &&
-      read.totalAmount == null &&
-      read.documentNo == null;
+  /// `foundNothing` rather than "no supplier, no total, no number",
+  /// which is what this asked before. Those three are what an INVOICE
+  /// has; a bank statement has none of them and is its rows, so a
+  /// statement read perfectly reported that nothing legible came back.
+  bool get _nothing => read.foundNothing;
 
   OcrExtraction get _edited => OcrExtraction(
         supplierName: _trimmed(_supplier),
@@ -263,6 +264,23 @@ class _ScanResultDialogState extends ConsumerState<_ScanResultDialog> {
                   'Nothing legible came back. A sharper photograph of the '
                   'whole receipt, flat and in daylight, usually does it — '
                   'or type the figures in below.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              // What a statement actually came back with, said plainly.
+              //
+              // Everything below this is an INVOICE's fields — supplier,
+              // tax number, document number — and a bank statement has
+              // none of them, so a statement whose every transaction was
+              // read showed nine boxes saying "Not on the document" and
+              // nothing at all about the transactions. They are the
+              // whole content of the page.
+              if (read.rows.isNotEmpty)
+                Text(
+                  read.rows.length == 1
+                      ? 'One transaction was read off this statement.'
+                      : '${read.rows.length} transactions were read off '
+                          'this statement.',
+                  key: const ValueKey('scan-rows-read'),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               // Editable even when nothing was read: a reading that came

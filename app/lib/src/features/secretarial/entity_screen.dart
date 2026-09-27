@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/safe_link.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -74,6 +76,15 @@ class CorpEntityScreen extends ConsumerWidget {
       body: AsyncView(
         value: entity,
         onRetry: () => ref.invalidate(corpEntityProvider(entityId)),
+        // Seven tabs, the same seven for every company, built inside
+        // the builder because the row is what they are about.
+        skeleton: const TabbedSkeleton(
+          tabs: 7,
+          body: Padding(
+            padding: EdgeInsets.all(Space.lg),
+            child: CardRowsSkeleton(rows: 5, leadingSize: 24, trailing: 1),
+          ),
+        ),
         builder: (e) {
           if (e == null) {
             return const EmptyState(
@@ -1544,7 +1555,7 @@ class _DocumentEditorState extends ConsumerState<_DocumentEditor> {
       // Strip PostgREST's wrapper so the database's own sentence shows.
       if (mounted) {
         setState(() =>
-            _error = '$e'.replaceFirst(RegExp(r'^\w*Exception[^:]*:\s*'), ''));
+            _error = errorText(e).replaceFirst(RegExp(r'^\w*Exception[^:]*:\s*'), ''));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1827,7 +1838,7 @@ class _SignatureRow extends ConsumerWidget {
     );
     if (!ok || token == null || !context.mounted) return;
 
-    final url = '${Uri.base.origin}/#/sign/$token';
+    final url = '${shareOrigin()}/#/sign/$token';
     await showDialog<void>(
       context: context,
       builder: (_) => _LinkDialog(url: url, who: signature.personName),

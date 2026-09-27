@@ -4,7 +4,9 @@
  * Reads a receipt or a bill that has already been filed as an
  * attachment, and hands back the fields somebody would otherwise retype.
  *
- * POST { "org_id": "<uuid>", "attachment_id": "<uuid>" }
+ * POST { "org_id": "<uuid>", "attachment_id": "<uuid>",
+ *        "provider": "<code>"?  // 0698, read it again with this one
+ *      }
  *   -> { scan_id, provider, charged, extraction: { … } }
  *
  * Three decisions are made in the database, not here, and this function
@@ -49,9 +51,23 @@
  * `OCR_ANTHROPIC_API_KEY` from before the catalog existed is still read
  * as a fallback for Claude.
  */
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
+import { geminiSchema } from "./gemini_schema.ts";
+import { poolProblem } from "./pool.ts";
+import { Exchange, record } from "./exchange.ts";
+import { ReaderRefusal, withOneRetry } from "./retry.ts";
+import {
+  type ScanTarget,
+  narrowToTarget,
+  outputBudget,
+  requiredWith,
+  targetPrompt,
+  targetSchema,
+  tooLongMessage,
+  usableTargets,
+} from "./targets.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -93,6 +109,33 @@ interface Extraction {
    * serve a screen most people never open.
    */
   raw_text: string | null;
+
+  /**
+   * Which destination the reader decided this document is, as
+   * `module.action` — or null for "I could not place it", which has to
+   * be sayable or it gets guessed. Null on every scan of a platform
+   * that has configured no targets, which is every scan before `0681`.
+   */
+  target: string | null;
+
+  /**
+   * What it read for that destination's fields, keyed by column name.
+   *
+   * Values only, no types: everything comes back as a string, because
+   * the schema asks for what is PRINTED and a date on a Malaysian
+   * receipt is `03/09/2026` until somebody who knows the column decides
+   * which way round that is. Coercion belongs where the column is
+   * known, not here.
+   */
+  fields: Record<string, string> | null;
+
+  /**
+   * One entry per printed line, where the destination takes rows.
+   *
+   * A bank statement is forty records, not one. Null for every other
+   * document and for every reader that is not asked — see `0682`.
+   */
+  rows: Record<string, string>[] | null;
 }
 
 interface BeginResult {
@@ -103,7 +146,13 @@ interface BeginResult {
   provider: string;
   provider_name: string;
   /** The protocol, which is the only thing this function switches on. */
-  kind: "anthropic" | "openai" | "google_docai" | "self_hosted" | "device";
+  kind:
+    | "anthropic"
+    | "openai"
+    | "google_gemini"
+    | "google_docai"
+    | "self_hosted"
+    | "device";
   endpoint: string | null;
   model: string | null;
   key_source: "platform" | "own" | "device";
@@ -150,7 +199,10 @@ const SCHEMA = {
   properties: {
     supplier_name: {
       type: ["string", "null"],
-      description: "The business issuing the document, as printed.",
+      description: "The business issuing the document, as it appears on the page. On " +
+        "a document a business wrote about its OWN payment — a payment " +
+        "voucher, a petty cash slip — that is the business itself, and " +
+        "the party being PAID is not this field; put the payee in `note`.",
     },
     supplier_tax_id: {
       type: ["string", "null"],
@@ -169,20 +221,20 @@ const SCHEMA = {
     supplier_email: {
       type: ["string", "null"],
       description:
-        "The supplier's email address as printed. Null unless one is " +
+        "The supplier's email address as it appears. Null unless one is " +
         "plainly there — a wrong address is where a remittance goes.",
     },
     supplier_phone: {
       type: ["string", "null"],
       description:
-        "The supplier's telephone number as printed. Not an approval " +
+        "The supplier's telephone number as it appears. Not an approval " +
         "code, a terminal id or a customer service number for somebody " +
         "else's product.",
     },
     supplier_address: {
       type: ["string", "null"],
       description:
-        "The supplier's full address as printed, newlines preserved. Do " +
+        "The supplier's full address as it appears, newlines preserved. Do " +
         "not split it into fields and do not reorder it.",
     },
     document_no: {
@@ -197,9 +249,13 @@ const SCHEMA = {
     document_date: {
       type: ["string", "null"],
       description:
-        "The document date as YYYY-MM-DD. Malaysian receipts are usually " +
-        "DD/MM/YYYY; read them that way unless the day exceeds 12 and " +
-        "resolves the order for you.",
+        "The document date as YYYY-MM-DD. Malaysian documents are " +
+        "usually DD/MM/YYYY; read them that way unless the day exceeds " +
+        "12 and resolves the order for you. Handwritten dates are often " +
+        "DD/MM/YY with a two-digit year — 28/1/25 is 2025-01-28, not " +
+        "2025-01-28 in some other order and not 1925. If the date on " +
+        "the document is unreadable this is null: a period named in the " +
+        "description is what the payment is FOR, not when it was made.",
     },
     currency: {
       type: ["string", "null"],
@@ -258,27 +314,8 @@ const SCHEMA = {
   },
 } as const;
 
-const SYSTEM = [
-  "You are reading a purchase document for a Malaysian bookkeeper: a",
-  "receipt, a supplier invoice, a bill or a payment slip.",
-  "",
-  "Transcribe what is printed. Do not compute a missing figure and",
-  "present it as read — if the subtotal is not on the document, that",
-  "field is null, and if the arithmetic on the document does not foot,",
-  "say so in `note` and report the printed figures unchanged.",
-  "",
-  "A charge often takes more than one printed line: the item on the",
-  "first, the detail on the second — a part number, a period covered, a",
-  "site address, a serial. That is one entry, and the second line goes",
-  "in its description after a newline. Splitting it into a second entry",
-  "with no price puts a phantom line on somebody's bill; dropping it",
-  "loses what they are actually being charged for.",
-  "",
-  "Malaysian documents worth knowing: amounts are prefixed RM; service",
-  "tax appears as SST, and older documents show GST; a tax-inclusive",
-  "total is often printed as 'Total Inclusive of SST'. Thermal receipts",
-  "fade — an amount you cannot read is null and a note, never a guess.",
-].join("\n");
+export { SYSTEM } from "./prompt.ts";
+import { SYSTEM } from "./prompt.ts";
 
 /** The base64 an API body wants, without blowing the stack on a big file. */
 function toBase64(bytes: Uint8Array): string {
@@ -300,11 +337,18 @@ function toNumber(v: unknown): number | null {
 }
 
 async function readClaude(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
   bytes: Uint8Array,
   mime: string,
+  // The schema and the prompt are ARGUMENTS since `0681`, not the
+  // module constants, because what a platform asks a reader for is now
+  // configuration. They default to the constants so a deployment that
+  // has set up no targets behaves exactly as it did.
+  schema: Record<string, unknown> = SCHEMA,
+  system: string = SYSTEM,
 ): Promise<Extraction> {
   // A PDF is a document block and an image is an image block; the API
   // rejects each in the other's place, and a phone camera produces one
@@ -316,7 +360,7 @@ async function readClaude(
     data: toBase64(bytes),
   };
 
-  const response = await fetch(endpoint, {
+  const response = await record(rec, endpoint, {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -325,12 +369,15 @@ async function readClaude(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4000,
-      system: SYSTEM,
+      // Claude and the OpenAI-shaped endpoints allow far more than a
+      // statement needs; 16000 is chosen for the answer rather than
+      // for the ceiling. See `outputBudget`.
+      max_tokens: outputBudget(schema, 16000),
+      system,
       // No extended thinking. This is a bounded transcription with a
       // fixed output shape, and the tenant is paying per scan for an
       // answer while somebody stands at a counter holding the receipt.
-      output_config: { format: { type: "json_schema", schema: SCHEMA } },
+      output_config: { format: { type: "json_schema", schema } },
       messages: [{
         role: "user",
         content: [
@@ -343,10 +390,11 @@ async function readClaude(
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(
+    throw new ReaderRefusal(
       `Claude refused the document: ${
         body?.error?.message ?? `HTTP ${response.status}`
       }`,
+      response.status,
     );
   }
   // A safety decline is a 200 with no usable content, so the stop
@@ -355,10 +403,7 @@ async function readClaude(
     throw new Error("Claude declined to read this document.");
   }
   if (body?.stop_reason === "max_tokens") {
-    throw new Error(
-      "The document was too long to read in one pass. Attach the page " +
-        "with the totals on it.",
-    );
+    throw new Error(tooLongMessage(schema));
   }
 
   const text = (body?.content ?? [])
@@ -389,23 +434,49 @@ async function readClaude(
  * happens to parse rather than a hard failure.
  */
 async function readOpenAiShaped(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
   bytes: Uint8Array,
   mime: string,
+  // The schema and the prompt are ARGUMENTS since `0681`, not the
+  // module constants, because what a platform asks a reader for is now
+  // configuration. They default to the constants so a deployment that
+  // has set up no targets behaves exactly as it did.
+  schema: Record<string, unknown> = SCHEMA,
+  system: string = SYSTEM,
 ): Promise<Extraction> {
-  // Chat-completions takes images, not documents. A PDF would have to go
-  // through a different endpoint on every one of these, so it is refused
-  // by name rather than sent and misread.
-  if (mime === "application/pdf") {
-    throw new Error(
-      "This reader takes photographs, not PDFs. Photograph the document, " +
-        "or switch to Claude, which reads PDFs.",
-    );
-  }
+  // A PDF goes as a FILE part and a photograph as an image part.
+  //
+  // `0701`. This used to refuse a PDF outright, on the reasoning that
+  // chat-completions carries images and nothing else. That was true
+  // when it was written and is not any more: the shape has a `file`
+  // part carrying base64, and OpenAI's own SDK types spell it
+  // `{ type: "file", file: { filename, file_data } }`.
+  //
+  // Whether the vendor BEHIND this endpoint honours it is a different
+  // question, and it is not answered here -- `ocr_providers.reads_pdf`
+  // answers it per reader, so a platform can switch one on the day its
+  // vendor ships it without waiting for a release. Sending it and
+  // letting the vendor refuse is the same bargain `readSelfHosted`
+  // makes.
+  const part = mime === "application/pdf"
+    ? {
+      type: "file",
+      file: {
+        // Named, because some vendors key their handling off the
+        // extension rather than off the data URL's mime type.
+        filename: "document.pdf",
+        file_data: `data:${mime};base64,${toBase64(bytes)}`,
+      },
+    }
+    : {
+      type: "image_url",
+      image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
+    };
 
-  const response = await fetch(endpoint, {
+  const response = await record(rec, endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -413,20 +484,17 @@ async function readOpenAiShaped(
     },
     body: JSON.stringify({
       model,
-      max_completion_tokens: 4000,
+      max_completion_tokens: outputBudget(schema, 16000),
       response_format: {
         type: "json_schema",
-        json_schema: { name: "purchase_document", strict: true, schema: SCHEMA },
+        json_schema: { name: "purchase_document", strict: true, schema },
       },
       messages: [
-        { role: "system", content: SYSTEM },
+        { role: "system", content: system },
         {
           role: "user",
           content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
-            },
+            part,
             { type: "text", text: "Read this document." },
           ],
         },
@@ -436,19 +504,17 @@ async function readOpenAiShaped(
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(
+    throw new ReaderRefusal(
       `The reader refused the document: ${
         body?.error?.message ?? `HTTP ${response.status}`
       }`,
+      response.status,
     );
   }
 
   const choice = body?.choices?.[0];
   if (choice?.finish_reason === "length") {
-    throw new Error(
-      "The document was too long to read in one pass. Attach the page " +
-        "with the totals on it.",
-    );
+    throw new Error(tooLongMessage(schema));
   }
   const text = choice?.message?.content;
   if (typeof text !== "string" || text.trim() === "") {
@@ -458,6 +524,124 @@ async function readOpenAiShaped(
     throw new Error(
       choice?.message?.refusal ??
         "The reader answered with nothing.",
+    );
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("The reader answered with something that was not the schema.");
+  }
+  return normalise(parsed);
+}
+
+/**
+ * Gemini, through its own API rather than through Google's
+ * OpenAI-compatibility shim.
+ *
+ * `0701`. The shim is `/v1beta/openai/chat/completions`, and the parts
+ * a chat-completions message may carry are text and `image_url`. So
+ * `readOpenAiShaped` refused a PDF by name and every company on Gemini
+ * was told "this reader takes photographs, not PDFs" — true of the
+ * road we took, and false of the model. `generateContent` takes
+ * `inline_data` with any mime type it supports, `application/pdf`
+ * among them, and reads the document rather than a picture of it.
+ *
+ * The key goes in a HEADER and not in the query string. Both work;
+ * only one of them stays out of logs, and this one is a tenant's
+ * credential or the platform's pooled key.
+ */
+async function readGemini(
+  rec: Exchange[],
+  apiKey: string,
+  endpoint: string,
+  model: string,
+  bytes: Uint8Array,
+  mime: string,
+  schema: Record<string, unknown> = SCHEMA,
+  system: string = SYSTEM,
+): Promise<Extraction> {
+  if (!model) {
+    throw new Error(
+      "This reader has no model set. Choose one in the platform console " +
+        "before it can be asked to read anything.",
+    );
+  }
+
+  // The endpoint on the catalog is a BASE — the model and the method
+  // belong in the path, and the model is configuration. A trailing
+  // slash from whoever typed it would otherwise produce `//models/`.
+  const base = (endpoint || "https://generativelanguage.googleapis.com/v1beta")
+    .replace(/\/+$/, "");
+  const url = `${base}/models/${encodeURIComponent(model)}:generateContent`;
+
+  const response = await record(rec, url, {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      // `systemInstruction` rather than a first user turn: the prompt
+      // says how to read every document and the document says what to
+      // read, and folding them together is how a supplier's letterhead
+      // ends up answering a question meant for us.
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{
+        role: "user",
+        parts: [
+          { inline_data: { mime_type: mime, data: toBase64(bytes) } },
+          { text: "Read this document." },
+        ],
+      }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: geminiSchema(schema),
+        // 8192 is Gemini 2.0 Flash's ceiling, and asking for more is a
+        // 400 rather than a truncation -- which would turn a long
+        // statement into a refusal, the failure `outputBudget` exists
+        // to remove.
+        maxOutputTokens: outputBudget(schema, 8192),
+      },
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ReaderRefusal(
+      `Gemini refused the document: ${
+        body?.error?.message ?? `HTTP ${response.status}`
+      }`,
+      response.status,
+    );
+  }
+
+  const candidate = body?.candidates?.[0];
+  // `MAX_TOKENS` is the same fault `finish_reason === "length"` is on
+  // the OpenAI side, and it needs the same sentence: the answer is
+  // truncated JSON and blaming the schema would send somebody looking
+  // in the wrong place.
+  if (candidate?.finishReason === "MAX_TOKENS") {
+    throw new Error(tooLongMessage(schema));
+  }
+  // A blocked answer carries no parts at all, and the reason is the
+  // only thing that says why.
+  if (candidate?.finishReason === "SAFETY" ||
+      candidate?.finishReason === "PROHIBITED_CONTENT") {
+    throw new Error(
+      "Gemini would not answer about this document. Try another reader.",
+    );
+  }
+
+  const text = candidate?.content?.parts
+    ?.map((p: { text?: string }) => p?.text ?? "")
+    .join("");
+  if (typeof text !== "string" || text.trim() === "") {
+    throw new Error(
+      body?.promptFeedback?.blockReason
+        ? `Gemini would not read it: ${body.promptFeedback.blockReason}`
+        : "The reader answered with nothing.",
     );
   }
 
@@ -500,11 +684,18 @@ async function readOpenAiShaped(
  * certainly does, and the catalog row says which by `takes_key`.
  */
 async function readSelfHosted(
+  rec: Exchange[],
   apiKey: string,
   endpoint: string,
   model: string,
   bytes: Uint8Array,
   mime: string,
+  // No schema and no prompt, unlike the two above. A self-hosted
+  // reader is sent `schema=iakauntan.extraction.v1` — a NAME, which it
+  // implements at its end — so there is nothing here to configure and
+  // accepting the arguments in order to ignore them would be the
+  // signature promising something it does not do. Per-target fields
+  // reach an LLM reader and not this one, and `0681`'s console says so.
 ): Promise<Extraction> {
   if (!endpoint) {
     throw new Error(
@@ -530,7 +721,7 @@ async function readSelfHosted(
   const headers: Record<string, string> = { accept: "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
-  const res = await fetch(endpoint, {
+  const res = await record(rec, endpoint, {
     method: "POST",
     headers,
     body: form,
@@ -543,9 +734,10 @@ async function readSelfHosted(
 
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 300);
-    throw new Error(
+    throw new ReaderRefusal(
       `The reader at ${new URL(endpoint).host} answered ${res.status}. ` +
         (detail || "It sent no explanation."),
+      res.status,
     );
   }
 
@@ -628,7 +820,67 @@ function normaliseExtraction(raw: Record<string, unknown>): Extraction {
     total_amount: num("total_amount"),
     lines,
     note: str("note"),
+    target: targetOf(raw),
+    fields: fieldsOf(raw),
+    rows: rowsOf(raw),
   } as Extraction;
+}
+
+/**
+ * The per-line values, where a destination takes rows.
+ *
+ * A row that came back with nothing usable in it is dropped rather than
+ * kept as an empty object: a statement with three blank lines in the
+ * middle is worse than one with three lines missing, because the blanks
+ * look like entries somebody has to go and explain.
+ */
+function rowsOf(raw: Record<string, unknown>): Record<string, string>[] | null {
+  const v = raw.rows;
+  if (!Array.isArray(v)) return null;
+  const out: Record<string, string>[] = [];
+  for (const entry of v) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const row: Record<string, string> = {};
+    for (const [k, value] of Object.entries(entry as Record<string, unknown>)) {
+      if (typeof value === "string") {
+        if (value.trim() !== "") row[k] = value.trim();
+      } else if (typeof value === "number" && Number.isFinite(value)) {
+        row[k] = String(value);
+      }
+    }
+    if (Object.keys(row).length > 0) out.push(row);
+  }
+  return out.length === 0 ? null : out;
+}
+
+/** The destination the reader chose, if it chose a real one. */
+function targetOf(raw: Record<string, unknown>): string | null {
+  const v = raw.target;
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+/**
+ * The per-field values, flattened to strings.
+ *
+ * Everything the schema asks for is `["string", "null"]`, but a model
+ * handed a column called `total_amount` returns a number often enough
+ * that refusing one would drop the field silently. So a number is
+ * taken and stringified, and anything else -- an object, an array, a
+ * boolean -- is dropped, because there is no column this app has that
+ * one of those is the honest value for.
+ */
+function fieldsOf(raw: Record<string, unknown>): Record<string, string> | null {
+  const v = raw.fields;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, value] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof value === "string") {
+      if (value.trim() !== "") out[k] = value.trim();
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      out[k] = String(value);
+    }
+  }
+  return Object.keys(out).length === 0 ? null : out;
 }
 
 /** The same number forgiveness, for a line. */
@@ -643,6 +895,7 @@ function numberFrom(v: unknown): number | null {
 }
 
 async function readGoogle(
+  rec: Exchange[],
   credential: string,
   project: string,
   location: string,
@@ -667,7 +920,7 @@ async function readGoogle(
   const endpoint = `https://${location}-documentai.googleapis.com/v1/` +
     `projects/${project}/locations/${location}/processors/${processor}:process`;
 
-  const response = await fetch(endpoint, {
+  const response = await record(rec, endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -679,10 +932,11 @@ async function readGoogle(
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(
+    throw new ReaderRefusal(
       `Document AI refused the document: ${
         body?.error?.message ?? `HTTP ${response.status}`
       }`,
+      response.status,
     );
   }
 
@@ -740,6 +994,17 @@ async function readGoogle(
     total_amount: toNumber(pick("total_amount")),
     lines,
     note: null,
+    // Null, and not a gap this can close. Document AI answers with the
+    // entities its PROCESSOR was trained on, and a processor is
+    // configured in Google's console rather than in ours — so the
+    // per-target fields of `0681` do not reach it, and pretending
+    // otherwise would put empty columns on a draft and blame the
+    // reader. `raw_text` below is what Document AI offers instead: the
+    // whole page, which the "All data" screen lets somebody assign by
+    // hand.
+    target: null,
+    fields: null,
+    rows: null,
     raw_text: typeof body?.document?.text === "string"
       ? body.document.text
       : null,
@@ -776,21 +1041,88 @@ function normalise(raw: Record<string, unknown>): Extraction {
       };
     }),
     note: str(raw.note),
+    target: targetOf(raw),
+    fields: fieldsOf(raw),
+    rows: rowsOf(raw),
   };
+}
+
+/**
+ * A key taken out of a pool, and the row it came from.
+ *
+ * `key_id` is null for the two older ways of holding a key — the
+ * single `org_ocr_credentials` row and the `OCR_KEY_<CODE>` secret —
+ * which have no counters to spend and no row to blame when the
+ * provider refuses them.
+ */
+interface ResolvedKey extends OwnCredential {
+  key_id: string | null;
+  key_label: string | null;
+}
+
+async function whyThePoolIsEmpty(
+  db: SupabaseClient,
+  provider: string,
+  orgId: string | null,
+): Promise<string> {
+  const { data } = await db.rpc("ocr_key_pool_size", {
+    p_provider: provider,
+    p_org_id: orgId,
+  });
+  const pool = (data ?? {}) as { keys?: number; usable?: number };
+  return poolProblem(pool.keys ?? 0, pool.usable ?? 0);
 }
 
 /**
  * The key the scan runs on.
  *
  * Read here with the service role, which is the only reader
- * `org_ocr_credentials` has — the table's grants to `anon` and
- * `authenticated` are revoked, so this is not merely the convention.
+ * `org_ocr_credentials` and `ocr_provider_keys` have — both tables have
+ * their grants to `anon` and `authenticated` revoked, so this is not
+ * merely the convention.
+ *
+ * The POOL is asked first, on both sides. `app.claim_ocr_key` picks the
+ * next key that is inside its clock and under its caps and spends one
+ * call of its budget in the same statement, so nothing here has to
+ * decide anything about rate limits. Null back means the pool had
+ * nothing, and then the two older arrangements are tried — a single
+ * `org_ocr_credentials` row, or `OCR_KEY_<CODE>` — so that filling a
+ * pool is something a deployment opts into rather than something that
+ * breaks it on the way past.
+ *
+ * The order is deliberate and is the safe one: a platform that has
+ * filled a pool means the pool to be used, and a platform that has not
+ * carries on exactly as it did.
  */
 async function credentialFor(
   db: SupabaseClient,
   begin: BeginResult,
   orgId: string,
-): Promise<OwnCredential> {
+): Promise<ResolvedKey> {
+  const poolOwner = begin.key_source === "own" ? orgId : null;
+  const { data: claimed, error: claimError } = await db.rpc(
+    "claim_ocr_key",
+    { p_provider: begin.provider, p_org_id: poolOwner },
+  );
+  if (claimError) {
+    console.error("could not ask the key pool", begin.provider, claimError);
+  }
+  // A set-returning function comes back as an array, and an empty one
+  // is the pool having nothing to give rather than an error.
+  const key = Array.isArray(claimed) ? claimed[0] : claimed;
+  if (key?.api_key) {
+    return {
+      api_key: key.api_key as string,
+      key_id: (key.key_id as string) ?? null,
+      key_label: (key.label as string) ?? null,
+      // Document AI needs three more things, and they are not per-key:
+      // a pool is for a key that is the whole credential.
+      project_id: Deno.env.get("OCR_GOOGLE_PROJECT") ?? null,
+      location: Deno.env.get("OCR_GOOGLE_LOCATION") ?? "us",
+      processor_id: Deno.env.get("OCR_GOOGLE_PROCESSOR") ?? null,
+    };
+  }
+
   if (begin.key_source === "own") {
     const { data, error } = await db
       .from("org_ocr_credentials")
@@ -799,9 +1131,13 @@ async function credentialFor(
       .eq("provider", begin.provider)
       .maybeSingle();
     if (error || !data) {
-      throw new Error("The key for this organization could not be read.");
+      throw new Error(
+        "The key for this organization could not be read: " +
+          await whyThePoolIsEmpty(db, begin.provider, orgId) +
+          ", and no single key is on file either.",
+      );
     }
-    return data as unknown as OwnCredential;
+    return { ...(data as unknown as OwnCredential), key_id: null, key_label: null };
   }
 
   // `OCR_KEY_<CODE>` by convention, so a reader added as a row in the
@@ -815,25 +1151,268 @@ async function credentialFor(
     ? "OCR_ANTHROPIC_API_KEY"
     : null;
 
-  const key = Deno.env.get(generic) ??
+  const fromEnv = Deno.env.get(generic) ??
     (legacy ? Deno.env.get(legacy) : undefined);
-  if (!key) {
+  if (!fromEnv) {
     throw new Error(
-      `${begin.provider_name} is not configured on the platform: set ` +
-        `${generic} on this function, or ask the organization to supply ` +
-        "its own key.",
+      `${begin.provider_name} is not configured on the platform: its key ` +
+        `pool is unusable because ` +
+        await whyThePoolIsEmpty(db, begin.provider, null) +
+        `, and ${generic} is not set on this function either.`,
     );
   }
 
   if (begin.kind !== "google_docai") {
-    return { api_key: key, project_id: null, location: null, processor_id: null };
+    return {
+      api_key: fromEnv,
+      key_id: null,
+      key_label: null,
+      project_id: null,
+      location: null,
+      processor_id: null,
+    };
   }
   return {
-    api_key: key,
+    api_key: fromEnv,
+    key_id: null,
+    key_label: null,
     project_id: Deno.env.get("OCR_GOOGLE_PROJECT") ?? null,
     location: Deno.env.get("OCR_GOOGLE_LOCATION") ?? "us",
     processor_id: Deno.env.get("OCR_GOOGLE_PROCESSOR") ?? null,
   };
+}
+
+/**
+ * Sending the document to one reader.
+ *
+ * Switches on `kind`, never on the provider's name. That is what lets a
+ * reader be added as a row in the console: a new ChatGPT-shaped
+ * endpoint arrives here already understood.
+ *
+ * A function rather than the body of the handler since `0679`, because
+ * it is now called twice — once for the reader the company chose, and
+ * once more for the platform's free fallback when the first one will
+ * not answer. Two copies of this switch would be two places for a
+ * newly added `kind` to be half-supported.
+ */
+async function runReader(
+  // Where each call to the vendor is written down, in order. `0704`:
+  // one scan can be three requests to two vendors -- the first
+  // attempt, `459d3716`'s retry and `0679`'s fallback -- and which of
+  // them said what was unanswerable until this was kept.
+  rec: Exchange[],
+  reader: Pick<BeginResult, "kind" | "endpoint" | "model" | "provider">,
+  credential: ResolvedKey,
+  bytes: Uint8Array,
+  mime: string,
+  // What this platform has configured its readers to ask for. Empty
+  // for a platform that has set none up, and then every call below
+  // falls back to the schema and prompt this function shipped with.
+  targets: ScanTarget[] = [],
+  // Whether the caller NAMED the destination, so `targets` is the one
+  // they asked for rather than everything on offer. Changes the prompt
+  // from "decide which of these it is" to "this is a bank statement,
+  // transcribe it". See `narrowToTarget`.
+  known = false,
+): Promise<Extraction> {
+  const extra = targetSchema(targets);
+  // `required` grows with `properties`, and forgetting that broke every
+  // scan on any platform that had configured a single field.
+  //
+  // `SCHEMA` is `strict: true` with `additionalProperties: false` and
+  // an explicit `required` naming every property — "every field is
+  // required and nullable rather than optional", which is its own
+  // header's rule. OpenAI's strict mode enforces it: a property that is
+  // not in `required` is an invalid schema and the call comes back 400.
+  // That reached the caller as `The document could not be read`, which
+  // is what this function says about everything, so it looked like the
+  // reader having a bad day rather than us sending a malformed request.
+  //
+  // It bit only after somebody ticked a field in the console, because
+  // an empty target list leaves the schema untouched — so it presented
+  // as scanning that had worked all week and suddenly did not.
+  const schema = extra === null ? SCHEMA : {
+    ...SCHEMA,
+    properties: { ...SCHEMA.properties, ...extra },
+    required: requiredWith(SCHEMA.required, extra),
+  };
+  const system = extra === null
+    ? SYSTEM
+    : SYSTEM + "\n" + targetPrompt(targets, known);
+
+  // Which reader made the calls this run is about to add. Stamped
+  // here, once, rather than passed down into five readers that have no
+  // other use for it: `record` knows the endpoint and the answer, and
+  // this is the only place that knows whose they were.
+  const from = rec.length;
+  try {
+    return await callReader(rec, reader, credential, bytes, mime, schema, system);
+  } finally {
+    for (let i = from; i < rec.length; i++) {
+      rec[i].provider ??= reader.provider;
+    }
+  }
+}
+
+async function callReader(
+  rec: Exchange[],
+  reader: Pick<BeginResult, "kind" | "endpoint" | "model" | "provider">,
+  credential: ResolvedKey,
+  bytes: Uint8Array,
+  mime: string,
+  schema: Record<string, unknown>,
+  system: string,
+): Promise<Extraction> {
+  switch (reader.kind) {
+    case "anthropic":
+      return await readClaude(
+        rec,
+        credential.api_key,
+        reader.endpoint ?? "https://api.anthropic.com/v1/messages",
+        reader.model ?? "",
+        bytes,
+        mime,
+        schema,
+        system,
+      );
+    case "google_gemini":
+      return await readGemini(
+        rec,
+        credential.api_key,
+        reader.endpoint ?? "",
+        reader.model ?? "",
+        bytes,
+        mime,
+        schema,
+        system,
+      );
+    case "openai":
+      return await readOpenAiShaped(
+        rec,
+        credential.api_key,
+        reader.endpoint ?? "",
+        reader.model ?? "",
+        bytes,
+        mime,
+        schema,
+        system,
+      );
+    case "self_hosted":
+      return await readSelfHosted(
+        rec,
+        credential.api_key,
+        reader.endpoint ?? "",
+        reader.model ?? "",
+        bytes,
+        mime,
+      );
+    case "google_docai":
+      return await readGoogle(
+        rec,
+        credential.api_key,
+        credential.project_id ?? "",
+        credential.location ?? "us",
+        credential.processor_id ?? "",
+        bytes,
+        mime,
+      );
+    default:
+      // `device` never reaches here — ocr_begin refuses it — and an
+      // unknown kind means the catalog has outrun this function.
+      throw new Error(
+        `This deployment does not know how to talk to a ${reader.kind} ` +
+          "reader. It needs updating before that one can be used.",
+      );
+  }
+}
+
+/** What `public.ocr_fallback` hands back, or null when there is none. */
+interface FallbackReader {
+  provider: string;
+  provider_name: string;
+  kind: BeginResult["kind"];
+  endpoint: string | null;
+  model: string | null;
+}
+
+/**
+ * The reader a failed scan tries instead.
+ *
+ * The database decides whether there is one and records that there
+ * was, in the same statement — see `0679`. Everything this function
+ * adds is the running of it, and two rules that are its own:
+ *
+ *   the PLATFORM's keys, always. `key_source: "platform"` is written
+ *   here rather than carried over, because a company's own key belongs
+ *   to the reader that company chose. Spending it on a different
+ *   vendor because ours timed out is a decision made with somebody
+ *   else's money;
+ *
+ *   and a failure here is swallowed into null. The scan has already
+ *   failed once; the caller's job is to report THAT failure, and a
+ *   fallback that also failed must not replace the first reader's
+ *   message with the second one's.
+ */
+async function tryFallback(
+  rec: Exchange[],
+  db: SupabaseClient,
+  scanId: string,
+  orgId: string,
+  bytes: Uint8Array,
+  mime: string,
+  targets: ScanTarget[],
+  known: boolean,
+): Promise<{ extraction: Extraction; reader: FallbackReader } | null> {
+  try {
+    const { data, error } = await db.rpc("ocr_fallback", { p_scan_id: scanId });
+    if (error || !data) return null;
+    const reader = data as unknown as FallbackReader;
+
+    const credential = await credentialFor(db, {
+      ...reader,
+      scan_id: scanId,
+      key_source: "platform",
+      storage_path: "",
+      mime_type: mime,
+      charged: 0,
+    }, orgId);
+    return {
+      extraction: await runReader(
+        rec, reader, credential, bytes, mime, targets, known),
+      reader,
+    };
+  } catch (e) {
+    // Logged, not raised, and not written against the scan either: the
+    // scan's `error` column is about the reader the company chose.
+    console.error("the fallback reader failed too", scanId, e);
+    return null;
+  }
+}
+
+/**
+ * Files what the readers said, and never lets that cost a scan.
+ *
+ * Best effort, twice over: nothing is awaited for its result beyond the
+ * error, and a failure here is logged and dropped. This is a note about
+ * work that has already happened -- the reading is done, the charge is
+ * settled, the caller is holding an answer -- and losing the note must
+ * not turn any of that into a failure.
+ */
+async function keepExchanges(
+  db: SupabaseClient,
+  scanId: string,
+  exchanges: Exchange[],
+): Promise<void> {
+  if (exchanges.length === 0) return;
+  try {
+    const { error } = await db.rpc("ocr_record_exchanges", {
+      p_scan_id: scanId,
+      p_exchanges: exchanges,
+    });
+    if (error) console.error("could not keep the exchanges", scanId, error);
+  } catch (e) {
+    console.error("could not keep the exchanges", scanId, e);
+  }
 }
 
 serveFunction("ocr.failed", async (req: Request) => {
@@ -848,6 +1427,13 @@ serveFunction("ocr.failed", async (req: Request) => {
   const orgId = typeof body?.org_id === "string" ? body.org_id : null;
   const attachmentId = typeof body?.attachment_id === "string"
     ? body.attachment_id
+    : null;
+  // Optional, and only ever a hint: `ocr_begin` checks it against the
+  // catalog, the company's key source and its own keys. An empty
+  // string is the same as absent -- a client clearing a picker should
+  // not be an unknown reader.
+  const provider = typeof body?.provider === "string" && body.provider.trim()
+    ? body.provider.trim()
     : null;
   if (!orgId || !attachmentId) {
     return fail("Say which attachment, on which organization", 400);
@@ -866,6 +1452,14 @@ serveFunction("ocr.failed", async (req: Request) => {
   const started = await caller.rpc("ocr_begin", {
     p_org_id: orgId,
     p_attachment_id: attachmentId,
+    // `0698`. Reading the same file again with a reader the caller
+    // names. Sent as null rather than omitted when there is none, so
+    // there is one shape of call rather than two -- and the database,
+    // not this function, decides whether that reader is one this
+    // company may use. Nothing here validates it on purpose: a check
+    // in an edge function is a check a caller can skip by calling the
+    // RPC directly.
+    p_provider: provider,
   });
   if (started.error) {
     // These are the database's own refusals — scanning switched off, no
@@ -877,6 +1471,54 @@ serveFunction("ocr.failed", async (req: Request) => {
   const begin = started.data as unknown as BeginResult;
 
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // Which key out of the pool ran this scan, once one has been claimed.
+  // Declared out here because both halves need it: the try spends it,
+  // and the catch is where the provider's refusal gets written against
+  // it. Null while no pool was involved -- a single `org_ocr_credentials`
+  // row, or `OCR_KEY_<CODE>` -- and there is then no row to blame.
+  let usedKey: string | null = null;
+
+  // The document itself, hoisted for the same reason `usedKey` is: the
+  // catch retries with it. Null while it has not been fetched, which is
+  // one of the ways the first attempt can fail -- and a fallback cannot
+  // read a file that was never downloaded, so the null is checked
+  // rather than asserted away.
+  let bytes: Uint8Array | null = null;
+  let mime = begin.mime_type ?? "image/jpeg";
+
+  // Where a document of this sort can go, and what each destination
+  // wants filled in. `0681`. An error here is not a scan failure: a
+  // platform that has configured nothing, or a database older than
+  // this function, reads a document exactly as it always did.
+  let targets: ScanTarget[] = [];
+  {
+    const { data, error } = await db.rpc("scan_extraction_targets");
+    if (error) {
+      console.error("could not read the scan targets", error);
+    } else {
+      targets = usableTargets(data);
+    }
+  }
+
+  // The destination the caller already knows. A screen that exists to
+  // do one thing -- the bank statement importer -- has told us what
+  // this is, and asking the reader to guess anyway is how a statement
+  // that read perfectly came back as a bill with no rows on it.
+  const asked = typeof body?.target === "string" ? body.target.trim() : "";
+  targets = narrowToTarget(targets, asked);
+  // Known only where the narrowing actually MATCHED. An unknown key
+  // widens back to everything, and telling the reader "this has
+  // already been identified" over a list of seven is worse than not
+  // telling it anything.
+  const knownTarget = asked !== "" && targets.length === 1 &&
+    targets[0].key === asked;
+
+  // Every call this scan makes to a vendor, in order, kept raw for the
+  // console. `0704`. Declared out here rather than inside the `try`
+  // because the CATCH needs it too -- a scan that failed is the one
+  // somebody is troubleshooting, and its exchanges are the answer.
+  const exchanges: Exchange[] = [];
 
   // From here on every exit settles the scan, because an unsettled scan
   // is a charge nobody gave back.
@@ -891,7 +1533,7 @@ serveFunction("ocr.failed", async (req: Request) => {
         }`,
       );
     }
-    const bytes = new Uint8Array(await file.data.arrayBuffer());
+    bytes = new Uint8Array(await file.data.arrayBuffer());
     if (bytes.byteLength > MAX_BYTES) {
       throw new Error(
         "That file is too large to scan. Photograph the document rather " +
@@ -899,70 +1541,67 @@ serveFunction("ocr.failed", async (req: Request) => {
       );
     }
 
-    const mime = begin.mime_type ?? file.data.type ?? "image/jpeg";
+    mime = begin.mime_type ?? file.data.type ?? "image/jpeg";
     if (!mime.startsWith("image/") && mime !== "application/pdf") {
       throw new Error(`There is nothing to read in a ${mime} file.`);
     }
 
     const credential = await credentialFor(db, begin, orgId);
-    // On `kind`, never on the provider's name. That is what lets a
-    // reader be added as a row: a new ChatGPT-shaped endpoint arrives
-    // here already understood.
-    let extraction: Extraction;
-    switch (begin.kind) {
-      case "anthropic":
-        extraction = await readClaude(
-          credential.api_key,
-          begin.endpoint ?? "https://api.anthropic.com/v1/messages",
-          begin.model ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      case "openai":
-        extraction = await readOpenAiShaped(
-          credential.api_key,
-          begin.endpoint ?? "",
-          begin.model ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      case "self_hosted":
-        extraction = await readSelfHosted(
-          credential.api_key,
-          begin.endpoint ?? "",
-          begin.model ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      case "google_docai":
-        extraction = await readGoogle(
-          credential.api_key,
-          credential.project_id ?? "",
-          credential.location ?? "us",
-          credential.processor_id ?? "",
-          bytes,
-          mime,
-        );
-        break;
-      default:
-        // `device` never reaches here — ocr_begin refuses it — and an
-        // unknown kind means the catalog has outrun this function.
-        throw new Error(
-          `This deployment does not know how to talk to a ${begin.kind} ` +
-            "reader. It needs updating before that one can be used.",
-        );
-    }
+    // Remembered outside the try's scope below only in the sense that
+    // the catch needs it: a provider's refusal belongs against the KEY
+    // that caused it, and by the time we know it failed the credential
+    // is the only thing that says which key that was.
+    usedKey = credential.key_id;
+    // Read once, with the service role, and passed to both attempts.
+    // Configuration rather than a secret -- `scan_extraction_targets`
+    // is granted to `authenticated` too -- but asking for it twice on
+    // a fallback would be a second round trip to learn the same thing.
+    //
+    // Asked twice where the reader said "not now". A 503 is a model at
+    // capacity and the same request a second later usually works;
+    // before this, an overloaded vendor and an unreadable file were
+    // written off identically. `retry.ts` has which statuses count.
+    //
+    // Inside the same invocation, so `ocr_begin` has already taken the
+    // charge once and a second attempt cannot take another.
+    // Collected rather than assigned: a `let` written only inside a
+    // callback narrows to `never` here, and the compiler is right that
+    // it cannot see the write.
+    const blips: ReaderRefusal[] = [];
+    const extraction = await withOneRetry(
+      () =>
+        runReader(exchanges, begin, credential, bytes as Uint8Array, mime,
+          targets, knownTarget),
+      { onRetry: (failure) => blips.push(failure) },
+    );
+    const firstFailure = blips.length > 0 ? blips[0] : null;
 
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
       p_status: "ok",
       p_extracted: extraction,
-      p_error: null,
+      // Kept ON the successful row, the way a rescued scan keeps the
+      // reader that failed it. A blip nobody saw is still a vendor
+      // having a bad afternoon, and this row is the only place that
+      // would record it -- the day the retry stops being enough is the
+      // day somebody wants to know how long it had been shaky.
+      //
+      // The KEY is not blamed for it. `note_ocr_key_error` is about a
+      // refusal the key caused, and a model at capacity is not the
+      // key's doing; noting it would walk a pool towards standing keys
+      // down over somebody else's outage.
+      p_error: firstFailure === null
+        ? null
+        : `${begin.provider_name} answered ${firstFailure.status} and ` +
+          `was asked again: ${firstFailure.message}`,
     });
     if (error) console.error("could not settle scan", begin.scan_id, error);
+
+    // The successful ones too, which is the half somebody will be
+    // tempted to drop. A reading that came back WRONG is the case
+    // where the raw reply matters most, and by definition it did not
+    // fail.
+    await keepExchanges(db, begin.scan_id, exchanges);
 
     return json({
       scan_id: begin.scan_id,
@@ -972,6 +1611,89 @@ serveFunction("ocr.failed", async (req: Request) => {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // Minted HERE rather than at the return, which is the whole of
+    // `0680`. The reference is what the person scanning is told to
+    // quote, and it used to be created after the scan had been settled
+    // — so it went to this function's stdout and nowhere else, and the
+    // one identifier the message pointed at was the one identifier
+    // nothing could look up. Having it in hand before the settle is
+    // all it takes to write it against the row.
+    const ref = logFailure(e, "ocr.failed", { scan_id: begin.scan_id });
+    const { error: refNoted } = await db.rpc("ocr_note_log_ref", {
+      p_scan_id: begin.scan_id,
+      p_ref: ref,
+    });
+    if (refNoted) {
+      console.error("could not record the reference", begin.scan_id, refNoted);
+    }
+    // Against the key, when a key from a pool is what ran. A key
+    // revoked at the provider's end has to read differently in the
+    // console from one that is merely busy, and the console has no
+    // other way to tell: it cannot see the key, so it cannot try it.
+    //
+    // Not a refusal and not a stand-down. The commonest error here is a
+    // rate limit, which is the thing the caps exist to stop us causing
+    // -- a key struck out of the pool for one of those would be a pool
+    // that empties itself the first busy afternoon.
+    if (usedKey) {
+      const { error: noted } = await db.rpc("note_ocr_key_error", {
+        p_key_id: usedKey,
+        p_error: message,
+      });
+      if (noted) console.error("could not note the key error", usedKey, noted);
+    }
+
+    // 0679. Before the scan is written off, the platform's free reader
+    // gets one attempt at it.
+    //
+    // After `note_ocr_key_error` on purpose: the key that failed
+    // failed, and a fallback that rescues the document does not make
+    // that untrue -- the console needs to see a vendor having a bad
+    // afternoon even when nobody noticed, because the day the fallback
+    // is also down is the day somebody wishes they had.
+    //
+    // Only when the file was actually read. A scan that failed on a
+    // missing file, an oversized one or an unreadable type has nothing
+    // to retry, and sending a second vendor a request that cannot
+    // succeed is one more place the document has been.
+    if (bytes) {
+      const rescued = await tryFallback(
+        exchanges, db, begin.scan_id, orgId, bytes, mime, targets,
+        knownTarget,
+      );
+      if (rescued) {
+        const { error: settled } = await db.rpc("ocr_finish", {
+          p_scan_id: begin.scan_id,
+          p_status: "ok",
+          p_extracted: rescued.extraction,
+          // The first reader's failure is kept ON the successful row.
+          // Losing it would hide the whole point: the company's chosen
+          // reader is not working, and somebody has to be able to find
+          // that out without a fallback that silently covers for it
+          // for a month.
+          p_error: `${begin.provider_name} failed and ` +
+            `${rescued.reader.provider_name} read it instead: ${message}`,
+        });
+        if (settled) {
+          console.error("could not settle a rescued scan", begin.scan_id, settled);
+        }
+        // Both readers' answers: the one that refused and the one that
+        // read it. That pair is the whole of "why did this cost twice".
+        await keepExchanges(db, begin.scan_id, exchanges);
+        return json({
+          scan_id: begin.scan_id,
+          provider: begin.provider,
+          // Named, not buried. The company is told which reader read
+          // its document, because that is a different vendor from the
+          // one it chose and it is entitled to know which.
+          fell_back_to: rescued.reader.provider,
+          fell_back_to_name: rescued.reader.provider_name,
+          charged: begin.charged,
+          extraction: rescued.extraction,
+        });
+      }
+    }
+
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,
       p_status: "failed",
@@ -983,11 +1705,15 @@ serveFunction("ocr.failed", async (req: Request) => {
     if (error) {
       console.error("scan failed and was not refunded", begin.scan_id, error);
     }
+
+    // The failure is the one somebody is troubleshooting, so this is
+    // the path that must not miss.
+    await keepExchanges(db, begin.scan_id, exchanges);
     // The provider's message goes to the log and to `ocr_scans.error`,
-    // which is the organization's own row behind RLS. It does not go in
-    // the response: a Document AI failure quotes the project, the
-    // processor and sometimes the page it choked on.
-    const ref = logFailure(e, "ocr.failed", { scan_id: begin.scan_id });
+    // which is the organization's own row behind RLS, and to the
+    // console's scan log. It does not go in the response: a Document
+    // AI failure quotes the project, the processor and sometimes the
+    // page it choked on.
     return fail(
       "The document could not be read. Quote this reference if you get in touch.",
       502,

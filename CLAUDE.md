@@ -24,7 +24,7 @@ Three things to know before you touch the code:
 - **A widget test that passes has not yet proved anything.** Break the screen
   on purpose and watch the test fail: `python3 scripts/mutate.py <source>
   <test> <mutants.py>`, always with a no-op control, because a harness that
-  errors on every run reports a clean sweep. `docs/widget-tests.md` lists ten
+  errors on every run reports a clean sweep. `docs/widget-tests.md` lists eleven
   ways a green test covers a broken screen — every one of them happened here,
   and three of them hid a real defect.
 

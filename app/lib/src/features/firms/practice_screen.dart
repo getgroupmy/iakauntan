@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -680,7 +681,7 @@ class _AppointDialogState extends ConsumerState<_AppointDialog> {
           // decided before the list of companies arrives -- only the
           // options in the first box are missing.
           loading: () => const FormSkeleton(fields: 2),
-          error: (e, _) => Text('$e'),
+          error: (e, _) => Text(errorText(e)),
           data: (list) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [

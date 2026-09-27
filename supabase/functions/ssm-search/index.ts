@@ -53,7 +53,7 @@
  * cache and the rate limit are part of keeping this modest, not
  * optimisations to tune away.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { serveFunction } from "../_shared/cors.ts";
 import {
   DEFAULT_ROUTES,

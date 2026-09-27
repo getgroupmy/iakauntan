@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertMatch, assertStringIncludes } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertMatch, assertStringIncludes } from "jsr:@std/assert@1.0.19";
 import { b64urlDecode, vapidAuthorization } from "./web_push.ts";
 
 /**

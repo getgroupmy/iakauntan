@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
@@ -70,6 +71,14 @@ class LandingCmsTab extends ConsumerWidget {
     return AsyncView<Map<String, dynamic>?>(
       value: page,
       onRetry: () => ref.invalidate(landingPageAdminProvider),
+      // The EDITOR, not the page. The page itself is the one place a
+      // skeleton would be a guess -- see the preview below, which keeps
+      // its circle for exactly that reason -- but the boxes an operator
+      // types into are the same boxes whatever is saved in them.
+      skeleton: const Padding(
+        padding: EdgeInsets.all(Space.md),
+        child: FormSkeleton(fields: 5),
+      ),
       builder: (row) => ListView(
         padding: const EdgeInsets.all(Space.md),
         children: [

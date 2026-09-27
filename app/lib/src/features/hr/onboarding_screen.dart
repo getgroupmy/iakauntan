@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
@@ -360,7 +361,7 @@ class _TasksDialog extends ConsumerWidget {
         ));
       }
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(errorText(err))));
     }
     ref.invalidate(onboardingTasksProvider(checklistId));
   }

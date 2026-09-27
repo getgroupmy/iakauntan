@@ -4,7 +4,7 @@ import {
   assertMatch,
   assertRejects,
   assertStringIncludes,
-} from "jsr:@std/assert@1";
+} from "jsr:@std/assert@1.0.19";
 import { googleAccessToken, type ServiceAccount } from "./google_auth.ts";
 
 /**

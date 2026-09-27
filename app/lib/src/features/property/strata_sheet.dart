@@ -345,13 +345,23 @@ class _SchemeSheetState extends ConsumerState<_SchemeSheet> {
                 ),
                 const SizedBox(height: Space.sm),
                 // The comparison the schedule is held separately for.
+                // `Fmt.qty` on both, not `$stated`. Share units are
+                // numeric, so the parcels come back as doubles and the
+                // denominator is parsed as one -- and the line read
+                // "700.0 of 1000.0 allocated" against a Schedule of
+                // Parcels that says 700 and 1,000. `Fmt.qty` drops the
+                // zeros on a whole number and keeps them on a
+                // fractional one, which a schedule allocating halves
+                // still needs.
                 Text(
                   stated == null
-                      ? '$allocated share units allocated so far.'
+                      ? '${Fmt.qty(allocated)} share units allocated so far.'
                       : scheduleIsComplete(stated, allocated)
                           ? 'The Schedule of Parcels is complete: '
-                              '$allocated of $stated allocated.'
-                          : 'Incomplete: $allocated of $stated allocated. '
+                              '${Fmt.qty(allocated)} of ${Fmt.qty(stated)} '
+                              'allocated.'
+                          : 'Incomplete: ${Fmt.qty(allocated)} of '
+                              '${Fmt.qty(stated)} allocated. '
                               'Charges raised now would be levied against a '
                               'denominator the parcels do not add up to.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(

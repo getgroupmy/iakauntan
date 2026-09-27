@@ -1,8 +1,9 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
+import '../../data/models.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
@@ -11,6 +12,10 @@ import '../../core/widgets.dart';
 import 'book_balance.dart';
 import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
+import '../shared/receipt_capture.dart';
+import '../shared/scan_intake.dart';
+import '../shared/scan_runner.dart';
+import '../smartscan/scan_destination.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
 import 'transfers_history_dialog.dart';
@@ -23,7 +28,27 @@ import 'transfers_history_dialog.dart';
 /// left over is the number that matters, and it is the one shown
 /// largest.
 class ReconciliationScreen extends ConsumerStatefulWidget {
-  const ReconciliationScreen({super.key});
+  const ReconciliationScreen({
+    super.key,
+    this.openAccountId,
+    this.openImport = false,
+  });
+
+  /// Which account to open on, where the caller knows. `0710`-era.
+  ///
+  /// The Bank statements screen sends it: somebody who pressed Upload
+  /// beside Maybank means Maybank, and landing on whichever account
+  /// sorts first is a statement imported into the wrong one.
+  final String? openAccountId;
+
+  /// Open the import straight away.
+  ///
+  /// So "Upload a statement" is one press rather than a press, a
+  /// screen, and an unlabelled icon. The import itself stays here --
+  /// the parse, the balance chain, the duplicate skip and the closing
+  /// balance are all on this screen and a second copy of them would be
+  /// a second set of answers to drift.
+  final bool openImport;
 
   @override
   ConsumerState<ReconciliationScreen> createState() =>
@@ -69,7 +94,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(errorText(e))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -84,8 +109,22 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     // Seed the account once the list arrives, so the screen is useful
     // without a first click.
     if (_bankAccountId == null && banks.isNotEmpty) {
-      _bankAccountId = banks.first['id'] as String;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+      // The one the caller asked for, where it is still a real account
+      // of this company's. A stale id in a link opens the first one
+      // rather than an empty screen.
+      final asked = widget.openAccountId;
+      _bankAccountId = banks.any((b) => b['id'] == asked)
+          ? asked
+          : banks.first['id'] as String;
+      // Once, and only because `_bankAccountId` was just set: this
+      // whole block is inside `build`, which runs again on every
+      // rebuild, and the condition above is the only thing stopping
+      // the import dialog from reopening behind itself.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _refresh();
+        if (!mounted || !widget.openImport) return;
+        await _import();
+      });
     }
 
     return Scaffold(
@@ -212,6 +251,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
                       lines: _lines,
                       canPost: canPost,
                       onMatch: _match,
+                      onPost: _post,
                       onUnmatch: _unmatch,
                     ),
                     const SizedBox(height: 40),
@@ -223,13 +263,28 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
   }
 
   Future<void> _import() async {
-    final text = await showDialog<String>(
+    // A parse rather than the raw text, since `0683`: the dialog now
+    // has three sources — a paste, a file, and a photograph — and only
+    // the first two are text. Handing back what was READ lets all
+    // three arrive the same way, and drops a second parse of the same
+    // paste on the way out.
+    final parsed = await showDialog<StatementParse>(
       context: context,
-      builder: (_) => const _PasteDialog(),
+      builder: (_) => _PasteDialog(
+        // `.valueOrNull`, not `.value`: `AsyncError.value` THROWS, so
+        // the `??` beside it never runs and an errored provider would
+        // take the Import button down with it. `check_async_value.py`
+        // caught this one.
+        intoAccountNumber:
+            (ref.read(bankAccountsProvider).valueOrNull ?? const [])
+            .cast<Map<String, dynamic>>()
+            .where((b) => b['id'] == _bankAccountId)
+            .map((b) => b['account_number']?.toString())
+            .firstOrNull,
+      ),
     );
-    if (text == null || !mounted) return;
+    if (parsed == null || !mounted) return;
 
-    final parsed = parseStatement(text);
     if (parsed.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(parsed.problems.join(' ')),
@@ -245,18 +300,25 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     if (!mounted) return;
     // Skipped lines and unreadable lines are both reported. A statement
     // that half-imports quietly reconciles to the wrong number.
-    final checks = (result['balance_checks'] as num? ?? 0).toInt();
+    // LINES, not spans. `balance_checks` counts the runs the arithmetic
+    // closed, and since 0713 a run can be a whole page: Hong Leong
+    // prints a balance on 21 lines of a 95-line statement, so reporting
+    // spans would tell somebody 20 about a statement whose own
+    // arithmetic proved all 95. `lines_proved` is what was proved.
+    final proved = (result['lines_proved'] as num? ?? 0).toInt();
+    final imported = (result['imported'] as num? ?? 0).toInt();
     final parts = <String>[
-      '${result['imported']} imported',
+      '$imported imported',
       if ((result['skipped'] as num? ?? 0) > 0)
         '${result['skipped']} already there',
       // Worth saying out loud. It is the difference between a paste
       // that looks right and one the statement's own arithmetic agrees
       // with, and somebody who pastes a balance column deserves to know
       // the check happened rather than to assume it.
-      if (checks > 0) 'balance follows on $checks lines',
-      if (parsed.problems.isNotEmpty)
-        '${parsed.problems.length} could not be read',
+      if (proved > 0) 'balance follows across $proved of $imported lines',
+      // `unreadable`, not `problems.length`. One message can cover
+      // fifty-five undated lines and a footing failure covers none.
+      if (parsed.unreadable > 0) '${parsed.unreadable} could not be read',
     ];
 
     // The figure the difference gets measured against, taken from the
@@ -285,9 +347,16 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     if (!mounted) return;
 
     if (suggestions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Nothing posted matches that amount and date. '
-            'Record the receipt or payment first.'),
+      // It used to end here, which on a ledger with nothing in it is
+      // where every line ended: "record the receipt first", twenty-four
+      // times, with nothing on the screen that could record one.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Nothing already posted matches that amount '
+            'and date.'),
+        action: SnackBarAction(
+          label: 'Post it',
+          onPressed: () => _post(line),
+        ),
       ));
       return;
     }
@@ -306,6 +375,41 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
         sourceId: chosen['source_id'] as String,
       ),
       successMessage: 'Matched',
+    );
+    if (ok) await _refresh();
+  }
+
+  /// Enters a statement line into the ledger against one account.
+  Future<void> _post(Map<String, dynamic> line) async {
+    final List<Account> accounts;
+    try {
+      accounts = await ref.read(accountsProvider.future);
+    } catch (e) {
+      // The chart has to arrive before anything can be chosen from it,
+      // and a button that throws into the void looks like a button that
+      // does nothing.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(errorText(e))));
+      return;
+    }
+    if (!mounted) return;
+
+    final chosen = await showDialog<_PostChoice>(
+      context: context,
+      builder: (_) => _PostLineDialog(line: line, accounts: accounts),
+    );
+    if (chosen == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      doing: 'posting a statement line',
+      action: () => ref.read(repoProvider)!.postBankTransaction(
+            transactionId: line['id'] as String,
+            accountId: chosen.accountId,
+            description: chosen.description,
+          ),
+      successMessage: 'Posted',
     );
     if (ok) await _refresh();
   }
@@ -438,6 +542,69 @@ class _Controls extends StatelessWidget {
   }
 }
 
+/// Why a reconciliation does not balance, in the words that fit it.
+///
+/// ## The sentence this replaces, and what was wrong with it
+///
+/// The screen used to say, whatever the figures were:
+///
+///     24 statement lines are still unmatched. A difference is a line
+///     nobody has matched, a payment entered twice, or a charge the
+///     books have not heard of.
+///
+/// Reported with a screenshot where all three were wrong. A Maybank
+/// statement for October 2025 had been scanned and imported perfectly
+/// into an account whose ledger begins in January 2026 — so the book
+/// balance was zero, the difference was the statement balance to the
+/// sen, and there was no discrepancy between two sets of records
+/// because there was only one set of records.
+///
+/// Somebody hunting the first when they have the second looks for a
+/// missing RM 11,008.23 that was never there.
+///
+/// ## Why no date has to be passed in
+///
+/// `posted_entries` counts postings dated ON OR BEFORE the statement
+/// date and `books_start` is the earliest posting at ANY date, so a
+/// zero count already means every posting falls after the statement.
+/// Comparing the two dates here would be asking a question the pair of
+/// figures has answered.
+///
+/// A server that does not send `posted_entries` — an app talking to a
+/// deployment older than `0716` — gets the sentence that was always
+/// here, rather than a guess.
+String whyItIsOut(Map<String, dynamic> status) {
+  final lines = (status['unmatched_lines'] as num?)?.toInt() ?? 0;
+  final posted = (status['posted_entries'] as num?)?.toInt();
+  if (posted == null || posted > 0) return _aDifference(lines);
+
+  final start = _startedOn(status['books_start']);
+  final opening = start == null
+      ? 'Nothing has ever been posted to this account'
+      : 'Nothing is posted to this account by the statement date — its '
+          'books start on ${Fmt.date(start)}';
+  final tail = lines == 1
+      ? 'the statement line has'
+      : 'the $lines statement lines have';
+  return '$opening, so there is nothing for the statement to agree '
+      'with. That is not a difference to hunt: $tail to be entered into '
+      'the ledger first.';
+}
+
+String _aDifference(int lines) {
+  final count = lines == 1
+      ? '1 statement line is still unmatched'
+      : '$lines statement lines are still unmatched';
+  return '$count. A difference is a line nobody has matched, a payment '
+      'entered twice, or a charge the books have not heard of.';
+}
+
+DateTime? _startedOn(Object? value) {
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
+
 class _StatusCard extends StatelessWidget {
   const _StatusCard({required this.status});
 
@@ -458,7 +625,11 @@ class _StatusCard extends StatelessWidget {
             _Line(label: 'Book balance', value: Fmt.toDouble(status['book_balance'])),
             _Line(
               label: 'Less what the bank has not seen',
-              value: -Fmt.toDouble(status['unpresented']),
+              // `0 - x` rather than `-x`: negating a double zero gives
+              // NEGATIVE zero, which this formats as "RM -0.00" — and
+              // a minus sign in front of nothing reads as a figure
+              // somebody should go and look at.
+              value: 0 - Fmt.toDouble(status['unpresented']),
               caption: 'Unpresented cheques and deposits in transit',
             ),
             const Divider(height: 20),
@@ -497,10 +668,7 @@ class _StatusCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  '${status['unmatched_lines']} statement lines are still '
-                  'unmatched. A difference is a line nobody has matched, a '
-                  'payment entered twice, or a charge the books have not '
-                  'heard of.',
+                  whyItIsOut(status),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -547,12 +715,14 @@ class _LinesCard extends StatelessWidget {
     required this.canPost,
     required this.onMatch,
     required this.onUnmatch,
+    required this.onPost,
   });
 
   final List<Map<String, dynamic>> lines;
   final bool canPost;
   final ValueChanged<Map<String, dynamic>> onMatch;
   final ValueChanged<Map<String, dynamic>> onUnmatch;
+  final ValueChanged<Map<String, dynamic>> onPost;
 
   @override
   Widget build(BuildContext context) {
@@ -581,6 +751,7 @@ class _LinesCard extends StatelessWidget {
                   canPost: canPost,
                   onMatch: () => onMatch(line),
                   onUnmatch: () => onUnmatch(line),
+                  onPost: () => onPost(line),
                 ),
           ],
         ),
@@ -595,12 +766,21 @@ class _LineTile extends StatelessWidget {
     required this.canPost,
     required this.onMatch,
     required this.onUnmatch,
+    required this.onPost,
   });
 
   final Map<String, dynamic> line;
   final bool canPost;
   final VoidCallback onMatch;
   final VoidCallback onUnmatch;
+
+  /// Post this line straight to an account.
+  ///
+  /// Beside Match rather than instead of it. They answer different
+  /// questions — "which of the things I have already entered is this?"
+  /// and "this was never entered; enter it" — and a ledger that has
+  /// both kinds of line needs both verbs.
+  final VoidCallback onPost;
 
   @override
   Widget build(BuildContext context) {
@@ -625,9 +805,15 @@ class _LineTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Money(amount, bold: true),
+          if (canPost && !matched)
+            IconButton(
+              tooltip: 'Post to an account',
+              icon: const Icon(Icons.post_add, size: 20),
+              onPressed: onPost,
+            ),
           if (canPost)
             IconButton(
-              tooltip: matched ? 'Unmatch' : 'Match',
+              tooltip: matched ? 'Unmatch' : 'Match to something posted',
               icon: Icon(matched ? Icons.close : Icons.search, size: 20),
               onPressed: matched ? onUnmatch : onMatch,
             ),
@@ -645,17 +831,160 @@ class _LineTile extends StatelessWidget {
       };
 }
 
-class _PasteDialog extends StatefulWidget {
-  const _PasteDialog();
+/// What was chosen in [_PostLineDialog].
+class _PostChoice {
+  const _PostChoice({required this.accountId, this.description});
 
-  @override
-  State<_PasteDialog> createState() => _PasteDialogState();
+  final String accountId;
+  final String? description;
 }
 
-class _PasteDialogState extends State<_PasteDialog> {
+/// Which account the other side of a statement line goes to.
+///
+/// One question, because that is all the posting needs: the bank's own
+/// side is decided by the line's sign and the amount is the line's own.
+/// A form that asked for either of those would be offering somebody the
+/// chance to disagree with the bank.
+class _PostLineDialog extends StatefulWidget {
+  const _PostLineDialog({required this.line, required this.accounts});
+
+  final Map<String, dynamic> line;
+  final List<Account> accounts;
+
+  @override
+  State<_PostLineDialog> createState() => _PostLineDialogState();
+}
+
+class _PostLineDialogState extends State<_PostLineDialog> {
+  late final TextEditingController _description = TextEditingController(
+    text: widget.line['description']?.toString() ?? '',
+  );
+  String? _accountId;
+
+  @override
+  void dispose() {
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = Fmt.toDouble(widget.line['amount']);
+    final id = _accountId;
+
+    return AlertDialog(
+      title: const Text('Post this line'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${Fmt.date(Fmt.parseDate(widget.line['transaction_date']))}'
+              ' · ${Fmt.money(amount)}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              postingSideNote(amount),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            SearchablePicker<String>(
+              // Headings dropped: a group account cannot receive a
+              // posting, so offering one is offering a refusal.
+              options: accountPickerOptions(widget.accounts),
+              value: _accountId,
+              onChanged: (v) => setState(() => _accountId = v),
+              label: 'Account',
+              hint: 'Search by code or name',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _description,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                helperText: 'What the journal will be called',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: id == null
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    _PostChoice(
+                      accountId: id,
+                      description: _description.text.trim().isEmpty
+                          ? null
+                          : _description.text.trim(),
+                    ),
+                  ),
+          child: const Text('Post'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Which way round the posting goes, said in words before it is made.
+///
+/// `bank_transactions.amount` is a GL-signed movement on the bank's own
+/// account — `0085` fixed that meaning and `0712` made a credit card
+/// obey it by storing the card negated — so the sign is the whole rule
+/// and there is no account-type branch behind this sentence either.
+String postingSideNote(double amount) => amount < 0
+    ? 'Money out. The account you choose will be debited.'
+    : 'Money in. The account you choose will be credited.';
+
+class _PasteDialog extends ConsumerStatefulWidget {
+  const _PasteDialog({this.intoAccountNumber});
+
+  /// The account number of the bank account this import is going into.
+  ///
+  /// Passed in rather than looked up, because the dialog does not know
+  /// which account the person pressed Upload beside — the screen does,
+  /// and that is the one question about the document only the screen
+  /// can answer. Null where the account has no number recorded, which
+  /// is not a failure: `accountMismatch` stays silent on an absence.
+  final String? intoAccountNumber;
+
+  @override
+  ConsumerState<_PasteDialog> createState() => _PasteDialogState();
+}
+
+class _PasteDialogState extends ConsumerState<_PasteDialog> {
   final _text = TextEditingController();
   String? _fileName;
   bool _reading = false;
+
+  /// What a photograph was read as. `0683`.
+  ///
+  /// Held apart from `_text` rather than rendered into it: a scan comes
+  /// back as rows, and turning them into CSV so the text box could hold
+  /// them would mean formatting figures in order to parse them straight
+  /// back — a round trip whose only possible effect is to lose one.
+  StatementParse? _scanned;
+  String? _scannedFrom;
+
+  @override
+  void initState() {
+    super.initState();
+    // Before the first frame, so a statement photographed in SmartScan
+    // is already on screen when the import dialog opens rather than
+    // appearing a moment later.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _takeParkedStatement();
+    });
+  }
 
   @override
   void dispose() {
@@ -671,31 +1000,241 @@ class _PasteDialogState extends State<_PasteDialog> {
   /// No extension filter. Banks name these `.csv`, `.txt`, `.sta`,
   /// `.940` and `.TXT`, and a filter that misses one is a file the
   /// picker refuses to show for a reason nobody can see.
-  /// `parseStatement` works out which format it is from the content.
+  ///
+  /// ## And a PDF or a photograph is a statement too
+  ///
+  /// Asked for in one sentence: "bank statement should allow to upload
+  /// pdf csv and also image not only csv". This button used to read
+  /// whatever was picked with `readAsString`, so a PDF came back as a
+  /// `FormatException` under "Could not read the file" — which reads as
+  /// the statement being broken rather than the button being for
+  /// something else. A PDF is what a bank emails and a photograph is
+  /// what somebody has of a printed one, so between them they are most
+  /// of the statements there are.
+  ///
+  /// ONE BUTTON, not two. Which importer a file belongs to is a
+  /// question about the file, and `statementFileKind` answers it from
+  /// the bytes — so nobody has to know that a CSV is free and a PDF
+  /// costs a scan, and nobody picks the wrong button and pays for a
+  /// reading of a file that could have been parsed here.
   Future<void> _openFile() async {
     setState(() => _reading = true);
     try {
-      final file = await openFile();
-      if (file == null) return;
-      final text = await file.readAsString();
-      if (!mounted) return;
-      setState(() {
-        _text.text = text;
-        _fileName = file.name;
-      });
+      // Picked here rather than inside `captureAndRead`, because what
+      // happens next depends on the bytes and asking twice would be a
+      // second file dialog over a file already chosen.
+      final file = await pickReceipt();
+      if (file == null || !mounted) return;
+
+      switch (statementFileKind(mimeType: file.mimeType, bytes: file.bytes)) {
+        case StatementFile.scan:
+          await _readStatement(file);
+        case StatementFile.text:
+          setState(() {
+            _text.text = statementText(file.bytes)!;
+            _fileName = file.name;
+            // A file chosen now replaces a photograph taken earlier.
+            // `statementPreview` gives the scan precedence, so leaving
+            // it would import the old reading and say nothing.
+            _scanned = null;
+            _scannedFrom = null;
+          });
+        case StatementFile.neither:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'That is not a statement this can read. Online banking '
+                'exports a CSV or an MT940; a PDF or a photograph of a '
+                'printed statement works too. A spreadsheet has to be '
+                'saved as CSV first.',
+              ),
+            ),
+          );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Could not read the file: $e')));
+      ).showSnackBar(SnackBar(content: Text('Could not read the file: ${errorText(e)}')));
     } finally {
       if (mounted) setState(() => _reading = false);
     }
   }
 
+  /// A PDF or a photograph, through the reader and into the same rows.
+  ///
+  /// `captureAndRead` is the whole of AI SmartScan's intake and it is
+  /// reused rather than reimplemented: it refuses a PDF BEFORE the
+  /// upload where the chosen reader cannot take one, shows the progress
+  /// modal, keeps the file when the reading fails, and files it against
+  /// `bank_transactions` so the scan inbox — and the Bank statements
+  /// screen — can say what became of it.
+  ///
+  /// The reading becomes rows through `scannedStatement`, which is the
+  /// same function the parked-photograph path uses. Two ways in, one
+  /// interpretation.
+  Future<void> _readStatement(CapturedFile file) async {
+    final staged = await captureAndRead(
+      context,
+      ref,
+      source: CaptureSource.file,
+      table: ScanDestination.bankStatement.table,
+      picked: file,
+      // We KNOW what this is. Somebody pressed Upload on a screen that
+      // imports bank statements and nothing else, so the reader is
+      // told rather than asked -- which is what puts `rows` in the
+      // schema at all.
+      target: ScanDestination.bankStatement.targetKey,
+    );
+    if (staged == null || !mounted) return;
+
+    // What it was, recorded on the scan.
+    //
+    // `0614` exists so that "what did it think this was" has an answer
+    // three months later, and this screen is the one place where the
+    // answer was never in doubt -- somebody pressed Upload on a screen
+    // that imports bank statements and nothing else. It recorded
+    // nothing anyway, because the kind comes off the READER and a
+    // reader narrowed to one destination is never asked to choose one.
+    //
+    // Before the reading is even looked at, and with `staged.read`
+    // possibly null: a statement that could not be read is still a
+    // statement, and that is the more useful thing to find later.
+    await rememberDocumentKind(
+      ref,
+      attachmentId: staged.attachmentId,
+      accepted: staged.read,
+      fallback: ScanDestination.bankStatement.knownKind,
+    );
+    if (!mounted) return;
+
+    // The file's own text layer, where it has one, and the statement's
+    // own date off it.
+    //
+    // This OUTRANKS the `document_date` the reader was asked for, and
+    // the reason is the whole of `95e08146`: two RHB statements came
+    // back read faultlessly, every line a day and a month, and
+    // `document_date` null — so a hundred and two lines were thrown
+    // away for want of a year that was printed on page one of the file
+    // as selectable text. A model is asked and may decline. A text
+    // layer is read.
+    //
+    // Null on a photograph, on a phone, and on a PDF with no text in
+    // it, and in every one of those cases the reading is used exactly
+    // as it was before.
+    final text = await pdfTextLayer(file.bytes, file.mimeType);
+    if (!mounted) return;
+    final period = text == null ? null : statementPeriodFromText(text);
+
+    // The account this is going into, so the statement can be checked
+    // against it. `0683`'s five columns describe a LINE; this is the
+    // one question about the document that only the screen can answer,
+    // because only the screen knows where the person pressed Upload.
+    var parse = scannedStatement(
+      staged.read,
+      period: period,
+      intoAccountNumber: widget.intoAccountNumber,
+    );
+
+    // `0711`. The file was uploaded either way -- see
+    // `alreadyHereNotice` for why reusing the old attachment is not the
+    // free win it looks like -- but somebody who has sent this exact
+    // statement before is entitled to know before they import it again.
+    final seenBefore = alreadyHereNotice(
+      fileName: staged.alreadyHere?.fileName,
+      filedAt: staged.alreadyHere?.createdAt,
+    );
+    if (seenBefore != null) {
+      parse = StatementParse(
+        parse.rows,
+        parse.problems,
+        [seenBefore, ...parse.notices],
+        parse.unreadable,
+      );
+    }
+    if (parse.rows.isEmpty && parse.problems.isEmpty) {
+      // THREE different failures wore one sentence, and the sentence
+      // was wrong about all of them.
+      //
+      // It said a platform administrator had to set the reader up
+      // under Kinds of document. `0683` set the statement's five
+      // columns up years ago and they are live — so the one person who
+      // saw this was sent to configure something that was already
+      // configured, on the strength of a guess this screen had no
+      // business making.
+      //
+      // The file is kept in every case: `0708` refuses to delete it
+      // once anything is built from it, and nothing has been built
+      // here.
+      final read = staged.read;
+      final String why;
+      if (read == null) {
+        why = 'That document could not be read at all. The file is '
+            'kept — open it from AI SmartScan to try a different '
+            'reader, or paste the statement in below.';
+      } else if (read.foundNothing) {
+        why = 'Nothing legible came back from that document. The file '
+            'is kept. A photograph of a screen, or a scan at an angle, '
+            'is usually the reason.';
+      } else {
+        // Read perfectly well, and read as something else. Which is
+        // worth saying plainly rather than calling it unreadable.
+        why = 'That was read, but not as a bank statement — no lines '
+            'with a date and an amount came back. The file is kept. '
+            'Check it is the statement itself rather than a summary or '
+            'an advice slip.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(why)));
+      return;
+    }
+    setState(() {
+      _scanned = parse;
+      _scannedFrom = 'read from ${file.name}';
+      // The box and the reading are two answers to one question and
+      // `statementPreview` prefers the reading, so the box is cleared
+      // rather than left holding something that will not be imported.
+      _text.clear();
+      _fileName = null;
+    });
+  }
+
+  /// Whatever AI SmartScan photographed on the way here.
+  ///
+  /// The button that used to sit on this screen is gone: scanning is
+  /// one door now, and a statement is one of the things that comes
+  /// through it. What arrives here is the reading, parked because a
+  /// route cannot carry an `OcrExtraction`.
+  ///
+  /// Taken exactly once, so coming back to this screen later does not
+  /// re-apply a photograph somebody has already dealt with.
+  void _takeParkedStatement() {
+    final staged = ref.read(pendingStatementProvider.notifier).take();
+    if (staged == null) return;
+    final parse = scannedStatement(staged.read);
+    if (parse.rows.isEmpty && parse.problems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nothing on that photograph read as statement lines. The '
+            'reader has to be asked for them, which a platform '
+            'administrator sets up under Kinds of document.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _scanned = parse;
+      _scannedFrom = 'photographed';
+    });
+  }
+
+
   @override
   Widget build(BuildContext context) {
-    final preview = _text.text.trim().isEmpty ? null : parseStatement(_text.text);
+    // The photograph wins while it is there, because it is the thing
+    // somebody just did. Clearing it is what the button below is for.
+    final preview = statementPreview(_scanned, _text.text);
 
     return AlertDialog(
       title: const Text('Import statement'),
@@ -710,8 +1249,9 @@ class _PasteDialogState extends State<_PasteDialog> {
                 'Open the file your bank exports, or paste it. A CSV needs '
                 'its header row — columns are found by name, so the order '
                 'does not matter. An MT940, which is what corporate '
-                'accounts get, is recognised on its own. Lines already '
-                'imported are skipped.',
+                'accounts get, is recognised on its own. A PDF or a '
+                'photograph of a printed statement is read by AI '
+                'SmartScan. Lines already imported are skipped.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
@@ -722,6 +1262,9 @@ class _PasteDialogState extends State<_PasteDialog> {
                     onPressed: _reading ? null : _openFile,
                     icon: const Icon(Icons.folder_open_outlined, size: 18),
                     label: const Text('Open a file'),
+                    // The label stays short; what it accepts is in the
+                    // sentence above, where there is room to say why a
+                    // PDF takes longer than a CSV.
                   ),
                   if (_fileName != null) ...[
                     const SizedBox(width: 12),
@@ -731,6 +1274,29 @@ class _PasteDialogState extends State<_PasteDialog> {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+                    ),
+                  ],
+                  if (_scannedFrom != null) ...[
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        _scannedFrom!,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    // Said, and undoable. A photograph overrides the
+                    // text box while it is there, and somebody who
+                    // photographed the wrong page needs a way back to
+                    // the paste still sitting underneath it.
+                    IconButton(
+                      key: const ValueKey('statement-scan-clear'),
+                      tooltip: 'Use the pasted text instead',
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => setState(() {
+                        _scanned = null;
+                        _scannedFrom = null;
+                      }),
                     ),
                   ],
                 ],
@@ -751,7 +1317,7 @@ class _PasteDialogState extends State<_PasteDialog> {
                 const SizedBox(height: 12),
                 Text(
                   '${preview.rows.length} lines read'
-                  '${preview.problems.isEmpty ? '' : ', ${preview.problems.length} could not be'}',
+                  '${preview.unreadable == 0 ? '' : ', ${preview.unreadable} could not be'}',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: preview.problems.isEmpty
@@ -761,6 +1327,35 @@ class _PasteDialogState extends State<_PasteDialog> {
                 ),
                 for (final problem in preview.problems.take(5))
                   Text(problem, style: Theme.of(context).textTheme.bodySmall),
+                // What was READ and then CHANGED, kept apart from what
+                // could not be read: a sign put right off the running
+                // balance is a line that WILL be imported, and burying
+                // it in the problem list would read as a line that will
+                // not. Every one of them is shown -- a correction
+                // nobody was told about is a correction nobody can
+                // disagree with.
+                if (preview.notices.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  // The heading used to read "N lines were corrected
+                  // against the running balance", which was true when a
+                  // sign repair was the only notice there was and
+                  // became false the moment a second kind existed. It
+                  // was wrong twice over: it named a cause that no
+                  // longer applied to every notice, and it counted
+                  // NOTICES as LINES -- a single notice covering
+                  // fifty-five lines would have announced itself as
+                  // one. Each notice below says its own count and its
+                  // own cause, so the heading says neither.
+                  Text(
+                    noticesHeading(preview.notices.length),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.warning,
+                    ),
+                  ),
+                  for (final notice in preview.notices)
+                    Text(notice, style: Theme.of(context).textTheme.bodySmall),
+                ],
               ],
             ],
           ),
@@ -774,7 +1369,7 @@ class _PasteDialogState extends State<_PasteDialog> {
         FilledButton(
           onPressed: preview == null || preview.isEmpty
               ? null
-              : () => Navigator.pop(context, _text.text),
+              : () => Navigator.pop(context, preview),
           child: const Text('Import'),
         ),
       ],

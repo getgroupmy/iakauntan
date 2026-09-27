@@ -57,7 +57,7 @@
  * from somebody. It is in `public` because PostgREST exposes no other
  * schema; the grant is what keeps it private, not the schema.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { fail, json, serveFunction } from "../_shared/cors.ts";
 import { attachmentPath, decodeBase64 } from "../_shared/mail_files.ts";
 

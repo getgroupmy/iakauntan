@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
@@ -87,7 +88,7 @@ class _CustomerPortalCardState extends ConsumerState<CustomerPortalCard> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -107,7 +108,7 @@ class _CustomerPortalCardState extends ConsumerState<CustomerPortalCard> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);

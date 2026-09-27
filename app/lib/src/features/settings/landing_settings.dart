@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
@@ -57,6 +58,15 @@ class _LandingSettingsCardState extends ConsumerState<LandingSettingsCard> {
     return AsyncView(
       value: saved,
       onRetry: () => ref.invalidate(userPreferencesProvider),
+      // One card of radio choices. Which screens are on the list is
+      // decided by the modules, not by the preferences being fetched --
+      // only which one is ticked is waiting.
+      skeleton: const Card(
+        child: Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(rows: 5, leadingSize: 20, lines: 1),
+        ),
+      ),
       builder: (prefs) {
         final current = _draft ?? prefs;
         final choices = landingChoicesFor((m) => moduleEnabled(ref, m));

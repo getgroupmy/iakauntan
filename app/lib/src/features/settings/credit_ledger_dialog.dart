@@ -142,10 +142,21 @@ class _LedgerDialog extends ConsumerWidget {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
-                      Text(
-                        '${Fmt.money(flows.inTotal)} in · '
-                        '${Fmt.money(flows.outTotal)} out',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      // `Flexible`, not a bare `Text`: unflexed it takes
+                      // its natural width whatever is left, and two
+                      // five-figure totals — "RM 12,345.67 in ·
+                      // RM 9,876.54 out" — are wider than the 284
+                      // logical pixels this dialog gets on a phone.
+                      // Found by opening it at 412 with one row in it;
+                      // the empty state it was always tested with has no
+                      // totals line at all.
+                      Flexible(
+                        child: Text(
+                          '${Fmt.money(flows.inTotal)} in · '
+                          '${Fmt.money(flows.outTotal)} out',
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ],
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -58,6 +59,18 @@ class FilingScreen extends ConsumerWidget {
       body: AsyncView(
         value: filing,
         onRetry: () => ref.invalidate(fsFilingProvider(filingId)),
+        // A banner and a column of cards, in that order, whatever the
+        // filing turns out to say. Only the values inside them are
+        // waiting on the row.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 5,
+            leading: false,
+            lines: 3,
+            rowGap: Space.lg,
+          ),
+        ),
         builder: (f) {
           if (f == null) {
             return const EmptyState(
@@ -322,7 +335,7 @@ class _BalanceCard extends ConsumerWidget {
     return check.when(
       loading: () =>
           const Card(child: ListTile(title: Text('Checking the statements…'))),
-      error: (e, _) => Card(child: ListTile(title: Text('$e'))),
+      error: (e, _) => Card(child: ListTile(title: Text(errorText(e)))),
       data: (r) {
         if (r == null) return const SizedBox.shrink();
         final balances = r['balances'] == true;
@@ -349,11 +362,19 @@ class _BalanceCard extends ConsumerWidget {
                           : context.colors.danger,
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      balances
-                          ? 'The statement of financial position balances'
-                          : 'Out by ${Fmt.money(diff)}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    // Expanded, because the good-news sentence is a
+                    // long one and a bare Text in a Row takes its
+                    // natural width: it went 289 pixels off a 412px
+                    // phone, which a release build clips in silence.
+                    // The bad-news one is short and fitted, which is
+                    // exactly why nobody saw this.
+                    Expanded(
+                      child: Text(
+                        balances
+                            ? 'The statement of financial position balances'
+                            : 'Out by ${Fmt.money(diff)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),

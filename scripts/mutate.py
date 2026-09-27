@@ -19,6 +19,12 @@ Each is an exact string replacement, applied once, to a copy of the
 source. The original is restored afterwards, and restoring it is
 checked by running the test one last time.
 
+The pattern must match the file in EXACTLY ONE PLACE. A pattern that
+matches two is a HARNESS ERROR and not a mutant, because the
+replacement takes the first match: aim at the second function and the
+first one gets mutated, and where the test does not cover it the mutant
+survives under the name of the function you meant.
+
 ## Always include a control
 
 Its description must BEGIN with the word `CONTROL` — that is how one is
@@ -160,6 +166,37 @@ def _version_of(bin_dir: str) -> str | None:
         return None
 
 
+def apply_once(text: str, old: str, new: str) -> tuple[str, str | None]:
+    """The mutated source, or a reason it could not be produced.
+
+    The pattern has to match EXACTLY ONCE. Not "at least once": the
+    replacement takes the first match, so a pattern matching two places
+    mutates the one nearer the top of the file -- and where the test
+    does not cover that one, the mutant survives and is reported under
+    the name of the function you were aiming at.
+
+    That is not hypothetical. `statement_import.dart` holds two parsers
+    that both contain `if (date == null) {` followed by
+    `problems.add(`. A mutant anchored on those two lines and aimed at
+    the second landed in the first, and the survivor read as a missing
+    assertion in a function whose assertion was there and correct all
+    along. Hand-applying it to check the harness reproduced the
+    survival, because hand-applying means pasting the same ambiguous
+    pattern and hitting the same first match.
+
+    Refusing beats mutating every match: several at once is a different
+    and weaker experiment, and which one was meant is a thing only the
+    author knows. Extend the pattern by a line until it is unique.
+    """
+    hits = text.count(old)
+    if hits == 0:
+        return text, "pattern not found"
+    if hits > 1:
+        return text, (f"pattern matches {hits} places; "
+                      "extend it until it matches one")
+    return text.replace(old, new, 1), None
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 4:
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
@@ -204,16 +241,23 @@ def main(argv: list[str]) -> int:
     print(f"baseline: {run()}")
     survivors: list[str] = []
     controls: list[tuple[str, str]] = []
+    # A mutant that never ran is not a mutant that was killed, and
+    # saying "every mutant killed" over one is the same lie the control
+    # exists to catch -- just narrower, because it is one line of the
+    # output rather than all of them.
+    errors: list[str] = []
     try:
         for name, old, new in mutants:
             shutil.copy(backup, source_path)
             with open(source_path) as handle:
                 text = handle.read()
-            if old not in text:
-                print(f"{name:<44} HARNESS ERROR: pattern not found")
+            mutated, why = apply_once(text, old, new)
+            if why is not None:
+                print(f"{name:<44} HARNESS ERROR: {why}")
+                errors.append(f"{name}: {why}")
                 continue
             with open(source_path, "w") as handle:
-                handle.write(text.replace(old, new, 1))
+                handle.write(mutated)
             result = run()
             print(f"{name:<44} {result}")
             # STARTS WITH, not contains. A mutant whose description
@@ -258,8 +302,20 @@ def main(argv: list[str]) -> int:
               "worth writing down):")
         for name in survivors:
             print(f"  {name}")
-    else:
+    elif not errors:
         print("every mutant killed, control survived.")
+
+    if errors:
+        print()
+        print("NOT RUN -- these were never applied, so nothing above "
+              "says anything about them:")
+        for name in errors:
+            print(f"  {name}")
+        return 1
+    # Survivors keep exiting 0: an equivalent mutant is an ordinary
+    # result and is meant to be read and written down, not to fail a
+    # command. A mutant that never ran is different -- it is a broken
+    # experiment, and the run has to be repeated.
     return 0
 
 

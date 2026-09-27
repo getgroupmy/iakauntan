@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -124,8 +125,18 @@ class _RunTile extends ConsumerWidget {
       onTap: () => context.go('/hr/payroll/${run.id}'),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+      // Flexible, for the reason `_MatterTile` carries the same note:
+      // a run number and a status chip are both natural-width, and the
+      // box a ListTile gives its title is whatever the trailing left.
+      // With a net-pay figure and "net pay" under it that is not much,
+      // and the chip went 55 pixels off a 412px phone.
       title: Row(children: [
-        Text(run.runNo, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(run.runNo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
         const SizedBox(width: Space.sm),
         StatusChip(run.status, compact: true),
       ]),
@@ -177,6 +188,17 @@ class PayrollRunScreen extends ConsumerWidget {
       body: AsyncView(
         value: runs,
         onRetry: () => ref.invalidate(payrollRunsProvider),
+        // A run's page is a header and the payslips under it, one row
+        // to an employee. Which run was asked for does not change that
+        // shape, only the names in it.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 6,
+            leadingSize: 32,
+            trailing: 1,
+          ),
+        ),
         builder: (list) {
           final run = list.where((r) => r.id == runId).firstOrNull;
           if (run == null) {
@@ -354,7 +376,7 @@ class _PaymentCard extends ConsumerWidget {
             ),
             lines.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => _PaymentBody(run: run, lines: list),
             ),
           ],
@@ -636,7 +658,7 @@ class _PayslipsCard extends StatelessWidget {
             const SectionHeader('Payslips'),
             payslips.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => Column(children: [
                 for (var i = 0; i < list.length; i++) ...[
                   if (i > 0) const Divider(height: 1),
@@ -967,7 +989,7 @@ class _HistoryCard extends StatelessWidget {
                 subtitle: 'Every request and decision stays on the record'),
             requests.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => list.isEmpty
                   ? Text('You have not asked for access before.',
                       style: Theme.of(context).textTheme.bodySmall)

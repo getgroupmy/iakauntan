@@ -1,3 +1,7 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../core/error_text.dart';
+import '../core/format.dart';
 import 'attachments_repository.dart' show RepoAttachments;
 import 'repository.dart';
 
@@ -10,6 +14,8 @@ class OcrProvider {
     required this.takesKey,
     required this.runsOnDevice,
     required this.ready,
+    this.isActive = true,
+    this.readsPdf,
     this.blurb,
   });
 
@@ -26,6 +32,30 @@ class OcrProvider {
   /// model has not been chosen is listed and refused rather than hidden,
   /// so an administrator can see it exists and ask for it.
   final bool ready;
+
+  /// Whether the platform still offers it. `ocr_status` lists the active
+  /// readers PLUS the one this company is on, so a false here means
+  /// exactly one thing: your company is on a reader that has been
+  /// retired since you chose it, and nothing will scan until you pick
+  /// another. 0678.
+  final bool isActive;
+
+  /// Whether this reader opens a PDF, or null where the database
+  /// declines to say.
+  ///
+  /// `0697`, and the null is the interesting part. `app.reader_reads_pdf`
+  /// answers per KIND -- the anthropic shape and Document AI open one,
+  /// the chat-completions shape refuses it by name in
+  /// `supabase/functions/ocr/index.ts` -- and it answers null for the
+  /// on-device reader, because that is `pdf.js` in a browser and ML Kit
+  /// on a phone and only this side knows which. [pdfBlock] combines it
+  /// with `onDeviceReadsPdf`.
+  ///
+  /// Null also for a kind added to the catalog since that function was
+  /// written, and for an older database that does not send the field at
+  /// all. Both mean "nobody has said", which is why nothing here treats
+  /// it as a no.
+  final bool? readsPdf;
   final String? blurb;
 
   factory OcrProvider.fromJson(Map<String, dynamic> j) => OcrProvider(
@@ -35,10 +65,61 @@ class OcrProvider {
         takesKey: j['takes_key'] != false,
         runsOnDevice: j['runs_on_device'] == true,
         ready: j['ready'] != false,
+        isActive: j['is_active'] != false,
+        // Tri-state, so `!= false` will not do: a missing key and a
+        // json null both have to arrive as null rather than as true.
+        readsPdf: j['reads_pdf'] is bool ? j['reads_pdf'] as bool : null,
         blurb: (j['blurb']?.toString().trim().isEmpty ?? true)
             ? null
             : j['blurb'].toString().trim(),
       );
+}
+
+/// The platform's default reader, and what it is doing.
+///
+/// One row, two jobs. It is what a company that has chosen nothing is
+/// handed — and, WHEN IT IS FREE, it is also what a failed scan is
+/// retried on. The second is conditional on the first, which is why
+/// this is a small object rather than a code: a console showing only
+/// the name cannot say that setting a chargeable default has silently
+/// left the platform with no fallback at all. 0679.
+class OcrDefaultState {
+  const OcrDefaultState({
+    required this.provider,
+    required this.name,
+    required this.price,
+    required this.isFree,
+    required this.isFallback,
+    required this.runsOnDevice,
+  });
+
+  final String provider;
+  final String name;
+  final double price;
+  final bool isFree;
+
+  /// Whether a scan that failed on the company's own reader is retried
+  /// on this one. Free, active, and able to run on a server.
+  final bool isFallback;
+  final bool runsOnDevice;
+
+  static const none = OcrDefaultState(
+    provider: '',
+    name: '',
+    price: 0,
+    isFree: false,
+    isFallback: false,
+    runsOnDevice: false,
+  );
+
+  factory OcrDefaultState.fromJson(Map<String, dynamic> j) => OcrDefaultState(
+    provider: j['provider']?.toString() ?? '',
+    name: j['name']?.toString() ?? j['provider']?.toString() ?? '',
+    price: OcrSettings._num(j['price']),
+    isFree: j['is_free'] == true,
+    isFallback: j['is_fallback'] == true,
+    runsOnDevice: j['runs_on_device'] == true,
+  );
 }
 
 /// What an organization has chosen about reading its own paperwork.
@@ -56,6 +137,12 @@ class OcrSettings {
     required this.balance,
     required this.price,
     this.providers = const [],
+    this.defaultProvider,
+    this.chosen = false,
+    this.fallback,
+    this.fallbackName,
+    this.hasModule = true,
+    this.ownKeyAllowed = true,
   });
 
   final bool enabled;
@@ -86,6 +173,52 @@ class OcrSettings {
   /// the platform can add one without an app release.
   final List<OcrProvider> providers;
 
+  /// The reader the platform hands to a company that has never chosen
+  /// one. Null only from an older database that does not send it.
+  final String? defaultProvider;
+
+  /// The free reader a failed scan is retried on, and its name.
+  ///
+  /// Null when there is none — the platform's default is this
+  /// company's own reader, or is chargeable, or runs on the device.
+  /// The database applies the same test `ocr_fallback` does, so a
+  /// sentence drawn from this cannot promise a retry that would not
+  /// happen. 0679.
+  final String? fallback;
+  final String? fallbackName;
+
+  /// Whether the `smartscan` module is switched on for this company.
+  ///
+  /// `0682` made scanning a module of its own. Until then it was a
+  /// SETTING any administrator could turn on, and it is the most
+  /// expensive thing in this product per use — every scan is a call to
+  /// somebody else's model.
+  ///
+  /// Defaults to true so an older database, which does not send it,
+  /// draws the card as it always did rather than telling everybody
+  /// their module is off.
+  final bool hasModule;
+
+  /// Whether THIS company ever picked a reader, as opposed to being
+  /// shown the platform's default.
+  ///
+  /// The distinction is the whole of `0678`. Until then the default was
+  /// the literal `'claude'` inside `ocr_status`, so a company that had
+  /// never opened this screen was indistinguishable from one that had
+  /// deliberately chosen Claude — and when Claude was retired in the
+  /// console, both were handed a reader the save would refuse.
+  final bool chosen;
+
+  /// Whether this PLATFORM offers reading on a key of the company's
+  /// own. `0718`.
+  ///
+  /// Defaults true, like every other switch whose absence must not take
+  /// a control off the screen. `set_ocr_settings` is what enforces it;
+  /// this is here so the card can stop offering a choice that would be
+  /// refused — and so it can go on offering it to a company already on
+  /// its own key, which still needs a way back.
+  final bool ownKeyAllowed;
+
   OcrProvider? get current =>
       providers.where((p) => p.code == provider).firstOrNull;
 
@@ -107,6 +240,24 @@ class OcrSettings {
   /// Whether the chosen reader runs in the app rather than on a server.
   bool get onDevice => current?.runsOnDevice ?? (provider == 'mlkit');
 
+  /// The company is on a reader the platform no longer offers.
+  ///
+  /// Nothing will scan and the save will be refused, so the screen has
+  /// to show the reader list whether or not scanning is switched on —
+  /// until `0678` that list was drawn only when it was ON, and turning
+  /// it on was the call that failed. A company could not reach the
+  /// control that fixes it from any screen it had.
+  bool get retired => current != null && !current!.isActive;
+
+  /// Whether the reader list must be drawn although scanning is OFF.
+  ///
+  /// The one case, and the fix for the reported bug. Every scanning
+  /// control lived inside `if (ocr.enabled)`; a company whose reader
+  /// had been retired could not switch scanning on, because the save
+  /// refuses a retired reader, so the only way to change the reader
+  /// was through the door the reader had locked.
+  bool get mustChooseAnother => !enabled && retired;
+
   /// Roughly how many more scans the balance buys.
   int get scansLeft =>
       price <= 0 ? 0 : (balance / price).floor();
@@ -115,6 +266,7 @@ class OcrSettings {
         enabled: j['enabled'] == true,
         provider: j['provider']?.toString() ?? 'claude',
         keySource: j['key_source']?.toString() ?? 'platform',
+        ownKeyAllowed: j['own_key_allowed'] != false,
         hasOwnKey: j['has_own_key'] == true,
         keys: ((j['keys'] as Map?) ?? const {})
             .entries
@@ -127,6 +279,11 @@ class OcrSettings {
             .whereType<Map>()
             .map((p) => OcrProvider.fromJson(Map<String, dynamic>.from(p)))
             .toList(),
+        defaultProvider: j['default_provider']?.toString(),
+        chosen: j['chosen'] == true,
+        fallback: j['fallback']?.toString(),
+        fallbackName: j['fallback_name']?.toString(),
+        hasModule: j['has_module'] != false,
       );
 
   static double _num(Object? v) =>
@@ -209,6 +366,107 @@ List<OcrLine> foldOcrContinuations(List<OcrLine> lines) {
   return out;
 }
 
+/// What one scanned line's quantity and unit price should actually be.
+///
+/// ## The column that was being thrown away
+///
+/// A reader is asked for three figures per line — `quantity`,
+/// `unit_price` and `amount` — and the editor used the first two and
+/// IGNORED THE THIRD whenever a unit price came back. But `amount` is
+/// the figure printed in the rightmost column, and it is the one the
+/// supplier's own total is built from. The other two are the small
+/// print beside it.
+///
+/// So a line the reader got slightly wrong — a unit price misread, or a
+/// discount column it was never asked about — became a line whose
+/// extension disagreed with the paper, silently. `0705`'s banner then
+/// said the document did not tie to what was read, which is true and
+/// says nothing about WHICH line.
+///
+/// ## The amount wins, because the amount is what foots
+///
+/// The unit price is derived from it: `unit_price = amount / quantity`.
+/// `unit_price` is `numeric(18,4)`, so 10.00 over three comes back as
+/// 3.3333 and extends to 9.9999, which the 2-decimal line total rounds
+/// to the 10.00 that is printed. The document ties to the paper by
+/// construction rather than by luck.
+///
+/// This is also the right answer for the commonest legitimate
+/// disagreement: an invoice with a discount column, where quantity
+/// times price is the gross and `amount` is what is actually charged.
+///
+/// ## Told, not just done
+///
+/// [corrected] is non-null only where the difference is MATERIAL to the
+/// line total — half a sen or more. A unit price rounded for display
+/// (3.33 printed, 3.3333 meant) is not a disagreement worth a sentence,
+/// and reporting it would put a notice on nearly every invoice and
+/// train people to ignore all of them.
+typedef ScannedLine = ({double quantity, double unitPrice, String? corrected});
+
+/// How far a line's extension may legitimately miss its printed amount.
+///
+/// It SCALES WITH QUANTITY, and that is the whole subtlety. A unit price
+/// is printed to two places all over Malaysia and meant to four: 3.33 on
+/// the page for a third of ten ringgit. Extended over three units that
+/// is 9.99 against a printed 10.00 — one sen out, and not a misreading.
+/// Over a hundred units the same rounding is 50 sen out.
+///
+/// So the slack is half a sen PER UNIT, which is exactly the rounding
+/// the price column can hide, plus a whisker for the representation
+/// error in a double. A flat half-sen tolerance reports half the
+/// invoices in the country; a flat ringgit hides a real misread digit
+/// on a single-unit line.
+double _lineSlack(double quantity) => quantity.abs() * 0.005 + 0.0001;
+
+ScannedLine lineFromScan(OcrLine line) {
+  final read = line.quantity;
+  // A quantity of zero with money beside it is a misreading, not a free
+  // item: taken at face value it makes the unit price zero and the
+  // charge disappears off the bill entirely. One is the only quantity
+  // that keeps the money.
+  final quantity = (read == null || read == 0) ? 1.0 : read;
+  final amount = line.amount;
+  final price = line.unitPrice;
+
+  // Nothing printed in the amount column. The extension is all there
+  // is, and it is taken as read.
+  if (amount == null) return (quantity: quantity, unitPrice: price ?? 0, corrected: null);
+
+  final derived = amount / quantity;
+  if (price == null) {
+    // No price column, or none read. Deriving it is the only option
+    // and there is nothing to disagree with.
+    return (quantity: quantity, unitPrice: derived, corrected: null);
+  }
+
+  final extension = quantity * price;
+  if ((extension - amount).abs() < _lineSlack(quantity)) {
+    // They agree. The price as printed is kept, so a line reads back
+    // the way the paper does.
+    return (quantity: quantity, unitPrice: price, corrected: null);
+  }
+
+  return (
+    quantity: quantity,
+    unitPrice: derived,
+    corrected:
+        '${_qty(quantity)} x ${_money2(price)} comes to '
+        '${_money2(extension)}, but the line is printed as '
+        '${_money2(amount)}. Taken as ${_money2(amount)}.',
+  );
+}
+
+/// A quantity in a sentence: no trailing zeros on a whole one, because
+/// "2 x 15.00" reads and "2.00 x 15.00" does not.
+String _qty(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+/// Money in a sentence: always two places. "printed as 10" beside
+/// "comes to 9.99" reads as a different KIND of figure; "10.00" reads
+/// as the same figure, differently.
+String _money2(double v) => v.toStringAsFixed(2);
+
 class OcrExtraction {
   const OcrExtraction({
     this.supplierName,
@@ -227,6 +485,10 @@ class OcrExtraction {
     this.note,
     this.rawText,
     this.documentKind,
+    this.target,
+    this.fields = const {},
+    this.rows = const [],
+    this.statement = const {},
   });
 
   final String? supplierName;
@@ -283,6 +545,96 @@ class OcrExtraction {
   /// taken before 0614 and every one where the list had not loaded.
   final String? documentKind;
 
+  /// Where the reader decided this document goes, as `module.action`.
+  ///
+  /// Not the same question as [documentKind], and a stronger answer.
+  /// `documentKind` is what the app's own classifier made of the text
+  /// afterwards — string matching against letterheads, in Dart. This is
+  /// the reader's own judgement, made while it had the page in front of
+  /// it and a list of the destinations this platform has configured.
+  ///
+  /// Null where the platform has configured none, which is every
+  /// reading before `0681`, and null where the reader could not place
+  /// the document — which it is told to say rather than guess, because
+  /// a document filed wrongly becomes a record somebody has to find and
+  /// undo.
+  final String? target;
+
+  /// What it read for that destination's fields, keyed by column name.
+  ///
+  /// Strings, all of them, and deliberately. The schema asks for what is
+  /// PRINTED, and `03/09/2026` on a Malaysian receipt is not a date
+  /// until somebody who knows the column decides which way round it is.
+  /// Coercion belongs where the column is known.
+  final Map<String, String> fields;
+
+  /// What the document says about ITSELF, where it takes rows.
+  ///
+  /// A bank statement is not only its lines. It prints a period, an
+  /// opening and a closing balance, and the account it belongs to —
+  /// and none of that was ever asked for, so the one check that spans
+  /// a whole document could not be made:
+  ///
+  ///     opening + sum(every amount) == closing
+  ///
+  /// `import_bank_transactions` walks the chain line to line, which
+  /// catches a line misread BETWEEN two balances. It cannot catch a
+  /// line missing from the END, a statement read from the wrong page,
+  /// or a first line never returned — each of those closes a chain
+  /// that was never the whole statement.
+  ///
+  /// Strings, like [fields], and for the same reason: the schema asks
+  /// for what is PRINTED, and coercion belongs where the column is
+  /// known. Empty for every document that takes a single record.
+  final Map<String, String> statement;
+
+  /// One entry per printed line, where the destination takes rows.
+  ///
+  /// A bank statement is forty records, not one: a date, a description,
+  /// an amount and a balance, the same four on every line. `0681`
+  /// deliberately left statements out for exactly this reason and
+  /// `0682` is the answer — a target marked `repeats` asks the reader
+  /// for an array instead of an object.
+  ///
+  /// Empty for every other document, which is almost all of them.
+  final List<Map<String, String>> rows;
+
+  /// Whether the reader came back with NOTHING AT ALL.
+  ///
+  /// One answer, on the model, because two screens were each deciding
+  /// it for themselves and both got it wrong the same way: they asked
+  /// about a supplier, a total and a document number, which is what an
+  /// invoice has.
+  ///
+  /// A BANK STATEMENT has none of those. It has no supplier, no invoice
+  /// total and no document number — it has an account, a period and its
+  /// transactions, and those arrive in [rows]. So a CIMB statement whose
+  /// every line was read correctly reported "nothing legible came back"
+  /// on the result dialog and "nothing came back at all" on the "All
+  /// data" screen, and the only thing actually missing was three fields
+  /// that were never going to be on the page.
+  ///
+  /// Everything that can carry content is asked about here, which is
+  /// what stops the next destination with a different shape from
+  /// reading as a failure.
+  bool get foundNothing =>
+      rows.isEmpty &&
+      lines.isEmpty &&
+      fields.values.every((v) => v.trim().isEmpty) &&
+      (rawText ?? '').trim().isEmpty &&
+      supplierName == null &&
+      supplierTaxId == null &&
+      supplierRegistrationNo == null &&
+      supplierEmail == null &&
+      supplierPhone == null &&
+      supplierAddress == null &&
+      documentNo == null &&
+      documentDate == null &&
+      currency == null &&
+      subtotal == null &&
+      taxAmount == null &&
+      totalAmount == null;
+
   /// The same reading with some of it changed.
   ///
   /// Only ever sets; it cannot put a field back to null, which is what
@@ -305,6 +657,9 @@ class OcrExtraction {
     String? note,
     String? rawText,
     String? documentKind,
+    String? target,
+    Map<String, String>? fields,
+    List<Map<String, String>>? rows,
   }) =>
       OcrExtraction(
         supplierName: supplierName ?? this.supplierName,
@@ -324,6 +679,9 @@ class OcrExtraction {
         note: note ?? this.note,
         rawText: rawText ?? this.rawText,
         documentKind: documentKind ?? this.documentKind,
+        target: target ?? this.target,
+        fields: fields ?? this.fields,
+        rows: rows ?? this.rows,
       );
 
   /// The amount to put in an expense's Amount field.
@@ -356,6 +714,23 @@ class OcrExtraction {
         note: _text(j['note']),
         rawText: _text(j['raw_text']),
         documentKind: _text(j['document_kind']),
+        target: _text(j['target']),
+        fields: {
+          for (final e in ((j['fields'] as Map?) ?? const {}).entries)
+            if (_text(e.value) != null) '${e.key}': _text(e.value)!,
+        },
+        statement: {
+          for (final e in ((j['statement'] as Map?) ?? const {}).entries)
+            if (_text(e.value) != null) '${e.key}': _text(e.value)!,
+        },
+        rows: [
+          for (final r in ((j['rows'] as List?) ?? const []))
+            if (r is Map)
+              {
+                for (final e in r.entries)
+                  if (_text(e.value) != null) '${e.key}': _text(e.value)!,
+              },
+        ]..removeWhere((r) => r.isEmpty),
       );
 
   /// The same shape the server-side readers return, so a scan logged
@@ -389,6 +764,14 @@ class OcrExtraction {
         'note': note,
         'raw_text': rawText,
         'document_kind': documentKind,
+        'target': target,
+        // Omitted when empty rather than written as `{}`: a scan taken
+        // on a phone, or on a platform with no targets configured, has
+        // no answer here, and a stored `{}` reads as "the reader was
+        // asked and found nothing" when it was never asked.
+        if (fields.isNotEmpty) 'fields': fields,
+        if (statement.isNotEmpty) 'statement': statement,
+        if (rows.isNotEmpty) 'rows': rows,
       };
 
   static String? _text(Object? v) {
@@ -416,10 +799,19 @@ extension RepoOcr on Repo {
     return OcrSettings.fromJson(Map<String, dynamic>.from(data));
   }
 
+  /// Moves the switch, and optionally the reader or whose key it uses.
+  ///
+  /// Both are nullable and null means "leave it alone", which is what
+  /// lets the switch be moved without naming a reader. `0678`: naming
+  /// one was the bug. The screen echoed back the provider `ocr_status`
+  /// had handed it, that provider was the literal `'claude'` for any
+  /// company that had never chosen, and once Claude was retired in the
+  /// console the echo came back as `Claude is not available` — the
+  /// screen asking for something it had never been asked to want.
   Future<void> setOcrSettings({
     required bool enabled,
-    required String provider,
-    required String keySource,
+    String? provider,
+    String? keySource,
   }) =>
       client.rpc('set_ocr_settings', params: {
         'p_org_id': orgId,
@@ -457,11 +849,56 @@ extension RepoOcr on Repo {
   /// The charge is taken by the database before the provider is called
   /// and given back if the call fails, so a thrown exception here means
   /// nothing was spent.
-  Future<OcrExtraction> scanAttachment(String attachmentId) async {
-    final res = await client.functions.invoke('ocr', body: {
-      'org_id': orgId,
-      'attachment_id': attachmentId,
-    });
+  /// Reads a filed attachment on the server.
+  ///
+  /// [provider] names a reader for THIS scan only — `0698`, reading the
+  /// same file again with a different one. Null means the company's
+  /// setting, which is every caller that existed before it.
+  ///
+  /// Nothing is validated here. `ocr_begin` checks the code against the
+  /// catalog, against whether the platform still offers it, and — where
+  /// the company brings its own key — against whether it has a key for
+  /// that reader. A check in the client is a check anybody can skip.
+  Future<OcrExtraction> scanAttachment(
+    String attachmentId, {
+    String? provider,
+
+    /// The destination the CALLER already knows, as
+    /// `module.action` — `accounting.bank_statement`.
+    ///
+    /// A screen that exists to do one thing has already been told what
+    /// the document is, and asking the reader to guess anyway is how a
+    /// statement that read perfectly came back classified as a bill
+    /// with no rows on it. See `narrowToTarget` in the edge function.
+    ///
+    /// Not validated here: an unknown key widens back to every target
+    /// on the server, which is the behaviour this had before.
+    String? target,
+  }) async {
+    final FunctionResponse res;
+    try {
+      res = await client.functions.invoke('ocr', body: {
+        'org_id': orgId,
+        'attachment_id': attachmentId,
+        if (provider != null) 'provider': provider,
+        if (target != null) 'target': target,
+      });
+    } on FunctionException catch (e) {
+      // A non-2xx throws rather than coming back as data, so the
+      // careful unwrapping below never ran on the answers that most
+      // needed it. A 403 reached a snackbar as
+      //
+      //   Could not read it: FunctionException(status: 403, details:
+      //   {error: Document scanning is switched off for this
+      //   organization...}, reasonPhrase: )
+      //
+      // with the sentence somebody could act on buried inside a Dart
+      // toString. The body is the same shape either way.
+      // The status as well as the sentence. `0703`: whether this is
+      // worth re-reading on the device is a question about the CODE,
+      // and until now the code was thrown away here.
+      throw OcrException(_functionError(e), status: e.status);
+    }
     final data = res.data;
     if (data is Map && data['error'] != null) {
       throw OcrException(data['error'].toString());
@@ -498,17 +935,60 @@ extension RepoOcr on Repo {
   /// Answers null where there was no scan to write on — a capture
   /// nobody read still reaches this with whatever the form said — which
   /// is why it is not an error.
+  /// [named] is what somebody typed when nothing on the list fitted.
+  /// `0709`. It is NOT a kind — `scan_document_kinds` is the vocabulary
+  /// and the server still refuses a code that is not in it — and it is
+  /// never cleared by a later call that says nothing about it.
   Future<String?> setScanDocumentKind({
     required String attachmentId,
     String? kind,
+    String? named,
   }) async {
     final out = await client.rpc('set_scan_document_kind', params: {
       'p_org_id': orgId,
       'p_attachment_id': attachmentId,
       'p_document_kind': kind,
+      if (named != null) 'p_named': named,
     });
     return out?.toString();
   }
+
+  /// Records that somebody accepted a reading, and what they changed.
+  ///
+  /// `0684`. Returns the names of the fields that differed — empty
+  /// where the reader was right, null where there was no scan to write
+  /// on (an on-device capture that was never read still reaches here).
+  ///
+  /// The corrected reading is the only ground truth this system
+  /// produces. It arrives free, from somebody holding the paper, and
+  /// before this it was handed to the form and dropped.
+  Future<List<String>?> noteScanCorrection({
+    required String attachmentId,
+    required OcrExtraction accepted,
+  }) async {
+    // `callRpc` rather than `client.rpc`: it notes a 42501 the way the
+    // rest of Repo does, and — the reason this matters here — it is on
+    // the CLASS, so a test double can intercept it. This method is on
+    // `extension RepoOcr`, and an extension method binds to the static
+    // type, so a fake that declared it would never be called and the
+    // real body would run against the fake's client.
+    // See docs/widget-tests.md.
+    final out = await callRpc('ocr_note_correction', params: {
+      'p_org_id': orgId,
+      'p_attachment_id': attachmentId,
+      'p_accepted': accepted.toJson(),
+    });
+    if (out == null) return null;
+    return [for (final f in out as List) f.toString()];
+  }
+
+  /// Per reader: how many readings a person checked, how many they had
+  /// to change, and the field each gets wrong most. `0684`.
+  Future<List<Map<String, dynamic>>> platformScanAccuracy({
+    int days = 90,
+  }) async =>
+      Repo.rows(
+          await callRpc('platform_scan_accuracy', params: {'p_days': days}));
 
   /// Every movement of the scanning balance, newest first.
   Future<List<Map<String, dynamic>>> creditLedger() async => Repo.rows(
@@ -598,12 +1078,95 @@ extension RepoOcr on Repo {
   }
 }
 
+/// The sentence inside a failed function call.
+///
+/// The edge function answers `{error: '...'}` whatever the status, so
+/// there is always something better to say than the exception's own
+/// toString. Falls back to the status only when there is not — and says
+/// what the status MEANS rather than printing the number, because "403"
+/// is not a sentence anybody can act on.
+/// A storage failure, in words rather than in JSON.
+///
+/// Reported from a phone, twice on one scan, and the second was this:
+///
+///     Could not read it on this device: StorageException(message:
+///     {"statusCode":"404","error":"not_found","message":"Object not
+///     found","code":"NoSuchKey"}, statusCode: 400, error: null)
+///
+/// Which is a Dart `toString` of a JSON body nested inside an exception
+/// whose own `statusCode` disagrees with the one inside it. The same
+/// fault `_functionError` was written for, on the other client.
+///
+/// A missing object is not a fault the person can act on by trying
+/// again, so the sentence says what is true: the reading is kept and
+/// the FILE is gone. Everything else falls through to a plain message
+/// rather than the raw object.
+///
+/// Public, because the on-device reader, the image opener and the
+/// rescan all reach storage and all three were printing the exception.
+String storageProblem(Object error) {
+  final code = error is StorageException ? error.statusCode : null;
+  final said = error is StorageException ? error.message : '$error';
+
+  // `404` arrives in two places and they disagree: `StorageException`
+  // carries `statusCode: 400` while the BODY it wrapped says 404 and
+  // `NoSuchKey`. Both are checked, because relying on either alone is
+  // relying on the one that happens to be wrong today.
+  final missing = code == '404' ||
+      said.contains('NoSuchKey') ||
+      said.contains('not_found') ||
+      said.contains('Object not found');
+
+  if (missing) {
+    return 'The file for this scan is no longer in storage, so there is '
+        'nothing left to open or read again. What was read off it is '
+        'kept.';
+  }
+  if (code == '403' || said.contains('Unauthorized')) {
+    return 'You do not have access to that file.';
+  }
+  return 'The file could not be fetched: $said';
+}
+
+String _functionError(FunctionException e) {
+  final details = e.details;
+  if (details is Map && details['error'] != null) {
+    final said = details['error'].toString().trim();
+    if (said.isNotEmpty) return said;
+  }
+  if (details is String && details.trim().isNotEmpty) return details.trim();
+  return switch (e.status) {
+    401 || 403 => 'This company is not allowed to read documents. An '
+        'administrator turns AI SmartScan on in Settings.',
+    402 => 'There is no scanning credit left on this company.',
+    413 => 'That file is too big to read.',
+    429 => 'The reader is busy. Try again in a moment.',
+    _ => 'The reader could not be reached. Try again in a moment.',
+  };
+}
+
 /// A scan that did not happen, with the reason the database or the
 /// provider gave. Nothing was charged.
-class OcrException implements Exception {
-  OcrException(this.message);
+class OcrException implements Exception, Explained {
+  OcrException(this.message, {this.status});
+
+  @override
 
   final String message;
+
+  /// The HTTP status the edge function answered with, where there was
+  /// one.
+  ///
+  /// Carried since `0703`, because "read it here instead" has to be
+  /// decided on a CODE. The message is the sentence a person reads and
+  /// it gets reworded; a caller that decided by looking for "busy" in
+  /// it would stop falling back the day somebody improved the wording,
+  /// silently, and the only symptom would be scans failing that used
+  /// to be rescued.
+  ///
+  /// Null where nothing answered with a status at all — a refusal the
+  /// function returned in a 200 body, or one raised in the app.
+  final int? status;
 
   @override
   String toString() => message;
@@ -668,4 +1231,780 @@ extension PlatformOcrCatalog on PlatformRepo {
       if (blurb != null) 'p_blurb': blurb,
     },
   );
+
+  /// Which reader a company that has never chosen one is offered, and
+  /// whether it is also the one a failed scan retries on.
+  ///
+  /// Resolved rather than raw: if the reader named in the setting has
+  /// since been retired, this describes the one companies are ACTUALLY
+  /// being given, which is the question an operator looking at the
+  /// dropdown is asking.
+  Future<OcrDefaultState> ocrDefaultState() async {
+    final data = await client.rpc('ocr_default_state');
+    return OcrDefaultState.fromJson(
+      data is Map ? Map<String, dynamic>.from(data) : const {},
+    );
+  }
+
+  /// Chooses it. Refused if the reader is switched off or has no model,
+  /// so the default can never name something the tenant's own save
+  /// would then refuse — which is the failure `0678` was written for.
+  Future<void> setDefaultOcrProvider(String code) async =>
+      await client.rpc(
+        'platform_set_default_ocr_provider',
+        params: {'p_code': code},
+      );
+
+  /// Every scan, newest first, with the reason the failed ones failed.
+  ///
+  /// The reason is deliberately absent from what the person scanning
+  /// is shown — a vendor's message quotes the project and the
+  /// processor — so this is the only place in the product it can be
+  /// read. Until `0680` there was no such place: `ocr_scans` had no
+  /// reader in the app at all, and "quote this reference if you get in
+  /// touch" resolved to hand-written SQL against production.
+  Future<List<ScanLogEntry>> scanLog({
+    int limit = 50,
+    String? status,
+    String? search,
+  }) async => Repo.rows(
+    await client.rpc(
+      'platform_scan_log',
+      params: {
+        'p_limit': limit,
+        'p_status': status,
+        'p_search': search,
+      },
+    ),
+  ).map(ScanLogEntry.fromJson).toList();
+
+  /// Read today, failed today, and the ones that never settled.
+  Future<ScanHealth> scanHealth() async {
+    final data = await client.rpc('platform_scan_health');
+    return ScanHealth.fromJson(
+      data is Map ? Map<String, dynamic>.from(data) : const {},
+    );
+  }
+
+  /// Everything the readers actually said on one scan, raw.
+  ///
+  /// `0704`. `ScanLogEntry.error` is one sentence, written by us out of
+  /// whichever field of the vendor's JSON the edge function reached
+  /// for. This is the reply itself — and one row per CALL, so a retry
+  /// and a fallback are two more rows on the same scan.
+  ///
+  /// Platform administrators only, and the guard is in the database: a
+  /// caller who is not one gets an empty list rather than an error.
+  Future<List<ScanExchange>> scanExchanges(String scanId) async => Repo.rows(
+    await client
+        .rpc('platform_scan_exchanges', params: {'p_scan_id': scanId}),
+  ).map(ScanExchange.fromJson).toList();
+
+  /// Per reader and distinct fault, worst first. `0685`.
+  Future<List<ReaderFault>> readerFailures({int days = 30}) async =>
+      Repo.rows(await client
+              .rpc('platform_reader_failures', params: {'p_days': days}))
+          .map(ReaderFault.fromJson)
+          .toList();
+}
+
+/// One call to a reader, as it happened.
+///
+/// `0704`. The request is deliberately not here — no headers, no body,
+/// and the endpoint arrives with its query string already stripped by
+/// the database, because that is where Gemini's key travels.
+class ScanExchange {
+  const ScanExchange({
+    required this.id,
+    required this.at,
+    required this.attempt,
+    required this.ok,
+    required this.truncated,
+    this.provider,
+    this.endpoint,
+    this.httpStatus,
+    this.ms,
+    this.body,
+  });
+
+  final String id;
+  final DateTime at;
+
+  /// 1 is the first attempt, 2 the retry, 3 the fallback. The order is
+  /// the point: which reader said what, and in which order.
+  final int attempt;
+  final bool ok;
+
+  /// Whether the reply was longer than the 16k that is kept.
+  final bool truncated;
+
+  final String? provider;
+  final String? endpoint;
+
+  /// Null or 0 means NOTHING ANSWERED — a different fault from being
+  /// refused, and the one the log could not tell apart before.
+  final int? httpStatus;
+  final int? ms;
+
+  /// The reply, verbatim.
+  final String? body;
+
+  bool get noAnswer => (httpStatus ?? 0) == 0;
+
+  factory ScanExchange.fromJson(Map<String, dynamic> j) => ScanExchange(
+        id: j['id'].toString(),
+        at: DateTime.tryParse('${j['at']}')?.toLocal() ?? DateTime.now(),
+        attempt: int.tryParse('${j['attempt']}') ?? 1,
+        ok: j['ok'] == true,
+        truncated: j['truncated'] == true,
+        provider: j['provider']?.toString(),
+        endpoint: j['endpoint']?.toString(),
+        httpStatus: int.tryParse('${j['http_status']}'),
+        ms: int.tryParse('${j['ms']}'),
+        body: j['body']?.toString(),
+      );
+}
+
+/// One reader, one thing it keeps saying.
+///
+/// `0685`. [read] and [failed] are the READER's totals over the window
+/// and repeat down every one of its rows, which is the whole point:
+/// `read == 0` beside a `failed` of forty-seven is a reader somebody
+/// switched on, has been paying for, and which has never once worked.
+/// Without those two numbers on the row it reads as forty-seven
+/// individually unremarkable failures.
+class ReaderFault {
+  const ReaderFault({
+    required this.provider,
+    required this.providerName,
+    required this.read,
+    required this.failed,
+    required this.fault,
+    required this.n,
+    this.firstSeen,
+    this.lastSeen,
+    this.exampleRef,
+  });
+
+  final String provider;
+  final String providerName;
+  final int read;
+  final int failed;
+
+  /// The vendor's message with the parts that differ per request taken
+  /// out — ids, hex blobs, long numbers, long quoted payload
+  /// fragments. A short quoted name is KEPT: `Unknown name "strict"`
+  /// is the fault, not noise.
+  final String fault;
+  final int n;
+  final DateTime? firstSeen;
+  final DateTime? lastSeen;
+
+  /// One reference, so the whole row can be found in the log below.
+  final String? exampleRef;
+
+  /// Switched on, paid for, and has never returned a reading.
+  bool get neverWorked => read == 0 && failed > 0;
+
+  static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  factory ReaderFault.fromJson(Map<String, dynamic> j) => ReaderFault(
+        provider: '${j['provider'] ?? ''}',
+        providerName: '${j['provider_name'] ?? j['provider'] ?? ''}',
+        read: _int(j['read']),
+        failed: _int(j['failed']),
+        fault: '${j['fault'] ?? ''}',
+        n: _int(j['n']),
+        firstSeen: DateTime.tryParse('${j['first_seen']}'),
+        lastSeen: DateTime.tryParse('${j['last_seen']}'),
+        exampleRef: j['example_ref'] as String?,
+      );
+}
+
+/// One scan, as the console is allowed to see it.
+class ScanLogEntry {
+  const ScanLogEntry({
+    required this.id,
+    required this.createdAt,
+    required this.orgName,
+    required this.providerName,
+    required this.keySource,
+    required this.status,
+    required this.charged,
+    required this.refunded,
+    this.logRef,
+    this.finishedAt,
+    this.fellBackTo,
+    this.fileName,
+    this.error,
+  });
+
+  final String id;
+
+  /// The reference quoted on the failure the person scanning saw.
+  /// Null for a scan that succeeded, and for any failure from before
+  /// `0680` — it was minted after the settle and never stored.
+  final String? logRef;
+
+  final DateTime createdAt;
+  final DateTime? finishedAt;
+  final String orgName;
+  final String providerName;
+
+  /// `platform`, `own` or `device`. It decides who the failure is a
+  /// problem for: the platform's key is ours to fix, and a company's
+  /// own is a conversation with them.
+  final String keySource;
+
+  /// `ok`, `failed`, or `pending`.
+  final String status;
+  final double charged;
+  final bool refunded;
+
+  /// The reader that read it when the chosen one would not. 0679.
+  final String? fellBackTo;
+  final String? fileName;
+
+  /// The vendor's own sentence. The whole reason this screen exists.
+  final String? error;
+
+  /// A scan still pending an hour after it started.
+  ///
+  /// The function died between `ocr_begin` and `ocr_finish`, so the
+  /// charge was taken and the refund never ran. Worth its own name
+  /// because it does not look like a failure — the status says
+  /// `pending`, which reads as "still going" for ever.
+  bool get unsettled =>
+      status == 'pending' &&
+      DateTime.now().difference(createdAt) > const Duration(hours: 1);
+
+  /// Money that was taken and not given back.
+  bool get owed => charged > 0 && !refunded && (status == 'failed' || unsettled);
+
+  static DateTime? _date(Object? v) =>
+      v == null ? null : DateTime.tryParse('$v')?.toLocal();
+
+  factory ScanLogEntry.fromJson(Map<String, dynamic> j) => ScanLogEntry(
+    id: '${j['id']}',
+    logRef: j['log_ref']?.toString(),
+    createdAt: _date(j['created_at']) ?? DateTime.now(),
+    finishedAt: _date(j['finished_at']),
+    orgName: j['org_name']?.toString() ?? 'a company since deleted',
+    providerName: j['provider_name']?.toString() ?? '${j['provider']}',
+    keySource: j['key_source']?.toString() ?? 'platform',
+    status: j['status']?.toString() ?? 'pending',
+    charged: OcrSettings._num(j['amount_charged']),
+    refunded: j['refunded'] == true,
+    fellBackTo: j['fell_back_to']?.toString(),
+    fileName: (j['file_name']?.toString().trim().isEmpty ?? true)
+        ? null
+        : j['file_name'].toString().trim(),
+    error: (j['error']?.toString().trim().isEmpty ?? true)
+        ? null
+        : j['error'].toString().trim(),
+  );
+}
+
+/// How scanning is going, in the three numbers worth a glance.
+class ScanHealth {
+  const ScanHealth({
+    required this.ok24h,
+    required this.failed24h,
+    required this.unsettled,
+    required this.unsettledCharged,
+  });
+
+  final int ok24h;
+  final int failed24h;
+
+  /// Scans still pending an hour on. Each one is a charge that was
+  /// taken and never refunded, which is the one combination nobody
+  /// finds on their own.
+  final int unsettled;
+  final double unsettledCharged;
+
+  static const none =
+      ScanHealth(ok24h: 0, failed24h: 0, unsettled: 0, unsettledCharged: 0);
+
+  static int _int(Object? v) =>
+      v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+
+  factory ScanHealth.fromJson(Map<String, dynamic> j) => ScanHealth(
+    ok24h: _int(j['ok_24h']),
+    failed24h: _int(j['failed_24h']),
+    unsettled: _int(j['unsettled']),
+    unsettledCharged: OcrSettings._num(j['unsettled_charged']),
+  );
+}
+
+/// One key out of a reader's pool, as the console is allowed to see it.
+///
+/// Everything about it except the key. `keyTail` is the last four
+/// characters, which is what lets two keys off the same Google account
+/// be told apart against the provider's own console, and is short
+/// enough to be no use to anybody who obtains it. There is no field
+/// that could carry the key and no function that would return one to
+/// this app: `ocr_keys_for` is the only reader, and the key column is
+/// not in its result.
+///
+/// [inWindow] and [hasHeadroom] are the two gates, kept apart because
+/// they come back at different times and for different reasons — out
+/// of hours returns at six, spent returns when the window rolls.
+class OcrPoolKey {
+  const OcrPoolKey({
+    required this.id,
+    required this.label,
+    required this.keyTail,
+    required this.isActive,
+    required this.inWindow,
+    required this.hasHeadroom,
+    required this.spentMinute,
+    required this.spentDay,
+    required this.spentMonth,
+    this.perMinute,
+    this.perDay,
+    this.perMonth,
+    this.hours = const [],
+    this.weekdays = const [],
+    this.months = const [],
+    this.lastUsedAt,
+    this.lastError,
+    this.lastErrorAt,
+  });
+
+  final String id;
+  final String label;
+  final String keyTail;
+  final bool isActive;
+
+  /// Whether its clock allows it at this moment.
+  final bool inWindow;
+
+  /// Whether it is under all three of its caps at this moment.
+  final bool hasHeadroom;
+
+  final int spentMinute;
+  final int spentDay;
+  final int spentMonth;
+
+  /// Null is no cap, which is the right answer for a paid key.
+  final int? perMinute;
+  final int? perDay;
+  final int? perMonth;
+
+  /// Empty is always, which is what almost every key wants.
+  final List<int> hours;
+  final List<int> weekdays;
+  final List<int> months;
+
+  final DateTime? lastUsedAt;
+  final String? lastError;
+  final DateTime? lastErrorAt;
+
+  /// Whether a scan would be given this key right now.
+  ///
+  /// All three, because a key fails this for three different reasons
+  /// and the screen says which — `standDownReason`.
+  bool get isUsableNow => isActive && inWindow && hasHeadroom;
+
+  /// Why it would not be, in the words the console shows, or null when
+  /// it would be.
+  ///
+  /// Order matters and is the order somebody can act in: switched off
+  /// is a decision to reverse, out of hours is a wait with a known end,
+  /// and spent is a wait that needs nobody.
+  String? get standDownReason {
+    if (!isActive) return 'Switched off';
+    if (!inWindow) return 'Outside its hours';
+    if (!hasHeadroom) return 'Spent for now';
+    return null;
+  }
+
+  static List<int> _ints(Object? raw) => switch (raw) {
+    final List<dynamic> list => [
+        for (final v in list)
+          if (int.tryParse('$v') case final int n) n,
+      ],
+    _ => const [],
+  };
+
+  static int? _intOrNull(Object? raw) =>
+      raw == null ? null : int.tryParse('$raw');
+
+  factory OcrPoolKey.fromJson(Map<String, dynamic> j) => OcrPoolKey(
+        id: '${j['id']}',
+        label: '${j['label'] ?? ''}',
+        keyTail: '${j['key_tail'] ?? ''}',
+        isActive: j['is_active'] == true,
+        inWindow: j['in_window'] == true,
+        hasHeadroom: j['has_headroom'] == true,
+        spentMinute: _intOrNull(j['spent_minute']) ?? 0,
+        spentDay: _intOrNull(j['spent_day']) ?? 0,
+        spentMonth: _intOrNull(j['spent_month']) ?? 0,
+        perMinute: _intOrNull(j['per_minute']),
+        perDay: _intOrNull(j['per_day']),
+        perMonth: _intOrNull(j['per_month']),
+        hours: _ints(j['hours']),
+        weekdays: _ints(j['weekdays']),
+        months: _ints(j['months']),
+        lastUsedAt: DateTime.tryParse('${j['last_used_at']}'),
+        lastError: (j['last_error']?.toString().trim().isEmpty ?? true)
+            ? null
+            : j['last_error'].toString().trim(),
+        lastErrorAt: DateTime.tryParse('${j['last_error_at']}'),
+      );
+}
+
+/// A reader's pool of keys: the platform's, or one company's own.
+///
+/// Built on the CLIENT and not on a repository, and that is the whole
+/// point rather than a shortcut.
+///
+/// `Repo` is a tenant's, and it does not exist until an organization
+/// has been resolved. A platform operator belongs to no company, so on
+/// the console screen `repoProvider` is null and `requireRepo` refuses
+/// the only people that screen exists for — "Your company has not
+/// finished loading", for ever.
+/// `platform_console_wiring_test.dart` is a whole file about that bug
+/// coming back twice, and it caught this on the way in: the first
+/// version of this pool was an `extension on Repo`.
+///
+/// `PlatformRepo` would work and would be a lie: a tenant administrator
+/// keeping their own company's keys is not the platform.
+///
+/// So it is neither. The three functions take an org id — null for the
+/// platform's pool, a uuid for a company's — and the DATABASE decides
+/// who may ask, by looking at the id it was handed:
+/// `app.is_platform_admin()` for null and `app.can_admin(org_id)` for
+/// the rest. One implementation, one argument list, and the guard in
+/// the one place it can actually be enforced.
+class OcrKeyPool {
+  const OcrKeyPool(this.client);
+
+  final SupabaseClient client;
+
+  Future<List<OcrPoolKey>> keys(String provider, {String? orgId}) async =>
+      Repo.rows(await client.rpc('ocr_keys_for', params: {
+        'p_provider': provider,
+        'p_org_id': orgId,
+      })).map(OcrPoolKey.fromJson).toList();
+
+  /// Adds a key or changes one.
+  ///
+  /// A null [apiKey] on an EXISTING key leaves the stored one alone,
+  /// which is what lets a cap be raised without retyping a secret
+  /// nobody still has — this app cannot show anybody the key it holds.
+  /// On a new one the function refuses a blank, so the screen need not
+  /// decide what an empty box means.
+  Future<String> save(
+    String provider, {
+    String? orgId,
+    String? id,
+    String? label,
+    String? apiKey,
+    int? perMinute,
+    int? perDay,
+    int? perMonth,
+    List<int> hours = const [],
+    List<int> weekdays = const [],
+    List<int> months = const [],
+    bool isActive = true,
+  }) async =>
+      '${await client.rpc('save_ocr_key', params: {
+        'p_provider': provider,
+        'p_org_id': orgId,
+        'p_id': id,
+        'p_label': label,
+        'p_api_key': apiKey,
+        'p_per_minute': perMinute,
+        'p_per_day': perDay,
+        'p_per_month': perMonth,
+        'p_hours': hours,
+        'p_weekdays': weekdays,
+        'p_months': months,
+        'p_is_active': isActive,
+      })}';
+
+  Future<void> remove(String provider, String id, {String? orgId}) async =>
+      await client.rpc('delete_ocr_key', params: {
+        'p_provider': provider,
+        'p_id': id,
+        'p_org_id': orgId,
+      });
+}
+
+/// One sheet of paper, and what became of it.
+///
+/// `0694`. `ocr_scans` has always recorded what was read, what it cost
+/// and which provider answered; it never recorded what the photograph
+/// BECAME, so a scan that quietly produced nothing was indistinguishable
+/// from one that posted a bill.
+///
+/// [postedLabel] is resolved in SQL rather than here — see the migration
+/// header. A row whose document was deleted afterwards comes back with
+/// [postedTable] set and [postedLabel] null, which is the honest answer:
+/// this became a bill that no longer exists.
+class ScanInboxEntry {
+  const ScanInboxEntry({
+    required this.scanId,
+    required this.scannedAt,
+    this.attachmentId,
+    this.fileName,
+    this.storagePath,
+    this.mimeType,
+    this.provider,
+    this.status,
+    this.error,
+    this.logRef,
+    this.documentKind,
+    this.kindLabel,
+    this.target,
+    this.postedTable,
+    this.postedId,
+    this.postedAt,
+    this.postedLabel,
+    this.postedDate,
+    this.reviewedAt,
+    this.corrected = false,
+    this.readings = 1,
+  });
+
+  /// NULL on a file that was kept and never read. `0714`.
+  ///
+  /// `scan_inbox` unions those in, because the AI SmartScan screen is
+  /// the pile of paper and a chip that says Everything cannot leave out
+  /// the documents somebody deliberately put there. There is no scan to
+  /// name, and naming one would be an id that fetches nothing.
+  final String? scanId;
+  final DateTime scannedAt;
+
+  /// Whether this row is a file kept without a reading.
+  ///
+  /// Said once here rather than as `scanId == null` in four places, so
+  /// the meaning of the null is written down where the null is.
+  bool get isKeptOnly => scanId == null;
+
+  /// How many times this sheet of paper has been read. `0715`.
+  ///
+  /// One normally, 0 on a file kept and never read, and more once
+  /// somebody has used "Read it again". The inbox shows ONE row per
+  /// sheet, so without this the other readings would vanish silently --
+  /// and a second reading is a second charge, which somebody looking at
+  /// the list is entitled to see.
+  final int readings;
+
+  /// Null once the record this was filed against has been deleted:
+  /// `delete_attachments_of_row` takes the picture with the document and
+  /// `ocr_scans.attachment_id` is `on delete set null`.
+  final String? attachmentId;
+
+  /// Falls back to the storage object's own name for exactly that case.
+  final String? fileName;
+  final String? storagePath;
+
+  /// What kind of file it is, off the attachment. `0698`.
+  ///
+  /// Null where the attachment is gone — a deleted document takes
+  /// it with it — and the offer to read it again then cannot say
+  /// which readers could open it, so it is not made.
+  final String? mimeType;
+  final String? provider;
+  final String? status;
+  final String? error;
+
+  /// The reference `0680` mints when a scan fails, and tells the person
+  /// to quote. Null on a scan that did not fail — an empty one would be
+  /// something somebody tries to quote. `0695` is this reaching a
+  /// screen: until then it was on the row, in the logs, and nowhere a
+  /// person could read it.
+  final String? logRef;
+  final String? documentKind;
+  final String? kindLabel;
+  final String? target;
+  final String? postedTable;
+  final String? postedId;
+  final DateTime? postedAt;
+  final String? postedLabel;
+  final DateTime? postedDate;
+  final DateTime? reviewedAt;
+  final bool corrected;
+
+  /// Whether anything came of this reading.
+  bool get isPosted => postedTable != null;
+
+  /// Whether the picture can still be opened. A scan whose document was
+  /// deleted keeps its row and loses its file.
+  bool get hasImage => (storagePath ?? '').isNotEmpty && attachmentId != null;
+
+  /// Whether a record was ever made from this reading.
+  ///
+  /// `0694` records it. What it decides here is whether the file may be
+  /// removed: a capture nothing was built from is somebody's spare
+  /// photograph, and one that became a bill is the evidence behind it —
+  /// which `0708` refuses to delete whatever this says.
+  bool get becameSomething => postedId != null;
+
+  /// Whether there is a file to remove and nothing was built from it.
+  bool get fileCanBeRemoved => hasImage && !becameSomething;
+
+  factory ScanInboxEntry.fromJson(Map<String, dynamic> j) => ScanInboxEntry(
+        scanId: j['scan_id']?.toString(),
+        attachmentId: j['attachment_id']?.toString(),
+        fileName: j['file_name']?.toString(),
+        storagePath: j['storage_path']?.toString(),
+        mimeType: j['mime_type']?.toString(),
+        scannedAt: DateTime.parse(j['scanned_at'].toString()).toLocal(),
+        provider: j['provider']?.toString(),
+        status: j['status']?.toString(),
+        error: j['error']?.toString(),
+        logRef: j['log_ref']?.toString(),
+        documentKind: j['document_kind']?.toString(),
+        kindLabel: j['kind_label']?.toString(),
+        target: j['target']?.toString(),
+        postedTable: j['posted_table']?.toString(),
+        postedId: j['posted_id']?.toString(),
+        postedAt: Fmt.parseDate(j['posted_at']),
+        postedLabel: j['posted_label']?.toString(),
+        postedDate: Fmt.parseDate(j['posted_date']),
+        reviewedAt: Fmt.parseDate(j['reviewed_at']),
+        corrected: j['corrected'] == true,
+        // Absent from an older server, and 1 is what every row meant
+        // before `0715` counted them.
+        readings: (j['readings'] as num?)?.toInt() ?? 1,
+      );
+}
+
+extension RepoScanInbox on Repo {
+  /// Every reading this company has taken, newest first.
+  ///
+  /// [only] is `all`, `posted` or `unposted`. The last is the one worth
+  /// looking at: a photograph that became nothing is either work left
+  /// half done or a reading that failed, and both want a person.
+  Future<List<ScanInboxEntry>> scanInbox({
+    int limit = 100,
+    String only = 'all',
+  }) async {
+    final rows = await callRpc('scan_inbox', params: {
+      'p_org_id': orgId,
+      'p_limit': limit,
+      'p_only': only,
+    });
+    return [
+      for (final r in Repo.rows(rows))
+        ScanInboxEntry.fromJson(Map<String, dynamic>.from(r)),
+    ];
+  }
+
+  /// Records what a reading became.
+  ///
+  /// With no [table] the destination is copied off the attachment, which
+  /// is where the FILE went — see `0694`. [table] and [recordId] are for
+  /// the one document that becomes many rows: a bank statement is filed
+  /// against `bank_transactions` with a placeholder id.
+  ///
+  /// Best-effort by design. A posting that happened is not undone
+  /// because the note about it failed, and the flows call this after the
+  /// document already exists.
+  Future<void> recordScanPosting({
+    required String attachmentId,
+    String? table,
+    String? recordId,
+  }) async {
+    try {
+      await callRpc('record_scan_posting', params: {
+        'p_org_id': orgId,
+        'p_attachment_id': attachmentId,
+        if (table != null) 'p_table': table,
+        if (recordId != null) 'p_id': recordId,
+      });
+    } catch (_) {
+      // Swallowed for the reason above. The inbox showing "nothing came
+      // of this" about a bill that exists is a smaller wrong than a
+      // posted bill rolled back over a note.
+    }
+  }
+}
+
+extension RepoScanReading on Repo {
+  /// The whole reading a scan produced.
+  ///
+  /// Read straight off `ocr_scans` rather than through a function:
+  /// `ocr_scans_read` already lets anybody who may write or read the
+  /// ledger see their own company's rows, which is the same audience
+  /// the inbox has. A SECURITY DEFINER wrapper would be a second copy
+  /// of that rule to keep in step.
+  ///
+  /// Null where the scan failed — there is no reading — or where the
+  /// row is not this company's, which RLS turns into no row rather than
+  /// an error.
+  Future<OcrExtraction?> scanReading(String scanId) async {
+    final rows = await client
+        .from('ocr_scans')
+        .select('extracted')
+        .eq('id', scanId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final held = rows.first['extracted'];
+    if (held is! Map) return null;
+    return OcrExtraction.fromJson(Map<String, dynamic>.from(held));
+  }
+}
+
+/// What the PAPER said the totals were, for putting beside what the
+/// lines come to.
+///
+/// Three figures off the scan and enough to say where they came from.
+/// `null` on any one of them means the reader did not find it, which is
+/// a different answer from zero and must not be shown as a difference.
+class ScanTotals {
+  const ScanTotals({
+    required this.scanId,
+    required this.readAt,
+    required this.fileName,
+    this.subtotal,
+    this.tax,
+    this.total,
+  });
+
+  factory ScanTotals.fromJson(Map<String, dynamic> json) => ScanTotals(
+        scanId: json['scan_id']?.toString() ?? '',
+        readAt: DateTime.tryParse(json['read_at']?.toString() ?? ''),
+        fileName: json['file_name']?.toString() ?? '',
+        subtotal: OcrExtraction._num(json['subtotal']),
+        tax: OcrExtraction._num(json['tax_amount']),
+        total: OcrExtraction._num(json['total']),
+      );
+
+  final String scanId;
+  final DateTime? readAt;
+  final String fileName;
+  final double? subtotal;
+  final double? tax;
+  final double? total;
+
+  /// Whether the reading said anything worth comparing at all. A scan
+  /// that found none of the three is a scan of a page with no totals on
+  /// it, and there is nothing to reconcile.
+  bool get hasFigures => subtotal != null || tax != null || total != null;
+}
+
+extension RepoScanTotals on Repo {
+  /// What the newest successful reading of this document's paperwork
+  /// said its subtotal, tax and total were. `0705`.
+  ///
+  /// Null where nothing has been read — deliberately not zeroes, which
+  /// would make every typed-in document look like it disagreed with a
+  /// document that does not exist.
+  Future<ScanTotals?> documentScanTotals({
+    required String table,
+    required String recordId,
+  }) async {
+    final rows = Repo.rows(await client.rpc('document_scan_totals', params: {
+      'p_org_id': orgId,
+      'p_table': table,
+      'p_record_id': recordId,
+    }));
+    if (rows.isEmpty) return null;
+    return ScanTotals.fromJson(rows.first);
+  }
 }

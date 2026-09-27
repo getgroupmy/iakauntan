@@ -223,3 +223,17 @@ String contactTypeFor(String docType) => showsValidUntil(docType)
 /// Document types shown in the type switcher, in cycle order.
 Iterable<MapEntry<String, DocTypeMeta>> docTypesFor(DocKind kind) =>
     docTypes.entries.where((e) => e.value.kind == kind);
+
+/// "a" or "an", for a document type's name in a sentence.
+///
+/// One of the fourteen singulars begins with a vowel — Invoice — and
+/// it is the one the product says most often, so "taken forward to a
+/// invoice" was on the commonest path through the transfer dialog.
+///
+/// The initial LETTER is the whole rule, which is not true of English
+/// in general ("an hour", "a university") and is exactly true of this
+/// closed list of fourteen words. Said here rather than reached for
+/// from somewhere general, so nobody borrows it for prose it cannot
+/// handle.
+String articleFor(String noun) =>
+    noun.isNotEmpty && 'aeiouAEIOU'.contains(noun[0]) ? 'an' : 'a';

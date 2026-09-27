@@ -302,10 +302,6 @@ All four or none. Three of them set is somebody halfway through a job,
 and answering "not configured" would leave them hunting for why iPhones
 are being skipped — so a half-configured deployment throws.
 
-Leave `APNS_PRODUCTION` unset while testing. It defaults to the sandbox,
-because a production host refuses every token a development build
-registered.
-
 **`APNS_PRODUCTION` and `aps-environment` are one setting in two
 places.** `app/ios/Runner/Runner.entitlements` carries
 `aps-environment: development`, which is what a checked-in entitlements
@@ -316,11 +312,36 @@ handset and is not one; `isDeadToken` deliberately does not unregister
 on it, so a crossed pair is recoverable rather than a slow wipe of the
 register.
 
+Which means the setting follows the BUILD, not the stage of the work,
+and "leave it unset while testing" — which this file used to say — is
+wrong for the way this app is now tested:
+
+| The build on the handset | `APNS_PRODUCTION` |
+| --- | --- |
+| `flutter run`, or any build from Xcode onto a cable | unset (sandbox) |
+| **anything from TestFlight** | **`true`** |
+| the App Store | `true` |
+
+**A TestFlight build is a distribution archive**, so it registers
+production tokens, and `.github/workflows/ios-release.yml` is the only
+way builds get onto a phone here. There is one in TestFlight already
+(build 5). So the useful default for this project is `true`, and the
+sandbox is the special case reserved for a cable — the opposite of what
+the old advice implied, and the reason it is written out as a table
+rather than a sentence.
+
 And the App ID needs the **Push Notifications** capability enabled under
 *Certificates, Identifiers & Profiles*, the way it needs Associated
 Domains for passkeys. Without it the provisioning profile carries no
 `aps-environment` and a signed build fails at signing. CI builds iOS
 with codesigning off, so this first shows up on a real release build.
+
+**Both are confirmed enabled**, and the proof is that a real release
+build exists. `Runner.entitlements` asks for `aps-environment` AND
+`com.apple.developer.associated-domains`; Xcode refuses to sign against
+a profile that carries neither, naming the missing entitlement. The
+archive in `ios-release.yml` run 5 signed, so the profile carries both,
+so the App ID has both. Nobody had to go and look.
 
 ### Android — Firebase
 

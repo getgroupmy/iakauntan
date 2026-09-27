@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -9,9 +9,13 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import '../smartscan/scan_availability.dart';
+import '../smartscan/scan_blocked_dialog.dart';
 import 'text_reader.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
+import 'scan_progress.dart';
+import 'file_viewer.dart';
 import 'scan_runner.dart';
 import 'scan_result_dialog.dart';
 
@@ -293,11 +297,27 @@ class _FileRowState extends ConsumerState<_FileRow> {
             tooltip: 'Open',
             onPressed: _open,
           ),
-          if (widget.canWrite)
+          // No delete button on the paper a posting or a reading was
+          // built from. `0708` refuses it in the database either way;
+          // this is so nobody presses a button that cannot work, and so
+          // the reason is on screen rather than in a red toast.
+          if (widget.canWrite && !file.isEvidence)
             IconButton(
+              key: const Key('attachment-remove'),
               icon: const Icon(Icons.delete_outline, size: 18),
               tooltip: 'Remove',
               onPressed: _remove,
+            ),
+          if (widget.canWrite && file.isEvidence)
+            const Tooltip(
+              message: 'This is what the record was built from — it is '
+                  'posted, or its figures were read off this page and '
+                  'never keyed by anybody. It stays with the record.',
+              child: Padding(
+                key: Key('attachment-kept'),
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.lock_outline, size: 18),
+              ),
             ),
         ],
       ),
@@ -308,18 +328,68 @@ class _FileRowState extends ConsumerState<_FileRow> {
   bool _readerHere(OcrSettings ocr) => !ocr.onDevice || onDeviceReaderAvailable;
 
   Future<void> _scan() async {
+    // Before the charge. `0697`. This button is the one on the screen
+    // that spends money, and a PDF handed to a chat-completions reader
+    // is refused by name in the edge function -- after `ocr_begin` has
+    // taken the charge and before it is refunded. Everything that
+    // question turns on is answerable here.
+    //
+    // By the declared type alone: the file is in the bucket, so there
+    // are no first bytes to sniff the way the capture path can. A PDF
+    // filed with the wrong type still reaches the edge function, which
+    // is the backstop either way.
+    //
+    // Caught, because this await now happens before the `try` below.
+    // A status call that will not answer used to reach the snackbar as
+    // "could not read it"; throwing here would be an unhandled error
+    // on a button press. Null is what `pdfBlock` treats as "nobody has
+    // said", so the scan goes on to the edge function, which is the
+    // real gate.
+    OcrSettings? known;
+    try {
+      known = await ref.read(ocrStatusProvider.future);
+    } catch (_) {
+      known = null;
+    }
+    if (!mounted) return;
+    final block = pdfBlock(
+      known,
+      isPdf: looksLikePdf(file.mimeType, null),
+      canAdmin: ref.read(canAdminProvider),
+      deviceReadsPdf: onDeviceReadsPdf,
+    );
+    if (block != null) {
+      await showScanBlocked(context, block);
+      return;
+    }
+
     setState(() => _scanning = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final read = await readDocument(
-        ref,
-        // Awaited rather than read off the cache, for the same reason
-        // the capture path is: a cold provider reads as "not on the
-        // device" and sends the scan somewhere it was never meant to go.
-        ocr: await ref.read(ocrStatusProvider.future),
-        attachmentId: file.id,
-        storagePath: file.storagePath,
-        mimeType: file.mimeType,
+      // Behind the same modal the capture flow and the rescan menu
+      // use. `_scanning` still greys THIS row's button; what the modal
+      // adds is the rest of the screen, so a second attachment cannot
+      // be sent to the reader while this one is in flight. One rule —
+      // scanning blocks — rather than one surface where it does not.
+      final read = await whileScanning<OcrExtraction>(
+        context,
+        from: ScanStage.reading,
+        // `async =>`, because the `ocr:` argument below still resolves
+        // the status inside this try — a refusal there belongs in the
+        // snackbar, not on the button press.
+        action: (report) async => readDocument(
+          ref,
+          // The same answer the question above was asked of, rather
+          // than a second round trip that could disagree with it.
+          // Awaited rather than read off the cache, for the reason it
+          // always was: a cold provider reads as "not on the device"
+          // and sends the scan somewhere it was never meant to go.
+          ocr: known ?? await ref.read(ocrStatusProvider.future),
+          attachmentId: file.id,
+          storagePath: file.storagePath,
+          mimeType: file.mimeType,
+          onLocalFallback: () => report(ScanStage.readingHere),
+        ),
       );
       if (!mounted) return;
       // The balance moved, so what the next tooltip says about it should
@@ -346,7 +416,7 @@ class _FileRowState extends ConsumerState<_FileRow> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            e is OcrException ? e.message : 'Could not read it: $e',
+            errorText(e),
           ),
         ),
       );
@@ -356,15 +426,18 @@ class _FileRowState extends ConsumerState<_FileRow> {
   }
 
   Future<void> _open() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      // The bucket is private, so this is a link that expires rather
-      // than a URL that keeps working after it has been forwarded.
-      final url = await ref.read(repoProvider)!.attachmentUrl(file.storagePath);
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not open: $e')));
-    }
+    // In the app, from the bytes. This used to mint a signed URL and
+    // hand it to the external browser, which put a working link to a
+    // private document into another application's address bar and
+    // history for the life of the signature. No URL is made now, so
+    // there is nothing to leak rather than a leak that expires.
+    await showFileInApp(
+      context,
+      ref,
+      storagePath: file.storagePath,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+    );
   }
 
   Future<void> _remove() async {

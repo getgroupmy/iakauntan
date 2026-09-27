@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -12,7 +13,6 @@ import 'einvoice_certificate_card.dart';
 import 'fiscal_close.dart';
 import 'module_offer.dart';
 import 'subscription_card.dart';
-import '../../data/ocr_repository.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
@@ -33,7 +33,6 @@ import 'passkeys_card.dart';
 import 'two_factor_card.dart';
 import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
-import 'credit_ledger_dialog.dart';
 import 'export_card.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/signup_reference_repository.dart';
@@ -63,6 +62,18 @@ class SettingsScreen extends ConsumerWidget {
       body: AsyncView(
         value: org,
         onRetry: () => refreshOrganization(ref),
+        // The settings cards are the same cards for every company. Only
+        // the name, the registration number and the switches inside
+        // them are waiting on the organisation.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 6,
+            leadingSize: 24,
+            trailing: 1,
+            rowGap: Space.lg,
+          ),
+        ),
         builder: (organization) {
           return SingleChildScrollView(
             child: PageBody(
@@ -131,7 +142,40 @@ class SettingsScreen extends ConsumerWidget {
                       environment: organization.einvoiceEnvironment,
                     ),
                     const SizedBox(height: 16),
-                    _ScanningCard(canEdit: isAdmin),
+                    // Scanning moved to `/smartscan` — the whole of
+                    // it, which is what was asked for. What is left
+                    // here is what was NESTED INSIDE it and is not
+                    // about reading documents at all.
+                    //
+                    // Until the move these four had exactly one
+                    // construction site each, inside the scanning
+                    // card's billing section, drawn only when the OCR
+                    // key source was `platform`. So a company that
+                    // brought its own scanning key could not reach
+                    // Payment Methods, Collect Payments, Bank Feeds or
+                    // Bank Rules at all — how this company takes money
+                    // was behind a question about who pays for OCR.
+                    //
+                    // Drawn unconditionally now. `0489`'s comment is
+                    // the same fault found once before and fixed only
+                    // for the invoice list.
+                    const _WaysToPay(),
+                    const SizedBox(height: Space.lg),
+                    // Above the acquirer, because a method is the thing
+                    // a receipt names and the acquirer is one way of
+                    // providing one.
+                    const PaymentMethodsCard(),
+                    const SizedBox(height: Space.lg),
+                    const CollectPaymentsCard(),
+                    const SizedBox(height: Space.lg),
+                    // Beside the acquirer credentials on purpose: both
+                    // are a third party holding a key that reaches this
+                    // company's money, both are held so nothing can
+                    // read the key back, and somebody setting one up is
+                    // usually setting up the other.
+                    const BankFeedsCard(),
+                    const SizedBox(height: Space.lg),
+                    const BankRulesCard(),
                     const SizedBox(height: 16),
                     _ModulesCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
@@ -525,565 +569,6 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
   }
 }
 
-/// Reading receipts and bills, which is off until somebody here says
-/// otherwise.
-///
-/// The default is off and there is no row until this card writes one,
-/// because a receipt carries a supplier, an amount and sometimes a
-/// person's movements, and sending that to a third party is a decision
-/// rather than something to discover afterwards.
-class _ScanningCard extends ConsumerStatefulWidget {
-  const _ScanningCard({required this.canEdit});
-
-  final bool canEdit;
-
-  @override
-  ConsumerState<_ScanningCard> createState() => _ScanningCardState();
-}
-
-class _ScanningCardState extends ConsumerState<_ScanningCard> {
-  final _apiKey = TextEditingController();
-  final _project = TextEditingController();
-  final _location = TextEditingController();
-  final _processor = TextEditingController();
-  bool _saving = false;
-
-  /// "My own key", chosen but not yet saved.
-  ///
-  /// The database refuses to store `own` until a key exists — rightly, or
-  /// an organization sits switched on with nothing to call. But the key
-  /// field only appeared once `own` was stored, so choosing it was
-  /// refused and there was no way to reach the field that would have
-  /// satisfied it. A deadlock, and the guard was not the half that was
-  /// wrong.
-  ///
-  /// So the choice is held here until there is a key to go with it, and
-  /// the two are written together.
-  String? _pendingKeySource;
-
-  @override
-  void dispose() {
-    _apiKey.dispose();
-    _project.dispose();
-    _location.dispose();
-    _processor.dispose();
-    super.dispose();
-  }
-
-  Future<void> _write(Future<void> Function() action, String message) async {
-    setState(() => _saving = true);
-    final ok = await runWithFeedback(
-      context,
-      action: action,
-      successMessage: message,
-    );
-    if (mounted) setState(() => _saving = false);
-    if (ok) ref.invalidate(ocrStatusProvider);
-    return;
-  }
-
-  /// What the screen is showing, which is the stored answer unless
-  /// somebody has just asked for a different one.
-  String _keySource(OcrSettings ocr) => _pendingKeySource ?? ocr.keySource;
-
-  void _chooseKeySource(OcrSettings ocr, String chosen) {
-    // Going back to the platform's key, or choosing your own when a key
-    // is already on file, are both storable straight away.
-    if (chosen == 'platform' || ocr.keys.contains(ocr.provider)) {
-      setState(() => _pendingKeySource = null);
-      _write(
-        () => ref
-            .read(repoProvider)!
-            .setOcrSettings(
-              enabled: true,
-              provider: ocr.provider,
-              keySource: chosen,
-            ),
-        'Saved',
-      );
-      return;
-    }
-    // Otherwise show the field first. Nothing is written until there is
-    // a key to write with it.
-    setState(() => _pendingKeySource = 'own');
-  }
-
-  /// Saves the key, then the choice that needed it — in that order,
-  /// which is the order the database's own guard requires.
-  Future<void> _saveKey(OcrSettings ocr) => _write(() async {
-    final repo = ref.read(repoProvider)!;
-    await repo.setOcrCredentials(
-      provider: ocr.provider,
-      apiKey: _apiKey.text.trim().isEmpty ? null : _apiKey.text.trim(),
-      projectId: _project.text.trim().isEmpty ? null : _project.text.trim(),
-      location: _location.text.trim().isEmpty ? null : _location.text.trim(),
-      processorId: _processor.text.trim().isEmpty
-          ? null
-          : _processor.text.trim(),
-    );
-    await repo.setOcrSettings(
-      enabled: ocr.enabled,
-      provider: ocr.provider,
-      keySource: 'own',
-    );
-    _apiKey.clear();
-    if (mounted) setState(() => _pendingKeySource = null);
-  }, 'Scanning is on your own key');
-
-  @override
-  Widget build(BuildContext context) {
-    final status = ref.watch(ocrStatusProvider);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Space.lg),
-        child: AsyncView(
-          value: status,
-          onRetry: () => ref.invalidate(ocrStatusProvider),
-          skeleton: const CardRowsSkeleton(rows: 3, leading: false),
-          builder: (ocr) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Named, because `0614` widened it past receipts. The
-              // subtitle names the papers rather than the technology:
-              // the question somebody has is "will it read THIS", and
-              // a list answers it where "AI-powered extraction" does
-              // not.
-              const SectionHeader(
-                'AI SmartScan',
-                subtitle:
-                    'Photograph a bill, a receipt, a delivery order, a '
-                    'name card or a bank statement and have it read — the '
-                    'supplier, the date, the amounts and the lines',
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: ocr.enabled,
-                onChanged: widget.canEdit && !_saving
-                    ? (v) => _write(
-                        () => ref
-                            .read(repoProvider)!
-                            .setOcrSettings(
-                              enabled: v,
-                              provider: ocr.provider,
-                              keySource: ocr.keySource,
-                            ),
-                        v ? 'Scanning is on' : 'Scanning is off',
-                      )
-                    : null,
-                title: const Text('Send documents to a reader'),
-                subtitle: const Text(
-                  'Off unless you turn it on. A receipt carries a supplier, '
-                  'an amount and sometimes a customer.',
-                ),
-              ),
-              if (ocr.enabled) ...[
-                const SizedBox(height: 8),
-                // A dropdown rather than segments: the list comes off a
-                // table the platform can add to, so it has no fixed
-                // width and cannot be laid out as buttons.
-                DropdownButtonFormField<String>(
-                  initialValue: ocr.providers.any((p) => p.code == ocr.provider)
-                      ? ocr.provider
-                      : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Reader'),
-                  items: [
-                    for (final p in ocr.providers)
-                      DropdownMenuItem(
-                        value: p.code,
-                        child: Text(
-                          p.runsOnDevice
-                              ? '${p.name} — free'
-                              : '${p.name} — ${Fmt.money(p.price)} a scan',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: widget.canEdit && !_saving
-                      ? (code) {
-                          if (code == null) return;
-                          // A half-finished choice belongs to the reader
-                          // it was made for. Changing reader abandons it
-                          // rather than carrying a banner about a key
-                          // nobody asked to set.
-                          setState(() => _pendingKeySource = null);
-                          _write(
-                            () => ref
-                                .read(repoProvider)!
-                                .setOcrSettings(
-                                  enabled: true,
-                                  provider: code,
-                                  // Switching to a reader you have no key
-                                  // for would be refused, so it falls
-                                  // back to the platform's.
-                                  keySource: ocr.keys.contains(code)
-                                      ? ocr.keySource
-                                      : 'platform',
-                                ),
-                            'Reader changed',
-                          );
-                        }
-                      : null,
-                ),
-                if (ocr.current?.blurb != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    ocr.current!.blurb!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: context.scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                if (ocr.current?.takesKey ?? true) ...[
-                  const SizedBox(height: 12),
-                  SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: 'platform',
-                        label: Text('Buy credit'),
-                      ),
-                      ButtonSegment(value: 'own', label: Text('My own key')),
-                    ],
-                    selected: {_keySource(ocr)},
-                    onSelectionChanged: widget.canEdit && !_saving
-                        ? (s) => _chooseKeySource(ocr, s.first)
-                        : null,
-                  ),
-                ],
-                const SizedBox(height: 16),
-                if (ocr.onDevice)
-                  const _OnDeviceNotice()
-                else if (_keySource(ocr) == 'platform')
-                  _BillingSection(ocr: ocr)
-                else
-                  _OwnKeyFields(
-                    ocr: ocr,
-                    canEdit: widget.canEdit,
-                    saving: _saving,
-                    // True while the choice is made but unsaved, which is
-                    // what the field below is there to finish.
-                    pending: _pendingKeySource != null,
-                    apiKey: _apiKey,
-                    project: _project,
-                    location: _location,
-                    processor: _processor,
-                    onSave: () => _saveKey(ocr),
-                    onClear: () => _write(
-                      () => ref
-                          .read(repoProvider)!
-                          .clearOcrCredentials(ocr.provider),
-                      'Key removed',
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The on-device reader, which is the one with nothing to configure.
-///
-/// Says what it costs (nothing), where the photograph goes (nowhere),
-/// and — because this is a web app as much as a phone one — where it
-/// does not work.
-class _OnDeviceNotice extends StatelessWidget {
-  const _OnDeviceNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(Space.md),
-          decoration: BoxDecoration(
-            color: context.colors.success.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.phonelink_lock_outlined, size: 20),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Nothing to configure: no key to hold and no credit to buy.',
-                  style: TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Works everywhere: ML Kit on the phone app, and Tesseract in a '
-          'browser, both served from us. The browser fetches about 8MB '
-          'the first time it reads something and caches it after that. '
-          'Check what it fills in — it reads the printing rather than '
-          'understanding the document, and it cannot open a PDF.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: context.scheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CreditBalance extends StatelessWidget {
-  const _CreditBalance({required this.ocr});
-
-  final OcrSettings ocr;
-
-  @override
-  Widget build(BuildContext context) {
-    final empty = ocr.outOfCredit;
-
-    return Container(
-      padding: const EdgeInsets.all(Space.md),
-      decoration: BoxDecoration(
-        color: (empty ? context.colors.warning : context.scheme.primary)
-            .withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            empty ? Icons.error_outline : Icons.account_balance_wallet_outlined,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${Fmt.money(ocr.balance)} of scanning credit',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  empty
-                      ? 'Not enough for another scan at '
-                            '${Fmt.money(ocr.price)} each. Ask us to top it up.'
-                      : '${Fmt.money(ocr.price)} a scan — about '
-                            '${ocr.scansLeft} more.',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          // The only question anybody asks of a prepaid balance. The
-          // ledger has recorded every movement all along and nothing
-          // read it, so the number went down and nobody could see what
-          // took it.
-          TextButton(
-            key: const ValueKey('credit-ledger'),
-            onPressed: () => showCreditLedger(context),
-            child: const Text('Where it went'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The scanning balance, and how the platform is paid.
-///
-/// `creditInvoicesProvider` has existed since 0111 and had no consumer:
-/// a company could be billed for scanning credit and had nowhere to see
-/// the invoice, let alone settle it. That list lived here from then
-/// until 0489, when `platform_invoices` stopped being only about
-/// scanning — it now carries every company's monthly module bill, and
-/// this section is drawn only when the OCR key source is 'platform'.
-/// The list is on the subscription card now; what is left here is the
-/// balance itself and the ways the platform can be paid.
-class _BillingSection extends StatelessWidget {
-  const _BillingSection({required this.ocr});
-
-  final OcrSettings ocr;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _CreditBalance(ocr: ocr),
-        const SizedBox(height: 12),
-        // 0489. The invoice list used to be here, and only here --
-        // inside the scanning card, drawn only when the key source was
-        // 'platform'. It was written in 0111 for scanning credit, which
-        // is what `platform_invoices` held then; now the table also
-        // holds every company's monthly module bill, and a company on
-        // its own OCR key could not see that bill at all. It is on the
-        // subscription card, which is drawn for an owner or admin
-        // whatever this company does about scanning.
-        const _WaysToPay(),
-        const SizedBox(height: Space.lg),
-        // Above the acquirer, because a method is the thing a receipt
-        // names and the acquirer is one way of providing one.
-        const PaymentMethodsCard(),
-        const SizedBox(height: Space.lg),
-        const CollectPaymentsCard(),
-        const SizedBox(height: Space.lg),
-        // Beside the acquirer credentials on purpose: both are a third
-        // party holding a key that reaches this company's money, both
-        // are held so nothing can read the key back, and somebody
-        // setting one up is usually setting up the other.
-        const BankFeedsCard(),
-        const SizedBox(height: Space.lg),
-        const BankRulesCard(),
-      ],
-    );
-  }
-}
-
-/// An organization's own provider key.
-///
-/// The key itself never comes back from the server — the table holding
-/// it has RLS with no policies and no grants, so the only reader is the
-/// edge function. What this shows is whether one is on file.
-class _OwnKeyFields extends StatelessWidget {
-  const _OwnKeyFields({
-    required this.ocr,
-    required this.canEdit,
-    required this.saving,
-    required this.pending,
-    required this.apiKey,
-    required this.project,
-    required this.location,
-    required this.processor,
-    required this.onSave,
-    required this.onClear,
-  });
-
-  final OcrSettings ocr;
-  final bool canEdit;
-  final bool saving;
-
-  /// Chosen but not stored yet, because there is no key to store with it.
-  final bool pending;
-  final TextEditingController apiKey;
-  final TextEditingController project;
-  final TextEditingController location;
-  final TextEditingController processor;
-  final VoidCallback onSave;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final isGoogle = ocr.provider == 'google';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (ocr.hasOwnKey)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.key_outlined,
-                  size: 18,
-                  color: context.colors.success,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'A key is on file. Scans run on your account with the '
-                    'provider and cost nothing here.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                ),
-                TextButton(
-                  onPressed: canEdit && !saving ? onClear : null,
-                  child: const Text('Remove'),
-                ),
-              ],
-            ),
-          )
-        else if (pending)
-          // Says which half is missing. Without this the screen looks
-          // switched over when nothing has been stored, and the first
-          // scan is the thing that finds out.
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(Space.md),
-            decoration: BoxDecoration(
-              color: context.colors.warning.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              'Not switched over yet. Paste your '
-              '${isGoogle ? 'Document AI' : 'Anthropic'} key below and save '
-              'it — scanning moves onto it in the same step. Until then it '
-              'stays on purchased credit.',
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-        TextField(
-          controller: apiKey,
-          enabled: canEdit,
-          obscureText: !isGoogle,
-          maxLines: isGoogle ? 4 : 1,
-          decoration: InputDecoration(
-            labelText: isGoogle ? 'Service account JSON' : 'API key',
-            helperText: ocr.hasOwnKey
-                ? 'Leave blank to keep the one already stored'
-                : 'Stored server-side only; never sent back to the app',
-          ),
-        ),
-        if (isGoogle) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: project,
-                  enabled: canEdit,
-                  decoration: const InputDecoration(labelText: 'Project id'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 120,
-                child: TextField(
-                  controller: location,
-                  enabled: canEdit,
-                  decoration: const InputDecoration(
-                    labelText: 'Location',
-                    hintText: 'us',
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: processor,
-            enabled: canEdit,
-            decoration: const InputDecoration(
-              labelText: 'Processor id',
-              helperText: 'The Expense or Invoice parser you created',
-            ),
-          ),
-        ],
-        const SizedBox(height: 16),
-        if (canEdit)
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: saving ? null : onSave,
-              child: Text(pending ? 'Save key and switch' : 'Save key'),
-            ),
-          ),
-      ],
-    );
-  }
-}
 
 /// What the tenant is entitled to. Add-ons are switched on by platform
 /// staff, not here, so this is informational with one exception: the
@@ -1495,7 +980,7 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
               // than assuming par. Said plainly, because the fix is to
               // enter the rate, not to try again.
               error: (e, _) =>
-                  Text('$e', style: TextStyle(color: context.colors.warning)),
+                  Text(errorText(e), style: TextStyle(color: context.colors.warning)),
               data: (rows) => rows.isEmpty
                   ? Text(
                       'Nothing open in a currency other than '
@@ -1831,11 +1316,32 @@ class _FiscalYearsCard extends ConsumerWidget {
             SectionHeader(
               'Fiscal years',
               subtitle: 'Nothing can be posted to a date no period covers',
+              // Two directions, because a company arrives with history
+              // as often as it runs out of runway. Forward is the
+              // common one and keeps the plain button; backward is
+              // behind the menu, where it is findable without being
+              // the thing somebody presses by accident.
               action: canAdmin
-                  ? TextButton.icon(
-                      onPressed: () => _createNext(context, ref),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add next year'),
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _createNext(context, ref),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add next year'),
+                        ),
+                        PopupMenuButton<String>(
+                          key: const ValueKey('fiscal-year-more'),
+                          tooltip: 'More',
+                          onSelected: (_) => _createPrevious(context, ref),
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'previous',
+                              child: Text('Add previous year'),
+                            ),
+                          ],
+                        ),
+                      ],
                     )
                   : null,
             ),
@@ -1866,6 +1372,50 @@ class _FiscalYearsCard extends ConsumerWidget {
       context,
       action: () => ref.read(repoProvider)!.createFiscalYear(),
       successMessage: 'Next fiscal year created, with its twelve periods',
+    );
+    ref.invalidate(fiscalYearsProvider);
+  }
+
+  /// The year BEFORE the earliest one, for books brought across.
+  ///
+  /// Asked out loud because it is not the button somebody was reaching
+  /// for: a year opened by accident is periods that accept postings
+  /// nobody meant to date that far back, and the fix is a delete this
+  /// screen does not offer.
+  ///
+  /// No date is sent. `0659` derives the year from the earliest one
+  /// that exists, and deliberately: a date chosen here could leave a
+  /// day covered by no period.
+  Future<void> _createPrevious(BuildContext context, WidgetRef ref) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add the year before the first?'),
+        content: const Text(
+          'Opens the fiscal year immediately before the earliest one, '
+          'with its periods, so entries can be posted to it. For books '
+          'brought across from somewhere else, or a comparative year '
+          'that was never entered.\n\n'
+          'The periods arrive open. Close the year once it is complete.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Add it'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.createPreviousFiscalYear(),
+      successMessage: 'Previous fiscal year created, with its periods',
     );
     ref.invalidate(fiscalYearsProvider);
   }
@@ -2638,7 +2188,7 @@ class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2775,7 +2325,7 @@ class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2930,7 +2480,7 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3134,7 +2684,7 @@ class _JoinCompanyState extends ConsumerState<_JoinCompanyDialog> {
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _said = '$e');
+      setState(() => _said = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

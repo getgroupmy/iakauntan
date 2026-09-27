@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -90,7 +91,7 @@ class ClaimApprovalCardState extends ConsumerState<ClaimApprovalCard> {
             threshold.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) =>
-                  Text('$e', style: TextStyle(color: context.colors.warning)),
+                  Text(errorText(e), style: TextStyle(color: context.colors.warning)),
               data: (value) {
                 // Fill the field the first time the amount arrives, and
                 // never again — re-filling on every rebuild would wipe

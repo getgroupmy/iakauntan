@@ -121,6 +121,14 @@ class _ProviderCard extends ConsumerWidget {
   String? get _address =>
       (provider['key_base_url'] as String?) ?? (provider['base_url'] as String?);
 
+  /// When the key was set, as a date rather than as whatever JSON made
+  /// of it. See the note at the use site: passing the raw value is what
+  /// turned this card into a grey rectangle.
+  DateTime? get _keySetAt {
+    final raw = provider['key_set_at'];
+    return raw == null ? null : DateTime.tryParse('$raw');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -175,11 +183,27 @@ class _ProviderCard extends ConsumerWidget {
               ].join(' · '),
               style: theme.textTheme.bodySmall,
             ),
-            if (_hasKey && provider['key_set_at'] != null)
+            // PARSED, not passed. `key_set_at` is a `timestamptz` and
+            // PostgREST hands it over as a JSON STRING; the map is
+            // `dynamic`, so `Fmt.dateTime(provider['key_set_at'])`
+            // compiled and threw
+            //
+            //     type 'String' is not a subtype of type 'DateTime?'
+            //
+            // during build — and a throw during build is an
+            // `ErrorWidget`, which a release web build draws as a plain
+            // grey rectangle filling whatever space it is given. So
+            // keying a provider in turned its card into a grey block
+            // with no message anywhere, and only once a key existed,
+            // because this line is behind `_hasKey`.
+            //
+            // `tryParse` rather than `parse`: a value that is not a
+            // timestamp should cost the sentence, not the card.
+            if (_hasKey && _keySetAt != null)
               Padding(
                 padding: const EdgeInsets.only(top: Space.xs),
                 child: Text(
-                  'Key set ${Fmt.dateTime(provider['key_set_at'])}. It cannot '
+                  'Key set ${Fmt.dateTime(_keySetAt)}. It cannot '
                   'be read back — replace it if you are not sure.',
                   style: theme.textTheme.bodySmall,
                 ),

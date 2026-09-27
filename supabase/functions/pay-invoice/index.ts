@@ -40,7 +40,7 @@
  * logged: a Billplz error body can quote the key back, so the failure
  * path returns a sentence and puts the detail in the function log.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
 import {

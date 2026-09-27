@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "my.iakauntan.iakauntan",
+      "sha256_cert_fingerprints": [
+        "20:38:98:4F:6A:96:A2:B9:E2:77:1E:EC:09:B0:FC:DB:28:3E:3F:86:1A:4D:F1:F3:5C:22:61:79:BC:05:CA:D7",
+        "19:50:C0:81:0F:2B:AB:3A:51:9B:BF:08:F1:77:A0:12:4E:4F:18:F6:99:6E:A2:A5:BB:2B:AC:9C:49:2E:6A:C8"
+      ]
+    }
+  }
+]

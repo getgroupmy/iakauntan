@@ -104,4 +104,33 @@ void main() {
       expect(canBill(charge(amount: '0')), isFalse);
     });
   });
+
+  group('the bill number, in either shape the row arrives in', () {
+    // Every fixture above hands over the FLAT `bill_no`, which is
+    // `site_screen`'s reshaping. The database does not send that
+    // shape: `propertyStatutoryCharges` selects the number as an
+    // embedded `purchase_documents(doc_no)`. Nothing here had ever
+    // asked in that shape, and the sheet's "Bill it" tooltip — which
+    // passes the row exactly as it came back — therefore dropped the
+    // number and said only "Already on a bill."
+
+    test('flat, as the site screen reshapes it', () {
+      expect(billNoOf(charge(bill: 'b1', billNo: 'BILL-9')), 'BILL-9');
+    });
+
+    test('embedded, as the database sends it', () {
+      final c = charge(bill: 'b1')
+        ..['purchase_documents'] = {'doc_no': 'BILL-9'};
+      expect(billNoOf(c), 'BILL-9');
+      expect(describeSettlement(c), 'On bill BILL-9');
+      expect(whyNotBillable(c), 'Already on bill BILL-9.');
+    });
+
+    test('and neither is still an answer, not a crash', () {
+      final c = charge(bill: 'b1');
+      expect(billNoOf(c), isNull);
+      expect(describeSettlement(c), 'On a bill');
+      expect(whyNotBillable(c), 'Already on a bill.');
+    });
+  });
 }

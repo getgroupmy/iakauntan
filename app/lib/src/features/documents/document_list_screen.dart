@@ -2,370 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/skeletons.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
-import '../../data/attachments_repository.dart';
-import '../../data/ocr_repository.dart';
-import '../../data/repository.dart';
 import 'bulk_plan.dart';
 import 'doc_types.dart';
-import 'duplicate_bill.dart';
 import 'late_orders_dialog.dart';
-import '../shared/scan_intake.dart';
-import '../shared/supplier_from_scan.dart';
 import 'settlement_dialog.dart';
 
-/// One list screen for every document type in both cycles. The doc type
-/// in the route decides which table, contact kind and actions apply.
-/// Scan a supplier's paperwork, then start the bill it describes.
-///
-/// The supplier is asked for *before* anything is created, and that is
-/// the database's rule rather than a preference: `purchase_documents`
-/// has `contact_id not null`, because a payable that is owed to nobody
-/// is not a payable. The first version of this created the draft first
-/// and left the supplier to the editor, which the constraint refused —
-/// correctly.
-///
-/// It is asked rather than matched. The reading's supplier name seeds
-/// the search, so the right contact is usually one tap away, but two
-/// contacts called "Syarikat Maju" are ordinary and picking the wrong
-/// one surfaces months later in an aged payables listing.
-Future<void> _scanInto(
-  BuildContext context,
-  WidgetRef ref, {
-  required String docType,
-  required DocTypeMeta meta,
-}) async {
-  final staged = await showScanIntake(
-    context,
-    ref,
-    table: meta.kind.table,
-    title: 'Scan a ${meta.singular.toLowerCase()}',
-  );
-  if (staged == null || !context.mounted) return;
 
-  final repo = ref.read(repoProvider)!;
-  final read = staged.read;
-
-  // Looked up before anybody is asked. The document names its supplier
-  // on the letterhead, and searching for a name that is already on
-  // screen is work the machine should have done.
-  final match = await resolveSupplier(context, ref, read);
-  if (!context.mounted) return;
-
-  String? contactId = match.contactId;
-  if (match.outcome == SupplierOutcome.ask) {
-    contactId = await _pickSupplier(context, ref, read);
-  }
-
-  if (contactId == null) {
-    // Abandoned at the supplier. The capture was filed against a
-    // placeholder that will never become a document, so it goes with it
-    // rather than sitting in the bucket forever.
-    await repo.deleteAttachmentById(staged.attachmentId);
-    return;
-  }
-
-  // 0628. Before anything is created, not after: a duplicate caught
-  // here is a decision, and one caught after the draft exists is a
-  // second draft to go and delete. The same receipt photographed twice
-  // is the ordinary way this happens, and the second photograph is
-  // taken by somebody who does not remember the first.
-  //
-  // Only on the purchase side. A sales document's number is this
-  // company's own sequence and cannot collide.
-  if (!meta.kind.isSales) {
-    if (!context.mounted) return;
-    final go = await _clearOfDuplicates(
-      context,
-      ref,
-      contactId: contactId,
-      docType: docType,
-      read: read,
-    );
-    if (!go) {
-      await repo.deleteAttachmentById(staged.attachmentId);
-      return;
-    }
-    if (!context.mounted) return;
-  }
-
-  try {
-    final saved = await repo.saveDocument(
-      kind: meta.kind,
-      docType: docType,
-      header: {
-        'contact_id': contactId,
-        'doc_date': Fmt.iso(read?.documentDate ?? DateTime.now()),
-        if (read?.documentNo != null) 'supplier_doc_no': read!.documentNo,
-      },
-      lines: const [],
-    );
-    final id = saved.id;
-    await repo.refileAttachment(
-      attachmentId: staged.attachmentId,
-      table: meta.kind.table,
-      recordId: id,
-    );
-    if (read != null) ref.read(pendingScanProvider.notifier).park(id, read);
-    if (context.mounted) {
-      context.go('${meta.kind.routePrefix}/$docType/$id');
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not start it: $e')));
-    }
-  }
-}
-
-
-/// Warns about a bill already on the books, and lets it go on anyway.
-///
-/// `0628`. Returns true to carry on. A check that REFUSED would refuse
-/// a supplier's corrected re-issue and a genuine second delivery on one
-/// day, and what people do with a check that is wrong a tenth of the
-/// time is type the number differently — which destroys the only field
-/// it runs on.
-///
-/// A lookup that fails is not a duplicate. It carries on: a network
-/// error must not stop somebody entering a bill.
-Future<bool> _clearOfDuplicates(
-  BuildContext context,
-  WidgetRef ref, {
-  required String contactId,
-  required String docType,
-  required OcrExtraction? read,
-}) async {
-  final number = read?.documentNo?.trim();
-  final date = read?.documentDate;
-  final total = read?.totalAmount;
-  if ((number == null || number.isEmpty) && (date == null || total == null)) {
-    return true;
-  }
-
-  final List<DuplicateBill> found;
-  try {
-    final rows = await ref.read(repoProvider)!.duplicatePurchaseDocuments(
-      contactId: contactId,
-      docType: docType,
-      supplierDocNo: number,
-      docDate: date,
-      totalAmount: total,
-    );
-    found = [for (final r in rows) DuplicateBill.fromMap(r)];
-  } catch (_) {
-    return true;
-  }
-  if (found.isEmpty || !context.mounted) return found.isEmpty;
-
-  final go = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      icon: const Icon(Icons.copy_all_outlined),
-      title: Text(
-        duplicateHeadline(found),
-        key: const ValueKey('duplicate-headline'),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            duplicateAdvice(found),
-            key: const ValueKey('duplicate-advice'),
-          ),
-          const SizedBox(height: Space.md),
-          for (final d in found)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                duplicateLine(d),
-                key: ValueKey('duplicate-line-${d.id}'),
-                style: Theme.of(ctx).textTheme.bodySmall,
-              ),
-            ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          key: const ValueKey('duplicate-stop'),
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Stop'),
-        ),
-        // Deliberately not styled as the primary action. Going on is
-        // allowed and is sometimes right; it should not be the button
-        // somebody presses without reading.
-        TextButton(
-          key: const ValueKey('duplicate-go-on'),
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Enter it anyway'),
-        ),
-      ],
-    ),
-  );
-  return go ?? false;
-}
-
-/// Which supplier this is from — the one thing no scan can decide.
-Future<String?> _pickSupplier(
-  BuildContext context,
-  WidgetRef ref,
-  OcrExtraction? read,
-) {
-  return showDialog<String>(
-    context: context,
-    builder: (_) => _SupplierPicker(read: read),
-  );
-}
-
-class _SupplierPicker extends ConsumerStatefulWidget {
-  const _SupplierPicker({this.read});
-
-  /// What the document said. The name seeds the search and is shown as
-  /// a reminder — never selected automatically. The rest of it is what
-  /// pre-fills a supplier created from here, so the SSM number and the
-  /// address the scan found are not thrown away just because the name
-  /// matched nothing.
-  final OcrExtraction? read;
-
-  String? get readName => read?.supplierName;
-
-  @override
-  ConsumerState<_SupplierPicker> createState() => _SupplierPickerState();
-}
-
-class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
-  late final TextEditingController _search = TextEditingController(
-    text: widget.readName ?? '',
-  );
-  late String _query = widget.readName ?? '';
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final contacts = ref.watch(
-      contactsProvider((type: 'supplier', search: _query)),
-    );
-
-    return AlertDialog(
-      title: const Text('Which supplier?'),
-      content: SizedBox(
-        width: 460,
-        height: 420,
-        child: Column(
-          children: [
-            if (widget.readName != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Space.sm),
-                child: Row(
-                  children: [
-                    const Icon(Icons.description_outlined, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'The document says “${widget.readName}”',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            TextField(
-              controller: _search,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Search suppliers',
-                isDense: true,
-                prefixIcon: Icon(Icons.search, size: 18),
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-            const SizedBox(height: Space.sm),
-            Expanded(
-              child: AsyncView(
-                value: contacts,
-                onRetry: () => ref.invalidate(
-                  contactsProvider((type: 'supplier', search: _query)),
-                ),
-                loading: const LinearProgressIndicator(),
-                skeleton: const ListSkeleton(rows: 6, leading: false),
-                builder: (list) => list.isEmpty
-                    ? const EmptyState(
-                        icon: Icons.person_search_outlined,
-                        title: 'No supplier matches',
-                        // No longer "add the supplier under Contacts
-                        // first". That meant leaving the scan, going
-                        // somewhere else, and starting again — for the
-                        // commonest case there is, a bill from somebody
-                        // new.
-                        message:
-                            'Clear the search to see them all, or create '
-                            'this one without leaving the scan.',
-                      )
-                    : ListView.separated(
-                        itemCount: list.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) => ListTile(
-                          dense: true,
-                          title: Text(list[i].name),
-                          subtitle: Text(
-                            list[i].code,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          onTap: () => Navigator.pop(context, list[i].id),
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        // The way out that did not exist. Somebody scanning a bill
-        // from a supplier who is not on file used to be told to go to
-        // Contacts and start again, which is the commonest case there
-        // is — a new supplier is exactly when a bill needs scanning.
-        TextButton.icon(
-          key: const ValueKey('picker-new-supplier'),
-          onPressed: () async {
-            final id = await createSupplierFromScan(context, ref, widget.read);
-            if (id != null && context.mounted) Navigator.pop(context, id);
-          },
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('New supplier'),
-        ),
-        // No `Spacer()` between these two, however much this wants to
-        // push Cancel to the other end. `AlertDialog.actions` are laid
-        // out by an `OverflowBar`, which is not a Flex, and a `Spacer`
-        // is an `Expanded` — which throws at layout in a parent that
-        // cannot give it a flex. In a release web build that throw is
-        // an `ErrorWidget`, and `ErrorWidget` renders as a plain grey
-        // rectangle filling whatever space it is given. Which is to say
-        // the whole dialog goes grey, with no message anywhere.
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-      ],
-    );
-  }
-}
-
-/// One thing the app bar offers, as a button or as a menu item.
-///
-/// [id] is only for the two that a test names; the rest are found by
-/// their label.
 class _ListAction {
   const _ListAction({
     required this.label,
@@ -417,7 +66,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$verb failed: $e')));
+        ).showSnackBar(SnackBar(content: Text('$verb failed: ${errorText(e)}')));
       }
     } finally {
       if (mounted) setState(() => _running = false);
@@ -549,13 +198,10 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       // Only on the purchase side. A sales invoice is raised from what
       // we are owed, not read off a piece of paper somebody handed us --
       // there is nothing to scan.
-      if (canWrite && !kind.isSales)
-        _ListAction(
-          label: 'Scan ${meta.singular.toLowerCase()}',
-          icon: Icons.document_scanner_outlined,
-          onTap: () =>
-              _scanInto(context, ref, docType: widget.docType, meta: meta),
-        ),
+      // `0682`. Hidden on the sales side until now, and the reason was
+      // the wording rather than the machinery: everything under it
+      // asked "which supplier?", which is the wrong question about your
+      // own customer. `ScanContactKind` carries the noun now.
     ];
   }
 
@@ -955,6 +601,9 @@ class _DocumentTile extends StatelessWidget {
         children: [
           Text(doc.docNo, style: const TextStyle(fontWeight: FontWeight.w600)),
           StatusChip(doc.isOverdue ? 'overdue' : doc.status, compact: true),
+          // Beside the status, because that is where somebody's eye
+          // already is when they scan the list. `0707`.
+          EntrySourceChip(doc.entrySource, compact: true),
           if (doc.einvoiceStatus != 'not_applicable')
             Tooltip(
               message: 'e-Invoice: ${Fmt.label(doc.einvoiceStatus)}',

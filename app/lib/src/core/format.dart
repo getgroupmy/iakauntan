@@ -4,6 +4,22 @@ import 'package:intl/intl.dart';
 class Fmt {
   const Fmt._();
 
+  /// A file size somebody can read.
+  ///
+  /// Binary units — 1 KB is 1024 bytes here, which is what every file
+  /// manager on every platform this app runs on shows, so a 10 MB
+  /// limit is the same 10 MB the person sees next to their file.
+  ///
+  /// No decimal on bytes and kilobytes: "1.0 KB" is noise, and a
+  /// screenshot is measured in whole KB. Megabytes get one, because
+  /// the difference between 9.4 and 10.2 is the difference between
+  /// accepted and refused.
+  static String bytes(int count) {
+    if (count < 1024) return '$count B';
+    if (count < 1024 * 1024) return '${(count / 1024).round()} KB';
+    return '${(count / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
   static final _date = DateFormat('dd/MM/yyyy');
   static final _longDate = DateFormat('d MMM yyyy');
   static final _monthYear = DateFormat('MMM yyyy');

@@ -38,7 +38,7 @@
  * configure here beyond the service-role key this function already has
  * in order to write attendance for somebody who is not signed in.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 
 import { serveFunction } from "../_shared/cors.ts";
 import { punchDirection, punchTime } from "./punch.ts";

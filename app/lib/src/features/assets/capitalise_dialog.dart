@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/row_actions.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -80,18 +81,30 @@ class _UncapitalisedDialog extends ConsumerWidget {
                             ].map((e) => e?.toString() ?? '').join(' · '),
                             style: const TextStyle(fontSize: 12),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
+                          // `RowActions`, not a bare Row. A figure plus
+                          // a labelled button is more than a ListTile
+                          // has left on a phone, and this tripped
+                          // Flutter's own "Trailing widget consumes the
+                          // entire tile width" — the same assertion the
+                          // quote-mismatch row tripped, from the same
+                          // shape. Below 700 the button is a menu.
+                          trailing: RowActions(
+                            menuKey: 'capitalise-menu-${r['line_id']}',
+                            leading: Padding(
+                              padding:
+                                  const EdgeInsets.only(right: Space.sm),
+                              child: Text(
                                 Fmt.money(Fmt.toDouble(r['amount'])),
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600),
                               ),
-                              const SizedBox(width: Space.sm),
-                              FilledButton.tonal(
-                                onPressed: () => _capitalise(context, ref, r),
-                                child: const Text('Capitalise'),
+                            ),
+                            actions: [
+                              RowAction(
+                                label: 'Capitalise',
+                                actionKey: 'capitalise-${r['line_id']}',
+                                emphasis: RowActionEmphasis.filled,
+                                onTap: () => _capitalise(context, ref, r),
                               ),
                             ],
                           ),

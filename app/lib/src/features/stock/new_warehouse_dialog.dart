@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 
@@ -144,7 +145,7 @@ class _NewWarehouseDialogState extends ConsumerState<NewWarehouseDialog> {
       // The likely failure is a code already in use, and "SA is taken"
       // is something the person can act on without losing the transfer
       // behind this dialog.
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

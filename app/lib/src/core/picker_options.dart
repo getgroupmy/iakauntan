@@ -56,6 +56,31 @@ List<PickerOption<String>> bankPickerOptions(
     ),
 ];
 
+/// The matters a firm is working on.
+///
+/// `0687`/`0688` put the matter on `gl_lines`, so a bill, an expense or
+/// a journal line can now say which matter it belongs to. This is the
+/// list that says it.
+///
+/// Findable by MATTER NUMBER as well as by name, for the same reason
+/// the chart of accounts leads with its code: a file is referred to by
+/// its number on every letter and every attendance note, and somebody
+/// typing "M-1042" means that matter and not whichever one merely
+/// mentions it. The number leads the label so `matchingOptions` ranks a
+/// label that STARTS with the query above one that only contains it.
+///
+/// The client is the second line, because two matters called "Sale of
+/// a house" are ordinary and the client is what tells them apart.
+List<PickerOption<String>> matterPickerOptions(List<Matter> matters) => [
+  for (final m in matters)
+    PickerOption<String>(
+      value: m.id,
+      label: '${m.matterNo} — ${m.name}',
+      sublabel: (m.clientName ?? '').isEmpty ? null : m.clientName,
+      keywords: [m.matterNo, m.name, m.clientName ?? ''],
+    ),
+];
+
 /// Staff.
 ///
 /// Findable by STAFF NUMBER as well as name, because a payroll clerk

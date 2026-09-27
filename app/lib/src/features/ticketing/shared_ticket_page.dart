@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 
@@ -70,7 +71,7 @@ class _SharedTicketPageState extends ConsumerState<SharedTicketPage> {
         });
       }
     } catch (e) {
-      setState(() => _error = '$e');
+      setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _sending = false);
     }

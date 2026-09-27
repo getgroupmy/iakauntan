@@ -14,9 +14,9 @@
     "allowImportingTsExtensions": true,
     "types": [],
     "paths": {
-      "jsr:@supabase/supabase-js@2": ["./supabase_js_stub.ts"],
+      "jsr:@supabase/supabase-js@*": ["./supabase_js_stub.ts"],
       "jsr:@supabase/supabase-js": ["./supabase_js_stub.ts"],
-      "jsr:@std/assert@1": ["./std_assert_stub.ts"],
+      "jsr:@std/assert@*": ["./std_assert_stub.ts"],
       "jsr:@std/assert": ["./std_assert_stub.ts"]
     }
   }

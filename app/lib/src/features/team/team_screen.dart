@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/row_actions.dart';
@@ -614,7 +615,7 @@ class _AccessLogState extends ConsumerState<_AccessLog> {
                   Space.md, 0, Space.md, Space.md),
               child: log.when(
                 loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('$e'),
+                error: (e, _) => Text(errorText(e)),
                 data: (entries) => entries.isEmpty
                     ? Text('Nobody has opened a payslip under a grant.',
                         style: Theme.of(context).textTheme.bodySmall)

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
@@ -30,6 +31,18 @@ class MyHrScreen extends ConsumerWidget {
       body: AsyncView(
         value: me,
         onRetry: () => ref.invalidate(myEmployeeProvider),
+        // The self-service cards -- clock, leave, payslips, claims --
+        // are the same cards for everybody. What is waiting is which
+        // employee they belong to.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(
+            rows: 4,
+            leadingSize: 24,
+            trailing: 1,
+            rowGap: Space.lg,
+          ),
+        ),
         builder: (employee) {
           if (employee == null) {
             return const EmptyState(
@@ -83,7 +96,7 @@ class _ClockCard extends ConsumerWidget {
           // button are waiting on the record.
           loading: () => const CardRowsSkeleton(
               leadingSize: 48, trailing: 2, trailingWidth: 56, rowGap: 0),
-          error: (e, _) => Text('$e'),
+          error: (e, _) => Text(errorText(e)),
           data: (record) {
             final clockedIn = record?.clockIn != null && record?.clockOut == null;
             final done = record?.clockOut != null;
@@ -207,7 +220,7 @@ class _LeaveBalancesCard extends ConsumerWidget {
             ),
             balances.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => list.isEmpty
                   ? Text('No leave entitlement has been set up yet.',
                       style: Theme.of(context).textTheme.bodySmall)
@@ -287,7 +300,7 @@ class _MyPayslipsCard extends ConsumerWidget {
                 subtitle: 'Only you and payroll can see these'),
             payslips.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e'),
+              error: (e, _) => Text(errorText(e)),
               data: (list) => list.isEmpty
                   ? Text('No payslip has been issued yet.',
                       style: Theme.of(context).textTheme.bodySmall)

@@ -261,6 +261,58 @@ void main() {
       expect(find.text('Nothing matches that.'), findsOneWidget);
     });
 
+    testWidgets('an empty list with an empty box still offers a way out',
+        (tester) async {
+      // The bug this group exists for now. A company with no bank
+      // account on file opened Pay supplier, tapped the picker, and got
+      // a sheet with NOTHING on it: no rows, because there are none; no
+      // "nothing matches", because that line used to be suppressed
+      // wherever there was a way to create one; and no create row,
+      // because that one only appeared once something had been typed.
+      //
+      // Three conditions that are individually reasonable and together
+      // draw a blank sheet. Reported as "not showing the list to select
+      // from", which is exactly what it is, and reported twice — Pay
+      // supplier and Receive payment are the same dialog.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SearchablePicker<String>(
+              options: const [],
+              value: null,
+              onChanged: (_) {},
+              onCreate: (_) async => 'b1',
+              label: 'Bank account',
+              createLabel: 'Add bank account',
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+
+      // Says there is nothing, rather than looking broken.
+      expect(find.text('None on file yet.'), findsOneWidget);
+      // And offers the way out under its plain name, because there is
+      // no typed text for it to be about.
+      expect(find.text('Add bank account'), findsOneWidget);
+    });
+
+    testWidgets('and says so even when the list has rows that do not match',
+        (tester) async {
+      // The other half: with a query that matches nothing, the create
+      // row names what was typed AND the explanation still appears.
+      // Suppressing it was the original mistake.
+      await pump(tester, onCreate: (_) async => 'c9');
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Zzz Trading');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing matches that.'), findsOneWidget);
+      expect(find.text('Add customer "Zzz Trading"'), findsOneWidget);
+    });
+
     testWidgets('adding one selects it', (tester) async {
       String? chosen;
       await pump(
@@ -481,6 +533,76 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(chosen, 'c3');
+    });
+  });
+
+  group('a value settled from outside, inside a Form', () {
+    // The share movement sheet defaults its class to the first one the
+    // moment the list arrives, so the picker's `value` goes from null
+    // to an id DURING a build. `didUpdateWidget` used to write that
+    // row's label straight into the controller -- and the controller
+    // belongs to a `TextFormField`, which tells its `Form` the field
+    // changed, and the `Form` calls `setState`. Mid-build, that is
+    // "setState() or markNeedsBuild() called during build", and it
+    // took the sheet down on the first frame after the classes loaded.
+    //
+    // Both halves are asserted here: that it does not throw, and that
+    // the box still ends up showing the row. Deferring a write is an
+    // easy way to lose it.
+
+    Future<void> pumpInForm(WidgetTester tester, String? value) =>
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Form(
+                child: SearchablePicker<String>(
+                  options: contacts,
+                  value: value,
+                  onChanged: (_) {},
+                  label: 'Customer',
+                  validator: (v) => v == null ? 'Required' : null,
+                ),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('does not mark the Form dirty during the build',
+        (tester) async {
+      await pumpInForm(tester, null);
+      await pumpInForm(tester, 'c3');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsOneWidget);
+    });
+
+    testWidgets('and the options arriving late still fills the box',
+        (tester) async {
+      // The other half of `didUpdateWidget`: the id is known before
+      // the list it belongs to has loaded.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Form(
+              child: SearchablePicker<String>(
+                options: const [],
+                value: 'c3',
+                onChanged: (_) {},
+                label: 'Customer',
+                validator: (v) => v == null ? 'Required' : null,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsNothing);
+
+      await pumpInForm(tester, 'c3');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsOneWidget);
     });
   });
 }

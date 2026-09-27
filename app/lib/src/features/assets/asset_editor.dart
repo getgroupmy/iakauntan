@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/skeletons.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 
@@ -42,6 +44,11 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
 
   DateTime _acquired = DateTime.now();
   String _method = 'straight_line';
+
+  /// The Schedule 3 class, and null is a real answer: land and goodwill
+  /// attract no capital allowance at all. `0664` says so on the column
+  /// so nobody reads the blanks as a to-do list.
+  String? _caClass;
   bool _saving = false;
 
   bool get _isNew => widget.asset == null;
@@ -62,6 +69,7 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
       if (a.ratePercent != null) _rate.text = Fmt.rate(a.ratePercent);
       _serial.text = a.serialNo ?? '';
       _location.text = a.location ?? '';
+      _caClass = a.caClassCode;
     }
   }
 
@@ -132,6 +140,7 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
               ratePercent: double.tryParse(_rate.text.trim()),
               serialNo: _nullIfBlank(_serial.text),
               location: _nullIfBlank(_location.text),
+              caClassCode: _caClass,
             ),
             id: widget.asset?.id,
           ),
@@ -307,6 +316,13 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
                   ),
                 ),
               ]),
+              const SizedBox(height: Space.lg),
+              const _CaClassHeading(),
+              const SizedBox(height: Space.sm),
+              _CaClassPicker(
+                value: _caClass,
+                onChanged: (c) => setState(() => _caClass = c),
+              ),
             ],
           ),
         ),
@@ -327,6 +343,122 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
               : const Text('Save'),
         ),
       ],
+    );
+  }
+}
+
+/// The heading over the tax side of the register.
+///
+/// Worth its own line rather than a label on the dropdown, because the
+/// distinction it makes is the one everything else here depends on: the
+/// figures above are the accounts, and this is the tax. They are not
+/// meant to agree.
+class _CaClassHeading extends StatelessWidget {
+  const _CaClassHeading();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Capital allowances',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        Text(
+          'Schedule 3, ITA 1967. Separate from the depreciation above: '
+          'depreciation is added back in a tax computation and replaced '
+          'by these.',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+/// Which Schedule 3 class an asset falls in, read from the rate table.
+///
+/// Read rather than listed: Budget speeches move the rates, and a list
+/// in Dart would be a second copy of them to forget.
+class _CaClassPicker extends ConsumerWidget {
+  const _CaClassPicker({required this.value, required this.onChanged});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final classes = ref.watch(capitalAllowanceClassesProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    return AsyncView(
+      value: classes,
+      onRetry: () => ref.invalidate(capitalAllowanceClassesProvider),
+      skeleton: const FormSkeleton(fields: 1),
+      builder: (list) {
+        // A class that is no longer in force but is still on this asset
+        // must stay selectable, or opening an old asset silently blanks
+        // its class and saving the form loses it.
+        final known = list.any((c) => c.code == value);
+        final chosen = list.where((c) => c.code == value).firstOrNull;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String?>(
+              key: const ValueKey('asset-ca-class'),
+              initialValue: known ? value : null,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Class'),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  // Not "none yet". Land attracts no capital allowance
+                  // and never will, and a blank that reads as unfinished
+                  // is a blank somebody fills in wrongly.
+                  child: Text('No capital allowance (land, goodwill)'),
+                ),
+                for (final c in list)
+                  DropdownMenuItem(
+                    value: c.code,
+                    child: Text('${c.label} — ${c.rates}'),
+                  ),
+              ],
+              onChanged: onChanged,
+            ),
+            if (chosen?.costCap != null) ...[
+              const SizedBox(height: Space.xs),
+              Text(
+                'Restricted: the allowance is computed on at most '
+                '${Fmt.money(chosen!.costCap!)}, however much it cost.',
+                style: TextStyle(fontSize: 12, color: scheme.error),
+              ),
+            ],
+            if (chosen?.smallValueThreshold != null) ...[
+              const SizedBox(height: Space.xs),
+              Text(
+                'Only for an asset costing less than '
+                '${Fmt.money(chosen!.smallValueThreshold!)}. Above that '
+                'it attracts nothing in this class — use its ordinary '
+                'one.',
+                style: TextStyle(fontSize: 12, color: scheme.error),
+              ),
+            ],
+            if (chosen != null && !chosen.isVerified) ...[
+              const SizedBox(height: Space.xs),
+              Text(
+                'These rates were taken from published percentages, not '
+                'transcribed from the Act. Check them before filing.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

@@ -21,6 +21,8 @@ class ScanKind {
     required this.label,
     this.labelMy,
     this.destination,
+    this.targetModule,
+    this.targetAction,
     this.hint,
     this.sortOrder = 100,
     this.isActive = true,
@@ -36,6 +38,22 @@ class ScanKind {
   /// nothing here turns one into a record yet, which is honest and is
   /// not the same as the kind being useless.
   final String? destination;
+
+  /// The module and the action a scan of this kind becomes. `0681`.
+  ///
+  /// [destination] still exists and the app still routes on it — a
+  /// trigger keeps it in step with this — but it names a SCREEN and
+  /// nothing more. These two name the record, which is what lets the
+  /// console list the fields that record has and ask the reader for
+  /// them. Both null for a kind that is filed and nothing else.
+  final String? targetModule;
+  final String? targetAction;
+
+  /// The pair as `scan_extraction_targets` keys it, or null.
+  String? get targetKey =>
+      targetModule == null || targetAction == null
+      ? null
+      : '$targetModule.$targetAction';
 
   /// One line saying what will happen if it is accepted. Somebody is
   /// about to press a button and this is the only place that says what
@@ -56,6 +74,8 @@ class ScanKind {
       label: '${j['label'] ?? j['code'] ?? ''}',
       labelMy: text(j['label_my']),
       destination: text(j['destination']),
+      targetModule: text(j['target_module']),
+      targetAction: text(j['target_action']),
       hint: text(j['hint']),
       sortOrder: (j['sort_order'] as num?)?.toInt() ?? 100,
       isActive: j['is_active'] != false,
@@ -101,8 +121,8 @@ class ScanKindsRepo {
     await client
         .from('scan_document_kinds')
         .select(
-          'code, label, label_my, destination, hint, sort_order, '
-          'is_active, is_builtin',
+          'code, label, label_my, destination, target_module, '
+          'target_action, hint, sort_order, is_active, is_builtin',
         )
         // Said out loud, because supabase-js defaults ascending to true
         // and postgrest-dart defaults it to false.

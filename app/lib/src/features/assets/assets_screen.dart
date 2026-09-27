@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'asset_editor.dart';
 import 'asset_schedule_dialog.dart';
+import 'capital_allowances_dialog.dart';
 import 'capitalise_dialog.dart';
 import 'depreciation_dialog.dart';
 import 'disposal_dialog.dart';
@@ -48,6 +49,17 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
               tooltip: 'Fixed asset schedule',
               icon: const Icon(Icons.table_chart_outlined),
               onPressed: () => showAssetSchedule(context),
+            ),
+          // The tax side of the same register. Beside the accounting
+          // schedule rather than somewhere else, because the whole
+          // point is that the two disagree and a reader should be able
+          // to open both.
+          if (canReadLedger)
+            IconButton(
+              key: const ValueKey('asset-capital-allowances'),
+              tooltip: 'Capital allowances',
+              icon: const Icon(Icons.receipt_long_outlined),
+              onPressed: () => showCapitalAllowances(context),
             ),
           if (canWrite)
             // The reconciliation from the ledger's end: what has been

@@ -236,7 +236,7 @@ class TimeTerminalsRepo {
 }
 
 final timeTerminalsRepoProvider = Provider<TimeTerminalsRepo?>((ref) {
-  final org = ref.watch(currentOrgIdProvider);
+  final org = ref.watch(orgIdProvider);
   if (org == null) return null;
   return TimeTerminalsRepo(ref.watch(supabaseProvider), org);
 });

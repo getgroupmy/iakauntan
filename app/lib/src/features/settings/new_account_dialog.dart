@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 
@@ -265,7 +266,7 @@ class _NewAccountDialogState extends ConsumerState<NewAccountDialog> {
       // number already in use and a number outside its type's range,
       // and both are things the person can fix without losing the
       // posting behind this dialog.
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

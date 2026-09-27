@@ -96,6 +96,13 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
       body: AsyncView<Map<String, dynamic>?>(
         value: run,
         onRetry: _refresh,
+        // A run is a summary line and then a row to each item it
+        // forecast. Whether there IS a run changes what is drawn; how a
+        // run is drawn does not change.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(rows: 7, leading: false, trailing: 2),
+        ),
         builder: (r) {
           if (r == null) {
             return EmptyState(

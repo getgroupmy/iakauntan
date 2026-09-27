@@ -61,7 +61,7 @@
  * performance one. It is separately settable from the search TTL for
  * that reason alone.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import { serveFunction } from "../_shared/cors.ts";
 import {
   normalizeSearchResults,

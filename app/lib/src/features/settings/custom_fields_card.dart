@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/skeletons.dart';
@@ -160,7 +161,7 @@ class _CustomFieldsCardState extends ConsumerState<CustomFieldsCard> {
                                         );
                                       } catch (e) {
                                         messenger.showSnackBar(
-                                          SnackBar(content: Text('$e')),
+                                          SnackBar(content: Text(errorText(e))),
                                         );
                                       }
                                     },
@@ -287,7 +288,7 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = '$e';
+          _error = errorText(e);
         });
       }
     }

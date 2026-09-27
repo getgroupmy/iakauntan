@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'surface.dart';
 
 import '../features/ai/ask_screen.dart';
+import '../features/smartscan/smartscan_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/firms/practice_screen.dart';
 import '../features/auth/reset_password_screen.dart';
@@ -22,6 +23,7 @@ import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
 import '../features/mail/inbox_screen.dart';
 import '../features/assets/assets_screen.dart';
+import '../features/banking/bank_statements_screen.dart';
 import '../features/banking/reconciliation_screen.dart';
 import '../features/stock/lots_screen.dart';
 import '../features/stock/stock_take_screen.dart';
@@ -47,12 +49,18 @@ import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/client_money_screen.dart';
+import '../features/legal/client_transfer_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
 import '../features/approvals/approvals_screen.dart';
 import '../features/collections/collections_screen.dart';
 import '../features/financials/filing_screen.dart';
 import '../features/financials/filings_screen.dart';
+import '../features/financials/form_b_screen.dart';
+import '../features/financials/form_p_screen.dart';
+import '../features/financials/tax_calendar_screen.dart';
+import '../features/financials/tax_computation_screen.dart';
+import '../features/financials/tax_estimate_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
@@ -123,7 +131,13 @@ import '../features/shell/app_shell.dart';
 import '../data/reserved_names_repository.dart';
 import 'providers.dart';
 
-final _rootKey = GlobalKey<NavigatorState>();
+/// The navigator every route in this app is pushed onto.
+///
+/// Public because one widget sits ABOVE it and still needs it: the beta
+/// report button lives in `MaterialApp.builder`, whose child IS this
+/// navigator, so `Navigator.of(context)` from there looks upward and
+/// finds nothing. A key looks sideways.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellKey = GlobalKey<NavigatorState>();
 
 /// Where a visitor at [path] belongs, given what is known about them.
@@ -552,7 +566,7 @@ String? routeFor({
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    navigatorKey: _rootKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: AuthRefresh(ref),
     redirect: (context, state) {
@@ -793,14 +807,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) => ContactEditor(
                   contactType: state.uri.queryParameters['type'] ?? 'customer',
                 ),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     ContactEditor(contactId: state.pathParameters['id']),
               ),
@@ -818,13 +832,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/legal/payouts',
             builder: (_, __) => const ClientMoneyScreen(inbound: false),
           ),
+          // The third client-money movement, and above `/legal/:id`
+          // for the reason the two above it are: `/legal/transfers`
+          // would otherwise read as a matter with that id.
+          GoRoute(
+            path: '/legal/transfers',
+            builder: (_, __) => const ClientTransferScreen(),
+          ),
           GoRoute(
             path: '/legal',
             builder: (_, __) => const MattersScreen(),
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     MatterDetailScreen(matterId: state.pathParameters['id']!),
               ),
@@ -836,6 +857,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           // behind it refuses without one, so a typed address reaches a
           // screen that says so rather than a blank page.
           GoRoute(path: '/ask', builder: (_, __) => const AskScreen()),
+          // AI SmartScan's only door. Every scan button in the product
+          // used to be a door of its own, on the screen that owned one
+          // destination each; this is the module.
+          GoRoute(
+            path: '/smartscan',
+            builder: (_, __) => const SmartScanScreen(),
+          ),
           GoRoute(
             path: '/feedback',
             builder: (_, __) => const FeedbackScreen(),
@@ -855,12 +883,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const EmployeeEditor(),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     EmployeeEditor(employeeId: state.pathParameters['id']),
               ),
@@ -884,7 +912,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     PayrollRunScreen(runId: state.pathParameters['id']!),
               ),
@@ -963,7 +991,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'group',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const GroupPaymentScreen(),
               ),
             ],
@@ -1026,11 +1054,56 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     FilingScreen(filingId: state.pathParameters['id']!),
               ),
             ],
+          ),
+          // The tax computation, beside the statutory filings rather
+          // than under reports: it is a document with a state, opened
+          // once a year and reviewed, not a report anybody runs.
+          // Form B and Form P are their own routes rather than a
+          // parameter on the computation: they are different documents
+          // with different middles, and a screen that switched on a
+          // string would be three screens in a trench coat.
+          GoRoute(
+            path: '/form-b/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) =>
+                FormBScreen(computationId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/form-p/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) =>
+                FormPScreen(computationId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/tax-computation/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) => TaxComputationScreen(
+              computationId: state.pathParameters['id']!,
+            ),
+          ),
+          // The dates, which outlive any one computation: a company
+          // that has opened nothing still has deadlines.
+          GoRoute(
+            path: '/tax-calendar',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, __) => const TaxCalendarScreen(),
+          ),
+          // The other half of the year. The computation to measure
+          // against is a QUERY parameter rather than a path segment
+          // because for most of the year there is not one, and a path
+          // that had to carry a placeholder would be a path that lies.
+          GoRoute(
+            path: '/tax-estimate/:id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, state) => TaxEstimateScreen(
+              estimateId: state.pathParameters['id']!,
+              computationId: state.uri.queryParameters['computation'],
+            ),
           ),
           GoRoute(
             path: '/timesheets',
@@ -1045,12 +1118,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               // the same trap `/property/new` fell into.
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const TicketEditor(),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, st) => TicketScreen(id: st.pathParameters['id']!),
               ),
             ],
@@ -1106,18 +1179,18 @@ final routerProvider = Provider<GoRouter>((ref) {
               // viewer is handed the literal string `new` as a uuid.
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const PropertySiteEditor(),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     PropertySiteScreen(siteId: state.pathParameters['id']!),
               ),
               GoRoute(
                 path: ':id/edit',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     PropertySiteEditor(siteId: state.pathParameters['id']),
               ),
@@ -1129,16 +1202,26 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) => ManufacturingOrderScreen(
                   orderId: state.pathParameters['id']!,
                 ),
               ),
             ],
           ),
+          // `?account=` and `?import=1` come from the Bank statements
+          // screen, so "Upload a statement" lands on the right account
+          // with the import already open.
           GoRoute(
             path: '/reconcile',
-            builder: (_, __) => const ReconciliationScreen(),
+            builder: (_, state) => ReconciliationScreen(
+              openAccountId: state.uri.queryParameters['account'],
+              openImport: state.uri.queryParameters['import'] == '1',
+            ),
+          ),
+          GoRoute(
+            path: '/bank-statements',
+            builder: (_, __) => const BankStatementsScreen(),
           ),
           GoRoute(
             path: '/secretarial',
@@ -1146,25 +1229,25 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'new',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const CorpEntityEditor(),
               ),
               // Before ':id', because a path parameter would otherwise
               // swallow it and open a company called "people".
               GoRoute(
                 path: 'people',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const CorpPeopleScreen(),
               ),
               GoRoute(
                 path: ':id/edit',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     CorpEntityEditor(entityId: state.pathParameters['id']),
               ),
               GoRoute(
                 path: ':id',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, state) =>
                     CorpEntityScreen(entityId: state.pathParameters['id']!),
               ),
@@ -1179,7 +1262,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               // visit from a company, not a place in the sidebar.
               GoRoute(
                 path: 'group',
-                parentNavigatorKey: _rootKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (_, __) => const GroupReportsScreen(),
               ),
             ],
@@ -1209,7 +1292,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             Text('No page at ${state.matchedLocation}'),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => _rootKey.currentContext?.go('/dashboard'),
+              onPressed: () => rootNavigatorKey.currentContext?.go('/dashboard'),
               child: const Text('Back to dashboard'),
             ),
           ],
@@ -1230,14 +1313,14 @@ List<RouteBase> _documentRoutes(String prefix, String fallbackType) => [
     routes: [
       GoRoute(
         path: 'new',
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, state) => DocumentEditor(
           docType: state.pathParameters['docType'] ?? fallbackType,
         ),
       ),
       GoRoute(
         path: ':id',
-        parentNavigatorKey: _rootKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, state) => DocumentEditor(
           docType: state.pathParameters['docType'] ?? fallbackType,
           documentId: state.pathParameters['id'],

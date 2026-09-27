@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -315,7 +316,7 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
       // caused it is on screen and usually needs editing, and a banner
       // that vanishes takes the reason with it.
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(() => _error = errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -9,7 +9,7 @@
  * the routing decision is a pure function and this asserts it directly
  * rather than through a fetch.
  */
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import { appleDelivery, Target, transportOf } from "./routing.ts";
 
 const phone = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";

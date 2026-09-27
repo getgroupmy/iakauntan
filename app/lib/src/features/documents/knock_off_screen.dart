@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -78,7 +80,7 @@ class KnockOffScreenState extends ConsumerState<KnockOffScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -145,6 +147,37 @@ class KnockOffScreenState extends ConsumerState<KnockOffScreen> {
     return AsyncView(
       value: async,
       onRetry: () => ref.invalidate(openItemsProvider(contactId)),
+      // Two columns side by side -- what is owed and what is on
+      // account -- each a list of tickable rows. Which side a row
+      // lands on is what the query decides; that there are two sides
+      // is not.
+      skeleton: const Padding(
+        padding: EdgeInsets.all(Space.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: CardRowsSkeleton(
+                rows: 6,
+                leadingSize: 20,
+                lines: 2,
+                trailing: 1,
+                trailingWidth: 90,
+              ),
+            ),
+            SizedBox(width: Space.lg),
+            Expanded(
+              child: CardRowsSkeleton(
+                rows: 3,
+                leadingSize: 20,
+                lines: 2,
+                trailing: 1,
+                trailingWidth: 90,
+              ),
+            ),
+          ],
+        ),
+      ),
       builder: (rows) {
         _items = [for (final r in rows) OpenItem.fromMap(r)];
         final owed = [for (final i in _items) if (i.owed) i];

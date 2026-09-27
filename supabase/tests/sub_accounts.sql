@@ -190,6 +190,7 @@ declare
   v_used uuid;
   v_other uuid;
   v_entry uuid;
+  v_out jsonb;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Sudah Berurusniaga Sdn Bhd');
@@ -207,21 +208,35 @@ begin
   values (v_org, v_entry, 1, v_used, 250, 0),
          (v_org, v_entry, 2, v_other, 0, 250);
 
-  perform pg_temp.check_refused(
-    'an account with a posting cannot take a sub-account',
-    format('select public.add_sub_account(%L, %L)', v_used, 'Vehicles'),
-    '%has 1 posted entry%', '23514');
-  -- And the reason is said, rather than left as a constraint name.
-  perform pg_temp.check_refused('and the refusal says why it matters',
-    format('select public.add_sub_account(%L, %L)', v_used, 'Vehicles'),
-    '%would leave the trial balance%', '23514');
+  -- `0693`. The child goes in; the PARENT is what must not change.
+  -- Its 250 is on the trial balance and promoting it would take that
+  -- figure out of the reports -- which is the whole of `0655`'s
+  -- reasoning and is untouched by something being nested under it.
+  v_out := public.add_sub_account(v_used, 'Vehicles');
+  perform pg_temp.check_eq('an account with a posting takes a sub-account',
+    v_out ->> 'code', '9600-1000');
 
-  -- Nothing happened to the account. A refusal that had already
-  -- promoted the parent would be the worst of both.
+  perform pg_temp.check_eq('and is NOT promoted to a heading',
+    v_out ->> 'parent_promoted', 'false');
   perform pg_temp.check_eq('and the account is still postable',
     (select is_group::text from public.accounts where id = v_used), 'false');
-  perform pg_temp.check_eq('and has no children',
-    (select count(*)::text from public.accounts where parent_id = v_used), '0');
+  perform pg_temp.check_eq('and now has the child',
+    (select count(*)::text from public.accounts where parent_id = v_used), '1');
+
+  -- Said, rather than left to be discovered. Somebody who has just
+  -- nested an account under this one needs to know it is still a place
+  -- money can land.
+  perform pg_temp.check_eq('and the caller is told it stays postable',
+    v_out ->> 'parent_stays_postable', 'true');
+  perform pg_temp.check_true('and why',
+    (v_out ->> 'not_promoted_because') like '%would leave the trial balance%');
+
+  -- The figure is still reported, which is the thing all of this is
+  -- protecting. It is the parent's own balance and never the sum of
+  -- its children, so a child changes nothing about it.
+  perform pg_temp.check_eq('and its balance is still on the trial balance',
+    (select sum(debit - credit)::text from public.gl_lines
+      where account_id = v_used), '250.00');
 end $$;
 
 
@@ -232,6 +247,7 @@ do $$
 declare
   v_org uuid;
   v_ob uuid;
+  v_out jsonb;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Baki Awal Sdn Bhd');
@@ -242,16 +258,24 @@ begin
   -- `chart_of_accounts.sql` relies on the same thing.
   update public.accounts set opening_balance = 500 where id = v_ob;
 
-  perform pg_temp.check_refused(
-    'an opening balance is a figure too',
-    format('select public.add_sub_account(%L, %L)', v_ob, 'Tin'),
-    '%carries an opening balance%', '23514');
+  -- An opening balance is not a posted line and is still a figure on
+  -- the balance sheet, so it stops the PROMOTION and not the child.
+  v_out := public.add_sub_account(v_ob, 'Tin');
+  perform pg_temp.check_eq('an opening balance still takes a sub-account',
+    v_out ->> 'code', '9130-1000');
+  perform pg_temp.check_eq('and the parent keeps its balance and its post',
+    v_out ->> 'parent_stays_postable', 'true');
+  perform pg_temp.check_true('for the reason the figure would be lost',
+    (v_out ->> 'not_promoted_because') like '%carries an opening balance%');
+  perform pg_temp.check_eq('so it is still postable',
+    (select is_group::text from public.accounts where id = v_ob), 'false');
 
-  -- Take it away and the same account accepts one, so this is a rule
-  -- about the figure rather than about the account.
+  -- Take the figure away and the same account is promoted, so this is
+  -- a rule about the figure rather than about the account.
   update public.accounts set opening_balance = 0 where id = v_ob;
-  perform pg_temp.check_eq('and with it cleared, it takes one',
-    public.add_sub_account(v_ob, 'Tin') ->> 'code', '9130-1000');
+  v_out := public.add_sub_account(v_ob, 'Tin two');
+  perform pg_temp.check_eq('and with it cleared, the parent is promoted',
+    v_out ->> 'parent_promoted', 'true');
 end $$;
 
 
@@ -270,6 +294,7 @@ declare
   v_org uuid;
   v_code text;
   v_id uuid;
+  v_out jsonb;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Kod Lejar Sdn Bhd');
@@ -289,12 +314,28 @@ begin
   perform pg_temp.check_true('the seeded chart has at least one such account',
     v_id is not null);
 
-  perform pg_temp.check_refused(
-    'a code the ledger posts to by number cannot become a heading',
-    format('select public.add_sub_account(%L, %L)', v_id, 'Split'),
-    '%finds by number when it posts%', '23514');
+  -- The report `0693` came from: `1120 Bank Accounts` is one of these
+  -- -- it is the bank leg `post_expense` falls back to -- and a company
+  -- that wants `1120-M001 Maybank` under it was told the arrangement
+  -- was impossible while already having one.
+  v_out := public.add_sub_account(v_id, 'Split');
+  perform pg_temp.check_true('a code the ledger posts to still takes one',
+    (v_out ->> 'code') is not null);
+
   perform pg_temp.check_eq('and it is still postable afterwards',
     (select is_group::text from public.accounts where id = v_id), 'false');
+  perform pg_temp.check_eq('which is what the caller is told',
+    v_out ->> 'parent_stays_postable', 'true');
+  perform pg_temp.check_true('and why',
+    (v_out ->> 'not_promoted_because') like '%finds by number when it posts%');
+
+  -- The thing that was actually being protected: the posting path goes
+  -- on finding it. Every one of those lookups carries `not is_group`,
+  -- so a promoted account is "no account found" a month later in
+  -- somebody else's screen.
+  perform pg_temp.check_eq('and the ledger can still find it by number',
+    (select count(*)::text from public.accounts a
+      where a.org_id = v_org and a.code = v_code and not a.is_group), '1');
 end $$;
 
 
@@ -323,6 +364,16 @@ begin
   -- was.
   perform pg_temp.check_eq('and nothing was promoted',
     v_out ->> 'parent_promoted', 'false');
+
+  -- Nor does it "stay postable", which is `0693`'s other answer and
+  -- means the same sort of thing: a fact about what changed. A heading
+  -- was never postable, so saying it stayed that way would have the
+  -- app tell somebody money can land on an account that has never
+  -- taken any. Both false is the only honest pair here.
+  perform pg_temp.check_eq('and it does not claim to stay postable',
+    v_out ->> 'parent_stays_postable', 'false');
+  perform pg_temp.check_true('and there is no reason to give',
+    (v_out ->> 'not_promoted_because') is null);
 end $$;
 
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/csv.dart';
 import '../../core/download.dart';
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -494,7 +495,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       // The database refuses the whole file when a row is wrong, and the
       // message says how many. Shown as it came rather than reduced to
       // "import failed".
-      setState(() => _failure = '$err');
+      setState(() => _failure = errorText(err));
     }
     if (mounted) setState(() => _busy = false);
   }

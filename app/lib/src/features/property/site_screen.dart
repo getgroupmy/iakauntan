@@ -33,6 +33,17 @@ class PropertySiteScreen extends ConsumerWidget {
     return AsyncView(
       value: site,
       onRetry: () => ref.invalidate(propertySiteProvider(siteId)),
+      // Three tabs either way -- the tenure decides WHICH three, not how
+      // many -- so the strip is worth outlining above the body it sits
+      // on. See [TabStripSkeleton] for why a body skeleton on its own
+      // would jump.
+      skeleton: const TabbedSkeleton(
+        tabs: 3,
+        body: Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(rows: 5, leadingSize: 24, trailing: 1),
+        ),
+      ),
       builder: (row) {
         final strata = row['tenure'] == 'strata';
         return DefaultTabController(

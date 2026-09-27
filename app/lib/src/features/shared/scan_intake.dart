@@ -55,6 +55,12 @@ Future<StagedReceipt?> showScanIntake(
     // and this is a note about the reading rather than part of it.
     await rememberDocumentKind(ref,
         attachmentId: staged.attachmentId, accepted: accepted);
+    // And what they changed. `0684`. Beside the kind because it is the
+    // same sort of note -- a person's opinion about a reading -- and
+    // because this is the last place that holds BOTH the reading and
+    // the attachment it belongs to.
+    await rememberCorrection(ref,
+        attachmentId: staged.attachmentId, accepted: accepted);
     return StagedReceipt(
       attachmentId: staged.attachmentId,
       placeholderId: staged.placeholderId,
@@ -168,5 +174,32 @@ class PendingScan
     if (held == null || held.documentId != documentId) return null;
     state = null;
     return held.read;
+  }
+}
+
+/// A statement photographed on the way to the import screen.
+///
+/// `0694`. The reconciliation screen used to own its own scan button,
+/// so the capture and the importer were on the same screen and the
+/// reading could be handed straight over. With one door the two are a
+/// navigation apart, and a route cannot carry an `OcrExtraction`.
+///
+/// Taken exactly once — `take()` clears it — so coming back to the
+/// import screen later does not re-apply a photograph somebody has
+/// already dealt with. The same bargain `PendingScan` makes above, for
+/// the same reason.
+final pendingStatementProvider =
+    NotifierProvider<PendingStatement, StagedReceipt?>(PendingStatement.new);
+
+class PendingStatement extends Notifier<StagedReceipt?> {
+  @override
+  StagedReceipt? build() => null;
+
+  void park(StagedReceipt staged) => state = staged;
+
+  StagedReceipt? take() {
+    final held = state;
+    state = null;
+    return held;
   }
 }

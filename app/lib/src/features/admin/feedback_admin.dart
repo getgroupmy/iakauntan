@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../shared/file_viewer.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -128,6 +129,11 @@ class _Row extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
+          // The files, which are the whole reason `0660` gave feedback
+          // its own read rule rather than reusing the org-scoped
+          // attachments table: staff here are in no organization and
+          // must still be able to open a screenshot of the fault.
+          _ReportFiles(reportId: '${row['id']}'),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -173,5 +179,65 @@ class _Row extends ConsumerWidget {
           .setFeedbackStatus(row['id'] as String, status, note: note),
     );
     ref.invalidate(platformFeedbackProvider(filter));
+  }
+}
+
+/// The files somebody attached when they filed the report.
+///
+/// Fetched when the row is expanded rather than with the list: most
+/// reports carry none, and a signed URL per file for a page of reports
+/// nobody opened would be a round trip for nothing.
+class _ReportFiles extends ConsumerWidget {
+  const _ReportFiles({required this.reportId});
+
+  final String reportId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final files = ref.watch(feedbackFilesProvider(reportId));
+    return files.when(
+      // Quietly, both of them. A report with no files is the common
+      // case and must not draw an empty heading; a list that failed to
+      // load must not push the triage buttons off the screen behind a
+      // red box. The status buttons below are what this row is for.
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (rows) {
+        if (rows.isEmpty) return const SizedBox.shrink();
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final file in rows)
+                ActionChip(
+                  avatar: const Icon(Icons.attachment, size: 16),
+                  label: Text(
+                    '${file['file_name']} '
+                    '(${Fmt.bytes((file['file_size'] as num?)?.toInt() ?? 0)})',
+                  ),
+                  onPressed: () async {
+                    final repo = ref.read(platformRepoProvider);
+                    // In the app, from the bytes. A screenshot attached
+                    // to a bug report is somebody's books on their
+                    // screen, and a signed URL handed to the external
+                    // browser leaves a working link to it in another
+                    // application's history.
+                    final path = '${file['storage_path']}';
+                    await showFileInApp(
+                      context,
+                      ref,
+                      fileName: '${file['file_name'] ?? 'Attachment'}',
+                      mimeType: file['mime_type']?.toString(),
+                      fetch: () => repo.feedbackFileBytes(path),
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

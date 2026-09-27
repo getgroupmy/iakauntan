@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 
 /// One row per financial year, newest first.
@@ -21,6 +22,7 @@ class FilingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filings = ref.watch(fsFilingsProvider);
     final canWrite = ref.watch(canWriteProvider);
+    final canPost = ref.watch(canPostProvider);
     // Asked once for the whole list rather than once per row. It is
     // allowed to fail without taking the screen with it: the list is
     // still the list if the countdown is missing, and `report_fs_deadlines`
@@ -30,7 +32,40 @@ class FilingsScreen extends ConsumerWidget {
         .maybeWhen(data: (m) => m, orElse: () => const <String, Map<String, dynamic>>{});
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Financial statements')),
+      appBar: AppBar(
+        title: const Text('Financial statements'),
+        actions: [
+          // The tax computation is the other half of a year end and
+          // has nowhere else to live: it is keyed to a financial year,
+          // and this is the screen that lists them.
+          if (canPost)
+            IconButton(
+              key: const ValueKey('open-tax-computation'),
+              tooltip: 'Tax computation',
+              icon: const Icon(Icons.calculate_outlined),
+              onPressed: () => _openTaxComputation(context, ref),
+            ),
+          // CP204 runs the opposite way round -- a figure said BEFORE
+          // the year rather than worked out after it -- so it is its
+          // own action rather than a tab on the computation.
+          // The calendar needs no permission to post: it computes
+          // dates and writes nothing, and the person who most needs to
+          // see a deadline is often not the one who keys the return.
+          IconButton(
+            key: const ValueKey('open-tax-calendar'),
+            tooltip: 'Tax calendar',
+            icon: const Icon(Icons.event_note_outlined),
+            onPressed: () => GoRouter.of(context).push('/tax-calendar'),
+          ),
+          if (canPost)
+            IconButton(
+              key: const ValueKey('open-tax-estimate'),
+              tooltip: 'Tax estimate (CP204)',
+              icon: const Icon(Icons.event_repeat_outlined),
+              onPressed: () => _openTaxEstimate(context, ref),
+            ),
+        ],
+      ),
       body: AsyncView(
         value: filings,
         onRetry: () => ref.invalidate(fsFilingsProvider),
@@ -284,5 +319,144 @@ class _NewFilingDialogState extends State<_NewFilingDialog> {
         ),
       ],
     );
+  }
+}
+
+/// Which financial year, for anything keyed to a basis period.
+///
+/// Newest first: both the computation and the estimate are about the
+/// year somebody is in or has just left, so the one they want is almost
+/// always the most recent. Returns null when there is nothing to pick
+/// or the reader backed out, and says why in the first case rather
+/// than opening an empty dialog.
+Future<FiscalYear?> _pickFiscalYear(
+  BuildContext context,
+  WidgetRef ref,
+  String what,
+) async {
+  final years = await ref.read(fiscalYearsProvider.future);
+  if (!context.mounted) return null;
+  if (years.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Start a financial year first — $what is for a basis period.',
+        ),
+      ),
+    );
+    return null;
+  }
+
+  final sorted = [...years]..sort((a, b) => b.endDate.compareTo(a.endDate));
+
+  return showDialog<FiscalYear>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: const Text('Which year?'),
+      children: [
+        for (final y in sorted)
+          SimpleDialogOption(
+            key: ValueKey('tax-year-${y.id}'),
+            onPressed: () => Navigator.pop(ctx, y),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Year of assessment ${y.endDate.year}'),
+              subtitle: Text(
+                '${Fmt.date(y.startDate)} to ${Fmt.date(y.endDate)}',
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// The CP204 estimate for a year, and the computation to judge it
+/// against where one has already been opened.
+///
+/// It does NOT open a computation to get one. Opening a computation is
+/// a document somebody then has to deal with, and the estimate screen
+/// is honest about not knowing — it says the shortfall cannot be
+/// checked yet rather than showing a shortfall against zero, which for
+/// most of the year is exactly the true state of things.
+Future<void> _openTaxEstimate(BuildContext context, WidgetRef ref) async {
+  final chosen = await _pickFiscalYear(context, ref, 'an estimate');
+  if (chosen == null || !context.mounted) return;
+
+  final repo = ref.read(repoProvider);
+  if (repo == null) return;
+
+  String? id;
+  String? computationId;
+  final ok = await runWithFeedback(
+    context,
+    doing: 'open the tax estimate',
+    successMessage: null,
+    action: () async {
+      id = await repo.openTaxEstimate(chosen.id);
+      computationId = await repo.existingTaxComputation(chosen.id);
+    },
+  );
+  final estimateId = id;
+  if (!ok || estimateId == null || !context.mounted) return;
+
+  final against = computationId;
+  GoRouter.of(context).push(
+    '/tax-estimate/$estimateId'
+    '${against == null ? '' : '?computation=$against'}',
+  );
+}
+
+/// Which year to compute the tax for, and then its computation.
+///
+/// A financial year rather than a calendar one, because the basis
+/// period is what a year of assessment is taken from -- `0665` derives
+/// the year from the period's end date rather than letting anybody
+/// type it.
+Future<void> _openTaxComputation(BuildContext context, WidgetRef ref) async {
+  final chosen = await _pickFiscalYear(context, ref, 'a tax computation');
+  if (chosen == null || !context.mounted) return;
+
+  final repo = ref.read(repoProvider);
+  if (repo == null) return;
+
+  String? id;
+  final ok = await runWithFeedback(
+    context,
+    doing: 'open the tax computation',
+    successMessage: null,
+    action: () async {
+      id = await repo.openTaxComputation(chosen.id);
+    },
+  );
+  // A local copy, because `id` is assigned inside the closure above
+  // and Dart will not promote a variable a closure captures — the
+  // null check holds and the type does not.
+  final computationId = id;
+  if (!ok || computationId == null || !context.mounted) return;
+
+  // Which return this company actually files. A sole proprietor filing
+  // a Form C would be wrong about the rate, the reliefs and the person
+  // liable, so the entity type decides rather than the reader.
+  //
+  // `enterprise` is a sole proprietorship registered under a trade
+  // name; `llp` files its own return and is closest to a company. An
+  // entity type nobody recognises gets the company form, which is what
+  // this product mostly holds.
+  final kind = ref.read(currentOrgProvider).valueOrNull?.entityType;
+  final path = switch (kind) {
+    'sole_proprietor' || 'enterprise' || 'individual' => '/form-b',
+    'partnership' => '/form-p',
+    _ => '/tax-computation',
+  };
+  await ref.read(repoProvider)!.saveTaxComputation(computationId, {
+    'form': switch (path) {
+      '/form-b' => 'B',
+      '/form-p' => 'P',
+      _ => 'C',
+    },
+  });
+  if (context.mounted) {
+    GoRouter.of(context).push('$path/$computationId');
   }
 }

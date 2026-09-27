@@ -10,7 +10,7 @@ import '../data/models.dart';
 import '../data/custom_fields_repository.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
-import '../features/admin/ios_release.dart';
+import '../features/admin/app_release.dart';
 import '../features/einvoice/received_einvoice.dart';
 import 'env.dart';
 import 'push.dart';
@@ -229,6 +229,20 @@ class CurrentOrgNotifier extends Notifier<String?> {
   void clear() => state = null;
 }
 
+/// **The org somebody PICKED from the switcher, and nothing else.**
+///
+/// Null is the normal state of this, not an edge case: it stays null
+/// for every person who has never opened the company switcher, which is
+/// everybody with one company and most people with two. The org they
+/// are actually working in comes from [currentOrgProvider], which falls
+/// back to `profiles.last_org_id` and then to the first company they
+/// belong to — and [repoProvider] is built from THAT.
+///
+/// So this is for the switcher: `select`, `clear`, and asking which one
+/// is ticked. **To scope a call to the current company, use
+/// [orgIdProvider].** Reading this one instead is a screen that works
+/// after you switch company and does nothing at all before, which is
+/// how it went wrong — see [orgIdProvider] for the report.
 final currentOrgIdProvider = NotifierProvider<CurrentOrgNotifier, String?>(
   CurrentOrgNotifier.new,
 );
@@ -283,6 +297,41 @@ final repoProvider = Provider<Repo?>((ref) {
   if (org == null) return null;
   return Repo(ref.watch(supabaseProvider), org.id);
 });
+
+/// The id of the company everything on screen is about.
+///
+/// Read off [repoProvider], deliberately, so this id and the id every
+/// RPC is already being sent with cannot differ. Null means the same
+/// thing it means there: no company has resolved yet.
+///
+/// ## Why this exists
+///
+/// Reported from a phone, of the assistant sheet: "Why can't save". It
+/// could not. `_save` opened with
+///
+///     final org = ref.read(currentOrgIdProvider);
+///     if (org == null) return;
+///
+/// and [currentOrgIdProvider] is the SWITCHER's selection, which is
+/// null until somebody switches company. So Save returned without
+/// calling anything, without an error, without a snackbar — a button
+/// that does nothing, for every company that had never used the
+/// switcher. The two key buttons on the same sheet did it too, and
+/// `aiStatusProvider` handed the screen an empty map, which is why the
+/// card above them said "Not ready to answer yet" over the word
+/// **null**.
+///
+/// It was not one sheet. Thirteen call sites read the switcher as
+/// though it were the current company: EA forms, the time terminals,
+/// the subdomain and mailboxes, the addresses card, the export card,
+/// bookkeepers, handover, mail compose and the SmartScan key card. Each
+/// of them was dead in exactly the same way and none of them said so.
+///
+/// `scripts/check_current_org.py` is the gate that keeps the next one
+/// from being written.
+final orgIdProvider = Provider<String?>(
+  (ref) => ref.watch(repoProvider)?.orgId,
+);
 
 /// Convenience accessor that throws rather than returning null, for use
 /// inside screens that are only reachable once an org exists.
@@ -437,6 +486,117 @@ final accountsProvider = FutureProvider<List<Account>>((ref) {
   return requireRepo(ref).accounts();
 });
 
+// ---------------------------------------------------------------------
+// The console: people, companies, and who can open which
+//
+// `0719`–`0721`. All on `platformRepoProvider`, because none of them
+// takes an organization and a console pane must not wait on one.
+// ---------------------------------------------------------------------
+
+/// Who is on this platform, filtered by whatever is in the search box.
+final platformUsersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, query) {
+  return ref.watch(platformRepoProvider).platformUsers(query: query);
+});
+
+/// Which companies one person can open, and as what.
+final platformUserOrgsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, userId) {
+  return ref.watch(platformRepoProvider).platformUserOrganizations(userId);
+});
+
+/// Who can open one company.
+final platformOrgMembersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, orgId) {
+  return ref.watch(platformRepoProvider).platformOrgMembers(orgId);
+});
+
+/// Every support session, open and closed.
+final platformSupportAccessProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(platformRepoProvider).platformSupportAccess();
+});
+
+/// The support sessions the signed-in administrator holds right now.
+///
+/// NOT autoDispose: the banner that reads it is drawn on every screen,
+/// and a provider thrown away between routes would flicker the banner
+/// off and on as somebody navigates -- which on a banner that says
+/// "you are reading somebody else's books" is the wrong way round.
+final mySupportAccessProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  // Only platform staff can hold one, and asking costs a round trip on
+  // every screen for everybody else.
+  final staff = await ref.watch(isPlatformAdminProvider.future);
+  if (!staff) return const [];
+  return ref.watch(platformRepoProvider).mySupportAccess();
+});
+
+/// The five scanning surface switches the platform holds. `0718`.
+///
+/// Platform-wide, so it is built on `platformRepoProvider` and waits on
+/// no organization. The console page that MOVES these is under
+/// `features/admin/`, and a console pane hung off a tenant repository
+/// shows a platform administrator who belongs to no company "Your
+/// company has not finished loading" with no way past it.
+/// `platform_console_wiring_test.dart` enumerates rather than lists,
+/// and it caught this.
+final scanSurfacesProvider = FutureProvider<ScanSurfaces>((ref) async {
+  return ScanSurfaces.from(
+      await ref.watch(platformRepoProvider).scanSurfaces());
+});
+
+/// Which scanning surfaces this platform offers.
+///
+/// A class rather than the raw map, so that a typo in a key name is a
+/// compile error rather than a switch that silently reads false and
+/// takes a button off the product.
+///
+/// EVERY FIELD DEFAULTS TO THE SURFACE BEING PRESENT. A call that has
+/// not answered yet, or a platform that has never been asked, must not
+/// blank the screen — `readerOnByDefault` is the exception, because it
+/// is the only one whose wrong answer sends somebody's paperwork to a
+/// third-party model.
+class ScanSurfaces {
+  const ScanSurfaces({
+    this.scanButton = true,
+    this.uploadButton = true,
+    this.ownKey = true,
+    this.readerOnByDefault = false,
+    this.statementsUpload = true,
+  });
+
+  factory ScanSurfaces.from(Map<String, dynamic> row) => ScanSurfaces(
+        scanButton: _on(row['scan_button'], true),
+        uploadButton: _on(row['upload_button'], true),
+        ownKey: _on(row['own_key'], true),
+        readerOnByDefault: _on(row['reader_on_default'], false),
+        statementsUpload: _on(row['statements_upload'], true),
+      );
+
+  /// The Scan button on AI SmartScan.
+  final bool scanButton;
+
+  /// The Upload button on AI SmartScan, which keeps a file unread.
+  final bool uploadButton;
+
+  /// Whether a company may read on a key of its own. Presentation
+  /// here; `set_ocr_settings` is what enforces it.
+  final bool ownKey;
+
+  /// Whether a company that has never touched the switch has
+  /// "Send documents to a reader" on. Read from the database on every
+  /// path that matters, so this copy is only for what the console
+  /// draws.
+  final bool readerOnByDefault;
+
+  /// The Upload button beside each account on Bank statements.
+  final bool statementsUpload;
+
+  static bool _on(Object? value, bool fallback) =>
+      value is bool ? value : fallback;
+}
+
 final fiscalYearsProvider = FutureProvider.autoDispose<List<FiscalYear>>((ref) {
   return requireRepo(ref).fiscalYears();
 });
@@ -500,6 +660,16 @@ final orgPaymentGatewaysProvider = FutureProvider<List<Map<String, dynamic>>>((
 final bankAccountsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).bankAccounts();
 });
+
+/// Chart accounts that look like bank accounts and are registered as
+/// none. `0689`.
+///
+/// autoDispose, unlike the list above: this is read by one dialog while
+/// it is open, and it changes the moment somebody registers one.
+final unregisteredBankAccountsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).unregisteredBankAccounts(),
+);
 
 /// The feed on one bank account, or null where there is none.
 ///
@@ -802,6 +972,157 @@ final depreciationHistoryProvider = FutureProvider.autoDispose
 
 /// The fixed asset note. Both dates are nullable: no start date means
 /// since the company began, which is the position rather than a period.
+/// The Form C working for one computation.
+final taxComputationProvider = FutureProvider.autoDispose
+    .family<TaxComputation, String>((ref, id) {
+      return requireRepo(ref).taxComputation(id);
+    });
+
+/// Every add-back and deduction in it.
+final taxComputationLinesProvider = FutureProvider.autoDispose
+    .family<List<TaxComputationLine>, String>((ref, id) {
+      return requireRepo(ref).taxComputationLines(id);
+    });
+
+/// The row's own figures, which the computation cannot derive.
+final taxComputationRowProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, id) {
+      return requireRepo(ref).taxComputationRow(id);
+    });
+
+/// What LHDN is waiting for, and when.
+///
+/// Not keyed on anything: the window is the same for everybody and the
+/// answer changes only with the date, so a second parameter would be a
+/// second cache entry for the same list.
+final taxFilingCalendarProvider =
+    FutureProvider.autoDispose<List<TaxFiling>>((ref) {
+      return requireRepo(ref).taxUpcomingFilings();
+    });
+
+/// What has already been recorded against an obligation.
+final taxFilingHistoryProvider =
+    FutureProvider.autoDispose<List<TaxFilingRecord>>((ref) {
+      return requireRepo(ref).taxFilingHistory();
+    });
+
+/// Where the instalment year stands: scheduled, paid, overdue, late.
+final taxInstalmentSummaryProvider = FutureProvider.autoDispose
+    .family<TaxInstalmentSummary, String>((ref, id) {
+      return requireRepo(ref).taxInstalmentSummary(id);
+    });
+
+/// How a first basis period differs, where the estimate says it is one.
+final taxFirstPeriodProvider = FutureProvider.autoDispose
+    .family<TaxFirstPeriod, String>((ref, id) {
+      return requireRepo(ref).taxEstimateFirstPeriod(id);
+    });
+
+/// The CP204 estimate row itself.
+final taxEstimateProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, id) {
+      return requireRepo(ref).taxEstimate(id);
+    });
+
+final taxEstimateScheduleProvider = FutureProvider.autoDispose
+    .family<List<TaxInstalment>, String>((ref, id) {
+      return requireRepo(ref).taxEstimateSchedule(id);
+    });
+
+/// Keyed on the estimate AND the computation, because the exposure is
+/// a different answer with one than without — and for most of the year
+/// there is not one.
+final taxEstimateExposureProvider = FutureProvider.autoDispose
+    .family<TaxEstimateExposure, ({String estimate, String? computation})>((
+      ref,
+      args,
+    ) {
+      return requireRepo(ref).taxEstimateExposure(
+        args.estimate,
+        computationId: args.computation,
+      );
+    });
+
+/// The Form B working.
+final individualTaxProvider = FutureProvider.autoDispose
+    .family<IndividualTaxComputation, String>((ref, id) {
+      return requireRepo(ref).individualTaxComputation(id);
+    });
+
+/// What each partner carries into their own Form B.
+final partnershipAllocationProvider = FutureProvider.autoDispose
+    .family<List<PartnerAllocation>, String>((ref, id) {
+      return requireRepo(ref).partnershipAllocation(id);
+    });
+
+/// The head of a Form P.
+final partnershipSummaryProvider = FutureProvider.autoDispose
+    .family<PartnershipSummary, String>((ref, id) {
+      return requireRepo(ref).partnershipSummary(id);
+    });
+
+final taxOtherIncomeProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxOtherIncome(id);
+    });
+
+final taxReliefClaimsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxReliefClaims(id);
+    });
+
+final taxPartnersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxPartners(id);
+    });
+
+/// The reliefs catalogue PCB uses, for the Form B picker.
+final individualReliefsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>((ref, on) {
+      return requireRepo(ref).individualReliefs(on);
+    });
+
+/// The typed adjustments on a computation, with their ids.
+final taxAdjustmentsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).taxAdjustments(id);
+    });
+
+/// Accounts whose tax treatment is for the other side of the ledger.
+final taxMisfiledAccountsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).taxMisfiledAccounts();
+    });
+
+/// What a chart of accounts can say about an account.
+///
+/// Not autoDispose: ten rows that move with a Budget, read by the
+/// account editor every time it opens.
+final taxTreatmentsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).taxTreatments();
+    });
+
+/// The Schedule 3 classes an asset can be put in.
+///
+/// Not autoDispose: the list is eight rows that change with a Budget,
+/// and refetching it every time somebody opens the asset editor is a
+/// round trip for a list that has not moved since the app started.
+final capitalAllowanceClassesProvider =
+    FutureProvider<List<CapitalAllowanceClass>>((ref) {
+      return requireRepo(ref).capitalAllowanceClasses();
+    });
+
+/// The capital allowance schedule for a year of assessment.
+///
+/// Keyed on the year, so flipping between two years keeps both and
+/// nothing is refetched going back. `autoDispose` because a schedule
+/// nobody is looking at is a schedule worth recomputing when they are.
+final capitalAllowancesProvider = FutureProvider.autoDispose
+    .family<List<CapitalAllowanceLine>, int>((ref, year) {
+      return requireRepo(ref).capitalAllowances(year);
+    });
+
 final assetMovementsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({DateTime? from, DateTime? to})>((
       ref,
@@ -981,6 +1302,40 @@ final isPlatformAdminProvider = FutureProvider<bool>((ref) async {
   return ref.watch(platformRepoProvider).amIPlatformAdmin();
 });
 
+/// Whether this person carries the report button on every screen.
+///
+/// Not autoDispose. The shell watches it for the whole session, and a
+/// provider that disposed between rebuilds would ask the server again
+/// every time the person changed screens -- which is the one thing a
+/// button on every screen must not do.
+///
+/// False while it is loading and false on an error, both deliberately.
+/// The failure mode of guessing true is a button that opens a dialog
+/// for somebody who will then be refused; the failure mode of guessing
+/// false is a button that appears a moment late.
+final isBetaTesterProvider = FutureProvider<bool>((ref) async {
+  if (ref.watch(currentUserProvider) == null) return false;
+  return ref.watch(platformRepoProvider).amIABetaTester();
+});
+
+final betaTestersProvider = FutureProvider.autoDispose<List<BetaTester>>((ref) {
+  return ref.watch(platformRepoProvider).betaTesters();
+});
+
+/// People matching what has been typed into the console's picker.
+///
+/// `autoDispose` and keyed on the query, so a search that has been
+/// typed past is not kept alive; `family` rather than a controller so
+/// the screen has no state to get out of step with the box.
+final platformUserSearchProvider = FutureProvider.autoDispose
+    .family<List<PlatformUser>, String>((ref, query) {
+  final needle = query.trim();
+  // The server refuses under two characters as well. This saves the
+  // round trip on every single keystroke of the first letter.
+  if (needle.length < 2) return Future.value(const <PlatformUser>[]);
+  return ref.watch(platformRepoProvider).searchUsers(needle);
+});
+
 final platformStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
   ref,
 ) {
@@ -1002,8 +1357,18 @@ final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
 /// `autoDispose` because it is a list of workflow runs and goes stale
 /// the moment one starts; the card refreshes it rather than holding
 /// yesterday's answer for the length of a session.
-final iosReleasesProvider = FutureProvider.autoDispose<IosReleases>((ref) {
-  return ref.watch(platformRepoProvider).iosReleases();
+final appReleasesProvider = FutureProvider.autoDispose
+    .family<AppReleases, ReleasePlatform>((ref, platform) {
+  return ref.watch(platformRepoProvider).appReleases(platform);
+});
+
+/// The files on one feedback report, fetched when a row is expanded.
+///
+/// `family` on the report id, and autoDispose so a triage session
+/// through forty reports does not hold forty lists open.
+final feedbackFilesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, reportId) {
+  return ref.watch(platformRepoProvider).feedbackFiles(reportId);
 });
 
 /// The bank rules, in the order they are tried. 0625.
@@ -1337,7 +1702,7 @@ final sstReturnLinesProvider = FutureProvider.autoDispose
 final ourPracticeProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((
   ref,
 ) async {
-  final orgId = ref.watch(currentOrgIdProvider);
+  final orgId = ref.watch(orgIdProvider);
   if (orgId == null) return null;
   final row = await ref
       .watch(supabaseProvider)
@@ -1352,7 +1717,7 @@ final ourPracticeProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((
 /// Who has held this company before. Owners and admins only.
 final companyTransferHistoryProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-      final orgId = ref.watch(currentOrgIdProvider);
+      final orgId = ref.watch(orgIdProvider);
       if (orgId == null) return Future.value(const []);
       return ref.watch(firmsRepoProvider).transferHistory(orgId);
     });
@@ -1647,6 +2012,17 @@ final clientPayoutsProvider =
     });
 
 /// What each matter holds, for the pickers on both screens.
+/// Money moved from one matter's client funds to another's. `0690`.
+///
+/// Both legs come back — a transfer is two rows and the ledger shows
+/// both — so the list reads as the client ledger does rather than
+/// hiding half of an entry that balances.
+final clientTransfersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref)
+          .clientAccountLedger(types: const ['transfer_out', 'transfer_in']);
+    });
+
 final matterClientBalancesProvider =
     FutureProvider.autoDispose<Map<String, double>>((ref) {
       return requireRepo(ref).matterClientBalances();
@@ -2344,6 +2720,31 @@ final orgLogoProvider = FutureProvider<Uint8List?>((ref) async {
 final ocrStatusProvider = FutureProvider<OcrSettings>((ref) {
   return requireRepo(ref).ocrStatus();
 });
+
+/// Every reading this company has taken, and what each became. `0694`.
+///
+/// The argument is the filter: `all`, `posted` or `unposted`. A family
+/// rather than one provider with a parameter on the widget, so that
+/// switching the filter does not re-fetch the list somebody is already
+/// looking at.
+final scanInboxProvider =
+    FutureProvider.autoDispose.family<List<ScanInboxEntry>, String>((
+      ref,
+      only,
+    ) {
+      return requireRepo(ref).scanInbox(only: only);
+    });
+
+/// The whole reading one scan produced. `0694`.
+///
+/// Separate from the inbox rather than a column on it: `extracted` is
+/// the largest thing `ocr_scans` holds — every line of a forty-line
+/// statement — and a list of a hundred rows does not want a hundred of
+/// them to draw one line each.
+final scanReadingProvider =
+    FutureProvider.autoDispose.family<OcrExtraction?, String>((ref, scanId) {
+      return requireRepo(ref).scanReading(scanId);
+    });
 
 final creditLedgerProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
@@ -3062,6 +3463,77 @@ final ocrProviderCatalogProvider =
       (ref) => ref.watch(platformRepoProvider).ocrProviderCatalog(),
     );
 
+/// The reader a company that has never chosen one is handed.
+///
+/// Resolved by the database, not read raw out of `platform_settings`:
+/// a default set last year may name a reader retired since, and what
+/// the console needs to show is what companies are ACTUALLY getting.
+/// 0678.
+final ocrDefaultProviderProvider = FutureProvider.autoDispose<OcrDefaultState>(
+  (ref) => ref.watch(platformRepoProvider).ocrDefaultState(),
+);
+
+/// Every scan, newest first, with the reason the failed ones failed.
+///
+/// Keyed on the filter, because a status and a search are the two
+/// questions an operator arrives with — "what is failing" and "what
+/// happened to THIS one" — and they are different lists. 0680.
+/// Everything the readers said on one scan, raw. `0704`.
+///
+/// Family rather than a field on the log row: the bodies are up to 16k
+/// each and a list of fifty scans would be carrying most of a megabyte
+/// nobody has asked to see. Fetched when a row is opened.
+final scanExchangesProvider =
+    FutureProvider.autoDispose.family<List<ScanExchange>, String>(
+  (ref, scanId) => ref.watch(platformRepoProvider).scanExchanges(scanId),
+);
+
+final scanLogProvider = FutureProvider.autoDispose
+    .family<List<ScanLogEntry>, ({String? status, String? search})>(
+      (ref, q) => ref
+          .watch(platformRepoProvider)
+          .scanLog(status: q.status, search: q.search),
+    );
+
+/// Read today, failed today, and the scans that never settled.
+final scanHealthProvider = FutureProvider.autoDispose<ScanHealth>(
+  (ref) => ref.watch(platformRepoProvider).scanHealth(),
+);
+
+/// What each reader keeps saying, worst first. `0685`.
+final readerFailuresProvider =
+    FutureProvider.autoDispose<List<ReaderFault>>(
+  (ref) => ref.watch(platformRepoProvider).readerFailures(),
+);
+
+/// The three calls a reader's key pool needs.
+///
+/// On the CLIENT rather than on a repository. `Repo` does not exist
+/// until an organization has been resolved and a platform operator
+/// belongs to none, so a pool hung off it would refuse the console the
+/// pool exists for; `PlatformRepo` would work and would be a lie, since
+/// a tenant administrator keeping their own keys is not the platform.
+/// The org id decides, and the database is what enforces it. 0675.
+final ocrKeyPoolApiProvider = Provider<OcrKeyPool>(
+  (ref) => OcrKeyPool(ref.watch(supabaseProvider)),
+);
+
+/// A reader's pool of keys, the platform's or one company's own.
+///
+/// Keyed on the pair, because a screen showing the platform's pool and
+/// a screen showing a tenant's are the same screen with a different
+/// argument — and a family keyed on the provider alone would hand one
+/// of them the other's cache.
+///
+/// Carries no key and cannot: `ocr_keys_for` has no column that could,
+/// and the table behind it has its grants revoked from everybody but
+/// the service role. 0675.
+final ocrKeyPoolProvider = FutureProvider.autoDispose
+    .family<List<OcrPoolKey>, ({String provider, String? orgId})>(
+      (ref, args) =>
+          ref.watch(ocrKeyPoolApiProvider).keys(args.provider, orgId: args.orgId),
+    );
+
 /// Every AI provider, with whether a key is on file. Platform staff
 /// only — the function behind it refuses anybody else, and it has no
 /// column that could carry a key. 0536.
@@ -3086,12 +3558,16 @@ final aiModelsProvider =
 
 /// Whether this company's assistant is on, what it will call, and
 /// whether that call can be made. 0536.
+/// `requireRepo` rather than a null check that answers `{}`. An empty
+/// map is not a status: the sheet drew it as "Not ready to answer yet"
+/// over the word **null**, because the reason line interpolated two
+/// absent keys. `OrgNotReady` is what [AsyncView] waits on, which is
+/// the truthful answer while a company is still resolving.
 final aiStatusProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
   ref,
 ) async {
-  final org = ref.watch(currentOrgIdProvider);
-  if (org == null) return <String, dynamic>{};
-  return requireRepo(ref).aiStatus(org);
+  final repo = requireRepo(ref);
+  return repo.aiStatus(repo.orgId);
 });
 
 /// Every run at an outlet that has not landed yet. 0259.
@@ -3313,6 +3789,22 @@ final depositNotesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({String? kind, String? status})>(
       (ref, args) =>
           requireRepo(ref).depositNotes(kind: args.kind, status: args.status),
+    );
+
+/// What the SCANNED paper said this document's totals were. `0705`.
+///
+/// Keyed by the record, not by the org: `requireRepo` already knows
+/// which company is being looked at, and a family key that repeats it
+/// would be a second place for the two to disagree.
+///
+/// `null` where nothing was ever read off this document, which is most
+/// of them.
+final documentScanTotalsProvider = FutureProvider.autoDispose
+    .family<ScanTotals?, ({String table, String recordId})>(
+      (ref, args) => requireRepo(ref).documentScanTotals(
+        table: args.table,
+        recordId: args.recordId,
+      ),
     );
 
 /// What is still held for a party, either way.

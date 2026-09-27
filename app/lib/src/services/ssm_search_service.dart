@@ -13,6 +13,8 @@
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/error_text.dart';
+
 /// Values documented for the search request's `entityType`.
 abstract final class SsmEntityType {
   static const company = 'company';
@@ -94,9 +96,10 @@ class SsmDocumentInfo {
 }
 
 /// Error surfaced by the edge function (or transport failure).
-class SsmApiException implements Exception {
+class SsmApiException implements Exception, Explained {
   const SsmApiException({required this.kind, required this.message, this.code, this.status, this.path, this.clientRefNo});
   final String kind; // validation | unauthorized | forbidden | rate_limited | auth | http | route | payload | upstream | network | parse | internal | transport
+  @override
   final String message;
   final Object? code;
   final int? status;

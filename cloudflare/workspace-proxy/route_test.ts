@@ -13,7 +13,7 @@
  * rewrites every `Location` breaks the OAuth round trip and nothing
  * else. None of the three announces itself.
  */
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "jsr:@std/assert@1.0.19";
 import { APEX, NOT_TENANTS, rewriteLocation, upstream } from "./worker.js";
 
 Deno.test("a company's subdomain is proxied to the apex", () => {

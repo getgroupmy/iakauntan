@@ -84,13 +84,13 @@ fi
 # to match would leave `deno check` going to the network, and on a
 # machine where that works this script would quietly become a slower
 # copy of CI rather than the offline check it claims to be.
-if ! grep -q '"jsr:@supabase/supabase-js@2"' supabase/functions/_local_check/import_map.json; then
+if ! grep -q '"jsr:@supabase/supabase-js@2.117.0"' supabase/functions/_local_check/import_map.json; then
   echo "The import map no longer names the specifier the functions import." >&2
   exit 1
 fi
 for f in "${entries[@]}"; do
   if grep -q 'from "jsr:@supabase/supabase-js@' "$f" &&
-     ! grep -q 'from "jsr:@supabase/supabase-js@2"' "$f"; then
+     ! grep -q 'from "jsr:@supabase/supabase-js@2.117.0"' "$f"; then
     echo "$f imports a supabase-js version the import map does not map." >&2
     exit 1
   fi

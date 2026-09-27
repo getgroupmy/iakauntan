@@ -61,45 +61,50 @@ class _LateOrdersDialogState extends ConsumerState<_LateOrdersDialog> {
                     'passed, and something still unshipped, appear here.',
               );
             }
-            return Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    for (final r in rows)
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          context.go(
-                              '/sales/sales_order/${r['document_id']}');
-                        },
-                        title: Text(
-                          '${r['doc_no']} · ${r['contact_name'] ?? '—'}',
-                        ),
-                        subtitle: Text(
-                          'Promised ${Fmt.date(Fmt.parseDate(r['delivery_date']))}'
-                          ' · ${Fmt.qty(Fmt.toDouble(r['outstanding']))} of '
-                          '${Fmt.qty(Fmt.toDouble(r['ordered']))} still to go',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '${r['days_late']} days late',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.danger,
-                              ),
-                            ),
-                            Money(Fmt.toDouble(r['amount'])),
-                          ],
-                        ),
+            // NOT Flexible. This is returned into the `SizedBox` that
+            // is the dialog's content, and a Flexible outside a Flex
+            // throws `Incorrect use of ParentDataWidget` — on every
+            // build, but only down the branch that HAS late orders.
+            // The empty and loading branches return ordinary widgets,
+            // so the dialog worked perfectly until there was something
+            // to show, which is the only time anybody opens it.
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (final r in rows)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        context.go(
+                            '/sales/sales_order/${r['document_id']}');
+                      },
+                      title: Text(
+                        '${r['doc_no']} · ${r['contact_name'] ?? '—'}',
                       ),
-                  ],
-                ),
+                      subtitle: Text(
+                        'Promised ${Fmt.date(Fmt.parseDate(r['delivery_date']))}'
+                        ' · ${Fmt.qty(Fmt.toDouble(r['outstanding']))} of '
+                        '${Fmt.qty(Fmt.toDouble(r['ordered']))} still to go',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${r['days_late']} days late',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.danger,
+                            ),
+                          ),
+                          Money(Fmt.toDouble(r['amount'])),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             );
           },

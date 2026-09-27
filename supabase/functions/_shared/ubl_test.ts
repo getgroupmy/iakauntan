@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "jsr:@std/assert@1";
+import { assertEquals, assertExists } from "jsr:@std/assert@1.0.19";
 import {
   type AddressJson,
   buildUblDocument,

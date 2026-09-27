@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/download.dart';
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -91,7 +92,7 @@ class _ExportCardState extends ConsumerState<ExportCard> {
   }
 
   Future<void> _run() async {
-    final orgId = ref.read(currentOrgIdProvider);
+    final orgId = ref.read(orgIdProvider);
     if (orgId == null) return;
     final org = ref.read(currentOrgProvider).valueOrNull;
     final repo = ref.read(firmsRepoProvider);
@@ -153,7 +154,7 @@ class _ExportCardState extends ConsumerState<ExportCard> {
       });
     } catch (err) {
       if (!mounted) return;
-      setState(() => _progress = '$err');
+      setState(() => _progress = errorText(err));
     } finally {
       if (mounted) setState(() => _running = false);
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
@@ -283,7 +284,7 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
             children: [
               types.when(
                 loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('$e'),
+                error: (e, _) => Text(errorText(e)),
                 data: (list) => SearchablePicker<String>(
                   options: [
                     for (final t in list)

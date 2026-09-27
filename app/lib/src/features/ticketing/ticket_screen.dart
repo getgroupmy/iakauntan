@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -66,7 +66,7 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
       // names the moves that were available instead — so it is shown
       // rather than replaced with "something went wrong".
       messenger.showSnackBar(
-        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+        SnackBar(content: Text(errorText(e))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -102,6 +102,12 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
       body: AsyncView(
         value: ticket,
         onRetry: () => ref.invalidate(ticketProvider(widget.id)),
+        // A header, the description, and the replies under it. A ticket
+        // that has not arrived yet is still that shape.
+        skeleton: const Padding(
+          padding: EdgeInsets.all(Space.lg),
+          child: CardRowsSkeleton(rows: 6, leadingSize: 32, rowGap: Space.md),
+        ),
         builder: (t) => PageBody(
           child: ListView(
             children: [
@@ -527,44 +533,85 @@ class _ReplyBox extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            // Defaults to the internal note, matching the column
-            // default, so the dangerous direction is the one that has to
-            // be chosen rather than the one that happens by accident.
-            SegmentedButton<bool>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: true, label: Text('Internal note')),
-                ButtonSegment(value: false, label: Text('Reply to requester')),
+        _controls(context, canned),
+      ],
+    );
+  }
+
+  /// The mode switch and the two buttons, on one line or two.
+  ///
+  /// They were one Row, and it overflowed a 412px phone by 252 pixels
+  /// -- so Send was entirely off the right edge and a ticket could not
+  /// be replied to from a phone at all. Flutter draws the yellow
+  /// stripes in debug and CLIPS silently in release, which is why the
+  /// button was simply missing rather than obviously broken.
+  ///
+  /// 640 is the breakpoint `document_editor.dart` and the expenses app
+  /// bar already use. One number, because two screens disagreeing
+  /// about what "narrow" means is how one of them ends up wrong on a
+  /// tablet.
+  Widget _controls(
+    BuildContext context,
+    AsyncValue<List<Map<String, dynamic>>> canned,
+  ) {
+    // Defaults to the internal note, matching the column default, so
+    // the dangerous direction is the one that has to be chosen rather
+    // than the one that happens by accident.
+    final mode = SegmentedButton<bool>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: true, label: Text('Internal note')),
+        ButtonSegment(value: false, label: Text('Reply to requester')),
+      ],
+      selected: {internal},
+      onSelectionChanged: (s) => onInternalChanged(s.first),
+    );
+
+    final quick = canned.maybeWhen(
+      data: (list) => list.isEmpty
+          ? const SizedBox.shrink()
+          : PopupMenuButton<String>(
+              tooltip: 'Canned response',
+              icon: const Icon(Icons.quickreply_outlined),
+              itemBuilder: (_) => [
+                for (final r in list)
+                  PopupMenuItem(
+                    value: r['body'] as String,
+                    child: Text((r['title'] ?? '') as String),
+                  ),
               ],
-              selected: {internal},
-              onSelectionChanged: (s) => onInternalChanged(s.first),
+              onSelected: (body) => controller.text = body,
             ),
-            const Spacer(),
-            canned.maybeWhen(
-              data: (list) => list.isEmpty
-                  ? const SizedBox.shrink()
-                  : PopupMenuButton<String>(
-                      tooltip: 'Canned response',
-                      icon: const Icon(Icons.quickreply_outlined),
-                      itemBuilder: (_) => [
-                        for (final r in list)
-                          PopupMenuItem(
-                            value: r['body'] as String,
-                            child: Text((r['title'] ?? '') as String),
-                          ),
-                      ],
-                      onSelected: (body) => controller.text = body,
-                    ),
-              orElse: () => const SizedBox.shrink(),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: busy ? null : onSend,
-              child: const Text('Send'),
-            ),
-          ],
+      orElse: () => const SizedBox.shrink(),
+    );
+
+    final send = FilledButton(
+      key: const ValueKey('ticket-send'),
+      onPressed: busy ? null : onSend,
+      child: const Text('Send'),
+    );
+
+    if (MediaQuery.sizeOf(context).width >= 640) {
+      return Row(
+        children: [mode, const Spacer(), quick, const SizedBox(width: 8), send],
+      );
+    }
+
+    // The switch keeps both of its words -- "Internal note" and "Reply
+    // to requester" are the whole safeguard and neither abbreviates --
+    // so it scrolls rather than shrinks, and the buttons go under it.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          child: mode,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [quick, const SizedBox(width: 8), send],
         ),
       ],
     );

@@ -61,23 +61,26 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
+          // A Row, not a horizontal ListView. `FilterBar` is itself a
+          // horizontal scroll view, and a second one inside it is given
+          // unbounded width -- which throws in `performResize` on every
+          // single build of this screen, so the filter bar has never
+          // drawn. Nothing caught it because nothing had ever put the
+          // screen on a surface.
           child: FilterBar(
-            child: SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final e in _filters.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(right: Space.sm),
-                      child: FilterChip(
-                        label: Text(e.value),
-                        selected: _status == e.key,
-                        onSelected: (_) => setState(() => _status = e.key),
-                      ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final e in _filters.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(right: Space.sm),
+                    child: FilterChip(
+                      label: Text(e.value),
+                      selected: _status == e.key,
+                      onSelected: (_) => setState(() => _status = e.key),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),

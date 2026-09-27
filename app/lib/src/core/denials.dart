@@ -57,6 +57,11 @@ String deniedAction(Object error, {String? doing}) {
 /// A stack trace or a page of JSON in a security log is a security log
 /// nobody reads.
 String deniedDetail(Object error, {int limit = 200}) {
+  // Deliberately NOT `errorText`. That one is for a person and drops
+  // what a person cannot act on — the type name in front of a bare
+  // `Exception`, the host in a failed lookup. A security log wants
+  // exactly those: it is read when somebody is working out what was
+  // refused and by what, and "nope" identifies nothing.
   final raw = error is PostgrestException ? error.message : '$error';
   final one = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (one.length <= limit) return one;

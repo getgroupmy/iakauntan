@@ -397,7 +397,13 @@ declare
     -- credit to output tax -- and the SST-02 return is built from both,
     -- so a figure that moved after posting would put the return and the
     -- ledger out of agreement with each other.
-    'service_charge_tax', 'service_charge_tax_code_id'];
+    'service_charge_tax', 'service_charge_tax_code_id',
+    -- 0706. The method decides `rounding_amount` and `total_amount`,
+    -- which are two lines above and frozen for the reason the journal
+    -- carries them. A method that could be changed after posting would
+    -- move both of them, and the rounding line is a posting of its own
+    -- -- 4990 on the sales side.
+    'rounding_method'];
   -- Deliberately still writable on a posted document, and why:
   --   money that moves after posting ... paid_amount, applied_amount,
   --     balance_amount, status
@@ -414,7 +420,12 @@ declare
   --   bookkeeping ...................... created_at, created_by,
   --     updated_at, deleted_at
   --   where the row came from .......... import_source, import_ref,
-  --     import_batch_id, imported_at. `0610`. Open rather than frozen,
+  --     import_batch_id, imported_at, and `0707`'s entry_source. The
+  --     last one on the same reasoning as the four before it: the
+  --     journal was not built from "a model read this off a PDF", and
+  --     a document whose paperwork is scanned after it posts is
+  --     telling the truth by saying so late. `0610`, `0707`. Open
+  --     rather than frozen,
   --     and the test's own question decides it: the journal was not
   --     built from any of them. They are bookkeeping ABOUT the row
   --     rather than a figure inside it, and `import_batch_id` is
@@ -428,6 +439,7 @@ declare
   --     expects. That path moves the receivable line's contact with it,
   --     which is asserted below.
   v_open text[] := array[
+    'entry_source',
     'contact_id', 'paid_amount', 'applied_amount', 'balance_amount', 'status',
     'einvoice_id', 'einvoice_status', 'is_consolidated',
     'requires_self_billed', 'fulfilment_status', 'parent_id',
@@ -498,7 +510,8 @@ declare
     'discount_amount', 'discount_percent', 'tax_code_id', 'tax_rate',
     'is_tax_inclusive', 'line_subtotal', 'tax_amount', 'line_total',
     'account_id', 'warehouse_id', 'cost_amount',
-    'service_start', 'service_end', 'project_code', 'department_code'];
+    'service_start', 'service_end', 'project_code', 'department_code',
+    'matter_id'];
   -- Still writable on the line of a posted document, and why:
   --   progress ......... quantity_invoiced, quantity_fulfilled,
   --     quantity_billed, quantity_received. `app.refresh_sales_progress`

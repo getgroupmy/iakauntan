@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
+import '../../core/skeletons.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // `RepoPos` is an extension, and a Dart extension is only in scope
 // where its declaring library is imported.
@@ -284,6 +286,13 @@ class _Day extends ConsumerWidget {
     );
     return AsyncView<List<Map<String, dynamic>>>(
       value: sheet,
+      // A column to each provider, filled with the day's appointments.
+      // How many providers there are is the only thing the sheet
+      // decides, and four is the usual chair count.
+      skeleton: const Padding(
+        padding: EdgeInsets.all(Space.md),
+        child: TilesSkeleton(count: 4, wideAspect: 0.6, narrowAspect: 1.2),
+      ),
       builder: (rows) {
         if (rows.isEmpty) {
           return const EmptyState(

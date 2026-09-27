@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/skeletons.dart';
@@ -58,7 +59,7 @@ class TodoCard extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('The list could not be read. $e'),
+                child: Text('The list could not be read. ${errorText(e)}'),
               ),
               data: (items) => items.isEmpty
                   ? const Padding(

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/error_text.dart';
 import '../core/format.dart';
 // For `writeCustomFields`, which both `openMatter` and `createTicket`
 // need and which each of them used to write out again inline.
@@ -12,7 +13,7 @@ import '../features/contacts/brought_forward.dart';
 import '../features/documents/transfer.dart';
 import '../features/einvoice/received_einvoice.dart';
 // `RepoMia` at the foot of this file returns these.
-import '../features/admin/ios_release.dart';
+import '../features/admin/app_release.dart';
 import '../features/mia/mia_credential.dart';
 import 'models.dart';
 
@@ -379,6 +380,55 @@ class Repo {
   Future<List<Map<String, dynamic>>> myFeedback() async =>
       _rows(await callRpc('my_feedback', params: {'p_org_id': orgId}));
 
+  /// Put a file on a report.
+  ///
+  /// Two steps and they cannot be one: the bytes go to storage, which
+  /// only the client holds, and then the row is recorded. Both halves
+  /// are guarded by `app.can_attach_to_feedback`, so an upload the
+  /// bucket allowed cannot fail to be recordable.
+  ///
+  /// The object key starts with the report id because **that is what
+  /// the storage policy reads** to decide who may see it —
+  /// `split_part(name, '/', 1)`. A file stored anywhere else would be
+  /// invisible to the very people the report is for. `0660` has a
+  /// CHECK saying the same thing about the row, so a mismatch is
+  /// refused rather than stored and unreadable.
+  Future<String> attachToFeedback({
+    required String reportId,
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+  }) async {
+    // A filename goes into an object key and into a URL. Anything that
+    // is not plainly a name is replaced rather than escaped, and the
+    // timestamp keeps two files of the same name apart. The same
+    // treatment `attachments_repository.dart` gives one, for the same
+    // reason.
+    final safe = fileName
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final path = '$reportId/${DateTime.now().millisecondsSinceEpoch}-'
+        '${safe.isEmpty ? 'file' : safe}';
+
+    await client.storage.from('feedback').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: mimeType),
+        );
+    final id = await callRpc(
+      'attach_feedback_file',
+      params: {
+        'p_report_id': reportId,
+        'p_storage_path': path,
+        'p_file_name': fileName,
+        'p_file_size': bytes.length,
+        'p_mime_type': mimeType,
+      },
+    );
+    return id as String;
+  }
+
+
   // ------------------------------------------------------------------
   // The chart of accounts
   //
@@ -738,7 +788,11 @@ class Repo {
     }
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or('name.ilike.%$q%,code.ilike.%$q%,email.ilike.%$q%');
+      query = query.or([
+        Repo.orLike('name', q),
+        Repo.orLike('code', q),
+        Repo.orLike('email', q),
+      ].join(','));
     }
 
     final data = await query.order('name', ascending: true).limit(200);
@@ -962,7 +1016,11 @@ class Repo {
 
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or('name.ilike.%$q%,code.ilike.%$q%,barcode.ilike.%$q%');
+      query = query.or([
+        Repo.orLike('name', q),
+        Repo.orLike('code', q),
+        Repo.orLike('barcode', q),
+      ].join(','));
     }
 
     final data = await query.order('code', ascending: true).limit(300);
@@ -1109,6 +1167,19 @@ class Repo {
       'p_org_id': orgId,
       if (startDate != null) 'p_start_date': Fmt.iso(startDate),
     },
+  );
+
+  /// Opens the year immediately BEFORE the earliest one, for a company
+  /// posting history it arrived with.
+  ///
+  /// Takes no date. The date is not the caller's to choose: the new
+  /// year ends the day before the earliest one, and `0659` derives it
+  /// from that rather than from anything passed in — a start date sent
+  /// from here could leave a day covered by no period, which is a date
+  /// nothing can be posted to and nothing reports.
+  Future<void> createPreviousFiscalYear() => callRpc(
+    'create_previous_fiscal_year',
+    params: {'p_org_id': orgId},
   );
 
   Future<void> setPeriodStatus(String periodId, String status) => callRpc(
@@ -2258,6 +2329,32 @@ class Repo {
     },
   );
 
+  /// Posts a statement line straight to an account, and matches it to
+  /// the journal that makes.
+  ///
+  /// The other half of bank import. `suggestBankMatches` can only offer
+  /// documents that are ALREADY posted, so a statement imported into a
+  /// ledger with nothing in it had no way forward at all — every line
+  /// answered "Record the receipt or payment first" and the screen
+  /// offered no way to record one. `0717`.
+  Future<String> postBankTransaction({
+    required String transactionId,
+    required String accountId,
+    String? description,
+    String? contactId,
+  }) async {
+    final id = await callRpc(
+      'post_bank_transaction',
+      params: {
+        'p_transaction_id': transactionId,
+        'p_account_id': accountId,
+        'p_description': description,
+        'p_contact_id': contactId,
+      },
+    );
+    return '$id';
+  }
+
   Future<void> unmatchBankTransaction(String transactionId) => callRpc(
     'unmatch_bank_transaction',
     params: {'p_transaction_id': transactionId},
@@ -2583,6 +2680,563 @@ class Repo {
     ),
   );
 
+  /// How a tax computation treats an account.
+  ///
+  /// A direct update rather than a parameter on `upsert_account`:
+  /// that function's signature belongs to an applied migration, and
+  /// the table already carries an update policy for somebody who may
+  /// change the chart. Null clears it back to ordinary.
+  Future<void> setAccountTaxTreatment(String id, String? treatment) async {
+    await client
+        .from('accounts')
+        .update({'tax_treatment': treatment})
+        .eq('id', id);
+  }
+
+  /// Starts, or reopens, the computation for a financial year.
+  Future<String> openTaxComputation(String fiscalYearId) async {
+    final id = await callRpc(
+      'open_tax_computation',
+      params: {'p_org_id': orgId, 'p_fiscal_year_id': fiscalYearId},
+    );
+    return id as String;
+  }
+
+  /// The Form C working, every figure derived.
+  Future<TaxComputation> taxComputation(String computationId) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_computation',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That computation no longer exists.');
+    }
+    return TaxComputation.fromMap(rows.first);
+  }
+
+  /// Every add-back and deduction in it, with the account behind each.
+  Future<List<TaxComputationLine>> taxComputationLines(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_computation_lines',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    return [for (final r in rows) TaxComputationLine.fromMap(r)];
+  }
+
+  /// Every income tax deadline this company has, computed.
+  ///
+  /// Nothing is stored per company — `0668` works each date out from
+  /// the company's own periods every time — so a corrected rule
+  /// corrects everybody rather than everybody who asks after today.
+  Future<List<TaxFiling>> taxUpcomingFilings({int withinDays = 240}) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_upcoming_filings',
+        params: {'p_org_id': orgId, 'p_within_days': withinDays},
+      ),
+    );
+    return [for (final r in rows) TaxFiling.fromMap(r)];
+  }
+
+  /// Records what was done about one obligation.
+  ///
+  /// A note rather than a submission — nothing here reaches LHDN and
+  /// nothing verifies the claim. `0669` refuses an obligation this
+  /// company does not have, so a sole proprietor cannot tick off a
+  /// Form C and then not file the Form B they owe.
+  Future<String> recordTaxFiling({
+    required String filingType,
+    required DateTime periodTo,
+    String status = 'filed',
+    DateTime? filedOn,
+    String? reference,
+    String? notes,
+  }) async {
+    final id = await callRpc(
+      'record_tax_filing',
+      params: {
+        'p_org_id': orgId,
+        'p_filing_type': filingType,
+        'p_period_to': Fmt.iso(periodTo),
+        'p_status': status,
+        'p_filed_on': filedOn == null ? null : Fmt.iso(filedOn),
+        'p_reference': reference,
+        'p_notes': notes,
+      },
+    );
+    return id as String;
+  }
+
+  /// Undoes a recording, putting the deadline back on the calendar.
+  Future<void> clearTaxFiling({
+    required String filingType,
+    required DateTime periodTo,
+  }) async {
+    await callRpc(
+      'clear_tax_filing',
+      params: {
+        'p_org_id': orgId,
+        'p_filing_type': filingType,
+        'p_period_to': Fmt.iso(periodTo),
+      },
+    );
+  }
+
+  /// Everything recorded, including what was dismissed and why.
+  Future<List<TaxFilingRecord>> taxFilingHistory({int limit = 100}) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_filing_history',
+        params: {'p_org_id': orgId, 'p_limit': limit},
+      ),
+    );
+    return [for (final r in rows) TaxFilingRecord.fromMap(r)];
+  }
+
+  /// Records that one instalment was paid.
+  ///
+  /// Defaults to today and to the scheduled amount: paying what was
+  /// asked for on the day is the ordinary case, and retyping the
+  /// figure is a chance to mistype it. `0673` keys it to the chain
+  /// ROOT, so it survives a revision.
+  Future<String> recordTaxInstalment({
+    required String estimateId,
+    required int instalmentNo,
+    DateTime? paidOn,
+    double? amount,
+    String? reference,
+    String? notes,
+  }) async {
+    final id = await callRpc(
+      'record_tax_instalment',
+      params: {
+        'p_estimate_id': estimateId,
+        'p_instalment_no': instalmentNo,
+        'p_paid_on': paidOn == null ? null : Fmt.iso(paidOn),
+        'p_amount': amount,
+        'p_reference': reference,
+        'p_notes': notes,
+      },
+    );
+    return id as String;
+  }
+
+  Future<void> clearTaxInstalment({
+    required String estimateId,
+    required int instalmentNo,
+  }) async {
+    await callRpc(
+      'clear_tax_instalment',
+      params: {
+        'p_estimate_id': estimateId,
+        'p_instalment_no': instalmentNo,
+      },
+    );
+  }
+
+  /// Where the instalment year stands.
+  Future<TaxInstalmentSummary> taxInstalmentSummary(String id) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_payment_summary',
+        params: {'p_estimate_id': id},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That estimate no longer exists.');
+    }
+    return TaxInstalmentSummary.fromMap(rows.first);
+  }
+
+  /// How a first basis period differs, where it is one.
+  Future<TaxFirstPeriod> taxEstimateFirstPeriod(String id) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_first_period',
+        params: {'p_estimate_id': id},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That estimate no longer exists.');
+    }
+    return TaxFirstPeriod.fromMap(rows.first);
+  }
+
+  /// Starts, or reopens, the CP204 estimate for a financial year.
+  Future<String> openTaxEstimate(
+    String fiscalYearId, {
+    double estimatedTax = 0,
+    double? priorEstimate,
+  }) async {
+    final id = await callRpc(
+      'open_tax_estimate',
+      params: {
+        'p_org_id': orgId,
+        'p_fiscal_year_id': fiscalYearId,
+        'p_estimated_tax': estimatedTax,
+        'p_prior_estimate': priorEstimate,
+      },
+    );
+    return id as String;
+  }
+
+  Future<Map<String, dynamic>?> taxEstimate(String id) async {
+    final rows = await client
+        .from('tax_estimates')
+        .select()
+        .eq('id', id)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
+  Future<void> saveTaxEstimate(
+    String id,
+    Map<String, dynamic> changes,
+  ) async {
+    await client.from('tax_estimates').update(changes).eq('id', id);
+  }
+
+  /// A revision is a NEW estimate that supersedes this one — CP204A is
+  /// its own form, and overwriting would lose the figure next year's
+  /// floor is measured against. Returns the new one's id.
+  Future<String> reviseTaxEstimate(String id, double estimatedTax) async {
+    final newId = await callRpc(
+      'revise_tax_estimate',
+      params: {'p_estimate_id': id, 'p_estimated_tax': estimatedTax},
+    );
+    return newId as String;
+  }
+
+  Future<List<TaxInstalment>> taxEstimateSchedule(String id) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_schedule',
+        params: {'p_estimate_id': id},
+      ),
+    );
+    return [for (final r in rows) TaxInstalment.fromMap(r)];
+  }
+
+  /// Whether the estimate clears the floor, and — where there is a
+  /// computation to measure against — what under-estimating costs.
+  Future<TaxEstimateExposure> taxEstimateExposure(
+    String id, {
+    String? computationId,
+  }) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_estimate_exposure',
+        params: {
+          'p_estimate_id': id,
+          'p_computation_id': computationId,
+        },
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That estimate no longer exists.');
+    }
+    return TaxEstimateExposure.fromMap(rows.first);
+  }
+
+  /// The Form B working.
+  Future<IndividualTaxComputation> individualTaxComputation(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_computation_individual',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That computation no longer exists.');
+    }
+    return IndividualTaxComputation.fromMap(rows.first);
+  }
+
+  /// What each partner carries into their own Form B.
+  Future<List<PartnerAllocation>> partnershipAllocation(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_partnership_allocation',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    return [for (final r in rows) PartnerAllocation.fromMap(r)];
+  }
+
+  /// The head of a Form P.
+  Future<PartnershipSummary> partnershipSummary(
+    String computationId,
+  ) async {
+    final rows = _rows(
+      await callRpc(
+        'tax_partnership_summary',
+        params: {'p_computation_id': computationId},
+      ),
+    );
+    if (rows.isEmpty) {
+      throw StateError('That computation no longer exists.');
+    }
+    return PartnershipSummary.fromMap(rows.first);
+  }
+
+  Future<List<Map<String, dynamic>>> taxOtherIncome(String id) async {
+    final rows = await client
+        .from('tax_other_income')
+        .select()
+        .eq('computation_id', id)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addTaxOtherIncome({
+    required String computationId,
+    required String kind,
+    String? label,
+    required double amount,
+  }) async {
+    await client.from('tax_other_income').insert({
+      'org_id': orgId,
+      'computation_id': computationId,
+      'kind': kind,
+      'label': label,
+      'amount': amount,
+    });
+  }
+
+  Future<void> removeTaxOtherIncome(String id) async {
+    await client.from('tax_other_income').delete().eq('id', id);
+  }
+
+  Future<List<Map<String, dynamic>>> taxReliefClaims(String id) async {
+    final rows = await client
+        .from('tax_relief_claims')
+        .select()
+        .eq('computation_id', id)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addTaxReliefClaim({
+    required String computationId,
+    String? reliefCode,
+    required String label,
+    required double amount,
+  }) async {
+    await client.from('tax_relief_claims').insert({
+      'org_id': orgId,
+      'computation_id': computationId,
+      'relief_code': reliefCode,
+      'label': label,
+      'amount': amount,
+    });
+  }
+
+  Future<void> removeTaxReliefClaim(String id) async {
+    await client.from('tax_relief_claims').delete().eq('id', id);
+  }
+
+  Future<List<Map<String, dynamic>>> taxPartners(String id) async {
+    final rows = await client
+        .from('tax_partners')
+        .select()
+        .eq('computation_id', id)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> saveTaxPartner({
+    required String computationId,
+    String? id,
+    required String name,
+    String? taxReference,
+    required double sharePercent,
+    required double salary,
+    required double interestOnCapital,
+  }) async {
+    final payload = {
+      'org_id': orgId,
+      'computation_id': computationId,
+      'name': name,
+      'tax_reference': taxReference,
+      'share_percent': sharePercent,
+      'salary': salary,
+      'interest_on_capital': interestOnCapital,
+    };
+    if (id == null) {
+      await client.from('tax_partners').insert(payload);
+    } else {
+      await client.from('tax_partners').update(payload).eq('id', id);
+    }
+  }
+
+  Future<void> removeTaxPartner(String id) async {
+    await client.from('tax_partners').delete().eq('id', id);
+  }
+
+  /// The reliefs catalogue PCB already uses, for the Form B picker.
+  ///
+  /// The schedule in force at [on], so a claim made for an older year
+  /// is offered that year's caps rather than this year's.
+  Future<List<Map<String, dynamic>>> individualReliefs(DateTime on) async {
+    final day = Fmt.iso(on);
+    final schedules = await client
+        .from('statutory_schedules')
+        .select('id')
+        .eq('body', 'pcb')
+        .lte('effective_from', day)
+        .or('effective_to.is.null,effective_to.gt.'
+            '${Repo.orValue(day)}')
+        .order('effective_from', ascending: false)
+        .limit(1);
+    final list = (schedules as List).cast<Map<String, dynamic>>();
+    if (list.isEmpty) return const [];
+    final rows = await client
+        .from('tax_reliefs')
+        .select()
+        .eq('schedule_id', list.first['id'] as String)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Accounts whose treatment is for the other side of the ledger.
+  ///
+  /// Those lines are DROPPED from the computation rather than applied,
+  /// so the figure is simply wrong by whatever the account holds and
+  /// nothing else in the working would show it.
+  Future<List<Map<String, dynamic>>> taxMisfiledAccounts() async => _rows(
+    await callRpc('tax_computation_misfiled', params: {'p_org_id': orgId}),
+  );
+
+  /// The row's own figures — what the ledger cannot know.
+  Future<Map<String, dynamic>?> taxComputationRow(String id) async {
+    final rows = await client
+        .from('tax_computations')
+        .select()
+        .eq('id', id)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first;
+  }
+
+  /// The computation for a year, where one has already been opened.
+  ///
+  /// Opening one is not free — `open_tax_computation` writes a row and
+  /// a row is a document somebody then has to look at. The estimate
+  /// screen wants to MEASURE against a computation if there is one and
+  /// say so plainly if there is not, so it asks rather than opens.
+  Future<String?> existingTaxComputation(String fiscalYearId) async {
+    final rows = await client
+        .from('tax_computations')
+        .select('id')
+        .eq('fiscal_year_id', fiscalYearId)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : list.first['id']?.toString();
+  }
+
+  Future<void> saveTaxComputation(
+    String id,
+    Map<String, dynamic> changes,
+  ) async {
+    await client.from('tax_computations').update(changes).eq('id', id);
+  }
+
+  Future<void> addTaxAdjustment({
+    required String computationId,
+    required String kind,
+    required String label,
+    required double amount,
+    String? reason,
+  }) async {
+    await client.from('tax_adjustments').insert({
+      'org_id': orgId,
+      'computation_id': computationId,
+      'kind': kind,
+      'label': label,
+      'amount': amount,
+      'reason': reason,
+    });
+  }
+
+  /// The typed adjustments on a computation, as rows that can be
+  /// removed again. `tax_computation_lines` folds them in with the
+  /// tagged accounts, which is right for reading and useless for
+  /// deleting -- a folded line has no id.
+  Future<List<Map<String, dynamic>>> taxAdjustments(
+    String computationId,
+  ) async {
+    final rows = await client
+        .from('tax_adjustments')
+        .select()
+        .eq('computation_id', computationId)
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> removeTaxAdjustment(String id) async {
+    await client.from('tax_adjustments').delete().eq('id', id);
+  }
+
+  /// What a chart of accounts can say about an account's tax treatment.
+  Future<List<Map<String, dynamic>>> taxTreatments() async {
+    final rows = await client
+        .from('tax_treatments')
+        .select()
+        .order('sort_order', ascending: true);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// The Schedule 3 classes in force today, for the editor's picker.
+  ///
+  /// Not org-scoped: the rates are the same for every company in
+  /// Malaysia, and `0664` puts them behind a read-for-anybody policy
+  /// for that reason.
+  Future<List<CapitalAllowanceClass>> capitalAllowanceClasses() async {
+    final today = Fmt.iso(DateTime.now());
+    final rows = await client
+        .from('capital_allowance_classes')
+        .select()
+        .lte('effective_from', today)
+        .or('effective_to.is.null,effective_to.gt.'
+            '${Repo.orValue(today)}')
+        // `ascending: true` said out loud. postgrest-dart defaults it
+        // to FALSE, so the bare `.order('sort_order')` this was written
+        // as put industrial buildings at the top of the picker and
+        // plant and machinery at the bottom.
+        .order('sort_order', ascending: true);
+    return [
+      for (final r in (rows as List).cast<Map<String, dynamic>>())
+        CapitalAllowanceClass.fromMap(r),
+    ];
+  }
+
+  /// The Schedule 3 working for a year of assessment.
+  ///
+  /// [year] is the year of assessment, which for a December year end is
+  /// the calendar year. A company on another year end has a basis
+  /// period, and mapping one to the other is not modelled — `0664` takes
+  /// the year and says so rather than pretending to know.
+  Future<List<CapitalAllowanceLine>> capitalAllowances(int year) async {
+    final rows = _rows(
+      await callRpc(
+        'capital_allowance_schedule',
+        params: {'p_org_id': orgId, 'p_year': year},
+      ),
+    );
+    return [for (final r in rows) CapitalAllowanceLine.fromMap(r)];
+  }
+
   /// What the open foreign balances would be restated to, one row per
   /// currency. Raises if a currency has no rate on file at that date,
   /// rather than reporting a confident zero for one it cannot price.
@@ -2702,7 +3356,10 @@ class Repo {
       final q = search.trim();
       query = kind.isSales
           ? query.ilike('doc_no', '%$q%')
-          : query.or('doc_no.ilike.%$q%,supplier_doc_no.ilike.%$q%');
+          : query.or([
+              Repo.orLike('doc_no', q),
+              Repo.orLike('supplier_doc_no', q),
+            ].join(','));
     }
 
     final data = await query.order('doc_date', ascending: false).limit(limit);
@@ -3462,10 +4119,15 @@ class Repo {
     unawaited(notifyPush(conversationId: conversationId));
   }
 
-  /// Short-lived, because the object is private and the policy that
-  /// guards it asks whether you are in the conversation *now*.
-  Future<String> chatFileUrl(String storagePath) =>
-      client.storage.from('chat').createSignedUrl(storagePath, 60 * 60);
+  /// The file itself, for showing it INSIDE the app.
+  ///
+  /// The viewer takes bytes rather than a link on purpose: a signed URL
+  /// handed to the external browser is a working link to somebody's
+  /// private conversation sitting in another application's history for
+  /// an hour. Downloaded through the same authenticated client, so the
+  /// same policy answers the same question and no URL is created.
+  Future<Uint8List> chatFileBytes(String storagePath) =>
+      client.storage.from('chat').download(storagePath);
 
   /// Storage rejects a key with characters it cannot round-trip, and a
   /// name typed on a phone is not a key. The original is kept in
@@ -4237,6 +4899,17 @@ class Repo {
   /// GL account the ledger posts to. The function makes the GL account
   /// itself unless one is named, so a company with three banks gets
   /// three lines on its balance sheet rather than one.
+  /// Chart accounts money can sit in that no bank account points at.
+  ///
+  /// `0689`, from a report: somebody added a sub-account under Bank on
+  /// the chart and went looking for it in a bank dropdown. A bank
+  /// account here is TWO records and the chart screen makes one of
+  /// them, so the account existed and the picker was right not to list
+  /// it. This is the list that offers to finish the job.
+  Future<List<Map<String, dynamic>>> unregisteredBankAccounts() async =>
+      _rows(await callRpc('unregistered_bank_accounts',
+          params: {'p_org_id': orgId}));
+
   Future<String> upsertBankAccount({
     required String name,
     String? bankName,
@@ -4360,6 +5033,7 @@ class Repo {
     String? reference,
     String? projectCode,
     String? departmentCode,
+    String? matterId,
     List<Map<String, dynamic>>? split,
   }) async {
     final row = await client
@@ -4378,12 +5052,14 @@ class Repo {
           'tax_code_id': taxCodeId,
           'tax_amount': taxAmount,
           'total_amount': amount + taxAmount,
-          // The two analysis dimensions. `project_code` has been on
+          // The three analysis dimensions. `project_code` has been on
           // this table since the dimensions went in and nothing ever
-          // sent it; `department_code` arrived with 0639. Both null is
-          // the ordinary case and posts exactly as it always has.
+          // sent it; `department_code` arrived with 0639 and `matter_id`
+          // with 0692. All three null is the ordinary case and posts
+          // exactly as it always has.
           'project_code': projectCode,
           'department_code': departmentCode,
+          'matter_id': matterId,
         })
         .select()
         .single();
@@ -4994,6 +5670,35 @@ class Repo {
     }, onConflict: 'user_id');
   }
 
+  /// A value safe to sit inside a PostgREST `or(...)` filter tree.
+  ///
+  /// `or` is not a parameter, it is a little language: commas separate
+  /// the branches, dots separate column from operator from value, and
+  /// parentheses nest. So a supplier called
+  ///
+  ///     SHAHARUDIN, SHAM SUNDER & PARTNERS
+  ///
+  /// interpolated raw produced
+  ///
+  ///     failed to parse logic tree ... unexpected "&" (PGRST100)
+  ///
+  /// off a live phone, and any Malaysian firm with a comma in its name
+  /// could not be searched for at all. Worse where the failure was
+  /// caught: `resolveSupplier` treats a thrown lookup as "no match", so
+  /// the crash quietly became "supplier not found" and the dialog that
+  /// offers the near-misses never opened.
+  ///
+  /// PostgREST's own answer is to double-quote the value, escaping `\`
+  /// and `"` inside it. That is all this does, and every `or()` built
+  /// from anything a person typed has to use it -- which
+  /// `scripts/check_or_filters.py` now insists on.
+  static String orValue(String v) =>
+      '"${v.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
+
+  /// `column.ilike."%what they typed%"`, escaped.
+  static String orLike(String column, String q) =>
+      '$column.ilike.${orValue('%$q%')}';
+
   static List<Map<String, dynamic>> _rows(dynamic data) =>
       (data as List? ?? const [])
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -5224,8 +5929,9 @@ extension RepoOrgLogo on Repo {
       .eq('id', orgId);
 }
 
-class MyInvoisException implements Exception {
+class MyInvoisException implements Exception, Explained {
   MyInvoisException(this.message, [this.details]);
+  @override
   final String message;
   final dynamic details;
   @override
@@ -5240,6 +5946,18 @@ class MyInvoisException implements Exception {
 /// organization to be filed under -- `report_denied` takes an org_id and
 /// checks membership -- and "somebody who is not platform staff tried the
 /// console" is not a tenant's event to hold.
+/// A refusal from the `platform-users` edge function, carrying the
+/// sentence it wrote rather than the driver's envelope. `0721`.
+class PlatformUserException implements Exception, Explained {
+  PlatformUserException(this.message);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class PlatformRepo {
   PlatformRepo(this.client);
 
@@ -5250,6 +5968,296 @@ class PlatformRepo {
     return data == true;
   }
 
+  // ------------------------------------------------------------------
+  // The console: people, companies, and who can open which
+  //
+  // `0719`, `0720`, `0721` and the `platform-users` edge function.
+  // Every one of these takes no organization, which is why they are
+  // here and not on [Repo]: a console pane hung off a tenant
+  // repository shows a platform administrator who belongs to no
+  // company "Your company has not finished loading" and no way past it.
+  // ------------------------------------------------------------------
+
+  /// Who is on this platform. `0721`.
+  Future<List<Map<String, dynamic>>> platformUsers({
+    String? query,
+    int limit = 50,
+  }) async {
+    final data = await client.rpc('platform_users',
+        params: {'p_query': query, 'p_limit': limit});
+    return _platformRows(data);
+  }
+
+  /// Edits the parts of a person that live in `profiles`. The e-mail
+  /// address is the sign-in identity and belongs to the edge function.
+  Future<void> platformUpdateUser({
+    required String userId,
+    String? fullName,
+    String? phone,
+  }) =>
+      client.rpc('platform_update_user', params: {
+        'p_user_id': userId,
+        'p_full_name': fullName,
+        'p_phone': phone,
+      });
+
+  /// Which companies one person can open, and as what. `0720`.
+  Future<List<Map<String, dynamic>>> platformUserOrganizations(
+          String userId) async =>
+      _platformRows(await client.rpc('platform_user_organizations',
+          params: {'p_user_id': userId}));
+
+  /// Who can open one company. `0720`.
+  Future<List<Map<String, dynamic>>> platformOrgMembers(String orgId) async =>
+      _platformRows(await client
+          .rpc('platform_org_members', params: {'p_org_id': orgId}));
+
+  /// Gives somebody access to a company, or changes what they have.
+  /// The same request arriving twice, so the database upserts. `0720`.
+  Future<void> platformAssignOrgAccess({
+    required String orgId,
+    required String email,
+    required String role,
+  }) =>
+      client.rpc('platform_assign_org_access', params: {
+        'p_org_id': orgId,
+        'p_user_email': email,
+        'p_role': role,
+      });
+
+  Future<void> platformRemoveOrgAccess({
+    required String orgId,
+    required String userId,
+  }) =>
+      client.rpc('platform_remove_org_access',
+          params: {'p_org_id': orgId, 'p_user_id': userId});
+
+  /// Makes a fully seeded company and hands it to the named owner.
+  /// `0719`.
+  Future<String> platformCreateOrganization({
+    required String ownerEmail,
+    required String name,
+    String entityType = 'sdn_bhd',
+    String? registrationNo,
+    String? tin,
+    String? stateCode,
+    String? city,
+    String? phone,
+    String? email,
+  }) async {
+    final id = await client.rpc('platform_create_organization', params: {
+      'p_owner_email': ownerEmail,
+      'p_name': name,
+      'p_entity_type': entityType,
+      'p_registration_no': registrationNo,
+      'p_tin': tin,
+      'p_state_code': stateCode,
+      'p_city': city,
+      'p_phone': phone,
+      'p_email': email,
+    });
+    return '$id';
+  }
+
+  /// Name and contact details only. Not the tax defaults, the fiscal
+  /// year or the books start date — those change what the ledger does.
+  Future<void> platformUpdateOrganization({
+    required String orgId,
+    String? name,
+    String? legalName,
+    String? registrationNo,
+    String? tin,
+    String? phone,
+    String? email,
+    String? city,
+    String? stateCode,
+  }) =>
+      client.rpc('platform_update_organization', params: {
+        'p_org_id': orgId,
+        'p_name': name,
+        'p_legal_name': legalName,
+        'p_registration_no': registrationNo,
+        'p_tin': tin,
+        'p_phone': phone,
+        'p_email': email,
+        'p_city': city,
+        'p_state_code': stateCode,
+      });
+
+  /// Opens a support session over one company: read-only, expiring,
+  /// and written into that company's own audit trail. `0719`.
+  Future<String> grantSupportAccess({
+    required String orgId,
+    required String reason,
+    int minutes = 60,
+  }) async {
+    final id = await client.rpc('grant_support_access', params: {
+      'p_org_id': orgId,
+      'p_reason': reason,
+      'p_minutes': minutes,
+    });
+    return '$id';
+  }
+
+  Future<void> endSupportAccess(String id) =>
+      client.rpc('end_support_access', params: {'p_id': id});
+
+  /// The sessions this administrator currently holds, for the banner.
+  Future<List<Map<String, dynamic>>> mySupportAccess() async =>
+      _platformRows(await client.rpc('my_support_access'));
+
+  /// Every session, open and closed, for the console.
+  Future<List<Map<String, dynamic>>> platformSupportAccess({
+    int limit = 100,
+  }) async =>
+      _platformRows(
+          await client.rpc('platform_support_access', params: {'p_limit': limit}));
+
+  // ------------------------------------------------------------------
+  // The three that are not SQL
+  //
+  // Creating an account, setting a password and suspending one live in
+  // `auth.users`, and the only supported way to write them is the Admin
+  // API with the service role key. That key is in the edge function and
+  // nowhere else — not here, not in the schema, not in any payload a
+  // client can read.
+  // ------------------------------------------------------------------
+
+  /// Creates an account with a password the administrator sets.
+  Future<String> platformCreateUser({
+    required String email,
+    required String password,
+    String? fullName,
+  }) async {
+    final data = await _callPlatformUsers({
+      'action': 'create',
+      'email': email,
+      'password': password,
+      'full_name': fullName,
+    });
+    return '${data['user_id']}';
+  }
+
+  Future<void> platformSetPassword({
+    required String userId,
+    required String password,
+  }) =>
+      _callPlatformUsers({
+        'action': 'password',
+        'user_id': userId,
+        'password': password,
+      });
+
+  Future<void> platformSetSuspended({
+    required String userId,
+    required bool suspended,
+  }) =>
+      _callPlatformUsers({
+        'action': 'suspend',
+        'user_id': userId,
+        'suspended': suspended,
+      });
+
+  /// The edge function, with its refusal turned into one this app shows
+  /// like any other.
+  ///
+  /// `FunctionException` carries the body in `details`, and the message
+  /// inside it is written for a person — "A user with this email
+  /// address has already been registered" is the one that matters, and
+  /// it tells an administrator to go and look for them.
+  Future<Map<String, dynamic>> _callPlatformUsers(
+      Map<String, dynamic> body) async {
+    try {
+      final res = await client.functions.invoke('platform-users', body: body);
+      final data = res.data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return const {};
+    } on FunctionException catch (e) {
+      final said = e.details;
+      final message = said is Map ? '${said['error'] ?? ''}'.trim() : '';
+      throw PlatformUserException(
+          message.isEmpty ? 'That did not work.' : message);
+    }
+  }
+
+  List<Map<String, dynamic>> _platformRows(dynamic data) =>
+      (data as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+  /// The five scanning surface switches. `0718`.
+  ///
+  /// On `PlatformRepo` and not on [Repo], although ordinary screens
+  /// read it: neither call takes an organization, and the console page
+  /// that MOVES these must not wait on one — a platform administrator
+  /// who belongs to no company would otherwise get "Your company has
+  /// not finished loading" and no way past it, which is the failure
+  /// `platform_console_wiring_test.dart` exists to stop coming back.
+  ///
+  /// Read through a function of its own rather than off
+  /// `platform_settings`, whose read policy is platform staff plus one
+  /// named key, and which also holds `maintenance_mode` and
+  /// `signup_enabled`. `scan_surfaces()` is granted to `authenticated`
+  /// and returns those five and nothing else.
+  Future<Map<String, dynamic>> scanSurfaces() async {
+    final data = await client.rpc('scan_surfaces');
+    return Map<String, dynamic>.from((data as Map?) ?? const {});
+  }
+
+  /// Moves one of them. Platform administrators only, and the database
+  /// refuses a key that is not one of the five.
+  Future<void> setScanSurface({
+    required String key,
+    required bool on,
+  }) =>
+      client.rpc('set_scan_surface', params: {'p_key': key, 'p_on': on});
+
+  /// Whether this person sees the floating report button.
+  ///
+  /// Asked once per session and cheap: `0663`'s function takes no
+  /// argument, so there is nothing to get wrong about whom it is
+  /// answering for.
+  Future<bool> amIABetaTester() async {
+    final data = await client.rpc('am_i_a_beta_tester');
+    return data == true;
+  }
+
+  /// The beta list, newest first, with names rather than uuids.
+  Future<List<BetaTester>> betaTesters() async {
+    final rows = await client.rpc('beta_testers_list');
+    return [
+      for (final r in (rows as List).cast<Map<String, dynamic>>())
+        BetaTester.fromMap(r),
+    ];
+  }
+
+  /// People matching a name or an e-mail, for the console's picker.
+  ///
+  /// Comes back empty under two characters, which the server decides --
+  /// see `0663`. The screen says so rather than showing an empty list
+  /// that reads as "nobody by that name".
+  Future<List<PlatformUser>> searchUsers(String query) async {
+    final rows = await client.rpc(
+      'search_platform_users',
+      params: {'p_query': query},
+    );
+    return [
+      for (final r in (rows as List).cast<Map<String, dynamic>>())
+        PlatformUser.fromMap(r),
+    ];
+  }
+
+  Future<void> assignBetaTester(String userId, {String? note}) async {
+    await client.rpc(
+      'assign_beta_tester',
+      params: {'p_user_id': userId, 'p_note': note},
+    );
+  }
+
+  Future<void> removeBetaTester(String userId) async {
+    await client.rpc('remove_beta_tester', params: {'p_user_id': userId});
+  }
+
   /// The last few iOS releases, newest first.
   ///
   /// Read from GitHub through the `ios-release` function rather than
@@ -5258,10 +6266,10 @@ class PlatformRepo {
   /// app's opinion of what happened. A workflow that failed to start,
   /// or one somebody ran by hand from the Actions tab, both show up in
   /// the same list.
-  Future<IosReleases> iosReleases() async {
+  Future<AppReleases> appReleases(ReleasePlatform platform) async {
     final FunctionResponse res;
     try {
-      res = await client.functions.invoke('ios-release');
+      res = await client.functions.invoke(platform.fn);
     } on FunctionException catch (e) {
       // `invoke` THROWS on a non-2xx. It does not hand back a response
       // with a status to inspect, which is what the first version of
@@ -5273,11 +6281,13 @@ class PlatformRepo {
         e.details,
         orElse: 'The build list could not be read',
       );
-      if (releaseNotConfigured(e.status)) return IosReleases.unavailable(said);
+      if (releaseNotConfigured(e.status)) {
+        return AppReleases.unavailable(said);
+      }
       throw Exception(said);
     }
     final runs = (res.data as Map)['runs'] as List? ?? const [];
-    return IosReleases.runs([
+    return AppReleases.runs([
       for (final r in runs) Map<String, dynamic>.from(r as Map),
     ]);
   }
@@ -5288,13 +6298,20 @@ class PlatformRepo {
   /// the public: the first reaches your own testers, the second reaches
   /// App Review, and what happens after that is Apple's and takes as
   /// long as it takes.
-  Future<void> releaseIosApp({required String lane, String? notes}) async {
+  Future<void> releaseApp(
+    ReleasePlatform platform, {
+    required String choice,
+    String? notes,
+  }) async {
     try {
       await client.functions.invoke(
-        'ios-release',
+        platform.fn,
         body: {
           'action': 'release',
-          'lane': lane,
+          // `lane` for iOS and `track` for Android, because that is
+          // what each workflow declares. One name for both would be a
+          // 422 from GitHub naming neither the input nor the value.
+          platform.input: choice,
           if (notes != null) 'notes': notes,
         },
       );
@@ -5407,6 +6424,29 @@ class PlatformRepo {
         'set_feedback_status',
         params: {'p_id': id, 'p_status': status, 'p_note': note},
       );
+
+  /// The files on one report. `0660`.
+  ///
+  /// Here rather than on `Repo` because this is where they are read
+  /// from: triage. `feedback_files` carries its own `can_see_feedback`
+  /// check, which is what lets somebody in NO organization open a
+  /// screenshot belonging to a company's report — the thing the whole
+  /// migration is arranged around.
+  Future<List<Map<String, dynamic>>> feedbackFiles(String reportId) async =>
+      Repo._rows(
+        await client.rpc('feedback_files', params: {'p_report_id': reportId}),
+      );
+
+  /// The file itself, for showing it INSIDE the console.
+  ///
+  /// This used to mint a ten-minute signed link and hand it to the
+  /// external browser. A screenshot attached to a bug report is
+  /// somebody's books on their screen, and ten minutes is long enough
+  /// for that link to be forwarded, cached and logged. Downloaded
+  /// through the same authenticated client instead, so no URL exists
+  /// to leak rather than one that expires.
+  Future<Uint8List> feedbackFileBytes(String storagePath) =>
+      client.storage.from('feedback').download(storagePath);
 
   /// `value` is `dynamic` rather than a map because `platform_settings`
   /// stores jsonb, and not every setting is an object: `mail_domain` is
@@ -5804,7 +6844,10 @@ extension RepoExtras on Repo {
     if (status != null && status != 'all') query = query.eq('status', status);
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or('name.ilike.%$q%,matter_no.ilike.%$q%');
+      query = query.or([
+        Repo.orLike('name', q),
+        Repo.orLike('matter_no', q),
+      ].join(','));
     }
 
     final data = await query.order('matter_no', ascending: false).limit(200);
@@ -6314,8 +7357,11 @@ extension RepoHr on Repo {
       q = q.eq('employment_status', status);
     }
     if (search != null && search.trim().isNotEmpty) {
-      final s = '%${search.trim()}%';
-      q = q.or('full_name.ilike.$s,employee_no.ilike.$s');
+      final s = search.trim();
+      q = q.or([
+        Repo.orLike('full_name', s),
+        Repo.orLike('employee_no', s),
+      ].join(','));
     }
     return Repo._rows(
       await q.order('employee_no', ascending: true),

@@ -297,17 +297,24 @@ void main() {
   });
 
   group('which cycle this is', () {
-    testWidgets('a bill can be scanned', (tester) async {
+    // `0694` took the scan button off this screen, and off the three
+    // others that had one. Scanning is a module with a door of its own
+    // now, because the button being HERE was what made the same receipt
+    // a bill on this screen and an expense on the next.
+    //
+    // Asserted as an absence, and kept rather than deleted: a button
+    // quietly coming back on one screen is exactly how four doors grew
+    // the first time.
+    testWidgets('no scan button lives on this screen any more',
+        (tester) async {
       await show(tester, docType: 'bill');
-
-      expect(find.text('Scan bill'), findsOneWidget);
+      expect(find.text('Scan bill'), findsNothing);
+      expect(find.textContaining('Scan'), findsNothing);
     });
 
-    testWidgets('an invoice cannot', (tester) async {
-      // There is nothing to scan: a sales invoice is raised from what
-      // we are owed, not read off a piece of paper somebody handed us.
+    testWidgets('and none on the sales side either', (tester) async {
       await show(tester);
-
+      expect(find.text('Scan invoice'), findsNothing);
       expect(find.textContaining('Scan'), findsNothing);
     });
 
@@ -616,13 +623,12 @@ void main() {
       );
 
       expect(find.text('From the group (1)'), findsNothing);
-      expect(find.text('Scan bill'), findsNothing);
+      expect(find.text('Pay supplier'), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('more-actions')));
       await tester.pumpAndSettle();
 
       expect(find.text('From the group (1)'), findsOneWidget);
-      expect(find.text('Scan bill'), findsOneWidget);
       expect(find.text('Pay supplier'), findsOneWidget);
     });
 
@@ -639,7 +645,7 @@ void main() {
       );
 
       expect(find.text('From the group (1)'), findsOneWidget);
-      expect(find.text('Scan bill'), findsOneWidget);
+      expect(find.text('Pay supplier'), findsOneWidget);
       expect(find.byKey(const ValueKey('more-actions')), findsNothing);
     });
 

@@ -154,7 +154,7 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
     _paid =
         c?['paid_on'] == null ? null : DateTime.parse(c!['paid_on'] as String);
     _billId = c?['bill_document_id'] as String?;
-    _billNo = (c?['purchase_documents'] as Map?)?['doc_no'] as String?;
+    _billNo = c == null ? null : billNoOf(c);
   }
 
   @override

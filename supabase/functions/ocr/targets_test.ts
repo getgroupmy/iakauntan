@@ -1,0 +1,620 @@
+import {
+  assert,
+  assertEquals,
+  assertStringIncludes,
+} from "jsr:@std/assert@1.0.19";
+import {
+  narrowToTarget,
+  outputBudget,
+  requiredWith,
+  targetPrompt,
+  targetSchema,
+  tooLongMessage,
+  usableTargets,
+} from "./targets.ts";
+
+// What a platform configures in the console becomes part of the schema
+// every reader is sent. Three things can go wrong quietly there and
+// every one of them looks like the reader being stupid:
+//
+//   * a target with no fields becomes a choice the model can make and
+//     then have nothing to fill, which reads as the scan having
+//     understood the document and lost it;
+//   * a missing `null` in the enum turns "I cannot place this" into a
+//     guess, and a document placed wrongly costs more than one placed
+//     nowhere;
+//   * a field with no description becomes a column name shown to a
+//     model and answered from the name alone.
+
+Deno.test("a target with no fields is not offered", () => {
+  const got = usableTargets([
+    { key: "purchases.bill", label: "A bill", fields: [] },
+    { key: "accounting.expense", label: "An expense", fields: null },
+    {
+      key: "contacts.contact",
+      label: "A contact",
+      fields: [{ name: "name" }],
+    },
+  ]);
+  assertEquals(got.map((t) => t.key), ["contacts.contact"]);
+});
+
+Deno.test("a field with no name is not a field", () => {
+  const got = usableTargets([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "" }] },
+  ]);
+  assertEquals(got.length, 0);
+});
+
+Deno.test("nonsense off the wire is no targets, not a throw", () => {
+  // The rpc can answer null on a database older than 0681, and the
+  // whole point is that such a deployment scans exactly as it did.
+  assertEquals(usableTargets(null), []);
+  assertEquals(usableTargets("[]"), []);
+  assertEquals(usableTargets([null, 3, "x"]), []);
+});
+
+Deno.test("no targets means no schema, so nothing is added", () => {
+  assertEquals(targetSchema([]), null);
+  assertEquals(targetPrompt([]), "");
+});
+
+Deno.test("the enum can say it does not know", () => {
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+  ])!;
+  const target = schema.target as { enum: (string | null)[] };
+  // Null LAST and null PRESENT. A model with no way to say "none of
+  // these" picks the closest one, and the closest one becomes a record
+  // somebody has to find and undo.
+  assertEquals(target.enum, ["purchases.bill", null]);
+});
+
+Deno.test("every field of every target is askable, flat", () => {
+  const schema = targetSchema([
+    {
+      key: "purchases.bill",
+      label: "A bill",
+      fields: [{ name: "doc_no" }, { name: "total" }],
+    },
+    {
+      key: "contacts.contact",
+      label: "A contact",
+      fields: [{ name: "email" }],
+    },
+  ])!;
+  const fields = schema.fields as { properties: Record<string, unknown> };
+  assertEquals(
+    Object.keys(fields.properties).sort(),
+    ["doc_no", "email", "total"],
+  );
+});
+
+Deno.test("a column two targets share is described once", () => {
+  // Two descriptions of one field is a field with contradictory
+  // instructions, which is worse than one imperfect sentence.
+  const schema = targetSchema([
+    {
+      key: "purchases.bill",
+      label: "A bill",
+      fields: [{ name: "doc_no", description: "The bill number." }],
+    },
+    {
+      key: "purchases.purchase_order",
+      label: "An order",
+      fields: [{ name: "doc_no", description: "The order number." }],
+    },
+  ])!;
+  const fields = schema.fields as {
+    properties: Record<string, { description: string }>;
+  };
+  assertEquals(Object.keys(fields.properties), ["doc_no"]);
+  assertEquals(fields.properties.doc_no.description, "The bill number.");
+});
+
+Deno.test("a field with no description still gets a question", () => {
+  // A bare column name handed to a model is answered from the name
+  // alone. This is a poor question and it is a question.
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "total_amount" }] },
+  ])!;
+  const fields = schema.fields as {
+    properties: Record<string, { description: string }>;
+  };
+  assertStringIncludes(fields.properties.total_amount.description, "total amount");
+  assertStringIncludes(fields.properties.total_amount.description, "as printed");
+});
+
+Deno.test("every field is nullable, because a page may not print it", () => {
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+  ])!;
+  const fields = schema.fields as {
+    properties: Record<string, { type: string[] }>;
+  };
+  assertEquals(fields.properties.doc_no.type, ["string", "null"]);
+});
+
+Deno.test("the prompt names the kinds of paper that land there", () => {
+  const said = targetPrompt([
+    {
+      key: "purchases.bill",
+      label: "A supplier's bill",
+      hint: "Becomes a bill.",
+      kinds: ["Supplier's bill or invoice", "Receipt"],
+      fields: [{ name: "doc_no", description: "The bill number." }],
+    },
+  ]);
+  assertStringIncludes(said, "purchases.bill");
+  assertStringIncludes(said, "A supplier's bill");
+  // The kinds are the operator's own words for the paper, and they are
+  // what a model recognises a letterhead against.
+  assertStringIncludes(said, "Supplier's bill or invoice");
+  assertStringIncludes(said, "doc_no — The bill number.");
+  // And the instruction that keeps a bad guess out of the books.
+  assertStringIncludes(said, "`target` is null");
+});
+
+// `0682`. A bank statement is forty records, not one, and a schema that
+// offered only `fields` would get the first line, or an average, or
+// whichever line the model thought mattered — all three of which look
+// like an answer.
+
+Deno.test("a repeating target asks for rows", () => {
+  const schema = targetSchema([
+    {
+      key: "accounting.bank_statement",
+      label: "A bank statement",
+      repeats: true,
+      fields: [{ name: "transaction_date" }, { name: "amount" }],
+    },
+  ])!;
+  const rows = schema.rows as {
+    type: string[];
+    items: { properties: Record<string, unknown> };
+  };
+  assertEquals(rows.type, ["array", "null"]);
+  assertEquals(
+    Object.keys(rows.items.properties).sort(),
+    ["amount", "transaction_date"],
+  );
+});
+
+Deno.test("no repeating target means no rows at all", () => {
+  // Every other document, which is nearly all of them. An unused `rows`
+  // in the schema is an array a model can decide to fill for a bill.
+  const schema = targetSchema([
+    {
+      key: "purchases.bill",
+      label: "A bill",
+      fields: [{ name: "doc_no" }],
+    },
+  ])!;
+  assertEquals("rows" in schema, false);
+});
+
+Deno.test("a repeating target's fields stay out of the single map", () => {
+  // `fields` is for the destination that takes ONE record. A statement
+  // column appearing there would invite the model to answer both, and
+  // the two answers would disagree.
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "running_balance" }],
+    },
+  ])!;
+  const fields = schema.fields as { properties: Record<string, unknown> };
+  assertEquals(Object.keys(fields.properties), ["doc_no"]);
+});
+
+Deno.test("the prompt says one entry per printed line", () => {
+  const said = targetPrompt([
+    {
+      key: "accounting.bank_statement",
+      label: "A bank statement",
+      repeats: true,
+      kinds: ["Bank statement"],
+      fields: [{ name: "amount", description: "Negative for money out." }],
+    },
+  ]);
+  assertStringIncludes(said, "ONE ENTRY PER PRINTED LINE");
+  assertStringIncludes(said, "`rows` rather than");
+  // Every line, in order. A statement with lines missing reconciles to
+  // nothing, and a model left to summarise will drop the small ones.
+  assertStringIncludes(said, "in the order printed");
+});
+
+// The one that broke scanning in production.
+//
+// `SCHEMA` in `index.ts` is `strict: true`, `additionalProperties:
+// false`, with an explicit `required` naming every property. OpenAI's
+// strict mode enforces that: a property not in `required` is an invalid
+// schema and the call comes back 400. Merging the configured fields
+// into `properties` and not into `required` therefore broke every scan
+// — but only on a platform that had ticked at least one field, because
+// an empty target list leaves the schema alone. It presented as
+// scanning that had worked all week and suddenly stopped.
+
+Deno.test("every property the targets add is also required", () => {
+  const extra = targetSchema([
+    {
+      key: "purchases.bill",
+      label: "A bill",
+      fields: [{ name: "doc_no" }],
+    },
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }],
+    },
+  ])!;
+  const base = ["supplier_name", "note"];
+  const required = requiredWith(base, extra);
+
+  // Nothing lost...
+  for (const k of base) assertEquals(required.includes(k), true);
+  // ...and every added property named.
+  for (const k of Object.keys(extra)) {
+    assertEquals(required.includes(k), true, `${k} is not required`);
+  }
+  // `target`, `fields`, `statement` and `rows` for this pair. The count
+  // is asserted as well as the loop above, because the loop only proves
+  // that what IS there is required -- it cannot notice a key that
+  // stopped being added at all.
+  assertEquals(required.length, base.length + 4);
+});
+
+/**
+ * The header a repeating document carries, beside its lines.
+ *
+ * A bank statement is not only its rows. It prints a period, an opening
+ * and a closing balance, and the account it belongs to, and the reader
+ * was asked for none of it -- so the one check that spans the whole
+ * document could not be made:
+ *
+ *     opening + sum(every amount) == closing
+ *
+ * `import_bank_transactions` walks the chain line to line, which catches
+ * a line misread BETWEEN two balances. It cannot catch a line missing
+ * from the end, a statement read from the wrong page, or a first line
+ * never returned -- each of which closes a chain that was never the
+ * whole statement.
+ */
+Deno.test("a repeating target is asked about the document, not only its lines", () => {
+  const extra = targetSchema([
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }],
+    },
+  ])!;
+
+  const stmt = extra.statement as Record<string, unknown>;
+  assertEquals(typeof stmt, "object");
+  const props = Object.keys(stmt.properties as Record<string, unknown>);
+  for (
+    const k of [
+      "period_start",
+      "period_end",
+      "opening_balance",
+      "closing_balance",
+      "account_number_tail",
+      "institution",
+    ]
+  ) {
+    assertEquals(props.includes(k), true, `${k} is not asked for`);
+  }
+  // Strict mode rejects a nested object whose `required` does not name
+  // every property, and the 400 reads to a bookkeeper as the document
+  // being unreadable. Same rule as `rows`, one level down.
+  assertEquals(stmt.required, props);
+  assertEquals(stmt.additionalProperties, false);
+});
+
+Deno.test("and a one-record target is asked nothing about a statement", () => {
+  // `statement` on a bill is a key that can only ever be null, which is
+  // one more thing for a model to think about and fill in wrongly.
+  const extra = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+  ])!;
+
+  assertEquals("statement" in extra, false);
+});
+
+Deno.test("four characters of the account number, and it says so", () => {
+  // Deliberate, and the reason is in SECURITY_PRIVACY: four digits is
+  // enough to warn that a statement may not belong to the account it is
+  // being imported into, and not enough to be worth leaking. A reader
+  // left to itself returns the whole number.
+  const extra = targetSchema([
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }],
+    },
+  ])!;
+  const stmt = extra.statement as Record<string, unknown>;
+  const tail = (stmt.properties as Record<string, { description: string }>)
+    .account_number_tail.description;
+
+  assertEquals(tail.includes("LAST FOUR"), true);
+  assertEquals(tail.includes("Never the whole number"), true);
+});
+
+
+Deno.test("no targets adds nothing to required", () => {
+  assertEquals(requiredWith(["a"], null), ["a"]);
+});
+
+Deno.test("a name is never required twice", () => {
+  // A duplicate in `required` is not rejected by every vendor, and is
+  // rejected by some. Cheaper to make impossible than to find out.
+  const extra = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+  ])!;
+  const required = requiredWith(["target", "supplier_name"], extra);
+  assertEquals(required.filter((k) => k === "target").length, 1);
+});
+
+Deno.test("the nested objects name their properties too", () => {
+  // Strict mode is not only a top-level rule. `fields` and each row of
+  // `rows` are objects with `additionalProperties: false`, and a
+  // vendor rejects either one for the same reason.
+  const schema = targetSchema([
+    { key: "purchases.bill", label: "A bill", fields: [{ name: "doc_no" }] },
+    {
+      key: "accounting.bank_statement",
+      label: "A statement",
+      repeats: true,
+      fields: [{ name: "amount" }, { name: "transaction_date" }],
+    },
+  ])!;
+
+  const fields = schema.fields as {
+    required: string[];
+    properties: Record<string, unknown>;
+  };
+  assertEquals(fields.required, Object.keys(fields.properties));
+
+  const rows = schema.rows as {
+    items: { required: string[]; properties: Record<string, unknown> };
+  };
+  assertEquals(rows.items.required.sort(), ["amount", "transaction_date"]);
+  assertEquals(rows.items.required.length, Object.keys(rows.items.properties).length);
+});
+
+/**
+ * How much room the reader is given, and why it is not a constant.
+ *
+ * It was 4000 at all three readers. That is right for a receipt —
+ * fourteen fields and a handful of lines — and it is about SEVENTY
+ * LINES of a bank statement, where each line of JSON costs roughly
+ * fifty-five tokens. A one-month business current account runs to two
+ * or three hundred.
+ *
+ * What a statement got was not a partial answer. It was
+ * `stop_reason: max_tokens`, reported to somebody who had just
+ * photographed their statement as the scan having failed.
+ */
+/// Exactly what `index.ts` hands a reader.
+///
+/// This is the shape that matters and the shape the first version of
+/// `outputBudget` got wrong: `targetSchema` puts `rows` at the top, and
+/// `index.ts` then spreads the whole thing into `properties`. Asking
+/// `"rows" in schema` of the assembled object is false, so every
+/// statement in production would have kept the 4000-token budget while
+/// a test that asked `targetSchema` directly went green.
+function assembled(extra: Record<string, unknown> | null) {
+  const base = {
+    type: "object",
+    additionalProperties: false,
+    required: ["supplier_name", "total_amount"],
+    properties: {
+      supplier_name: { type: ["string", "null"] },
+      total_amount: { type: ["number", "null"] },
+    },
+  };
+  if (extra === null) return base;
+  return {
+    ...base,
+    properties: { ...base.properties, ...extra },
+    required: requiredWith(base.required, extra),
+  };
+}
+
+const statementTarget = {
+  key: "accounting.bank_statement",
+  label: "A bank statement",
+  repeats: true,
+  fields: [{ name: "transaction_date" }, { name: "amount" }],
+};
+
+const receiptTarget = {
+  key: "accounting.expense",
+  label: "An expense",
+  fields: [{ name: "expense_date" }, { name: "total_amount" }],
+};
+
+Deno.test("a statement is given room for a statement", () => {
+  const schema = assembled(targetSchema([statementTarget]));
+  assertEquals(outputBudget(schema, 16000), 16000);
+});
+
+Deno.test("and a receipt is not, because it cannot use it", () => {
+  const schema = assembled(targetSchema([receiptTarget]));
+  assertEquals(outputBudget(schema, 16000), 4000);
+});
+
+Deno.test("a deployment with no targets keeps exactly what it had", () => {
+  // `targetSchema` answers null and `index.ts` leaves the base schema
+  // untouched. Nothing about this change may move that.
+  assertEquals(targetSchema([]), null);
+  assertEquals(outputBudget(assembled(null), 16000), 4000);
+});
+
+Deno.test("the vendor's ceiling wins, because exceeding it is a 400", () => {
+  // Gemini 2.0 Flash tops out at 8192 output tokens. Asking for more is
+  // refused outright rather than truncated -- which would turn a long
+  // statement into an error, the exact failure this removes.
+  assertEquals(outputBudget(assembled(targetSchema([statementTarget])), 8192),
+    8192);
+  // And a receipt under a low ceiling is still the receipt's budget,
+  // not the ceiling.
+  assertEquals(outputBudget(assembled(targetSchema([receiptTarget])), 8192),
+    4000);
+});
+
+Deno.test("the bare schema works too, since both shapes are real", () => {
+  // A caller holding `targetSchema`'s own output rather than the
+  // assembled one. Accepted, and asserted so that accepting it is a
+  // decision rather than an accident.
+  assertEquals(outputBudget(targetSchema([statementTarget])!, 16000), 16000);
+});
+
+/**
+ * What is said when the room runs out.
+ *
+ * Two sentences because they are two situations with two remedies.
+ * "Attach the page with the totals on it" is sound about a forty-page
+ * lease and useless about a statement, where every page is the point
+ * and the totals page is the one part nobody needs.
+ */
+Deno.test("a statement that overflows is told what to do about it", () => {
+  const said = tooLongMessage(assembled(targetSchema([statementTarget])));
+  assertStringIncludes(said, "statement");
+  // The way out with no length limit at all, because it is not read by
+  // a model.
+  assertStringIncludes(said, "CSV");
+  assert(
+    !said.includes("page with the totals"),
+    "that advice is for a long document, not for a statement",
+  );
+});
+
+Deno.test("and a long document still gets the advice that suits it", () => {
+  assertStringIncludes(
+    tooLongMessage(assembled(targetSchema([receiptTarget]))),
+    "page with the totals",
+  );
+});
+
+/**
+ * The destination the caller already knows.
+ *
+ * Reported with two screenshots: somebody pressed Upload inside the
+ * bank statement importer, beside a named bank account, and got back
+ * "Nothing on that document read as statement lines". There is no
+ * ambiguity in that press — they said what the document is and where
+ * it goes — and the reader was still handed seven destinations and
+ * asked to pick. A statement classified as anything else comes back
+ * with `rows` null and nothing to import.
+ */
+Deno.test("naming a destination narrows to it", () => {
+  const all = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  const one = narrowToTarget(all, "accounting.bank_statement");
+  assertEquals(one.length, 1);
+  assertEquals(one[0].key, "accounting.bank_statement");
+});
+
+Deno.test("and the schema then certainly has rows on it", () => {
+  // The whole point. Un-narrowed, whether `rows` appears depends on
+  // some OTHER target happening to repeat; narrowed to the statement,
+  // it is there because the statement is there.
+  const one = narrowToTarget(
+    usableTargets([
+      { key: "accounting.bank_statement", label: "A bank statement",
+        repeats: true, fields: [{ name: "amount" }] },
+      { key: "purchases.bill", label: "A bill",
+        fields: [{ name: "total_amount" }] },
+    ]),
+    "accounting.bank_statement",
+  );
+
+  const schema = targetSchema(one)!;
+  assert("rows" in schema, "a narrowed statement must ask for rows");
+  // And the bill's fields are gone, which on a long statement is
+  // output budget that was being spent on nulls.
+  assert(!("fields" in schema), "no single-record target is left to fill");
+});
+
+Deno.test("naming nothing leaves every destination on offer", () => {
+  const all = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  assertEquals(narrowToTarget(all, null).length, 2);
+  assertEquals(narrowToTarget(all, "").length, 2);
+  assertEquals(narrowToTarget(all, "   ").length, 2);
+  assertEquals(narrowToTarget(all, undefined).length, 2);
+});
+
+Deno.test("and an unknown key WIDENS rather than silencing the reader", () => {
+  // A caller out of step with the database. The right answer is the
+  // behaviour this had before -- every target offered -- not a reader
+  // with nothing at all to choose from, which would make every scan
+  // from that caller return nothing.
+  const all = usableTargets([
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  assertEquals(narrowToTarget(all, "accounting.does_not_exist").length, 1);
+  assertEquals(narrowToTarget(all, "accounting.does_not_exist")[0].key,
+    "purchases.bill");
+});
+
+Deno.test("the prompt tells a told reader that it has been told", () => {
+  const one = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+  ]);
+
+  const told = targetPrompt(one, true);
+  assertStringIncludes(told, "ALREADY BEEN IDENTIFIED");
+  assertStringIncludes(told, "A bank statement");
+  // It must still be able to disagree -- somebody picked the wrong
+  // file -- but not by quietly choosing a different destination, since
+  // the screen that asked has nowhere to put one.
+  assertStringIncludes(told, "`target` is null");
+  assertStringIncludes(told, "Do not quietly");
+});
+
+Deno.test("and an untold reader is still asked to decide", () => {
+  const all = usableTargets([
+    { key: "accounting.bank_statement", label: "A bank statement",
+      repeats: true, fields: [{ name: "amount" }] },
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+
+  const asked = targetPrompt(all, false);
+  assertStringIncludes(asked, "Decide which of these it is");
+  assertStringIncludes(asked, "placed wrongly costs more");
+  assert(
+    !asked.includes("ALREADY BEEN IDENTIFIED"),
+    "nothing identified it",
+  );
+});
+
+Deno.test("the default is untold, so every existing caller is unchanged", () => {
+  const all = usableTargets([
+    { key: "purchases.bill", label: "A bill",
+      fields: [{ name: "total_amount" }] },
+  ]);
+  assertEquals(targetPrompt(all), targetPrompt(all, false));
+});

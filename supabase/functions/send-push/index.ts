@@ -81,7 +81,7 @@
  *   APNS_TOPIC            the app's bundle identifier      (iPhones)
  *   APNS_PRODUCTION       "true" for the production host, else sandbox
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.117.0";
 import {
   fail,
   failUnexpected,
