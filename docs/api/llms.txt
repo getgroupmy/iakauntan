@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0722` (the highest applied migration).
+Schema version `0723` (the highest applied migration).
 807 functions and 367 readable tables, of which
 317 functions only read.
 
@@ -739,7 +739,7 @@ Not gated on any module.
 - `platform_users(p_query text, p_limit integer)` — Who is on this platform, for the console: when they last signed in, whether they confirmed their address, whether they are suspended, and how many companies they can open.
 - `portal_document_token(p_token text, p_document_id uuid)` *(writes)* — Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 0414's payment work unchanged.
 - `pos_report_fields(p_source app.pos_report_source)` — What this source can be cut by and what it can add up.
-- `post_bank_transaction(p_transaction_id uuid, p_account_id uuid, p_description text, p_contact_id uuid)` *(writes)* — Turns an unmatched statement line into a journal against one chosen account, and matches the line to it.
+- `post_bank_transaction(p_transaction_id uuid, p_account_id uuid, p_description text, p_contact_id uuid, p_matter_id uuid)` *(writes)* — Turns an unmatched statement line into a journal against one chosen account, and matches the line to it.
 - `post_bank_transfer(p_id uuid)` *(writes)* — Posts a transfer between two of the company's own bank accounts, with the fee to its own account and any residual as exchange difference.
 - `post_client_transaction(p_id uuid)` *(writes)* — Posts money through a legal practice's CLIENT account -- money the firm holds and does not own.
 - `post_expense(p_id uuid)` *(writes)* — Posts a recorded expense.
