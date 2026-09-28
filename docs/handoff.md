@@ -1252,11 +1252,30 @@ Add a property, add its name to `required`, at every level.
 Everything downstream follows from that one line, and none of it is
 obvious:
 
-* **`main` deploys nothing.** The migrate, edge-function and
-  workspace-proxy jobs are all gated on
+* **`main` touches nothing in production — but it is not true that it
+  deploys nothing.** The migrate, edge-function and workspace-proxy jobs
+  are all gated on
   `github.ref_name == github.event.repository.default_branch`, so on a
-  push to `main` they are SKIPPED. PR #4 merged this branch into `main`
-  on 2026-09-21 and its run skipped all three.
+  push to `main` those three are SKIPPED. PR #4 merged this branch into
+  `main` on 2026-09-21 and its run skipped all three; PR #5 merged it
+  again on 2026-09-28 (`7af418f9`) and run 2157 skipped the same three.
+
+  **The Vercel job is the exception, and it is easy to miss.** Its `if:`
+  has no `default_branch` comparison in it at all — only
+  `github.event_name != 'pull_request'`, the two upstream jobs and the
+  `superseded` check — so it runs on a push to ANY branch. What the
+  branch decides is the *kind* of deploy: on the default branch it runs
+  `vercel deploy --prebuilt --prod`, and anywhere else it takes the
+  `else` and runs `vercel deploy --prebuilt` with no `--prod`, which is a
+  **preview** deploy to a throwaway URL. "Confirm the domain is serving
+  this commit" is inside the default-branch arm, so on `main` it is
+  skipped too.
+
+  On run 2157 the Vercel job therefore RAN — it built the web bundle and
+  deployed it — as a preview. Nothing the live domain serves changed.
+  So: a push to `main` cannot touch the database, the edge functions,
+  the workspace proxy or the production web app, but it does build and
+  publish a preview, and saying "`main` deploys nothing" overstates it.
 * **This branch deploys everything.** Those same jobs run here, and
   `MIGRATIONS_AUTOPUSH` is `true`, so a green run on this branch
   applies its migrations to the live project and redeploys the edge
@@ -1279,7 +1298,8 @@ obvious:
   To answer "is the live site running commit X", look at the run for
   the TIP at the time, not at X's own run.
 * So the live product tracks THIS BRANCH. Merging to `main` is
-  bookkeeping, plus the one thing in the next bullet.
+  bookkeeping — plus a preview deploy nobody asked for, plus the one
+  thing in the next bullet.
 * **`workflow_dispatch` needs the file on the ref being dispatched.**
   `supabase/functions/ios-release` names a ref, and GitHub looks for
   the workflow file THERE — not on the default branch because it is the

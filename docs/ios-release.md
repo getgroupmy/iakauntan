@@ -173,9 +173,11 @@ can say "Nothing yet" and the button can still refuse.
 > **Worth knowing while you are here.** Because the default branch is
 > not `main`, the deploy jobs in `ci.yml` — migrations, edge
 > functions, the workspace proxy — run on the default branch and are
-> SKIPPED on `main`. So merging to `main` deploys nothing; it only
-> puts the file where a dispatch can find it. `docs/handoff.md` has
-> the full consequence.
+> SKIPPED on `main`. So merging to `main` changes nothing in
+> production; mostly it puts the file where a dispatch can find it. Not
+> *nothing*, though: the Vercel job has no default-branch gate, so it
+> runs there too and makes a **preview** deploy — no `--prod`, live
+> domain untouched. `docs/handoff.md` has the full consequence.
 
 ### Part 1 — two secrets, and the card works (10 minutes)
 
