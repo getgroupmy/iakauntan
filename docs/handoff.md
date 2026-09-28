@@ -1119,19 +1119,46 @@ answers with the entities its processor was trained on, configured in
 Google's console rather than ours, and a **self-hosted** reader is sent
 `schema=iakauntan.extraction.v1` — a name it implements at its end.
 
-### Half done, and the half that is left is the one that was asked for
+### The contact form fills from it now; the expense form does not
 
 `OcrExtraction.target` and `.fields` arrive and are asserted.
 
-**Something reads the map now**, which this entry used to deny:
-`readerColumns` in `smartscan/scan_field_map.dart` turns it into rows
-and `smartscan/scan_detail_sheet.dart` shows them under "What it filled
-in". So a person can SEE what the reader put in each destination column.
+**Two things read the map.** `readerColumns` in
+`smartscan/scan_field_map.dart` turns it into rows and
+`smartscan/scan_detail_sheet.dart` shows them under "What it filled in",
+so a person can SEE what the reader put in each destination column. And
+`contacts/scanned_contact.dart` now turns it into the contact editor's
+boxes, which is the half this entry used to say was missing: showing a
+value and putting it in the field somebody is about to save are
+different things, and both exist for `contacts.contact`.
 
-**What is still not done is the destination screen's FORM pre-filling
-from it.** Showing a value and putting it in the field somebody is about
-to save are different things, and only the first exists. That was the
-substance of the original entry and it stands.
+`scan_target_fields` asks for **sixteen** columns there and the form
+used six properties off the parse, so the legal name, the old
+registration number, the SST number, the mobile, the second and third
+address lines, the city and the state were asked for on every scan, paid
+for, listed on screen, and then typed in again off the same piece of
+paper. Two decisions in that mapping are worth knowing before changing
+it, and both are asserted in `app/test/scanned_contact_test.dart`:
+
+* **The reader's columns win over the parse, and a blank answer is not
+  an answer.** "The tax number is not printed on this receipt" is
+  useful and must not blank a field the parse did find.
+* **The address comes from ONE source, whole.** A reader that answered
+  the address columns read one address; `splitScannedAddress` split
+  another off the printed block. A postcode from one on the lines of the
+  other is wrong and looks right.
+
+`contacts.mobile` had a controller, a line in `_load` and a line in
+`_build` **and no box** — loadable, saveable, and impossible to type
+into. There is one now, beside Phone.
+
+**Still not done: the EXPENSE form.** `expenses_screen.dart`'s `_apply`
+reads four typed properties and none of `fields`, so the reader's own
+`description`, `payment_mode_code`, `currency` and `tax_amount` are
+asked for and dropped. Each needs more than a controller — the payment
+mode is a code lookup, the currency drags in the rate, the tax amount
+has the tax-code machinery behind it — which is why it is a separate
+piece of work and not an oversight in this one.
 
 ## `or()` is a grammar, not a parameter
 

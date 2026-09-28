@@ -19,7 +19,7 @@ import '../custom_fields/custom_fields_section.dart';
 import '../onboarding/onboarding_copy.dart'
     show oldIdentificationHelp, oldIdentificationHint, oldIdentificationLabel;
 import '../../data/ocr_repository.dart';
-import 'scanned_address.dart';
+import 'scanned_contact.dart';
 import 'control_account.dart';
 import '../../data/places_repository.dart';
 // `RepoGroupContacts` is an extension, and a Dart extension is only
@@ -94,8 +94,13 @@ class ContactEditor extends ConsumerStatefulWidget {
   /// A letterhead, invoice or name card that has just been read.
   ///
   /// Fills what the paper carries — the name, the numbers, the address
-  /// as printed — and leaves the rest. What it deliberately does not
-  /// fill is the city: see `splitScannedAddress`.
+  /// — and leaves the rest. Which boxes, and from which of the two
+  /// things a reading carries, is [scannedContact]'s decision and is
+  /// tested there. The one rule worth knowing at this end: a city or a
+  /// state appears only where the READER named it. Nothing here guesses
+  /// one out of a printed address block, for the reason
+  /// `splitScannedAddress` gives — it is the field that would look most
+  /// authoritative and be wrong most often.
   final OcrExtraction? scanned;
 
   @override
@@ -287,15 +292,22 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       await _suggestCode();
       final read = widget.scanned;
       if (read != null) {
-        _c('name').text = read.supplierName ?? '';
-        _c('tin').text = read.supplierTaxId ?? '';
-        _c('registrationNo').text = read.supplierRegistrationNo ?? '';
-        _c('email').text = read.supplierEmail ?? '';
-        _c('phone').text = read.supplierPhone ?? '';
-        final address = splitScannedAddress(read.supplierAddress);
-        _c('address1').text = address.line1;
-        _c('address2').text = address.line2;
-        if (address.postcode != null) _c('postcode').text = address.postcode!;
+        // The states are AWAITED, not read. Nothing has watched this
+        // provider at `initState` -- the first `ref.watch` of it is in
+        // `build`, which has not run -- so `.valueOrNull` here is the
+        // loading state, null, and the state box would silently never
+        // be filled by a scan. Its own `try`, because a letterhead is
+        // still worth filling in when the reference table cannot be
+        // reached; the dropdown just stays unset.
+        var states = const <Map<String, dynamic>>[];
+        try {
+          states = await ref.read(_statesRefProvider.future);
+        } catch (_) {
+          // The state is the only box that depends on it.
+        }
+        final filled = scannedContact(read, states: states);
+        filled.boxes.forEach((box, text) => _c(box).text = text);
+        if (filled.stateCode != null) _stateCode = filled.stateCode;
       }
       if (mounted) setState(() => _loading = false);
       return;
@@ -1116,6 +1128,21 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           keyboardType: TextInputType.phone,
                           decoration: const InputDecoration(labelText: 'Phone'),
                         ),
+                      ),
+                      const SizedBox(height: 14),
+                      // `contacts.mobile` has had a controller here, a
+                      // line in `_load` and a line in `_build` since
+                      // this form was written, and no box: the column
+                      // could be loaded and saved and never entered.
+                      // The reader is asked for it -- it is one of the
+                      // sixteen configured `contacts.contact` columns
+                      // -- so without this the scan would fill a value
+                      // nobody could see or correct, which is worse
+                      // than leaving it empty.
+                      TextFormField(
+                        controller: _c('mobile'),
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(labelText: 'Mobile'),
                       ),
 
                       const SizedBox(height: 24),
