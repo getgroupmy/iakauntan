@@ -382,8 +382,22 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
   /// Enters a statement line into the ledger against one account.
   Future<void> _post(Map<String, dynamic> line) async {
     final List<Account> accounts;
+    final List<Matter> matters;
     try {
       accounts = await ref.read(accountsProvider.future);
+      // AWAITED, not read. `ref.read(provider).valueOrNull` on a future
+      // nothing has watched is a loading state, so it answers null every
+      // time and the picker would never appear — on a law firm's screen
+      // as much as anybody's. The accounts above are fetched the same
+      // way for the same reason.
+      //
+      // Open matters only, for the reason `matter_closing.dart` exists:
+      // a closed file is not something new money should be put on. Empty
+      // on every company that is not a law firm, which is what keeps the
+      // picker off their dialog without anything having to ask whether
+      // the module is switched on. `0723`.
+      matters =
+          await ref.read(mattersProvider((status: 'open', search: '')).future);
     } catch (e) {
       // The chart has to arrive before anything can be chosen from it,
       // and a button that throws into the void looks like a button that
@@ -397,7 +411,11 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
 
     final chosen = await showDialog<_PostChoice>(
       context: context,
-      builder: (_) => _PostLineDialog(line: line, accounts: accounts),
+      builder: (_) => _PostLineDialog(
+        line: line,
+        accounts: accounts,
+        matters: matters,
+      ),
     );
     if (chosen == null || !mounted) return;
 
@@ -408,6 +426,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
             transactionId: line['id'] as String,
             accountId: chosen.accountId,
             description: chosen.description,
+            matterId: chosen.matterId,
           ),
       successMessage: 'Posted',
     );
@@ -833,10 +852,14 @@ class _LineTile extends StatelessWidget {
 
 /// What was chosen in [_PostLineDialog].
 class _PostChoice {
-  const _PostChoice({required this.accountId, this.description});
+  const _PostChoice({required this.accountId, this.description, this.matterId});
 
   final String accountId;
   final String? description;
+
+  /// `0723`. Null on every company that is not a law firm, and on a firm
+  /// posting its own costs — rent, salaries, its own bank charges.
+  final String? matterId;
 }
 
 /// Which account the other side of a statement line goes to.
@@ -846,10 +869,21 @@ class _PostChoice {
 /// A form that asked for either of those would be offering somebody the
 /// chance to disagree with the bank.
 class _PostLineDialog extends StatefulWidget {
-  const _PostLineDialog({required this.line, required this.accounts});
+  const _PostLineDialog({
+    required this.line,
+    required this.accounts,
+    this.matters = const [],
+  });
 
   final Map<String, dynamic> line;
   final List<Account> accounts;
+
+  /// The OPEN matters, or empty. `0723`, and empty is the ordinary case:
+  /// every company that is not a law firm has none, which is what keeps
+  /// the picker off their screen without anything having to ask whether
+  /// the legal module is switched on. The same rule the expense form and
+  /// the journal editor already follow.
+  final List<Matter> matters;
 
   @override
   State<_PostLineDialog> createState() => _PostLineDialogState();
@@ -860,6 +894,7 @@ class _PostLineDialogState extends State<_PostLineDialog> {
     text: widget.line['description']?.toString() ?? '',
   );
   String? _accountId;
+  String? _matterId;
 
   @override
   void dispose() {
@@ -900,6 +935,21 @@ class _PostLineDialogState extends State<_PostLineDialog> {
               label: 'Account',
               hint: 'Search by code or name',
             ),
+            if (widget.matters.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SearchablePicker<String>(
+                key: const ValueKey('post-line-matter'),
+                options: matterPickerOptions(widget.matters),
+                value: _matterId,
+                allowEmpty: true,
+                emptyLabel: 'No matter',
+                label: 'Matter',
+                helperText:
+                    'Which file this is on. Leave blank for the firm\'s own '
+                    'costs — rent, salaries, its own bank charges.',
+                onChanged: (v) => setState(() => _matterId = v),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _description,
@@ -926,6 +976,7 @@ class _PostLineDialogState extends State<_PostLineDialog> {
                       description: _description.text.trim().isEmpty
                           ? null
                           : _description.text.trim(),
+                      matterId: _matterId,
                     ),
                   ),
           child: const Text('Post'),

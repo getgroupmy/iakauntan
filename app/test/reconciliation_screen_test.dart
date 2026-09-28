@@ -73,6 +73,16 @@ void main() {
         accountType: 'revenue', accountSubtype: 'sales'),
   ];
 
+  /// A firm's open files. Empty by default, because that is what every
+  /// company that is not a law firm has — and it is what keeps the
+  /// matter picker off their posting dialog. `0723`.
+  final someMatters = [
+    Matter(id: 'm-1', matterNo: 'M-1', name: 'Sale of a house',
+        clientId: 'c-1', status: 'open', clientName: 'Puan Aminah'),
+    Matter(id: 'm-2', matterNo: 'M-2', name: 'A tenancy dispute',
+        clientId: 'c-1', status: 'open', clientName: 'Puan Aminah'),
+  ];
+
   Widget wrap(
     Map<String, dynamic> st, {
     String role = 'owner',
@@ -80,12 +90,15 @@ void main() {
     List<Map<String, dynamic>> banks = oneBank,
     String? openAccountId,
     bool openImport = false,
+    List<Matter> matters = const [],
   }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(repo ?? _FakeRepo(st)),
       bankAccountsProvider.overrideWith((ref) async => banks),
       accountsProvider.overrideWith((ref) async => someAccounts),
       memberRoleProvider.overrideWith((ref) async => role),
+      mattersProvider((status: 'open', search: ''))
+          .overrideWith((ref) async => matters),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -105,6 +118,7 @@ void main() {
     List<Map<String, dynamic>> banks = oneBank,
     String? openAccountId,
     bool openImport = false,
+    List<Matter> matters = const [],
   }) async {
     if (width != null) {
       // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
@@ -121,6 +135,7 @@ void main() {
       banks: banks,
       openAccountId: openAccountId,
       openImport: openImport,
+      matters: matters,
     ));
     await tester.pumpAndSettle();
   }
@@ -308,7 +323,117 @@ void main() {
         'accountId': 'a-rent',
         // The line's own wording, carried through untouched.
         'description': 'FPX PAYMENT',
+        // No matter, because this company has none. `0723`.
+        'matterId': null,
       });
+    });
+
+    // -------------------------------------------------------------------
+    // The matter, on the last of the three places `0688` left
+    // -------------------------------------------------------------------
+
+    testWidgets('a company with no matters is not asked for one',
+        (tester) async {
+      // The ordinary case, and the one that must not regress: every
+      // company that is not a law firm posts through this dialog.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('post-line-matter')), findsNothing);
+    });
+
+    testWidgets('a firm with open files is', (tester) async {
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo, matters: someMatters);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('post-line-matter')), findsOneWidget);
+    });
+
+    testWidgets('and the matter chosen reaches the posting', (tester) async {
+      // The whole point: `report_matter_ledger` reads `gl_lines`, so a
+      // disbursement posted from a statement without its matter is
+      // invisible to the report the legal module exists for.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo, matters: someMatters);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      // The account first, since nothing posts without one.
+      await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('post-line-matter')),
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('M-2 — A tenancy dispute').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final accountPicker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(SearchablePicker<String>),
+      ).first;
+      await tester.tap(find.descendant(
+        of: accountPicker,
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('6200 — Rental').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Post'));
+      await tester.pumpAndSettle();
+
+      expect(repo.posted?['matterId'], 'm-2');
+      expect(repo.posted?['accountId'], 'a-rent');
+    });
+
+    testWidgets('a firm posting its own costs leaves it blank',
+        (tester) async {
+      // Rent, salaries, the firm's own bank charges. The picker is
+      // offered and declined, and `matterId` has to arrive null rather
+      // than defaulting to the first file on the list.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo, matters: someMatters);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      final accountPicker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(SearchablePicker<String>),
+      ).first;
+      await tester.tap(find.descendant(
+        of: accountPicker,
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('6200 — Rental').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Post'));
+      await tester.pumpAndSettle();
+
+      expect(repo.posted?['matterId'], isNull);
     });
 
     testWidgets('and backing out of it posts nothing', (tester) async {
@@ -753,11 +878,13 @@ class _FakeRepo implements Repo {
     required String accountId,
     String? description,
     String? contactId,
+    String? matterId,
   }) async {
     posted = {
       'transactionId': transactionId,
       'accountId': accountId,
       'description': description,
+      'matterId': matterId,
     };
     return 'entry-1';
   }

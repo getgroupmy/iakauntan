@@ -2337,11 +2337,18 @@ class Repo {
   /// ledger with nothing in it had no way forward at all — every line
   /// answered "Record the receipt or payment first" and the screen
   /// offered no way to record one. `0717`.
+  /// `matterId` (`0723`) tags the CHOSEN account's leg only, never the
+  /// bank's — the convention `post_expense` set, and the reason is that
+  /// a matter ledger records what was spent on the matter rather than
+  /// being a balanced set of books for it. For a solicitor this is the
+  /// route most likely to feed `report_matter_ledger`: a disbursement
+  /// to a searcher, a court fee, money in from a client.
   Future<String> postBankTransaction({
     required String transactionId,
     required String accountId,
     String? description,
     String? contactId,
+    String? matterId,
   }) async {
     final id = await callRpc(
       'post_bank_transaction',
@@ -2350,6 +2357,7 @@ class Repo {
         'p_account_id': accountId,
         'p_description': description,
         'p_contact_id': contactId,
+        'p_matter_id': matterId,
       },
     );
     return '$id';

@@ -1010,6 +1010,7 @@ jobs:
                    supabase/tests/matter_trial_balance.sql \
                    supabase/tests/unregistered_bank_accounts.sql \
                    supabase/tests/matter_on_a_document.sql \
+                   supabase/tests/matter_on_a_bank_line.sql \
                    supabase/tests/scan_inbox.sql \
                    supabase/tests/reader_reads_pdf.sql \
                    supabase/tests/ocr_rescan.sql \
