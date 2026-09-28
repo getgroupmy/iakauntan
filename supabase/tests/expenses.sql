@@ -261,6 +261,7 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.money_org('Guard Sdn Bhd');
+  v_bad uuid;
   v_owner uuid := pg_temp.test_user();
   v_sales uuid := pg_temp.another_user('sales@iakauntan.test');
   v_bank uuid; v_exp uuid; v_gone uuid; v_ok boolean;
@@ -311,15 +312,35 @@ begin
   end;
   perform pg_temp.sign_in_as(v_owner);
 
-  -- A total that disagrees with its own parts. `total_amount` is an
-  -- ordinary column with a default of zero and nothing in the schema
-  -- keeps it equal to `amount + tax_amount`, so this was refused before
-  -- 0286 as well — but by the balance check, three steps later, in a
-  -- sentence about debits and credits. What is asserted is the errcode
-  -- and that it is the expense's own numbers being complained about.
+  -- A total that disagrees with its own parts. Refused before 0286 as
+  -- well — but by the balance check, three steps later, in a sentence
+  -- about debits and credits. What is asserted is the errcode and that
+  -- it is the expense's own numbers being complained about.
+  --
+  -- THE FIXTURE CHANGED WITH `0722`, and the reason is the point of the
+  -- assertion. That migration gave `expenses` a BEFORE trigger deriving
+  -- `total_amount` from its parts, so this state can no longer be
+  -- CREATED through the table — hand it 100.00 + 6.00 with a total of
+  -- 100.00 and it stores 106.00, which
+  -- `supabase/tests/expense_total.sql` asserts directly.
+  --
+  -- What it can still be is INHERITED: a row written before `0722`, in a
+  -- database that has been running since long before it. `0286`'s guard
+  -- is what those rows still have, which is why that migration's check
+  -- was not removed when the cause was. So the fixture is built with the
+  -- trigger switched off — the only way such a row can now arise — and
+  -- the guard is asserted on it.
+  --
+  -- Building it any other way would assert nothing: with the trigger on,
+  -- `post_expense` is handed a row that adds up, returns happily, and
+  -- the `raise exception` below fires on a guard that is working.
+  alter table public.expenses disable trigger expense_total;
+  v_bad := pg_temp.an_expense(v_org, 'EXP-7', '6250', 100.00, 6.00,
+                              100.00, v_bank);
+  alter table public.expenses enable trigger expense_total;
+
   begin
-    perform public.post_expense(
-      pg_temp.an_expense(v_org, 'EXP-7', '6250', 100.00, 6.00, 100.00, v_bank));
+    perform public.post_expense(v_bad);
     raise exception 'FAIL: posted an expense that does not add up';
   exception when sqlstate '23514' then
     raise notice 'ok   a total that disagrees with its parts is refused';
