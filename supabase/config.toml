@@ -101,6 +101,14 @@ verify_jwt = true
 [functions.platform-users]
 verify_jwt = true
 
+# Which models a reader's key can actually reach. Holds no service-role
+# powers over anybody's data, but it does ask a vendor a question with
+# the PLATFORM's reader key, and an unauthenticated version of that is a
+# free oracle for whether a key is still valid. Same arrangement as
+# above: `am_i_platform_admin` through the caller's own client first.
+[functions.ocr-models]
+verify_jwt = true
+
 # The exception. See the note above; do not "tidy" this to true, or
 # every payment confirmation Billplz sends will be rejected at the door
 # and no invoice will ever be marked paid.

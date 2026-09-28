@@ -2241,6 +2241,15 @@ jobs:
       - run: deno check supabase/functions/platform-users/rules_test.ts
       - run: deno test supabase/functions/platform-users/rules_test.ts
 
+      # Where each vendor keeps its list of models, and how to read the
+      # answer. The derivation is the part worth asserting: the list URL
+      # is built from `ocr_providers.endpoint` rather than stored beside
+      # it, so a regex anchored one character loosely would rewrite a
+      # proxy's path in the middle, and Gemini's `models/` prefix left on
+      # an id produces `/models/models/x:generateContent`.
+      - run: deno check supabase/functions/ocr-models/catalog_test.ts
+      - run: deno test supabase/functions/ocr-models/catalog_test.ts
+
       # Reading SSM's register. The network and the database halves are
       # not testable here; `normalise` is, and it is the half that
       # decides what somebody picks from — which becomes a registration

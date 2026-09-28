@@ -1490,17 +1490,71 @@ Established by reading the code, in the order I would take them:
    `additionalProperties: false`, and Google's OpenAI-compatibility
    layer is a compatibility layer rather than the same API. Nothing
    here has proven a Gemini scan ever came back schema-shaped.
-2. **Per-kind PDF handling.** `readOpenAiShaped` refuses
-   `application/pdf` by name for everything that speaks
-   chat-completions. Correct for ChatGPT and Grok when written;
-   **Gemini reads PDFs natively**, and a supplier's emailed invoice is
-   a PDF far more often than a photograph. OpenAI takes them now too,
-   through a different request shape.
-3. **A default model on the ChatGPT row.** `0113` inserts `openai` with
-   `model: null` and a blurb saying to set one in the console. Claude
-   ships with `claude-opus-5` and Gemini with `gemini-2.0-flash`;
-   ChatGPT ships as a row that cannot run until somebody types a model
-   name they have to already know.
+2. ~~**Per-kind PDF handling.**~~ **Done, and this entry was stale for
+   several sessions — worth knowing as a fact about this list, not just
+   about PDFs.** `0697` and `0701` did all of it: `readGemini` is its
+   own function on Gemini's `generateContent` rather than Google's
+   OpenAI-compatibility shim, so `inline_data` carries
+   `application/pdf` and the model reads the document; the
+   chat-completions path sends a `{ type: "file", file: { filename,
+   file_data } }` part instead of refusing by name; and
+   `ocr_providers.reads_pdf` is a nullable column where null means
+   `app.reader_reads_pdf(kind)` decides, so a platform can switch one
+   reader on the day its vendor ships it without a release. Read the
+   code before trusting an entry here.
+3. ~~**A default model on the ChatGPT row.**~~ **Done, but NOT the way
+   this entry proposed, and the difference is the point.** `0113` left
+   `model` null on ChatGPT and Grok deliberately, and its header says
+   why: *"Guessing an identifier would produce a migration that looks
+   finished and a 404 at the first scan, blamed on the feature rather
+   than on the guess."* Seeding a model identifier out of a model's own
+   memory is exactly that, so it was not done.
+
+   The real complaint in this entry was the other half: an operator was
+   left to TYPE an identifier they had to already know, from a vendor
+   that renames its models every few months, into a free-text field
+   that accepts anything and only fails at the first scan — by which
+   time `ocr_begin` has taken a tenant's credit for it.
+
+   So the vendor is asked. `supabase/functions/ocr-models` lists what
+   the platform's key can actually reach — `/v1/models` on the
+   chat-completions shape and on Anthropic, `/v1beta/models` on Gemini
+   — and the console's reader editor gained a magnifier beside the
+   Model box that fills it from the answer. `model` is still null on
+   those two rows, and that is still right: what changed is that
+   nobody has to guess.
+
+   Four things about it that are not obvious:
+
+   * **The list URL is DERIVED from `ocr_providers.endpoint`**, not a
+     second column. A column would be blank on every row that exists
+     and a second thing to get wrong when somebody adds a reader. All
+     three shapes differ by their last path segment, so the URL we have
+     determines the one we want — and `catalog_test.ts` asserts the
+     derivation, including that `/messages` is anchored at the END (a
+     proxy mounted under `/messages/v1/messages` must lose only the
+     last one) and that Gemini's `models/` prefix comes OFF the id,
+     because an id that kept it produces
+     `/models/models/x:generateContent`.
+   * **Asking does not spend a scan.** `claim_ocr_key` rolls a key's
+     minute, day and month counters forward in the same statement that
+     hands the key over — right for a document, wrong for a catalog
+     lookup, and an operator opening a picker would otherwise eat a
+     tenant's allowance. So the pool is READ with the service role, in
+     the order the claim would have used, and no counter moves.
+   * **It is a `SearchablePicker`, not a dropdown**, and
+     `dropdown_census_test.dart` is why: OpenAI's `/v1/models` answers
+     with dozens of entries on an ordinary account — embeddings,
+     moderation, audio, every dated snapshot — and somebody looking for
+     one of them is typing, not reading. The census freezes
+     `ocr_catalog_admin.dart` at one dropdown and a second would have
+     failed it by name, which is the gate working.
+   * **`ocrModels` is on `PlatformRepo` itself, not on the
+     `PlatformOcrCatalog` extension** where the rest of the catalog
+     lives. A Dart extension method is resolved STATICALLY, so a test's
+     `_FakePlatform` cannot stand in for one — it falls through to the
+     real `functions.invoke` and tries the network. The first draft had
+     it on the extension and the widget test could not be written.
 4. **Prompt caching on Claude, and a cheap Claude row.** The system
    prompt plus the schema is re-sent on every scan and has GROWN since
    `0681` — `targetPrompt` appends every configured field — while being

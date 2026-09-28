@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/error_text.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // `RepoOcrCatalog` is an extension, and a Dart extension is only in
 // scope where its declaring library is imported.
 import '../../data/ocr_repository.dart';
+// `ocrModels` is on `PlatformRepo` itself rather than on the extension
+// beside the rest of the catalog, and deliberately: a Dart extension
+// method is resolved STATICALLY, so a test's `_FakePlatform` cannot
+// stand in for one — it would fall through to the real
+// `functions.invoke`. `OcrModelChoice` comes from the same place.
+import '../../data/repository.dart';
 
 /// The readers on offer, and what each one costs a scan.
 ///
@@ -177,6 +185,54 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
       Fmt.toDouble(widget.existing!['price']) <= 0;
   bool _busy = false;
 
+  /// What the vendor said when it was asked, or null while nobody has
+  /// asked. Three states and not two: an empty list from a vendor that
+  /// answered is "this key can reach nothing", which is a real answer
+  /// and a different one from "we have not looked".
+  List<OcrModelChoice>? _models;
+
+  /// Why the asking did not work, in the vendor's own words where there
+  /// were any. Shown under the field rather than in a snack bar: it is
+  /// about the field, and a snack bar is gone by the time somebody has
+  /// finished reading the form.
+  String? _modelsProblem;
+  bool _asking = false;
+
+  /// Asks the vendor what models the platform's key can reach.
+  ///
+  /// `0113` would not invent a model identifier, and that was right —
+  /// "a migration that looks finished and a 404 at the first scan". The
+  /// half it left undone was leaving an operator to type one from
+  /// memory. Nothing here invents one either; it asks.
+  ///
+  /// The code is read off the EXISTING row rather than the box, because
+  /// a reader that has not been saved yet has no endpoint and no key on
+  /// the server to ask with, and asking about a code that is still being
+  /// typed would report "there is no reader called ope".
+  Future<void> _askVendor() async {
+    final code = '${widget.existing?['code'] ?? ''}'.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _asking = true;
+      _modelsProblem = null;
+    });
+    try {
+      final models = await ref.read(platformRepoProvider).ocrModels(code);
+      if (!mounted) return;
+      setState(() {
+        _models = models;
+        _asking = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _asking = false;
+        _models = null;
+        _modelsProblem = errorText(e);
+      });
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [_code, _name, _kind, _endpoint, _model, _price, _blurb]) {
@@ -287,10 +343,104 @@ class _ReaderDialogState extends ConsumerState<_ReaderDialog> {
                 decoration: const InputDecoration(labelText: 'Endpoint'),
               ),
               const SizedBox(height: Space.sm),
+              // The box stays. A fine-tune, a snapshot the list does not
+              // carry and a self-hosted name are all things somebody has
+              // to be able to type, and a dropdown that was the ONLY way
+              // in would be a narrower field than the one it replaced.
               TextField(
+                key: const ValueKey('reader-model'),
                 controller: _model,
-                decoration: const InputDecoration(labelText: 'Model'),
+                decoration: InputDecoration(
+                  labelText: 'Model',
+                  helperText: isNew
+                      ? 'Save the reader, then ask its vendor what its key '
+                          'can reach'
+                      : 'The identifier the vendor\'s own API wants',
+                  // Only for a saved reader: asking needs an endpoint and
+                  // a key on the server, and a row being typed has
+                  // neither.
+                  suffixIcon: isNew
+                      ? null
+                      : IconButton(
+                          key: const ValueKey('ask-vendor-for-models'),
+                          tooltip: 'What models can this key reach?',
+                          icon: _asking
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.search),
+                          onPressed: _asking ? null : _askVendor,
+                        ),
+                ),
               ),
+              if (_modelsProblem != null) ...[
+                const SizedBox(height: Space.xs),
+                Text(
+                  _modelsProblem!,
+                  style: TextStyle(fontSize: 12, color: context.scheme.error),
+                ),
+              ],
+              // An empty list from a vendor that answered is a real
+              // answer and gets said. Silence here would read as the
+              // button not working.
+              if (_models != null && _models!.isEmpty) ...[
+                const SizedBox(height: Space.xs),
+                Text(
+                  'That key reached the vendor and it listed no models. A '
+                  'key restricted to one project can legitimately see '
+                  'nothing.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (_models != null && _models!.isNotEmpty) ...[
+                const SizedBox(height: Space.sm),
+                // A picker and not a dropdown, by the rule in
+                // `dropdown_census_test.dart`: this list GROWS, and not
+                // by migration. OpenAI's `/v1/models` answers with
+                // dozens of entries on an ordinary account — embeddings,
+                // moderation, audio, and every dated snapshot of every
+                // model — and somebody looking for `gpt-4o` there is
+                // typing, not reading. The five readers above are a
+                // dropdown because five is a list you read; this is the
+                // scrollbar of four hundred customers that census exists
+                // to stop.
+                SearchablePicker<String>(
+                  key: const ValueKey('model-from-vendor'),
+                  label: 'Models this key can reach',
+                  helperText: 'Choosing one fills the box above',
+                  // Deliberately not seeded with what is in the box: the
+                  // stored model may be a name this key can no longer
+                  // reach, and showing it as the selection would say the
+                  // vendor had confirmed it.
+                  value: null,
+                  options: [
+                    for (final m in _models!)
+                      PickerOption(
+                        value: m.id,
+                        label: m.id,
+                        // The id is what gets stored, so the id is the
+                        // label. A vendor's display name is a second
+                        // line and a way to search, never the thing
+                        // shown in place of what is about to be saved.
+                        sublabel: m.label == m.id ? null : m.label,
+                        keywords: [m.label],
+                      ),
+                  ],
+                  // Fills the box rather than replacing it, so what is
+                  // about to be saved is visible in the same field it
+                  // would have been typed into.
+                  onChanged: (v) {
+                    if (v != null) setState(() => _model.text = v);
+                  },
+                ),
+              ],
               const SizedBox(height: Space.md),
               // Said in words before it is said in ringgit. What an
               // operator is deciding is whether this reader costs a

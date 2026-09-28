@@ -5958,6 +5958,41 @@ class PlatformUserException implements Exception, Explained {
   String toString() => message;
 }
 
+/// One model a vendor says the platform's key can reach.
+///
+/// [id] is what goes in `ocr_providers.model` and nothing else — the
+/// identifier the vendor's own API wants. [label] is only ever for the
+/// dropdown: Anthropic publishes a display name, OpenAI does not, and
+/// where there is none the id has to do both jobs.
+class OcrModelChoice {
+  const OcrModelChoice({required this.id, required this.label});
+
+  final String id;
+  final String label;
+
+  factory OcrModelChoice.fromJson(Map<dynamic, dynamic> j) {
+    final id = '${j['id'] ?? ''}'.trim();
+    final label = '${j['label'] ?? ''}'.trim();
+    return OcrModelChoice(id: id, label: label.isEmpty ? id : label);
+  }
+
+  /// What the list shows. The id is the thing being chosen, so it is
+  /// always visible — a dropdown of display names would have an operator
+  /// pick "Claude Opus 5" and store something they never saw.
+  String get shown => label == id ? id : '$label  ($id)';
+}
+
+/// A reader that could not be asked, in words already fit to show.
+class OcrModelsException implements Exception, Explained {
+  OcrModelsException(this.message);
+
+  @override
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class PlatformRepo {
   PlatformRepo(this.client);
 
@@ -6177,6 +6212,50 @@ class PlatformRepo {
       final message = said is Map ? '${said['error'] ?? ''}'.trim() : '';
       throw PlatformUserException(
           message.isEmpty ? 'That did not work.' : message);
+    }
+  }
+
+  /// What models the key in front of this reader can actually reach.
+  ///
+  /// `0113` left `model` null on ChatGPT and Grok on purpose — "guessing
+  /// an identifier would produce a migration that looks finished and a
+  /// 404 at the first scan" — and that reasoning still holds. What was
+  /// missing was the other half: an operator was left to TYPE an
+  /// identifier they had to already know, from a vendor that renames its
+  /// models every few months, into a field that accepts anything and
+  /// only fails at the first scan, by which time a tenant has been
+  /// charged for it.
+  ///
+  /// So the vendor is asked. The key never comes near this side: the
+  /// edge function holds it, checks the caller is platform staff through
+  /// their OWN client first, and hands back identifiers only.
+  ///
+  /// Throws [OcrModelsException] with the vendor's own sentence where
+  /// there is one — "incorrect API key provided" is the whole answer,
+  /// and replacing it with "that did not work" sends somebody to read
+  /// logs for what they had already been told.
+  Future<List<OcrModelChoice>> ocrModels(String code) async {
+    try {
+      final res = await client.functions.invoke(
+        'ocr-models',
+        body: {'provider': code},
+      );
+      final data = res.data;
+      final rows = data is Map ? data['models'] : null;
+      if (rows is! List) return const [];
+      return rows
+          .whereType<Map>()
+          .map(OcrModelChoice.fromJson)
+          .where((m) => m.id.isNotEmpty)
+          .toList();
+    } on FunctionException catch (e) {
+      final said = e.details;
+      final message = said is Map ? '${said['error'] ?? ''}'.trim() : '';
+      throw OcrModelsException(
+        message.isEmpty
+            ? 'That reader could not be asked what models it has.'
+            : message,
+      );
     }
   }
 
