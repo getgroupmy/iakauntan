@@ -5051,7 +5051,17 @@ class Repo {
           'amount': amount,
           'tax_code_id': taxCodeId,
           'tax_amount': taxAmount,
-          'total_amount': amount + taxAmount,
+          // `total_amount` is NOT sent. `0722` derives it in the
+          // database from these two, which is where every other document
+          // total in this schema is decided.
+          //
+          // This used to send `amount + taxAmount` -- two Dart doubles
+          // added in binary floating point. It was never wrong in
+          // practice, because `numeric(18, 2)` rounded the ~1e-13 error
+          // away on the way in, and that is the only reason. It was the
+          // one money figure in this database whose rule lived somewhere
+          // the database could not see, stated four times in three
+          // languages and enforced nowhere.
           // The three analysis dimensions. `project_code` has been on
           // this table since the dimensions went in and nothing ever
           // sent it; `department_code` arrived with 0639 and `matter_id`

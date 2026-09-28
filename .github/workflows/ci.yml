@@ -894,6 +894,7 @@ jobs:
                    supabase/tests/customer_portal_shapes.sql \
                    supabase/tests/document_history.sql \
                    supabase/tests/expense_split.sql \
+                   supabase/tests/expense_total.sql \
                    supabase/tests/notifications.sql \
                    supabase/tests/bulk_actions.sql \
                    supabase/tests/tax_bands.sql \
@@ -1396,6 +1397,16 @@ jobs:
       # written wrongly on an invoice that goes to somebody.
       - name: Check the app's currency decimals match the seed
         run: python3 scripts/check_currency_decimals.py
+
+      # Money is `numeric` everywhere in this schema, and until `0722`
+      # that was true by convention and enforced by nothing. A
+      # `double precision` money column has no scale to absorb the
+      # rounding error the way `numeric(18, 2)` does -- it stores it,
+      # sums it, and compares it, so `where balance = 0` stops matching
+      # a balance of 0.00000000000001 and a document paid in full sits
+      # on the aged listing for ever.
+      - name: Check no money column is a floating-point type
+        run: python3 scripts/check_money_is_numeric.py
 
       # One level below the embeds, and the same string literal. The
       # screen that declares an employee's TP1 reliefs filtered
@@ -2466,6 +2477,9 @@ jobs:
 
       - name: The document-type gate's own assertions
         run: python3 scripts/check_document_types_test.py
+
+      - name: The money-column gate's own assertions
+        run: python3 scripts/check_money_is_numeric_test.py
 
       - name: The loading-spinner gate's own assertions
         run: python3 scripts/check_loading_spinners_test.py
