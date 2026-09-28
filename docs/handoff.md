@@ -29,6 +29,35 @@ It is not a transcript, and cannot be:
 The repository is the only thing that crosses accounts. If it matters,
 it has to be committed.
 
+### THE "NOT DONE" LISTS GO STALE. CHECK BEFORE YOU BUILD.
+
+Not a hypothetical, and not one slip. In a single session on
+2026-09-28, five separate entries in this file described work as
+outstanding that had already been done:
+
+| This file said | Actually |
+| --- | --- |
+| Per-kind PDF handling is next | Done by `0697` and `0701` |
+| The bill editor and expense form need the matter picker | Done by `document_editor.dart` and `0692` |
+| The client-side general journal screen is not built | `legal/client_transfer_screen.dart`, routed |
+| Nothing reads `OcrExtraction.fields` | `scan_field_map.dart` does |
+| Statement lines are not turned into `bank_transactions` | `importBankTransactions`, wired |
+
+Each cost a round of reading to disprove, and one of them — the matter
+picker — nearly cost building something twice.
+
+**The cause is structural, not carelessness.** An entry is written when
+the work is deferred and is never revisited when the work is done,
+because the person doing it is solving the problem rather than auditing
+prose about it. Nothing in CI reads this file, so nothing can catch it
+the way `check_screens_built.py` catches a screen with no test.
+
+**So: grep for the thing before you build it.** A `grep -rln` for the
+function, the column or the widget takes ten seconds and is the only
+thing standing between you and reimplementing something that shipped
+three migrations ago. The entries below marked with a strikethrough have
+been checked; the ones that are not, have not.
+
 ### The container restarts without warning, and that rule is why
 
 It happened in this session, after `8b9d390e` and with no prompting.
@@ -1090,12 +1119,19 @@ answers with the entities its processor was trained on, configured in
 Google's console rather than ours, and a **self-hosted** reader is sent
 `schema=iakauntan.extraction.v1` — a name it implements at its end.
 
-### Not done, and worth knowing
+### Half done, and the half that is left is the one that was asked for
 
-`OcrExtraction.target` and `.fields` arrive and are asserted. Wiring
-each destination screen's form to read arbitrary columns out of
-`fields` is the next step — 14 files consume `OcrExtraction` today and
-none of them reads the new map yet.
+`OcrExtraction.target` and `.fields` arrive and are asserted.
+
+**Something reads the map now**, which this entry used to deny:
+`readerColumns` in `smartscan/scan_field_map.dart` turns it into rows
+and `smartscan/scan_detail_sheet.dart` shows them under "What it filled
+in". So a person can SEE what the reader put in each destination column.
+
+**What is still not done is the destination screen's FORM pre-filling
+from it.** Showing a value and putting it in the field somebody is about
+to save are different things, and only the first exists. That was the
+substance of the original entry and it stands.
 
 ## `or()` is a grammar, not a parameter
 
@@ -1202,12 +1238,14 @@ a sales document's number is this company's own sequence.
   `demo_modules_in_use`, and for a feature with no rows of its own the
   idiom is `select id, '<module>' from organizations where is_demo`.
 
-### Not done
+### ~~Not done~~ — wired since this was written
 
-The reader returns a statement's lines. Turning them into
-`bank_transactions` is not wired: that needs a bank account chosen, an
-import batch and the duplicate check, which is the bank-import
-machinery rather than the scan machinery.
+The reader returns a statement's lines, and turning them into
+`bank_transactions` is now done: `Repo.importBankTransactions`, called
+from `banking/reconciliation_screen.dart`, with the bank account chosen
+and the duplicate check the bank-import machinery already had.
+`banking/bank_statements_screen.dart` shows what became of each scan,
+filtered to the ones that reached `bank_transactions`.
 
 ## A schema is `strict`, and `required` grows with `properties`
 
@@ -1692,18 +1730,21 @@ postings. `app.today()`.
 
 The user asked for four things. This is the foundation for two of them.
 
-1. **Matter on all transactions** — the column exists and `0688` makes
-   every posting path carry it: `app.create_gl_entry_internal` is the
-   only function that inserts `gl_lines`, and a caller that knows its
-   matter now puts `matter_id` on the line the way `project_code`
-   already travels. The Flutter picker is **on the journal editor**; the
-   bill editor, expense form and bank reconciliation still need it.
+1. ~~**Matter on all transactions**~~ — **done.** `0688` made every
+   posting path carry it: `app.create_gl_entry_internal` is the only
+   function that inserts `gl_lines`, and a caller that knows its matter
+   puts `matter_id` on the line the way `project_code` already travels.
+   All four pickers are now placed — the journal editor (`0688`), the
+   expense form (`0692`), the bill editor (`document_editor.dart` carries
+   `matterId` on the header) and the bank reconciliation (`0723`).
 2. **Client trust monies with collections and payments** — already built
    (`ClientMoneyScreen`, `/legal/receipts`, `/legal/payouts`). Asked the
    user what is missing in practice rather than rebuilding it.
-3. ~~**General entry with inter-account transfers**~~ — the missing
-   reading was a general journal on the client side, and `0690` is it.
-   The SQL is done; **the screen is not**.
+3. ~~**General entry with inter-account transfers**~~ — **done, screen
+   and all.** The missing reading was a general journal on the client
+   side and `0690` is it; the screen that was outstanding when this was
+   written is `legal/client_transfer_screen.dart`, routed at
+   `router.dart:840` and reached from the matter detail screen too.
 4. **Per-matter trial balance** — done, plus the audit pull.
 
 The user settled the scope question: everything tagged to the matter,
@@ -1784,12 +1825,15 @@ initializer, so the default is unreachable. Noted in
 `journal_problem_test.dart` so the next sweep does not spend an
 afternoon on it.
 
-### Still to place
+### ~~Still to place~~ — all three are placed
 
-The bill editor, the expense form and the bank reconciliation. The
-journal was taken first because it already had two dimensions to sit
-beside, so the pattern is now established rather than invented three
-more times.
+The journal was taken first because it already had two dimensions to sit
+beside, so the pattern was established rather than invented three more
+times. The other three followed: the expense form in `0692`, the bill
+editor on its header, and the bank reconciliation in `0723` — which was
+the only one that genuinely still needed it by the time somebody looked,
+and needed it most, because `post_bank_transaction` had no argument to
+carry a matter at all.
 
 ## A bank account on the chart, and nowhere else
 
