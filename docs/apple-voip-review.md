@@ -109,6 +109,41 @@ third one is the one that gets missed: two members of a company that has
 bought chat still cannot see each other until their own row exists, and
 the symptom is a call button that is simply absent.
 
+### What exists in production now (29 September 2026)
+
+Done, verified, and recorded here because a demo org created outside a
+migration is invisible to anybody reading the schema:
+
+| | |
+| --- | --- |
+| company | `iAkauntan Demo`, slug `iakauntan-demo`, `a1ae9901-5215-4810-b094-e94060d7f10d` |
+| conversation | `5f42b308-e82e-444e-83b9-74ec131420c9` |
+| owner | `test_account_1@iakauntan.com` |
+| admin | `test_account_2@iakauntan.com` |
+
+`app.chat_enabled` answers true for both, both `chat_access` rows are
+enabled, and the conversation has exactly those two participants.
+
+Two things about how it got there are worth keeping:
+
+* **`demo_calling_pair` was run twice** — once by the platform admin
+  through the SQL editor with their own claims, once as the database
+  owner — and the second run returned the SAME conversation id. That is
+  the idempotence assertion confirmed against production rather than
+  only against a throwaway Postgres.
+* **`superadmin@iakauntan.com` was removed afterwards, but only after
+  the company was handed over.** `add_creator_as_owner` had made them
+  the owner, and `platform_remove_org_access` refuses to take the last
+  owner away — *"A company with no owner is a company nobody can open —
+  hand it over first."* So `test_account_1` is the owner now. Their
+  `chat_access` row was deleted too: it is a separate per-person row and
+  does not cascade from membership, so leaving it would be a chat
+  entitlement for somebody who is not a member.
+
+Those writes went in as the database owner, so their `audit_logs` rows
+carry a null `user_id`. That is the price of doing it that way and it is
+recorded here rather than left to be discovered.
+
 ### Who places the call
 
 The **callee** must be the iPhone — that is the device the recording is

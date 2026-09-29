@@ -119,6 +119,7 @@ finish without printing.
 | Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
 | Gates | 380 SQL assertion files, **53 Python gates (+17 gate self-tests)**, **6,439 Flutter tests**, 39 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test |
 | API description | 807 functions, 367 tables, version `0721` |
+| Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
 ## What this session shipped
 
