@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +24,7 @@ import '../shared/attachments_card.dart';
 import '../shared/scan_runner.dart';
 import 'expense_split.dart';
 import 'expense_voucher_pdf.dart';
+import 'scanned_expense.dart';
 import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_result_dialog.dart';
@@ -258,6 +261,12 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   String? _matterId;
 
   String _paymentMode = '03';
+
+  /// The currency a scanned document is in, when it is not this
+  /// company's. Said on the form rather than stored: see
+  /// `ScannedExpense.foreignCurrency`.
+  String? _foreignCurrency;
+
   DateTime _date = DateTime.now();
   bool _saving = false;
   bool _reading = false;
@@ -274,7 +283,10 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     final scanned = widget.scanned;
     if (scanned == null) return;
     _receipt = scanned;
-    if (scanned.read != null) _apply(scanned.read!);
+    // Not awaited, because `initState` cannot be: `_apply` awaits the
+    // tax codes and payment modes before it decides anything, and the
+    // form is perfectly usable in the moment before they land.
+    if (scanned.read != null) unawaited(_apply(scanned.read!));
   }
 
   @override
@@ -318,20 +330,53 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     // What the paper was taken to be, onto the scan. `0614`.
     await rememberDocumentKind(ref,
         attachmentId: staged.attachmentId, accepted: accepted);
-    if (mounted) setState(() => _apply(accepted));
+    // NOT `setState(() => _apply(...))`: `_apply` is async now, so the
+    // callback would return a Future and Flutter asserts against that
+    // -- `check_setstate_futures.py` in one line. It does its own
+    // `setState` when it has everything it needs.
+    if (mounted) await _apply(accepted);
   }
 
-  void _apply(OcrExtraction read) {
-    final net = read.netAmount;
-    if (net != null) _amount.text = net.toStringAsFixed(2);
-    if (read.documentDate != null) _date = read.documentDate!;
-    // The supplier and the document number, joined, because an expense
-    // has one description field and both belong in it.
-    final description = [read.supplierName, read.documentNo]
-        .whereType<String>()
-        .join(' · ');
-    if (description.isNotEmpty) _description.text = description;
-    if (read.documentNo != null) _reference.text = read.documentNo!;
+  /// What the reading puts on the form.
+  ///
+  /// Every decision is in `scannedExpense` and tested there. What is
+  /// here is the part that cannot be: the three lists it needs are
+  /// AWAITED. `ref.read(p).valueOrNull` on a provider nothing has
+  /// watched yet is the loading state, null — and at `initState`
+  /// nothing has, because the first `ref.watch` of each of these is in
+  /// `build`. Read instead of awaited, the tax code would never be
+  /// matched and the payment mode never accepted, silently, while
+  /// every assertion about the mapping still passed.
+  Future<void> _apply(OcrExtraction read) async {
+    List<TaxCode> codes = const [];
+    List<Map<String, dynamic>> modes = const [];
+    String home = 'MYR';
+    try {
+      codes = await ref.read(taxCodesProvider.future);
+      modes = await ref.read(paymentModesProvider.future);
+      home = (await ref.read(currentOrgProvider.future))?.baseCurrency ?? 'MYR';
+    } catch (_) {
+      // A reference list that will not load costs the fields that
+      // depend on it and nothing else; the figures and the words are
+      // still worth filling in.
+    }
+    if (!mounted) return;
+
+    final filled = scannedExpense(read,
+        taxCodes: codes, paymentModes: modes, homeCurrency: home);
+    setState(() {
+      if (filled.amount != null) {
+        _amount.text = filled.amount!.toStringAsFixed(2);
+      }
+      if (filled.date != null) _date = filled.date!;
+      if (filled.description != null) _description.text = filled.description!;
+      if (filled.reference != null) _reference.text = filled.reference!;
+      if (filled.taxCodeId != null) _taxCodeId = filled.taxCodeId;
+      if (filled.paymentModeCode != null) {
+        _paymentMode = filled.paymentModeCode!;
+      }
+      _foreignCurrency = filled.foreignCurrency;
+    });
   }
 
   Future<void> _discardReceipt() async {
@@ -643,6 +688,30 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   controller: _description,
                   decoration: const InputDecoration(labelText: 'Description'),
                 ),
+                if (_foreignCurrency != null) ...[
+                  const SizedBox(height: 12),
+                  // Said, because it cannot be stored. `expenses`
+                  // carries `currency` and `exchange_rate` and
+                  // `recordExpense` sets neither, so this document's
+                  // figures are about to be recorded as ringgit at a
+                  // rate of 1. That is a wrong number that looks like a
+                  // right one, and the person holding the paper is the
+                  // only one who can catch it.
+                  Container(
+                    key: const ValueKey('expense-foreign-currency'),
+                    padding: const EdgeInsets.all(Space.md),
+                    decoration: BoxDecoration(
+                      color: context.colors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'This document is in $_foreignCurrency. The expense '
+                      'will be recorded in ringgit, so convert the amount '
+                      'yourself before saving.',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(

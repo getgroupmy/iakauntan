@@ -1119,7 +1119,7 @@ answers with the entities its processor was trained on, configured in
 Google's console rather than ours, and a **self-hosted** reader is sent
 `schema=iakauntan.extraction.v1` — a name it implements at its end.
 
-### The contact form fills from it now; the expense form does not
+### Both destination forms fill from it now
 
 `OcrExtraction.target` and `.fields` arrive and are asserted.
 
@@ -1152,13 +1152,71 @@ it, and both are asserted in `app/test/scanned_contact_test.dart`:
 `_build` **and no box** — loadable, saveable, and impossible to type
 into. There is one now, beside Phone.
 
-**Still not done: the EXPENSE form.** `expenses_screen.dart`'s `_apply`
-reads four typed properties and none of `fields`, so the reader's own
-`description`, `payment_mode_code`, `currency` and `tax_amount` are
-asked for and dropped. Each needs more than a controller — the payment
-mode is a code lookup, the currency drags in the rate, the tax amount
-has the tax-code machinery behind it — which is why it is a separate
-piece of work and not an oversight in this one.
+### The expense form fills from it too, and a silent under-recording is gone
+
+`expenses/scanned_expense.dart`. All eight configured
+`accounting.expense` columns now have a path into the form; four had
+none at all before — the reader's own `description` (the "being payment
+of" line, in the words on the page), `payment_mode_code`, `currency` and
+`tax_amount`.
+
+**The tax is the decision worth reading.** The form does not take a tax
+figure: it takes a tax CODE and computes the figure from its rate, and
+that computed figure is what gets stored. So a printed tax can only
+choose a code — and a code is chosen only where `Fmt.taxOn(net, rate)`,
+the exact arithmetic the form itself will apply, reproduces the printed
+tax to the sen. Matching with the form's own function rather than with
+`tax / net` is what makes the match mean something: what is chosen
+recomputes to what is printed, by construction. An `isExempt` code is
+refused even when its rate would match, because that is a claim about
+the purchase rather than a rate.
+
+**Where nothing matches, the amount box now holds the TOTAL**, and this
+fixes a defect rather than adding a feature. `_apply` took
+`subtotal ?? total`, so a receipt printing 1000.00 + 90.00 = 1090.00
+against a chart that knows only 6% recorded an expense of 1000.00 with
+no tax — ninety ringgit of a real payment simply gone from the ledger,
+with nothing on screen saying so. A company that cannot match the code
+is a company not claiming the input tax, and for it the whole 1090.00 IS
+the cost.
+
+**A foreign document is SAID, not stored.** `expenses.currency` defaults
+to `MYR` and `exchange_rate` to 1, and `recordExpense` sets neither, so
+a USD receipt was being posted as ringgit at a rate of 1 — a wrong
+number that looks like a right one. There is no FX here to build on, so
+the form says which currency the paper is in and leaves the conversion
+to the person holding it.
+
+**Three traps this paid for:**
+
+* The tax codes, payment modes and company currency must be **awaited**.
+  `_apply` ran in `initState`, where nothing has watched any of those
+  providers yet — the first `ref.watch` of each is in `build` — so
+  `.valueOrNull` is the loading state. Read instead of awaited, the tax
+  code is never matched and the payment mode never accepted, silently,
+  while every assertion about the mapping still passes. Third time this
+  branch has hit it.
+* `_apply` is async now, so the re-read path's
+  `setState(() => _apply(accepted))` had to go: an arrow body returns
+  the Future and Flutter asserts against exactly that —
+  `check_setstate_futures.py` in one line.
+* **`OcrExtraction.netAmount` (`subtotal ?? total`) is still used by
+  `documents/document_editor.dart:501`**, as the single-line fallback
+  for a bill whose reader returned no lines. NOT changed here, and not
+  because it was overlooked: a document editor applies tax per line and
+  reconciles against the supplier's own printed total (`0706`,
+  `roundingThePaperApplied`), so whether the same hole exists there is a
+  question about a different machine. Somebody should look; a blind
+  change would be a guess about a total that is already being checked.
+* **The date is read off the TEXT, not through `DateTime.tryParse`.**
+  A reader answering `2026-03-04T18:00:00Z` parses to an instant that is
+  already the fifth in Malaysia, so anything reading its local
+  components files a document dated the fourth on the fifth. The
+  mutation run is what surfaced this: the `toLocal()` mutant SURVIVED,
+  because the test VM runs in UTC and CI does too — a defect that only
+  appears east of UTC is one no run here would ever show. Taking the
+  three numbers as printed cannot do it on any machine, which is why
+  the code changed rather than the test.
 
 ## `or()` is a grammar, not a parameter
 
