@@ -42,6 +42,57 @@ not a screen:
 The `audio` value beside it is for the same feature: a call that
 continues while the person switches apps.
 
+## BLOCKED: the media server is not deployed
+
+Found by trying it, 29 September, on the demo pair:
+
+    FunctionException(status: 503, {error: Calling is not configured.
+    Set CALL_SFU_URL and CALL_SFU_SECRET in the project's function
+    secrets.})
+
+That is `call-token/index.ts:127` refusing plainly, and it is not a
+missing config line. `CALL_SFU_URL` points at `server/sfu/` — a
+mediasoup server that has never been deployed. Its README says what it
+needs: a Linux VM with a public IP, TCP 443 for the `wss://` signalling
+socket, UDP 40000–40999 for media, and coturn beside it for the roughly
+one call in five that cannot go direct. Plus the two secrets, which must
+match on both sides.
+
+**So the recording cannot be finished today**, and the script below is
+split by what the missing piece actually stops:
+
+| shots | needs the SFU? |
+| --- | --- |
+| 1–4: locked handset, ring, CallKit answer, app opens | **no** |
+| 5–7: two-way audio, backgrounded call, hang up | **yes** |
+
+The ring works without it because of the ORDER in
+`Repo.chatStartCall`: the RPC creates the call row and the VoIP push is
+fired immediately after it (`unawaited(notifyPush(kind: 'call'))`),
+before anything asks for a media token. So a locked iPhone really does
+ring with the system's own call UI and really can be answered — and then
+the call screen fails, which is precisely the shot that must not be in a
+video sent to Apple.
+
+Two things to fix before filming:
+
+1. **Deploy `server/sfu/`** and set both secrets.
+2. **Add the SFU host to `connect-src`** in the CSP. `docs/pre-deployment.md`
+   already warns about this and it is worth repeating here because it
+   fails silently: the header lists the Supabase host and nothing else,
+   so the WEB build's call socket to `wss://<sfu-host>` is refused with
+   no useful error. Native is unaffected — which means the web caller
+   this document recommends would break while the phone looked fine.
+
+### A failed attempt leaves the conversation stuck
+
+`chat_calls` has a unique index of one open call per conversation. The
+503 happens AFTER the row is created, so the call stays open, the call
+buttons are replaced by "Join call", and nothing can start a fresh one.
+One such row was cleared by hand on 29 September. If the buttons are
+missing during filming, that is why; `chat_end_call` is the verb, and
+only whoever started it may call it.
+
 ## What to record
 
 Two physical iPhones (or one iPhone and one other signed-in client),
