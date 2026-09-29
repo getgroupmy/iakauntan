@@ -117,6 +117,30 @@ visible from the NAS:
    the worker if no prebuilt one matches, which on a 512 MB NAS means it
    will try for a long time and then fail.
 
+### 0. The DNS record must be DNS-ONLY, not proxied
+
+Checked on 29 September: `call.iakauntan.com` already resolves, and it
+resolves to **Cloudflare** (104.21.x, 2606:4700:…) rather than to any
+NAS. Either a wildcard or an existing record is answering for it, with
+the orange cloud on.
+
+**That cannot work, and it fails in a way that looks like two unrelated
+bugs.** Cloudflare's proxy carries HTTP and WebSockets on 443, so
+signalling might well connect — and TURN and media cannot go through an
+HTTP reverse proxy at all. `turn:call.iakauntan.com:3478` would resolve
+to Cloudflare, which is not listening for STUN, and the media ports are
+not HTTP in the first place. So the call would connect and be silent,
+which is the same symptom as a wrong announced address and has a
+completely different cause.
+
+Make `call` an explicit **A record, grey cloud (DNS only)**, pointing at
+the router's public address. Not the NAS's LAN address. If a proxied
+wildcard exists, the explicit record has to win over it.
+
+The consequence of grey cloud is that the origin address is visible in
+DNS. That is not a regression: a TURN server has to be reachable
+directly or it is not a TURN server.
+
 ### 1. `MEDIASOUP_ANNOUNCED_IP` is the PUBLIC address, not the NAS's
 
 This is the setting the whole deployment turns on. The container binds
@@ -135,6 +159,12 @@ Forward to the NAS's LAN address:
 | 40000–40999 udp **and** tcp | mediasoup media |
 | 3478 udp and tcp, 5349/tcp | TURN |
 | 49152–49651/udp | TURN relay |
+| 80/tcp | **only** for the certificate |
+
+Port 80 is on that list for a reason that is easy to miss until a
+renewal fails ninety days later: DSM's Let's Encrypt uses the HTTP-01
+challenge, which needs port 80 reachable from outside at issuance **and
+at every renewal**. Nothing serves on it otherwise.
 
 That last range is 500 ports because this file's own coturn config was
 narrowed from coturn's 16,384-port default for exactly this reason. If
@@ -161,7 +191,20 @@ certificate on disk for `turns:` — export it into
 remember the renewal will not reach the container by itself: the `turn`
 container reads its certificate at start, so a renewal needs a restart.
 
-### 4. Container Manager, not `docker compose` on a shell
+### 4. On a 2 GB model, cap the workers
+
+`MEDIASOUP_WORKERS` defaults to one per core — `os.cpus().length` in
+`src/config.js` — which is four on a DS224+'s J4125. Four mediasoup
+worker processes beside DSM on 2 GB is the wrong trade: each saturates
+one core and no more, and nobody here is running enough concurrent calls
+to need the second, let alone the fourth.
+
+    MEDIASOUP_WORKERS=2
+
+in `.env`. A call lives entirely inside one worker anyway, because
+everybody in it has to share a router to hear each other.
+
+### 5. Container Manager, not `docker compose` on a shell
 
 DSM 7.2+: **Container Manager → Project → Create**, point it at the
 `server/sfu` folder with its `docker-compose.yml`. `network_mode: host`
