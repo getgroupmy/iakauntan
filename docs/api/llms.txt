@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0723` (the highest applied migration).
-807 functions and 367 readable tables, of which
+Schema version `0724` (the highest applied migration).
+808 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**666 of 807 functions carry a `comment on
+**667 of 808 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -372,7 +372,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (595)
+### general (596)
 
 Not gated on any module.
 
@@ -542,6 +542,7 @@ Not gated on any module.
 - `delete_mia_credential(p_id uuid)` *(writes)* — Removes a recorded MIA credential.
 - `delete_my_account()` *(writes)* — 0158's name for close_my_account().
 - `delete_ocr_key(p_provider text, p_id uuid, p_org_id uuid)` *(writes)* — Takes a key out of a pool for good.
+- `demo_calling_pair(p_email_a text, p_email_b text, p_org_name text)` *(writes)* — Wires two EXISTING accounts into one company with chat entitled, each switched on individually, and a direct conversation between them -- the four things an in-app call needs.
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)* — Marks a held cheque as paid in, and POSTS NOTHING.
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
 - `detach_company_from_firm(p_org_id uuid)` *(writes)* — Ends the appointment between a company and the accounting practice keeping its books, and returns how many memberships it removed.

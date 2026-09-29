@@ -73,6 +73,51 @@ only costs twenty seconds.
 Keep it under two minutes, no edits, no cuts between step 2 and step 3 —
 a cut there is exactly where a reviewer would doubt it.
 
+## The two demo accounts
+
+A call needs two people, so App Review needs two accounts — and the four
+things that make the call button appear are easy to get three-quarters
+right. `0724` does the wiring in one call:
+
+```sql
+select public.demo_calling_pair(
+  'review-one@example.com', 'review-two@example.com', 'iAkauntan Demo');
+```
+
+It is idempotent, platform-admin only, and returns the conversation id.
+What it does NOT do is create the accounts, and that is not an oversight:
+an account and its password live in `auth.users`, which only the Admin
+API may write — `supabase/functions/platform-users/index.ts` is where
+that key lives and why. A row written straight into the table is an
+account that exists and cannot sign in.
+
+So the order is:
+
+1. **Console → Users → new**, twice. Set the passwords there. Use
+   addresses that are obviously for review, and treat the passwords the
+   way you would any other credential — they do not belong in a commit,
+   an issue, or a chat message.
+2. Run the call above with those two addresses.
+3. Sign in as each once, on the devices you will film with, and grant
+   notifications on the iPhone so the PushKit token is registered.
+
+What the function actually guarantees, and what the assertion file
+proves, is `app.chat_enabled` answering true for both people — which is
+only true when the company is entitled to `chat`, **each person is
+switched on individually in `chat_access`**, and both are members. That
+third one is the one that gets missed: two members of a company that has
+bought chat still cannot see each other until their own row exists, and
+the symptom is a call button that is simply absent.
+
+### Who places the call
+
+The **callee** must be the iPhone — that is the device the recording is
+of, and PushKit only delivers to a real handset. The **caller** can be
+anything signed in as the other account: a second handset, or the web
+build in a desktop browser, which is the easier setup for a reviewer
+with one phone. Try the web side once before relying on it for a
+submission.
+
 ## What to send
 
 Reply to the App Review message with the recording attached, and put the
