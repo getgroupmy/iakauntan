@@ -93,6 +93,99 @@ the web caller's socket is refused with no useful error while a phone on
 the same call is fine — which is the worst shape of failure, because the
 half that works is the half you are watching.
 
+## On a Synology NAS instead of a cloud VM
+
+It works, and four things differ. None of them is the NAS being slow —
+mediasoup forwards packets rather than transcoding — and all four are
+about the NAS being behind a router rather than on the internet.
+
+**Check these before buying anything or filling in a single field**,
+because two of them can make the whole plan impossible and neither is
+visible from the NAS:
+
+1. **Is the WAN address public, or is the ISP using CGNAT?** Compare the
+   WAN IP the router shows against what a "what is my IP" page says. If
+   they differ, inbound is impossible and no amount of forwarding fixes
+   it — the ISP has to give you a public IP, usually on a business plan.
+   A "fixed IP" on the NAS itself is almost always a static LAN address,
+   which is a different thing and not the one that matters here.
+2. **Is the model x86 or ARM, and how much RAM?** mediasoup's worker is
+   a native binary with prebuilt glibc builds for x86-64 and arm64. A
+   Ryzen or Intel model (DS923+, DS1522+, DS918+) is comfortable; a
+   modern arm64 j-series will run but has little memory to spare; an
+   older armv7 model will not work at all. The Dockerfile can compile
+   the worker if no prebuilt one matches, which on a 512 MB NAS means it
+   will try for a long time and then fail.
+
+### 1. `MEDIASOUP_ANNOUNCED_IP` is the PUBLIC address, not the NAS's
+
+This is the setting the whole deployment turns on. The container binds
+the NAS's LAN address and must ANNOUNCE the router's public one, because
+that is where the far side has to send. Putting the LAN address here
+produces a call that connects and is silent — every time, with nothing
+in any log saying so.
+
+### 2. Port forwarding, and why the relay range was narrowed
+
+Forward to the NAS's LAN address:
+
+| | |
+| --- | --- |
+| 443/tcp | the `wss://` socket |
+| 40000–40999 udp **and** tcp | mediasoup media |
+| 3478 udp and tcp, 5349/tcp | TURN |
+| 49152–49651/udp | TURN relay |
+
+That last range is 500 ports because this file's own coturn config was
+narrowed from coturn's 16,384-port default for exactly this reason. If
+the router cannot forward ranges at all — some ISP-supplied ones cannot
+— that is a hard stop, and it is worth finding out before anything else.
+
+### 3. DSM already owns 443, and its reverse proxy is better than nginx
+
+Do not install nginx. **Control Panel → Login Portal → Advanced →
+Reverse Proxy**: source `https://call.iakauntan.com:443`, destination
+`http://localhost:4443`, and **turn on the WebSocket option** — without
+it the upgrade is stripped and every call fails at connect with a clean,
+unhelpful HTTP error.
+
+Raise the proxy timeout while you are there. DSM's default closes a
+long-lived socket mid-call, which gets reported as "calls keep
+dropping" and looks nothing like a timeout.
+
+DSM can also issue and renew the Let's Encrypt certificate for that
+hostname, which is the other reason to use it rather than nginx.
+**Control Panel → Security → Certificate.** coturn needs the same
+certificate on disk for `turns:` — export it into
+`server/sfu/coturn/certs/` as `fullchain.pem` and `privkey.pem`, and
+remember the renewal will not reach the container by itself: the `turn`
+container reads its certificate at start, so a renewal needs a restart.
+
+### 4. Container Manager, not `docker compose` on a shell
+
+DSM 7.2+: **Container Manager → Project → Create**, point it at the
+`server/sfu` folder with its `docker-compose.yml`. `network_mode: host`
+is supported there and is required — see the compose file's own header
+for why publishing a thousand UDP ports through Docker's proxy is not an
+option.
+
+### The trap that will bite during filming
+
+**Hairpin NAT.** With the announced address being the public one, two
+devices *inside the same LAN as the NAS* may be told to send media to
+the public IP and out through the router and back — which many routers
+silently refuse. The call connects and is silent, and it looks exactly
+like a wrong announced address.
+
+So film with **one device on mobile data**. That is also the third proof
+below, which is the one worth doing anyway.
+
+### And the thing to decide rather than discover
+
+DSM reboots for its own updates, and a call in progress dies with it.
+Fine for a recording; a decision for production, where a small cloud VM
+is the boring answer.
+
 ## Then prove it, in this order
 
 Each step fails differently, so do them in order and stop at the first

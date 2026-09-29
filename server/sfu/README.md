@@ -46,7 +46,7 @@ What it does need is the ports.
 | 40000-40999 | UDP **and** TCP | media, direct to mediasoup |
 | 3478 | UDP and TCP | TURN |
 | 5349 | TCP | TURN over TLS |
-| 49152-65535 | UDP | TURN relay |
+| 49152-49651 | UDP | TURN relay. 500 ports, not coturn's 16,384-port default — see `coturn/turnserver.conf` for why, and `docs/call-deployment.md` if this is going behind a router |
 
 Open all of them. The media range being closed is the single most common
 cause of "the call connects and nobody can hear anything", because
