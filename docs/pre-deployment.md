@@ -106,12 +106,19 @@ calls and `ImageSource.camera` for receipt capture. Now
 payment=(), usb=(), interest-cohort=()`, and `media-src 'self' blob:` was
 added to the CSP for the same reason.
 
-**Outstanding, and it will break calls:** `connect-src` lists the
-Supabase host and nothing else, but `call_engine.dart` opens a WebSocket
-to whatever `CALL_SFU_URL` says. When the SFU is deployed its host must
-be added to `connect-src` as `wss://<host>` or every call will fail at
-the CSP with no useful error. ICE to STUN/TURN is not covered by
-`connect-src` and needs nothing.
+**~~Outstanding~~ — done, 29 September.** `connect-src` listed the
+Supabase host and nothing else, while `call_engine.dart` opens a
+WebSocket to whatever `CALL_SFU_URL` says, so every web call would have
+failed at the CSP with no useful error. `wss://call.iakauntan.com` is in
+the policy now and `check_csp_allows.py` fails the build if it is ever
+dropped — verified by dropping it and watching the gate name it.
+
+The host had to be DECIDED rather than discovered: a browser enforces
+the policy before it has spoken to anything, so a runtime value is no
+use. It is pinned in the policy and in that gate, and moving the SFU
+means moving both. `docs/call-deployment.md` is the order to switch the
+whole thing on in. ICE to STUN/TURN is not covered by `connect-src` and
+needs nothing.
 
 `fonts.gstatic.com` in `font-src` and `connect-src` looks like dead
 allowance — Plus Jakarta Sans is a bundled asset and nothing in the

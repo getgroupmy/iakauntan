@@ -46,6 +46,16 @@ REQUIRED = [
     ('https://fonts.gstatic.com',
      ('font-src',),
      'The web fonts.'),
+    ('wss://call.iakauntan.com',
+     ('connect-src',),
+     'The call signalling socket. `call_engine.dart` opens it to '
+     'whatever `CALL_SFU_URL` names, and that host is a Supabase '
+     'function secret -- so nothing in this repository can derive it '
+     'and it is pinned here instead. Native calls are unaffected by a '
+     'policy the browser enforces, so losing this line breaks the WEB '
+     'caller ONLY, silently, while a phone on the same call looks '
+     'perfectly healthy. If the SFU is ever moved, it moves in two '
+     'places: here and the policy.'),
 ]
 
 # `..src = 'https://...'` in Dart: something being loaded, not linked.
