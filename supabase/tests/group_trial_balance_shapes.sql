@@ -103,12 +103,21 @@ declare
   -- Last month, whole. The report is asked for exactly this window, and
   -- there is money on both sides of both ends of it.
   --
-  -- The shop's clock, not the session's. `current_date` is UTC in CI,
-  -- and from 16:00 UTC it is already tomorrow in Kuala Lumpur — so on
-  -- the last evening of a month this window slides by a whole month
-  -- while the documents posted into it do not. `pos.sql` went red
-  -- exactly that way in run 2176; the note at the top of it has the
-  -- arithmetic.
+  -- ONE clock for the whole file, and it is the product's.
+  --
+  -- `current_date` is the session's, which is UTC in CI; the product's
+  -- is `app.today()` -- Kuala Lumpur, UTC+8. From 16:00 UTC they are
+  -- different days, and on the last evening of a month a different
+  -- MONTH.
+  --
+  -- Run 2178 is why this says "one clock" rather than naming the
+  -- window. The window was moved to Kuala Lumpur and the FIXTURE DATES
+  -- below were left on `current_date`, which is worse than leaving
+  -- both alone: on 30 September the window then closed on the 30th
+  -- while the "after the period" entry was dated the 30th, so the one
+  -- row that must be outside the report was inside it. Half a fix is
+  -- a new bug.
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
   v_from date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date) - interval '1 month')::date;
   v_to   date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date) - interval '1 day')::date;
   v_before date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date) - interval '2 months')::date;
@@ -189,9 +198,17 @@ begin
   -- Before the period: this is an opening balance, not a movement.
   perform pg_temp.gtb_entry(v_a, v_before + 3, v_pre, v_pre_contra, 250);
 
-  -- After the period, and before today: this is not in the report at
-  -- all, and would be if the closing date were taken as today.
-  perform pg_temp.gtb_entry(v_a, current_date, v_post, v_post_contra, 900);
+  -- After the period, and no later than today: this is not in the
+  -- report at all, and would be if the closing date were taken as
+  -- today.
+  --
+  -- `v_today` and not `current_date`. `v_to` is the last day of last
+  -- month ON THE KUALA LUMPUR CLOCK, and today on that same clock is
+  -- always inside this month -- so this entry is strictly after the
+  -- window by construction, on every day of the year. Dated from the
+  -- session's clock it lands ON `v_to` for eight hours of every 30th
+  -- or 31st, which is how run 2178 went red.
+  perform pg_temp.gtb_entry(v_a, v_today, v_post, v_post_contra, 900);
 
   -- =================================================================
   -- Adding up, rather than picking one
@@ -293,7 +310,7 @@ begin
   -- The control. Without it the assertion above is also satisfied by a
   -- report that returns nothing for any date.
   perform pg_temp.check_eq('and is in it when the period is widened to today',
-    (select count(*) from public.report_group_trial_balance(v_a, v_from, current_date) t
+    (select count(*) from public.report_group_trial_balance(v_a, v_from, v_today) t
       where t.code = 'Z700'), 1);
 
   -- =================================================================

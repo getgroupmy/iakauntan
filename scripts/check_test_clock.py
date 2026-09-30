@@ -58,17 +58,40 @@ REFUSED = ("month", "week", "quarter")
 #: year being created for a fixture. It may fall; it may not rise.
 YEAR_BUDGET = 150
 
+#: Files that name BOTH clocks in code -- the Kuala Lumpur expression
+#: somewhere and a bare `current_date` somewhere else.
+#:
+#: Mostly harmless: a `current_date + 7` beside a KL-derived fiscal year
+#: is two independent facts, not a comparison. What is not harmless is
+#: HALF A FIX, and that is what this counts.
+#:
+#: Run 2178. `group_trial_balance_shapes.sql` had its report window
+#: moved to Kuala Lumpur and its fixture dates left on `current_date`.
+#: On 30 September the window then closed on the 30th while the entry
+#: that must fall OUTSIDE it was dated the 30th, so the assertion
+#: "money that moved after the period is not in the report" failed --
+#: on a file that had just been made more correct. Leaving both clocks
+#: alone would have passed.
+#:
+#: So: a file may already mix them, and no NEW file may start to. It
+#: may fall; it may not rise.
+MIXED_BUDGET = 27
+
 _REFUSED = re.compile(
     r"date_trunc\(\s*'(" + "|".join(REFUSED) + r")'\s*,\s*current_date\s*\)"
 )
 _YEAR = re.compile(r"date_trunc\(\s*'year'\s*,\s*current_date\s*\)")
+_KL = re.compile(r"at time zone 'Asia/Kuala_Lumpur'")
+_BARE = re.compile(r"\bcurrent_date\b")
 
 
-def offenders(root: Path) -> tuple[list[str], int]:
-    """Lines using a short bucket, and how many use the year one."""
+def offenders(root: Path) -> tuple[list[str], int, list[str]]:
+    """Short buckets, how many use the year one, and files with two clocks."""
     bad: list[str] = []
     years = 0
+    mixed: list[str] = []
     for path in sorted(root.glob("*.sql")):
+        kl = bare = 0
         for n, line in enumerate(
             path.read_text(encoding="utf-8").splitlines(), start=1
         ):
@@ -78,7 +101,13 @@ def offenders(root: Path) -> tuple[list[str], int]:
             if _REFUSED.search(line):
                 bad.append(f"{path.relative_to(root.parent.parent)}:{n}: {line.strip()}")
             years += len(_YEAR.findall(line))
-    return bad, years
+            if _KL.search(line):
+                kl += 1
+            if _BARE.search(line):
+                bare += 1
+        if kl and bare:
+            mixed.append(path.name)
+    return bad, years, mixed
 
 
 def main() -> int:
@@ -86,7 +115,7 @@ def main() -> int:
         print(f"no such directory: {TESTS}", file=sys.stderr)
         return 2
 
-    bad, years = offenders(TESTS)
+    bad, years, mixed = offenders(TESTS)
     problems = []
 
     if bad:
@@ -96,6 +125,18 @@ def main() -> int:
             "are different days, and across a boundary a different bucket:\n\n"
             + "\n".join(f"  {b}" for b in bad)
             + "\n\nUse (now() at time zone 'Asia/Kuala_Lumpur')::date instead."
+        )
+
+    if len(mixed) > MIXED_BUDGET:
+        problems.append(
+            f"{len(mixed)} files in supabase/tests name BOTH clocks in code,\n"
+            f"and the pinned budget is {MIXED_BUDGET}. A file that derives one\n"
+            "date from Kuala Lumpur and another from the session is a file\n"
+            "whose two dates move apart for eight hours a day -- which is how\n"
+            "run 2178 went red on a file that had just been made more\n"
+            "correct. Put the whole file on\n"
+            "(now() at time zone 'Asia/Kuala_Lumpur')::date.\n\n"
+            + "\n".join(f"  {m}" for m in mixed)
         )
 
     if years > YEAR_BUDGET:
@@ -118,7 +159,18 @@ def main() -> int:
         )
         return 1
 
-    print(f"the clock is the product's, with {years} fiscal years still to go")
+    if len(mixed) < MIXED_BUDGET:
+        print(
+            f"files naming both clocks are down to {len(mixed)} from "
+            f"{MIXED_BUDGET}.\nLower MIXED_BUDGET in this file so it cannot "
+            "climb back."
+        )
+        return 1
+
+    print(
+        f"the clock is the product's, with {years} fiscal years and "
+        f"{len(mixed)} two-clock files still to go"
+    )
     return 0
 
 

@@ -5379,3 +5379,54 @@ behind the first one. A serialised assertion run reports one problem at
 a time, and "the fix did not work" and "the fix worked and there is
 another" look identical from the outside until you read which assertion
 died.
+
+## Half a fix is a new bug: run 2178
+
+`920c8013` moved the report window in
+`supabase/tests/group_trial_balance_shapes.sql` onto the Kuala Lumpur
+clock and **left the fixture dates on `current_date`**. Run 2178 went
+red on:
+
+    FAIL money that moved after the period is not in the report at all,
+         however recent it is: expected 0, got 1
+
+Because on 30 September UTC the window then closed on **30 September**
+(the last day of last month in KL, where it is already 1 October) while
+the entry that must fall OUTSIDE the window was dated `current_date` —
+**30 September**. It landed on the boundary and was counted.
+
+Leaving both clocks alone would have passed. The file was made more
+correct and broke.
+
+The fix is `v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date`
+and every date in the file derived from it. `v_to` is the last day of
+last month on that clock and `v_today` is always inside this month, so
+the entry is strictly after the window **by construction, on every day
+of the year** — which is better than the arithmetic it replaced even
+ignoring time zones.
+
+### The ratchet this earned
+
+`check_test_clock.py` now also counts **files naming both clocks in
+code** — the Kuala Lumpur expression somewhere and a bare `current_date`
+somewhere else — and pins the number at **27**. It may fall; it may not
+rise.
+
+Most mixing is harmless: a `current_date + 7` beside a KL-derived fiscal
+year is two independent facts, not a comparison. What is not harmless is
+half a fix, and a new file starting to mix is exactly what half a fix
+looks like. **This ratchet would have fired on `920c8013` itself** —
+that commit took three files from one clock to two — and the advice it
+prints is the advice that would have prevented 2178: put the whole file
+on one clock.
+
+It is a budget rather than a ban because converting all 27 is not this
+change's job, and a gate whose backlog is the point is a gate nobody
+believes.
+
+### Three runs, three different failures
+
+2176 pos.sql, 2177 demo_rebuild, 2178 group_trial_balance_shapes — and
+only the third was caused by the fix before it. Worth being precise
+about which is which rather than reading a run of red as one problem
+resisting three attempts.

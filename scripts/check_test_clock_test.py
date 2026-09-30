@@ -60,9 +60,33 @@ begin
 end $$;
 """
 
+#: Both clocks in one file -- the shape that took run 2178 red on a file
+#: that had just been made MORE correct.
+MIXED = """
+do $$
+declare
+  v_to date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  perform pg_temp.entry(v_org, current_date);
+end $$;
+"""
 
-def run(files: dict[str, str], budget: int | None = None) -> tuple[int, str]:
-    """Run the gate over a scratch tree, optionally with a new budget."""
+ONE_CLOCK = """
+do $$
+declare
+  v_to date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  perform pg_temp.entry(v_org, v_to);
+end $$;
+"""
+
+
+def run(
+    files: dict[str, str],
+    budget: int | None = None,
+    mixed: int | None = None,
+) -> tuple[int, str]:
+    """Run the gate over a scratch tree, optionally with new budgets."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         tests = root / "supabase" / "tests"
@@ -80,6 +104,12 @@ def run(files: dict[str, str], budget: int | None = None) -> tuple[int, str]:
                 source,
                 flags=re.M,
             )
+        source = re.sub(
+            r"^MIXED_BUDGET = \d+$",
+            f"MIXED_BUDGET = {0 if mixed is None else mixed}",
+            source,
+            flags=re.M,
+        )
         copy = scripts / "check_test_clock.py"
         copy.write_text(source, encoding="utf-8")
 
@@ -120,6 +150,22 @@ def main() -> int:
 
     code, out = run({"a.sql": YEARS}, budget=2)
     expect("and under budget asks for the pin to be lowered", code, 1, out)
+
+    # Both clocks in one file. A ratchet, like the year budget: a file
+    # may already mix them and no NEW file may start to.
+    code, out = run({"a.sql": MIXED}, budget=0)
+    expect("a file naming both clocks is refused over budget", code, 1, out)
+    if code == 1 and "a.sql" not in out:
+        failures.append(f"the refusal does not name the file:\n{out}")
+
+    code, out = run({"a.sql": MIXED}, budget=0, mixed=1)
+    expect("and allowed exactly at budget", code, 0, out)
+
+    code, out = run({"a.sql": MIXED}, budget=0, mixed=2)
+    expect("and under budget asks for the pin to be lowered", code, 1, out)
+
+    code, out = run({"a.sql": ONE_CLOCK}, budget=0)
+    expect("one clock throughout is not mixing", code, 0, out)
 
     if failures:
         print("\n\n".join(failures), file=sys.stderr)
