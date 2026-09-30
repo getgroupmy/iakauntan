@@ -42,7 +42,21 @@ not a screen:
 The `audio` value beside it is for the same feature: a call that
 continues while the person switches apps.
 
-## BLOCKED: the media server is not deployed
+## ~~BLOCKED~~ — calling works, 30 September
+
+The SFU is deployed on a Synology DS224+ and a call between two devices
+on different networks carries audio. So all seven shots below are
+filmable, and the table further down about which ones need the SFU is
+kept only because it explains why the ring works before the media does.
+
+What it took, and what each cost, is in
+[`call-deployment.md`](call-deployment.md) — the four symptoms at the end
+of that file are the ones actually hit, in the order they were hit.
+
+The original entry follows, because the 503 it describes is what anybody
+will see if the secrets are ever lost.
+
+## Once blocked: the media server was not deployed
 
 Found by trying it, 29 September, on the demo pair:
 

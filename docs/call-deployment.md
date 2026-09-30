@@ -247,6 +247,55 @@ one that does not behave.
 Only (3) makes the Apple recording in
 [`apple-voip-review.md`](apple-voip-review.md) filmable end to end.
 
+## When it goes wrong: four symptoms and what each one is
+
+Every one of these was hit on the first real deployment, in this order.
+They are listed with the layer each sits at, because the useful skill is
+telling them apart rather than trying fixes.
+
+### `CERTIFICATE_VERIFY_FAILED` in the app, while curl and the browser are happy
+
+The intermediate certificate is missing from what the server sends.
+Browsers and macOS curl do **AIA fetching** — they go and get the
+intermediate themselves — so they paper over it. Flutter uses BoringSSL,
+which does not, and refuses to build a path.
+
+This is why proof 1 passing does not prove TLS is right for the app. On
+DSM the cause is usually the **Intermediate Certificate** field left
+empty on a manual import; check with
+
+    openssl s_client -connect <host>:443 -servername <host> -showcerts \
+      </dev/null 2>&1 | grep -c "BEGIN CERTIFICATE"
+
+`2` is leaf plus intermediate. **`1` is the bug.**
+
+### coturn says it found the certificate and then says there is none
+
+    INFO:  Certificate file found: /etc/coturn/certs/fullchain.pem
+    ERROR: TLS: ERROR: no certificate found
+    ERROR: TLS: ERROR: invalid private key
+
+The two lines contradict each other and both are true: the file exists
+and is not parseable PEM. `turns:` on 5349 is then dead while plain TURN
+on 3478 still works, so it costs you one fallback path silently. Check
+the first line of each file is a `-----BEGIN ...-----`, and rebuild the
+chain as `cat cert.pem chain.pem > fullchain.pem`.
+
+### The call connects and no media flows, on a host with several interfaces
+
+See the block about `listening-ip` and `relay-ip` in
+`coturn/turnserver.conf`. coturn warns twice in its own log when they are
+unset, and on a NAS it will discover its LAN interfaces, every Docker
+bridge and any VPN — then relay on whichever it picked, which may be an
+interface no port forward reaches.
+
+### `peer.silent` in the SFU log
+
+**Not a media failure**, despite how it reads. It is the WebSocket
+heartbeat in `server.js` reaping a socket that stopped answering pings —
+a locked phone, a backgrounded app, a network switch. Media never enters
+into it. Worth knowing before it sends somebody to look at ICE.
+
 ## What can be filmed before any of this
 
 The ring. `Repo.chatStartCall` creates the call row and fires the VoIP
