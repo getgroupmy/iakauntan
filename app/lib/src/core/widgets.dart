@@ -113,6 +113,30 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
   @override
   Widget build(BuildContext context) {
     return widget.value.when(
+      // Never draw bones over content this widget is still holding.
+      //
+      // `when` skips its loading arm during a REFRESH by default and
+      // does not skip it during a RELOAD — a reload being a watched
+      // dependency of the provider changing rather than the provider
+      // itself being invalidated. The distinction is invisible from
+      // here and means nothing to the person looking at the screen:
+      // either way there is a previous value in hand and it is still
+      // the best answer anybody has.
+      //
+      // Reported as "why does the whole chat page reload when text is
+      // sent or received". Every screen in the app did it, whenever a
+      // table without a narrow entry in `live_updates.dart` changed:
+      // the broad refresh reached `currentOrgProvider`, that rebuilt
+      // `repoProvider`, and every provider reading through
+      // `requireRepo` reloaded and blanked. Chat was simply the screen
+      // that writes such a table on every single message.
+      //
+      // The other two links in that chain are fixed too — `Repo` has
+      // value equality now, and the chat tables have narrow entries —
+      // and this is still worth fixing on its own. A skeleton is for a
+      // screen with nothing to show. Erasing something correct to draw
+      // a picture of it arriving is strictly worse than leaving it up.
+      skipLoadingOnReload: true,
       data: (data) {
         _stopWaiting();
         return widget.builder(data);

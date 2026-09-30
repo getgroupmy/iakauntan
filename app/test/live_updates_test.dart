@@ -39,6 +39,23 @@ void main() {
         'claim_approvals',
         'org_credits',
         'org_modules',
+        // Chat. Added while chasing "why does the whole chat page
+        // reload when text is sent or received", and deliberately NOT
+        // the fix for it — see the comment beside them in
+        // `live_updates.dart`. Chat writes `chat_participants` every
+        // few seconds (`chat_mark_read` on opening a thread,
+        // `chat_mark_delivered` on every message that arrives) with
+        // somebody sitting and watching, so narrowing it is worth
+        // having on its own.
+        'chat_participants',
+        'chat_messages',
+        'chat_conversations',
+        'chat_attachments',
+        'chat_typing',
+        'chat_presence',
+        'chat_calls',
+        'chat_call_participants',
+        'chat_access',
       },
     );
   });
@@ -166,6 +183,31 @@ void main() {
     // anything, so it is the one exception — and it is the exception by
     // name, in one place, rather than by a check scattered about.
     expect(liveUpdateNeverInvalidated, contains(authStateProvider));
+  });
+
+  test('and neither is the company you are in', () {
+    // What made the broad refresh ruinous rather than merely wasteful.
+    //
+    // 296 tables carry a `live_change_*` trigger and about fifteen have
+    // a narrow entry, so the broad refresh is what happens on nearly
+    // every write anybody in the company makes. Each one rebuilt
+    // `repoProvider` — a fresh `Repo`, unequal to the old one — and
+    // nearly every provider in the app WATCHES that through
+    // `requireRepo`. A watched dependency changing is a reload, and
+    // `AsyncValue.when` does not skip its loading arm on a reload, so
+    // every screen went down to loading bones and back while holding
+    // data that was still correct.
+    //
+    // Reported about chat, because chat is the screen somebody sits and
+    // watches while writes land every few seconds. Nothing about it was
+    // specific to chat.
+    //
+    // Nothing is lost: a company really being renamed arrives as a
+    // change to `organizations`, which has a narrow entry of its own.
+    expect(liveUpdateNeverInvalidated, contains(currentOrgProvider));
+    expect(liveUpdateNeverInvalidated, contains(organizationsProvider));
+    expect(liveUpdateProviders('organizations'), contains(organizationsProvider),
+        reason: 'the narrow path is what keeps a rename arriving');
   });
 
   test('a table with no entry of its own still refreshes something', () {

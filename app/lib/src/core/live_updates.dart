@@ -155,6 +155,52 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     moduleSurfaceProvider,
     moduleDashboardProvider,
   ],
+
+  // ## Chat
+  //
+  // Added while chasing "why does the whole chat page reload when text
+  // is sent or received". These entries are worth having and are NOT
+  // what was wrong, and the difference matters enough to write down,
+  // because the first diagnosis stopped here and it was the wrong
+  // place to stop.
+  //
+  // Chat writes `chat_participants` constantly — `chat_mark_read` on
+  // opening a thread, `chat_mark_delivered` on every message that
+  // arrives — and that table had no entry, so it fell through to
+  // `_refreshEverythingFetched`. Which looked like the answer until the
+  // database was counted: **296 tables carry a `live_change_*` trigger
+  // and about fifteen have an entry here.** The broad refresh is not
+  // the exception for a table nobody thought about; it is what happens
+  // on nearly every write in this application. Chat was not doing
+  // anything unusual. Chat was just doing it every few seconds with
+  // somebody watching.
+  //
+  // So the real defect was that the broad refresh was RUINOUS, and it
+  // was ruinous three links further down — see
+  // `liveUpdateNeverInvalidated` below, `Repo.==`, and `AsyncView`.
+  // Those three are the fix. This is an optimisation.
+  //
+  // The right-hand sides are the chat providers and nothing else. The
+  // conversation list carries unread counts, presence and receipts, so
+  // it is listed under most of them.
+  'chat_participants': [
+    chatConversationsProvider,
+    chatThreadProvider,
+    chatMembersProvider,
+  ],
+  'chat_messages': [chatConversationsProvider, chatThreadProvider],
+  'chat_conversations': [chatConversationsProvider],
+  'chat_attachments': [chatThreadProvider],
+  'chat_typing': [chatConversationsProvider, chatTypingProvider],
+  'chat_presence': [chatConversationsProvider, chatDirectoryProvider],
+  'chat_calls': [chatIncomingCallsProvider, chatActiveCallProvider],
+  'chat_call_participants': [
+    chatIncomingCallsProvider,
+    chatActiveCallProvider,
+  ],
+  // Who may use chat at all. Changing it changes the rail and the
+  // administrator's own list, and nothing else.
+  'chat_access': [chatAccessListProvider, chatDirectoryProvider],
 };
 
 /// The tables with an entry of their own. Every other table refreshes
@@ -179,7 +225,39 @@ const liveChangeFeed = 'live_changes';
 /// invalidating it re-subscribes to the auth stream, and a signed-in
 /// person would watch their session flicker every time a colleague
 /// saved anything.
-final Set<ProviderOrFamily> liveUpdateNeverInvalidated = {authStateProvider};
+///
+/// ## Which company you are in is not a fetched list either
+///
+/// [currentOrgProvider] and [organizationsProvider] were being thrown
+/// away with the rest, and that is what made the broad refresh ruinous
+/// rather than merely wasteful. 296 tables carry a `live_change_*`
+/// trigger and about fifteen have a narrow entry in `_watchers`, so the
+/// broad refresh is what happens on nearly every write anybody in the
+/// company makes.
+///
+/// Each one rebuilt [repoProvider] — a fresh `Repo` object, which
+/// before `Repo.==` was never equal to the old one. Nearly every
+/// provider in this application reads the repository through
+/// `requireRepo`, which WATCHES it. A watched dependency changing is a
+/// reload rather than a refresh, and `AsyncValue.when` does not skip
+/// its loading arm on a reload. So a colleague saving an invoice took
+/// every screen in the app down to loading bones and back, while it
+/// held data that was still correct throughout.
+///
+/// Reported about chat, because chat is the screen somebody sits and
+/// watches while writes land every few seconds. Nothing about it was
+/// specific to chat.
+///
+/// Nothing is lost by keeping these. A company that really is renamed
+/// arrives as a change to `organizations`, which has a narrow entry of
+/// its own, and [currentOrgProvider] watches [organizationsProvider] and
+/// follows it. Switching company is a choice somebody made, which this
+/// refresh has no business undoing in any case.
+final Set<ProviderOrFamily> liveUpdateNeverInvalidated = {
+  authStateProvider,
+  currentOrgProvider,
+  organizationsProvider,
+};
 
 /// Long enough to collect a burst, short enough to feel immediate.
 ///

@@ -92,6 +92,46 @@ class Repo {
 
   final Map<String, IdempotentAttempt> _attempts = {};
 
+  /// Two repositories onto the same company through the same client are
+  /// the same repository.
+  ///
+  /// Without this they were merely equivalent, and the difference was
+  /// visible on every screen in the app.
+  ///
+  /// `repoProvider` builds `Repo(client, org.id)` and watches
+  /// `currentOrgProvider`. A `Provider` re-emits when its new value is
+  /// `!=` the old one, and an object with no `==` is never equal to
+  /// another — so ANY refresh of the current company, even one that
+  /// resolved the same company for the same user, handed every reader a
+  /// new object.
+  ///
+  /// Nearly every provider in this app reads the repository through
+  /// `requireRepo`, which WATCHES it. A watched dependency changing is
+  /// a reload, not a refresh, and `AsyncValue.when` does not skip its
+  /// loading arm on a reload. So one broad refresh anywhere — and
+  /// `live_updates.dart` has a deliberate broad refresh for any table
+  /// without a narrow entry — turned every screen in the app into
+  /// loading bones and back, holding data the whole time that was still
+  /// correct.
+  ///
+  /// It was reported about chat, because chat writes
+  /// `chat_participants` on every message, but nothing about it was
+  /// specific to chat.
+  ///
+  /// `identical` on the client, because `SupabaseClient` has no value
+  /// equality and two clients are the same client only when they are.
+  /// Keeping the earlier instance also keeps `_attempts`, so an
+  /// idempotency record no longer evaporates when an unrelated list
+  /// refreshes.
+  @override
+  bool operator ==(Object other) =>
+      other is Repo &&
+      other.orgId == orgId &&
+      identical(other.client, client);
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(client), orgId);
+
   /// Every RPC in this file goes through here, so that being refused is
   /// written down.
   ///

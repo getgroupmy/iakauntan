@@ -5046,3 +5046,133 @@ container itself.
 microphone, no camera and no AVFoundation. The mechanism is read out of
 the plugin's own source and the failure it explains is the one in the
 screenshot, but only a phone can say it plays.
+
+## "Why does the whole chat page reload when text is sent or received?"
+
+It did. So did every other screen in the application, whenever anybody
+in the company saved anything. Chat was simply the screen somebody sits
+and watches while writes land every few seconds.
+
+Three things had to be true at once, and **each one alone would have
+hidden the other two** — which is why all three are fixed and all three
+are asserted. Fixing only the one that was found first would have made
+the symptom go away and left the defect in place.
+
+### The chain
+
+1. **The broad refresh is the normal path, not an edge case.**
+   `live_updates.dart` narrows a table's refresh to a handful of
+   providers when `_watchers` has an entry for it, and otherwise calls
+   `_refreshEverythingFetched()` — every provider holding an
+   `AsyncValue`. That fallback is deliberate and documented.
+
+   What nobody had counted is how often it fires. **296 tables carry a
+   `live_change_*` trigger and about fifteen have a narrow entry.** So
+   the sledgehammer is what happens on nearly every write in the
+   product. `chat_participants` is one of the 281, and chat writes it
+   constantly: `chat_mark_read` on opening a thread,
+   `chat_mark_delivered` on every message that arrives.
+
+2. **The sledgehammer threw away the company.** `currentOrgProvider`
+   holds an `AsyncValue`, so it was in scope. Invalidating it rebuilt
+   `repoProvider`, which is `Repo(client, org.id)` — and `Repo` had no
+   `==`, so **every rebuild produced an object unequal to the last**.
+
+3. **Nearly everything watches the repository.** `requireRepo(ref)` does
+   `ref.watch(repoProvider)`. A watched dependency changing is a
+   **reload**, not a refresh, and `AsyncValue.when` skips its loading arm
+   on a refresh and **does not skip it on a reload**. So `AsyncView`
+   drew six skeleton rows over a conversation it was still holding, and
+   then drew the conversation again.
+
+The distinction between a refresh and a reload is invisible from inside
+the widget and means nothing whatever to the person looking at the
+screen. Both have a previous value in hand and it is still the best
+answer anybody has.
+
+### Proved before it was fixed
+
+Not reasoned about — measured. A throwaway probe rendered an
+`AsyncView` over a provider with data in it and printed what happened:
+
+    AFTER INVALIDATE  skeleton=0 text=1      <- a refresh, content kept
+    AFTER DEPENDENCY  skeleton=1 text=0      <- a reload, content ERASED
+
+That single line settled a question three rounds of reading the code had
+not. Invalidating a whole `family` was probed too, in case
+`chat_live.dart`'s family-wide invalidate was the culprit — it is also a
+refresh, and it is not.
+
+### The four changes
+
+- `Repo` has value equality on `(client, orgId)`, `identical` on the
+  client because `SupabaseClient` has none. Keeping the earlier instance
+  also keeps its `_attempts` map, so an idempotency record no longer
+  evaporates when an unrelated list refreshes.
+- `currentOrgProvider` and `organizationsProvider` joined
+  `liveUpdateNeverInvalidated`, beside `authStateProvider` and for the
+  same reason. Nothing is lost: a company really being renamed arrives
+  as a change to `organizations`, which has a narrow entry of its own,
+  and `currentOrgProvider` watches `organizationsProvider` and follows.
+- `AsyncView` passes `skipLoadingOnReload: true`. A skeleton is for a
+  screen with nothing to show; erasing something correct to draw a
+  picture of it arriving is strictly worse than leaving it up.
+- The nine chat tables got narrow entries. **This is an optimisation and
+  not the fix**, and the comment beside them says so, because the first
+  diagnosis stopped there and it was the wrong place to stop.
+
+### One thing this made worse before it made it better
+
+The delivered-tick fix in `5e6ae1b1` gave `chat_mark_delivered` its
+first working caller. Every incoming message therefore began writing
+`chat_participants` — which, until this commit, meant a full-app refresh
+per message. The grey tick arrived and took the whole screen with it.
+Worth remembering when a fix lands on top of a defect nobody has found
+yet.
+
+## The incoming video is sideways, and this is as far as reading gets
+
+Not fixed. Diagnosed, with the last step needing a device.
+
+Both phones show the remote camera rotated 90° while their own
+picture-in-picture is upright. That pairing is the signature of
+**Coordination of Video Orientation (CVO) not surviving the trip**: the
+phone captures landscape sensor frames and sends the rotation as an RTP
+header extension rather than rotating the pixels, and a receiver that
+never negotiated the extension draws the raw sensor frames. The local
+preview is upright because it never goes through RTP at all.
+
+What was checked, and rules nothing out:
+
+- mediasoup **does** support `urn:3gpp:video-orientation` —
+  `supportedRtpCapabilities.js`, preferredId 8, `direction: 'sendrecv'`
+  — so the router is willing.
+- `mediasfu_mediasoup_client` never mentions the extension, so it is not
+  being stripped on purpose.
+- The app does **not** lock orientation: no `setPreferredOrientations`
+  anywhere, and `Info.plist` allows portrait and both landscapes. So the
+  device orientation the capturer reads is real.
+- `_cameraConstraints` asks for 640×480, i.e. landscape, which is what
+  makes the un-rotated frames look 90° out rather than merely cropped.
+- In `flutter_webrtc`, `RTCVideoValue.rotation` feeds **only**
+  `aspectRatio`; the pixels are rotated natively. So a sideways picture
+  means the frames arrived without rotation, not that the widget ignored
+  it.
+
+The likeliest remaining cause, and the one to test first: mediasoup
+computes a consumer's header extensions from the **consuming** peer's
+`rtpCapabilities`, which `call_engine.dart:267` sends from
+`device.rtpCapabilities`. Those come from a dummy offer, and libwebrtc
+does not always advertise CVO on an offer with no video **sender**. If
+the receiving side never offered the extension, mediasoup will not put
+it on the consumer, and the rotation is dropped — while the sending side
+negotiated it perfectly well and is relying on it.
+
+**The one measurement that settles it:** log
+`consumer.rtpParameters.headerExtensions` in `_attach` for a video
+consumer. `urn:3gpp:video-orientation` present means look elsewhere;
+absent means this is it.
+
+Deliberately NOT changed on a guess. Calling was taken from a 503 to
+working across two networks over one long evening, and a speculative
+edit to the media path is the wrong trade against that.
