@@ -90,7 +90,15 @@ begin
 
   -- Next Monday at ten, in the salon's own time. Derived rather than
   -- written down, so the file does not start failing on a Tuesday.
-  v_mon := (date_trunc('week', current_date) + interval '7 days')::date;
+  --
+  -- And derived from the SALON's day, which is what "in the salon's own
+  -- time" was always claiming. `current_date` is the session's, which is
+  -- UTC in CI: on a Sunday evening after 16:00 UTC it is already Monday
+  -- in Kuala Lumpur, so this landed on the Monday that had just begun
+  -- rather than the one a week out. `pos.sql` went red the same way in
+  -- run 2176, a month wide instead of a week.
+  v_mon := (date_trunc('week', (now() at time zone 'Asia/Kuala_Lumpur')::date)
+            + interval '7 days')::date;
   v_ten := (v_mon + time '10:00') at time zone 'Asia/Kuala_Lumpur';
 
   -- ------------------------------------------------------------------

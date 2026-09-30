@@ -57,6 +57,31 @@ declare
   -- already tomorrow in Kuala Lumpur, the board finds no bills for the
   -- day it is asked about, and the average-bill assertion divides by
   -- zero. Every reader in the module uses this expression; so does this.
+  --
+  -- Written for the day board, and the e-Invoice consolidation
+  -- assertions below went on using `current_date` regardless. They
+  -- failed in run 2176, at 17:04 UTC on the THIRTIETH OF SEPTEMBER,
+  -- which is the shape that earns this paragraph: eight hours of clock
+  -- difference is one day, and one day across a month boundary is a
+  -- whole month.
+  --
+  --     current_date                       2026-09-30
+  --     app.today()                        2026-10-01
+  --     date_trunc('month', current_date)  2026-09-01  <- asked for
+  --     date_trunc('month', app.today())   2026-10-01  <- filed under
+  --
+  -- `pos_einvoice_outstanding` buckets on `doc_date`, and a POS sale's
+  -- `doc_date` comes from `app.today()`, which is
+  -- `app.malaysian_day(now())`. So the three sales existed, in
+  -- October, and the September row the test asked for was never there:
+  -- `sales_waiting` came back NULL against an expected 3. Nothing was
+  -- wrong with the product, and the diff that went red contained no
+  -- SQL at all.
+  --
+  -- The same fuse is lit under every `date_trunc('year', current_date)`
+  -- that builds a fiscal year in this repository. Those burn for one
+  -- evening a year rather than one evening a month, which is the only
+  -- reason they have not gone off. See `docs/handoff.md`.
   v_kl_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
   v_line   uuid;
   v_promo  uuid;
@@ -111,7 +136,7 @@ begin
   -- rightly — but it means a shop that opens in January and never has a
   -- year created cannot sell at all, which is the correct refusal
   -- arriving at the worst possible moment. Worth knowing about.
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_kl_today)::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','purchases','inventory','einvoice']) m
@@ -284,13 +309,13 @@ begin
   select o.sales_waiting, o.due_date, o.consolidation_status
     into v_n, v_due, v_txt
     from public.pos_einvoice_outstanding(v_org) o
-   where o.period_start = date_trunc('month', current_date)::date;
+   where o.period_start = date_trunc('month', v_kl_today)::date;
   perform pg_temp.check_eq('three counter sales are waiting to be rolled up',
     v_n, 3);
   perform pg_temp.check_true('and no consolidation has been started',
     v_txt = 'not started');
   perform pg_temp.check_true('due seven days after month end',
-    v_due = (date_trunc('month', current_date) + interval '1 month - 1 day')::date + 7);
+    v_due = (date_trunc('month', v_kl_today) + interval '1 month - 1 day')::date + 7);
 
   -- "Boss, I need it under the company name" -- which arrives after the
   -- money, not before it.
@@ -336,7 +361,7 @@ begin
 
   select r.document_count, r.total_amount, r.added, r.due_date, r.period_end
     into v_n, v_a, v_b, v_due, v_pend
-    from public.consolidate_pos_einvoices(v_org, current_date) r;
+    from public.consolidate_pos_einvoices(v_org, v_kl_today) r;
   perform pg_temp.check_eq('two anonymous sales roll up', v_n, 2);
   perform pg_temp.check_eq('both added on the first run', v_b, 2);
   perform pg_temp.check_eq('for the cash sale plus the split sale',
@@ -353,7 +378,7 @@ begin
   -- worked, and a roll-up that double-counts on the second run files a
   -- return for twice the month's takings.
   select r.document_count, r.total_amount, r.added into v_n, v_a, v_b
-    from public.consolidate_pos_einvoices(v_org, current_date) r;
+    from public.consolidate_pos_einvoices(v_org, v_kl_today) r;
   perform pg_temp.check_eq('running it again adds nothing', v_b, 0);
   perform pg_temp.check_eq('the count does not move', v_n, 2);
   perform pg_temp.check_eq('nor the total', v_a, 20.10);
@@ -375,7 +400,7 @@ begin
   -- is the assertion that keeps them so.
   perform pg_temp.check_eq('nothing waits for this month any more',
     (select count(*) from public.pos_einvoice_outstanding(v_org) o
-      where o.period_start = date_trunc('month', current_date)::date), 0);
+      where o.period_start = date_trunc('month', v_kl_today)::date), 0);
 
   -- Once it has gone to LHDN it stops absorbing. A consolidation that
   -- keeps growing after submission is a return that no longer matches
@@ -383,7 +408,7 @@ begin
   update public.einvoice_consolidations set status = 'submitted'
    where org_id = v_org;
   begin
-    perform * from public.consolidate_pos_einvoices(v_org, current_date);
+    perform * from public.consolidate_pos_einvoices(v_org, v_kl_today);
     raise exception 'FAIL absorbed a sale into a submitted consolidation';
   exception when check_violation then
     raise notice 'ok   a submitted consolidation takes no more sales';
@@ -740,7 +765,12 @@ declare
   v_owner uuid := pg_temp.test_user();
 begin
   v_org := pg_temp.test_org('Kaunter Ujian Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  -- The shop's clock, not the session's — see the note in the first
+  -- block. This one is only wrong on New Year's Eve after 16:00 UTC,
+  -- which is exactly why it would have been found by somebody else.
+  perform public.create_fiscal_year(
+    v_org,
+    date_trunc('year', (now() at time zone 'Asia/Kuala_Lumpur')::date)::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -940,7 +970,12 @@ declare
   v_inv uuid; v_rcp uuid;
 begin
   v_org := pg_temp.test_org('Kaunter Sapu Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  -- The shop's clock, not the session's — see the note in the first
+  -- block. This one is only wrong on New Year's Eve after 16:00 UTC,
+  -- which is exactly why it would have been found by somebody else.
+  perform public.create_fiscal_year(
+    v_org,
+    date_trunc('year', (now() at time zone 'Asia/Kuala_Lumpur')::date)::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;

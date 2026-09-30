@@ -99,8 +99,19 @@ declare
   v_theirs uuid;
   v_owner  uuid := pg_temp.test_user();
   v_clerk  uuid;
-  v_start  date := date_trunc('month', current_date)::date;
-  v_end    date := (date_trunc('month', current_date)
+  -- The shop's clock, not the session's.
+  --
+  -- `pos_einvoice_outstanding` buckets on `doc_date`, and a POS sale's
+  -- `doc_date` comes from `app.today()` — `app.malaysian_day(now())`.
+  -- `current_date` is the session's, which is UTC in CI: from 16:00 UTC
+  -- it is already tomorrow in Kuala Lumpur, and on the last evening of
+  -- a month that is a different MONTH. `pos.sql` had the identical bug
+  -- and went red in run 2176 at 17:04 UTC on 30 September, asking for
+  -- the September period while the product filed the sales under
+  -- October. See the note at the top of that file.
+  v_kl_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_start  date := date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date)::date;
+  v_end    date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date)
                     + interval '1 month - 1 day')::date;
   v_n      integer;
   v_a      numeric;

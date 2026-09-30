@@ -1629,6 +1629,13 @@ jobs:
       - name: Check no ML Kit script is asked for and suppressed
         run: python3 scripts/check_mlkit_scripts.py
 
+      # `current_date` is the session's date, which is UTC here, and the
+      # product's is `app.today()` — Kuala Lumpur. From 16:00 UTC they
+      # are different days, and across a month boundary a different
+      # month. Run 2176 went red on a diff containing no SQL at all.
+      - name: Check an assertion buckets on the product's clock
+        run: python3 scripts/check_test_clock.py
+
       # Offered and not permitted is a save that fails; permitted and
       # not offered is a feature nobody can reach. Both were true of
       # `bank_accounts.account_type` at once.
@@ -2506,6 +2513,9 @@ jobs:
 
       - name: The or() gate's own assertions
         run: python3 scripts/check_or_filters_test.py
+
+      - name: The clock gate's own assertions
+        run: python3 scripts/check_test_clock_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py

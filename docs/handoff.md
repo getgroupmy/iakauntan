@@ -5176,3 +5176,85 @@ absent means this is it.
 Deliberately NOT changed on a guess. Calling was taken from a 503 to
 working across two networks over one long evening, and a speculative
 edit to the media path is the wrong trade against that.
+
+## CI went red on a commit that contained no SQL
+
+Run 2176, `ffff7127`. The diff was six Dart and Markdown files. The
+failing step was **"Run the database assertions"**:
+
+    ERROR: FAIL three counter sales are waiting to be rolled up:
+           expected 3, got <NULL>
+    supabase/tests/pos.sql
+
+Run 2175 had passed the same assertions three hours earlier on the same
+files. Nothing about the diff could reach SQL. What changed was the
+clock.
+
+### 17:04 UTC on the thirtieth of September
+
+`current_date` is the SESSION's date. In CI the session is UTC. The
+product's date is `app.today()`, which is `app.malaysian_day(now())` —
+Kuala Lumpur, UTC+8. **From 16:00 UTC the two disagree, every single
+day, for eight hours.**
+
+Measured against production at the time, rather than reasoned about:
+
+| | |
+| --- | --- |
+| `current_date` | 2026-09-30 |
+| `app.today()` | 2026-10-01 |
+| `date_trunc('month', current_date)` | 2026-09-01 ← the test asked |
+| `date_trunc('month', app.today())` | 2026-10-01 ← the product filed |
+
+`pos_einvoice_outstanding` buckets on `doc_date`, and a POS sale's
+`doc_date` comes from `app.today()`. So the three sales existed, in
+October, and the September row the test asked for was never there. One
+day of skew, landing on a month boundary, is a whole month.
+
+### The file already knew
+
+`pos.sql` declares `v_kl_today` at line 60, with a comment describing
+this exact failure — *"between 16:00 and midnight UTC it is already
+tomorrow in Kuala Lumpur"*. Somebody hit it on the day board, fixed
+that, and the six e-Invoice consolidation assertions twenty lines below
+went on using `current_date`.
+
+That is the thing worth remembering. The knowledge was in the file. It
+was not applied to the neighbours, because on the day it was written
+the neighbours were green.
+
+### What was fixed, and what was only counted
+
+Refused outright now, by `scripts/check_test_clock.py`: `month`, `week`
+and `quarter` bucketed over `current_date` anywhere in
+`supabase/tests`. Their fuses are short — one evening a month, one
+evening a week — and every one is a test that goes red on somebody
+else's diff. Eight were found and fixed:
+
+- `pos.sql` — six, the ones that went red
+- `pos_einvoice_consolidation.sql` — two, the identical bug, not yet
+  fired
+- `group_trial_balance_shapes.sql` — three, a report window that slides
+  a month on the last evening of a month
+- `pos_service.sql` — one, *"next Monday at ten, in the salon's own
+  time"*, derived from the session's Monday. A Sunday-evening fuse.
+
+**Counted rather than refused: `date_trunc('year', current_date)`, 150
+of them.** Almost all are `create_fiscal_year` in a fixture, and their
+fuse burns one evening a year — on 31 December after 16:00 UTC the
+test builds FY2026 while the product posts into 2027. Too many to
+convert in the commit that found this, so the number is PINNED in the
+gate: it may fall, it may not rise. The gate FAILS if the count drops
+without the pin being lowered, so the ratchet cannot quietly rust.
+
+The fix is the same everywhere:
+
+    (now() at time zone 'Asia/Kuala_Lumpur')::date
+
+### And the lesson about green
+
+A run that is green at 13:35 and red at 17:04 on identical files is not
+flaky infrastructure. It is an assertion that was always wrong and is
+only observable for eight hours a day. The first instinct — "my diff
+has no SQL, so this is a flake, re-run it" — would have been wrong, and
+would have left it for the next person on the last day of October.

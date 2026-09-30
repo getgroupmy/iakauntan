@@ -102,9 +102,16 @@ declare
   v_group uuid; v_a uuid; v_b uuid; v_c uuid; v_alone uuid;
   -- Last month, whole. The report is asked for exactly this window, and
   -- there is money on both sides of both ends of it.
-  v_from date := (date_trunc('month', current_date) - interval '1 month')::date;
-  v_to   date := (date_trunc('month', current_date) - interval '1 day')::date;
-  v_before date := (date_trunc('month', current_date) - interval '2 months')::date;
+  --
+  -- The shop's clock, not the session's. `current_date` is UTC in CI,
+  -- and from 16:00 UTC it is already tomorrow in Kuala Lumpur — so on
+  -- the last evening of a month this window slides by a whole month
+  -- while the documents posted into it do not. `pos.sql` went red
+  -- exactly that way in run 2176; the note at the top of it has the
+  -- arithmetic.
+  v_from date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date) - interval '1 month')::date;
+  v_to   date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date) - interval '1 day')::date;
+  v_before date := (date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date) - interval '2 months')::date;
   v_bank_a uuid; v_bank_b uuid; v_sales_a uuid; v_sales_b uuid;
   v_cf_a uuid; v_cf_b uuid; v_pre uuid; v_pre_contra uuid;
   v_post uuid; v_post_contra uuid;
