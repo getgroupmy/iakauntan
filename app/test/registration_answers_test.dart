@@ -38,16 +38,18 @@ void main() {
     view.resetDevicePixelRatio();
   });
 
-  Widget wrap() => ProviderScope(
+  Widget wrap([
+    LandingContent content = const LandingContent(
+      published: true,
+      signinShowRegister: true,
+    ),
+  ]) => ProviderScope(
     overrides: [
       workspaceHostProvider.overrideWith((ref) async => null),
       workspaceLookupProvider.overrideWith(
         (ref) async => (host: WorkspaceHost.platform, workspace: null),
       ),
-      landingContentProvider.overrideWith(
-        (ref) async =>
-            const LandingContent(published: true, signinShowRegister: true),
-      ),
+      landingContentProvider.overrideWith((ref) async => content),
       signupReferenceProvider.overrideWith(
         (ref) async => (
           dialCodes: const [
@@ -71,8 +73,14 @@ void main() {
     child: const MaterialApp(home: SignInScreen()),
   );
 
-  Future<void> openRegistration(WidgetTester tester) async {
-    await tester.pumpWidget(wrap());
+  Future<void> openRegistration(
+    WidgetTester tester, [
+    LandingContent content = const LandingContent(
+      published: true,
+      signinShowRegister: true,
+    ),
+  ]) async {
+    await tester.pumpWidget(wrap(content));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Create an account'));
     await tester.pumpAndSettle();
@@ -149,5 +157,113 @@ void main() {
     for (final segment in segmented.segments) {
       expect(segment.icon, isNull);
     }
+  });
+
+  // ===================================================================
+  // `0725`. Which answers this surface offers
+  // ===================================================================
+  //
+  // Six switches, one per answer per surface, and the console can turn
+  // any of them off. The unit rules are in `signup_kinds_test.dart`;
+  // what is asserted here is that the FORM follows them — a question
+  // with one answer is not asked, and a form with no answers left is
+  // still a form somebody can submit.
+  //
+  // These read the MOBILE switches, and that is not a choice. A widget
+  // test runs on the VM, so `kIsWeb` is false and
+  // `defaultTargetPlatform` is `android` — which makes
+  // `currentSurface` `Surface.android`. Writing these against the web
+  // columns is exactly the mistake the six switches exist to make
+  // possible, and it passed three of four tests before the surface was
+  // checked rather than assumed.
+
+  testWidgets('an answer the console withdrew is not offered', (tester) async {
+    await openRegistration(
+      tester,
+      const LandingContent(
+        published: true,
+        signinShowRegister: true,
+        signupShowAccountantMobile: false,
+      ),
+    );
+
+    final segmented = tester.widget<SegmentedButton<UseKind>>(
+      find.byKey(const ValueKey('signup-use')),
+    );
+    expect(segmented.segments.map((s) => s.value).toList(), [
+      UseKind.business,
+      UseKind.personal,
+    ]);
+  });
+
+  testWidgets('one answer left is not a question, and is what is used', (
+    tester,
+  ) async {
+    // A segmented bar with a single segment is a button that cannot be
+    // pressed and cannot be unpressed, and it invites somebody to hunt
+    // for the options that are not there.
+    await openRegistration(
+      tester,
+      const LandingContent(
+        published: true,
+        signinShowRegister: true,
+        signupShowBusinessMobile: false,
+        signupShowAccountantMobile: false,
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('signup-use')), findsNothing);
+    expect(find.text(useQuestion(SetupAudience.own)), findsNothing);
+    // Registering as an individual, so no company name is asked for.
+    // The form starts on `business`, so following the tapped answer
+    // rather than the settled one would ask for one here.
+    expect(find.byKey(const ValueKey('signup-business-name')), findsNothing);
+    expect(find.text(personalBlurb(SetupAudience.own)), findsOneWidget);
+  });
+
+  testWidgets('and none left still registers somebody, as an individual', (
+    tester,
+  ) async {
+    // NOT a form that cannot be submitted. An operator who switched all
+    // three off said what they want the form to BE, and the individual
+    // is the answer that needs nothing else to be true: no SSM number,
+    // no registered name, no paid module.
+    await openRegistration(
+      tester,
+      const LandingContent(
+        published: true,
+        signinShowRegister: true,
+        signupShowBusinessMobile: false,
+        signupShowAccountantMobile: false,
+        signupShowPersonalMobile: false,
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('signup-use')), findsNothing);
+    expect(find.byKey(const ValueKey('signup-business-name')), findsNothing);
+    expect(find.text(personalBlurb(SetupAudience.own)), findsOneWidget);
+  });
+
+  testWidgets('withdrawing it on the website leaves the apps alone', (
+    tester,
+  ) async {
+    // The whole reason there are six switches and not three. This is
+    // the app surface, so all three web columns being off changes
+    // nothing here.
+    await openRegistration(
+      tester,
+      const LandingContent(
+        published: true,
+        signinShowRegister: true,
+        signupShowBusinessWeb: false,
+        signupShowAccountantWeb: false,
+        signupShowPersonalWeb: false,
+      ),
+    );
+
+    final segmented = tester.widget<SegmentedButton<UseKind>>(
+      find.byKey(const ValueKey('signup-use')),
+    );
+    expect(segmented.segments, hasLength(3));
   });
 }

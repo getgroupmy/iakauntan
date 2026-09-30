@@ -471,3 +471,97 @@ begin
 end $$;
 
 rollback;
+
+-- =====================================================================
+-- Two clients, one year end
+-- =====================================================================
+--
+-- `0726`. `fs_filings` was unique on `(org_id, fy_end)`, which for a
+-- practice -- ONE organization holding many client companies -- meant
+-- one set of accounts per year end across every client it has. A great
+-- many Malaysian companies end on 31 December, so the second such
+-- client could not be recorded at all.
+--
+-- It was never found as itself. It was found three times as a test
+-- dying on a date: the paragraph above about 7 September 2026, and run
+-- 2177 on 1 October in Kuala Lumpur, where `demo_amanah_accounts` gave
+-- two of its three demo clients the same 31 December and took the
+-- whole assertion run down with it. Every October, and the demo
+-- function is not a test -- it runs in production.
+--
+-- So the rule is asserted here as a rule, rather than worked around in
+-- a fourth fixture.
+-- =====================================================================
+begin;
+
+\i supabase/tests/_helpers.sql
+
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_a     uuid;
+  v_b     uuid;
+  v_fye   date := date '2025-12-31';
+  v_n     integer;
+begin
+  -- `test_org` takes the NAME and makes its own owner, which is the
+  -- same `test_user()` read above. MBRS has to be on: `fs_filings`
+  -- lives behind the module, and a fixture that skips it asserts the
+  -- module gate rather than the key this block is about.
+  v_org := pg_temp.test_org('Firma Akaun Sdn Bhd');
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'mbrs', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_owner, 'role', 'authenticated')::text, true);
+
+  insert into public.corp_entities (org_id, name)
+  values (v_org, 'Kilang Sdn Bhd') returning id into v_a;
+  insert into public.corp_entities (org_id, name)
+  values (v_org, 'Pinang Sdn Bhd') returning id into v_b;
+
+  -- Two different clients, the same 31 December. The whole point.
+  insert into public.fs_filings
+    (org_id, corp_entity_id, fy_start, fy_end, framework, audit_status)
+  values (v_org, v_a, date '2025-01-01', v_fye, 'mpers', 'unaudited');
+
+  insert into public.fs_filings
+    (org_id, corp_entity_id, fy_start, fy_end, framework, audit_status)
+  values (v_org, v_b, date '2025-01-01', v_fye, 'mpers', 'unaudited');
+
+  select count(*) into v_n from public.fs_filings
+   where org_id = v_org and fy_end = v_fye;
+  perform pg_temp.check_eq(
+    'two clients may both end on 31 December', v_n, 2);
+
+  -- And the same client twice is still refused, which is the half of
+  -- the old key that was right.
+  begin
+    insert into public.fs_filings
+      (org_id, corp_entity_id, fy_start, fy_end, framework, audit_status)
+    values (v_org, v_a, date '2025-01-01', v_fye, 'mpers', 'unaudited');
+    raise exception 'FAIL one client filed twice for the same year end';
+  exception when unique_violation then
+    raise notice 'ok   but one client may not file the same year twice';
+  end;
+
+  -- The practice's own accounts carry no client, and there may be one
+  -- set of those per year end. A plain unique over three columns would
+  -- have let this happen twice, because every null is distinct.
+  insert into public.fs_filings
+    (org_id, fy_start, fy_end, framework, audit_status)
+  values (v_org, date '2025-01-01', v_fye, 'mpers', 'unaudited');
+  raise notice 'ok   the practice may file its own accounts as well';
+
+  begin
+    insert into public.fs_filings
+      (org_id, fy_start, fy_end, framework, audit_status)
+    values (v_org, date '2025-01-01', v_fye, 'mpers', 'unaudited');
+    raise exception 'FAIL the practice filed its own year end twice';
+  exception when unique_violation then
+    raise notice 'ok   and not twice, though the client column is null';
+  end;
+end $$;
+
+rollback;

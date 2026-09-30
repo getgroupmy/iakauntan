@@ -371,6 +371,14 @@ class LandingContent {
     this.signinShowPasskeyIos = false,
     // The odd one out, and deliberately: see the field.
     this.signinShowRegisterMobile = true,
+    // `0725`. Six more that ship ON, for the same reason: they take an
+    // answer away rather than offering a new one.
+    this.signupShowBusinessWeb = true,
+    this.signupShowBusinessMobile = true,
+    this.signupShowAccountantWeb = true,
+    this.signupShowAccountantMobile = true,
+    this.signupShowPersonalWeb = true,
+    this.signupShowPersonalMobile = true,
     this.signinShowMagicLink = false,
     this.signinShowGoogle = false,
     // `0653`. Six that ship ON, for the reason `signin_links.dart`
@@ -698,6 +706,29 @@ class LandingContent {
   /// switch could not say.
   final bool signinShowRegisterMobile;
 
+  /// `0725`. Which of the three answers to "What is this for?" the
+  /// registration form offers, per answer per surface.
+  ///
+  /// All six ship TRUE, like [signinShowRegisterMobile] and for the
+  /// same reason: they take something away rather than offering
+  /// something new.
+  ///
+  /// Per surface for the reason that switch is per surface, one step
+  /// further in. An app store has rules about who may open an account
+  /// and what it costs; those rules are not the website's, the two
+  /// stores do not share them, and they change on different days.
+  ///
+  /// Read through `signupKinds`, never one at a time: what a surface
+  /// offers, whether the question is asked at all, and what a form with
+  /// no answers left falls back to are one decision, and splitting it
+  /// across six call sites is how it gets made differently in each.
+  final bool signupShowBusinessWeb;
+  final bool signupShowBusinessMobile;
+  final bool signupShowAccountantWeb;
+  final bool signupShowAccountantMobile;
+  final bool signupShowPersonalWeb;
+  final bool signupShowPersonalMobile;
+
   /// `0613`. Draws "Email me a link instead" on the form.
   ///
   /// Ships FALSE, for the same reason as [signinShowPasskey] and in the
@@ -978,6 +1009,20 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowPasskeyIos: brandBool('signin_show_passkey_ios'),
       signinShowRegisterMobile:
           brandBoolUnlessOff('signin_show_register_mobile'),
+      signupShowBusinessWeb: brandBoolUnlessOff('signup_show_business_web'),
+      signupShowBusinessMobile: brandBoolUnlessOff(
+        'signup_show_business_mobile',
+      ),
+      signupShowAccountantWeb: brandBoolUnlessOff(
+        'signup_show_accountant_web',
+      ),
+      signupShowAccountantMobile: brandBoolUnlessOff(
+        'signup_show_accountant_mobile',
+      ),
+      signupShowPersonalWeb: brandBoolUnlessOff('signup_show_personal_web'),
+      signupShowPersonalMobile: brandBoolUnlessOff(
+        'signup_show_personal_mobile',
+      ),
       signinShowMagicLink: brandBool('signin_show_magic_link'),
       signinShowGoogle: brandBool('signin_show_google'),
       signinShowTermsIos: brandBoolUnlessOff('signin_show_terms_ios'),
@@ -1226,6 +1271,14 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowPasskeyAndroid: brandBool('signin_show_passkey_android'),
     signinShowPasskeyIos: brandBool('signin_show_passkey_ios'),
     signinShowRegisterMobile: brandBoolUnlessOff('signin_show_register_mobile'),
+    signupShowBusinessWeb: brandBoolUnlessOff('signup_show_business_web'),
+    signupShowBusinessMobile: brandBoolUnlessOff('signup_show_business_mobile'),
+    signupShowAccountantWeb: brandBoolUnlessOff('signup_show_accountant_web'),
+    signupShowAccountantMobile: brandBoolUnlessOff(
+      'signup_show_accountant_mobile',
+    ),
+    signupShowPersonalWeb: brandBoolUnlessOff('signup_show_personal_web'),
+    signupShowPersonalMobile: brandBoolUnlessOff('signup_show_personal_mobile'),
     signinShowMagicLink: brandBool('signin_show_magic_link'),
     signinShowGoogle: brandBool('signin_show_google'),
     signinShowTermsIos: brandBoolUnlessOff('signin_show_terms_ios'),

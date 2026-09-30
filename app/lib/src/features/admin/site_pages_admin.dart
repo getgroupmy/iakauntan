@@ -681,6 +681,90 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'Platform settings.',
                 onChanged: (v) => _save({'signin_show_register_mobile': v}),
               ),
+            // `0725`. One step further in than the two switches above:
+            // not WHETHER a stranger may register, but which of the
+            // three answers to "What is this for?" they are offered.
+            //
+            // Six rather than three, for the reason the switch above is
+            // separate from the one above it: an app store has rules
+            // about who may open an account and what it costs, those
+            // rules are not the website's, the two stores do not share
+            // them, and they change on different days.
+            //
+            // All six ship ON. Turning them all off on a surface does
+            // NOT break the form — it registers an individual and draws
+            // no question, which the last subtitle says out loud,
+            // because an operator switching off the third of three is
+            // entitled to know what the form then does.
+            if (!widget.login) ...[
+              _Switch(
+                value: onUnlessOff('signup_show_business_web'),
+                busy: _busy,
+                title: 'Offer "A business" on the website',
+                subtitle:
+                    'A registered company, enterprise, partnership or '
+                    'society. Asks for the registered name and the '
+                    'entity type, and invoices carry them.',
+                onChanged: (v) => _save({'signup_show_business_web': v}),
+              ),
+              _Switch(
+                value: onUnlessOff('signup_show_business_mobile'),
+                busy: _busy,
+                title: 'Offer "A business" in the apps',
+                subtitle:
+                    'The same answer in the iOS and Android apps, and '
+                    'its own switch because an app store\'s rules about '
+                    'who may open an account are not the website\'s.',
+                onChanged: (v) => _save({'signup_show_business_mobile': v}),
+              ),
+              _Switch(
+                value: onUnlessOff('signup_show_accountant_web'),
+                busy: _busy,
+                title: 'Offer "Accountant" on the website',
+                subtitle:
+                    'A firm keeping books for clients. Comes with '
+                    'Multi-Company from the first day, which is a PAID '
+                    'module — so a platform that does not sell to '
+                    'practices has a reason to withdraw this one and '
+                    'keep the other two.',
+                onChanged: (v) => _save({'signup_show_accountant_web': v}),
+              ),
+              _Switch(
+                value: onUnlessOff('signup_show_accountant_mobile'),
+                busy: _busy,
+                title: 'Offer "Accountant" in the apps',
+                subtitle:
+                    'The same answer in the iOS and Android apps. Worth '
+                    'its own switch: a store listing that describes a '
+                    'personal invoicing app should not offer to open a '
+                    'practice inside the app.',
+                onChanged: (v) => _save({'signup_show_accountant_mobile': v}),
+              ),
+              _Switch(
+                value: onUnlessOff('signup_show_personal_web'),
+                busy: _busy,
+                title: 'Offer "Myself" on the website',
+                subtitle:
+                    'Somebody invoicing under their own name, with no '
+                    'business registration. Invoices carry their name '
+                    'and their MyKad or passport number.',
+                onChanged: (v) => _save({'signup_show_personal_web': v}),
+              ),
+              _Switch(
+                value: onUnlessOff('signup_show_personal_mobile'),
+                busy: _busy,
+                title: 'Offer "Myself" in the apps',
+                subtitle:
+                    'The same answer in the iOS and Android apps. With '
+                    'one answer left on a surface the question is not '
+                    'asked at all and everybody registers as that one; '
+                    'with none left the form registers an individual '
+                    'and asks nothing, because that is the answer that '
+                    'needs no company name, no SSM number and no paid '
+                    'module.',
+                onChanged: (v) => _save({'signup_show_personal_mobile': v}),
+              ),
+            ],
             // `0579`. The passkey button, and the only switch on this
             // screen that ships OFF.
             //

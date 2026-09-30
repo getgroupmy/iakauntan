@@ -5258,3 +5258,124 @@ flaky infrastructure. It is an assertion that was always wrong and is
 only observable for eight hours a day. The first instinct — "my diff
 has no SQL, so this is a flake, re-run it" — would have been wrong, and
 would have left it for the next person on the last day of October.
+
+## Who may say what this is for, and two things found on the way
+
+### The feature: 0725
+
+Six switches over the three answers to "What is this for?" on the
+registration form — a business, an accountant, myself — one per answer
+per surface. Asked for as *"Admin Console → Sign up page → add option to
+show or hide for web and mobile app separately … If all are turned off
+then by default it will use as 'Myself' but no selection bar will be
+shown."*
+
+Built on `0638`'s machinery exactly: columns on `landing_page`, carried
+in the payload's `brand` object, read off `LandingContent`, edited in
+`site_pages_admin.dart`. All six ship TRUE, because they take something
+away rather than offering something new — the rule
+`signin_show_register_mobile` was added under.
+
+The rule itself is one pure function, `signup_kinds.dart`:
+
+- three answers, or two — draw the bar;
+- **one — register as that one and draw nothing.** A segmented bar with
+  a single segment is a button that cannot be pressed and cannot be
+  unpressed, and it invites somebody to hunt for the options that are
+  not there;
+- **none — register an individual and draw nothing.** Not a form that
+  cannot be submitted: an operator who switched all three off said what
+  they want the form to BE. The individual is the answer that needs
+  nothing else to be true — no SSM number, no registered name, no paid
+  module.
+
+`settledUse` is the other half and is easy to miss: `_use` starts life
+as `business` whether or not business is offered, and the payload is
+re-read while the form is open. So nothing reads `_use` directly — the
+metadata, the blurb and the company-name field all follow
+`_registeringAs`, which is one getter, so they cannot disagree.
+
+### Two restatements, both verified rather than trusted
+
+A `landing_page` switch needs TWO functions changed, and the second one
+is easy to miss because missing it fails silently:
+
+- `app.landing_payload` READS the columns out to the app.
+- `public.platform_save_landing_page` WRITES them, **and it sets every
+  column by name.** A switch the console draws and that function does
+  not list saves nothing and reports success — the optimistic UI moves,
+  the round trip returns, and the value never changes.
+
+Both are ~300–370 lines and had to be restated whole. Neither was
+typed:
+
+- `landing_payload` was transcribed and then PROVED: the transcription
+  minus the six added lines was hashed and compared against
+  `md5(pg_get_functiondef(...))` on production —
+  `124dd36877bb18ccf463f8beb2dca75a` both sides, byte-identical.
+- `platform_save_landing_page` was not transcribed at all. `0653`'s
+  copy in the repository turns out to BE what is live — collapse
+  whitespace and both sides are `b2ab0709fb2c948c67d10f9758d7a686` — so
+  0725's version was derived from that file by inserting six
+  assignments, and the derivation was checked back to the same hash.
+
+Do it this way every time. A 370-line function restated by hand is a
+transcription error waiting to be found by somebody else, and the check
+costs one query.
+
+### A widget test runs on Android, and this one nearly did not notice
+
+The four new widget assertions were written against the WEB columns and
+three of the four passed anyway, because a widget test runs on the VM:
+`kIsWeb` is false and `defaultTargetPlatform` is `android`, so
+`currentSurface` is `Surface.android` and the screen was reading the
+MOBILE columns the whole time. Writing a per-surface test against the
+wrong surface is precisely the mistake six switches exist to make
+possible. They are written against the mobile columns now, and say why
+in the file.
+
+### And the constraint that has now bitten three times: 0726
+
+`fs_filings` was `unique (org_id, fy_end)`. A practice is ONE
+organization holding many client companies — that is what
+`corp_entities` is for — so that key said *one set of accounts per year
+end, whichever client it is for*. A great many Malaysian companies end
+on 31 December, so a practice could record the first such client and not
+the second.
+
+It was never found as itself. Always as a test dying on a date:
+
+- `supabase/tests/fs_deadlines.sql` carries a paragraph about
+  **7 September 2026**, when two fixtures a day apart both clamped to
+  28 February and "the file died on a duplicate key, on that day only,
+  with nothing wrong in the code it tests". The fixture was rewritten.
+- **Run 2177**, 1 October in Kuala Lumpur: `app.demo_amanah_accounts`
+  gives Kilang the last complete calendar year (a 31 December) and Bayu
+  nine months back off the start of this month — which in OCTOBER is
+  the same 31 December. `demo_rebuild()` failed and took the whole
+  assertion run with it.
+
+Two workarounds and a third one waiting. The third is what turned it
+from a fixture problem into a schema problem: **`demo_rebuild()` is not
+a test.** It runs in production, and a demo rebuild that fails for the
+whole of October is a product broken for a month.
+
+Replaced by two partial unique indexes, because `corp_entity_id` is
+nullable and a plain three-column unique would treat every NULL as
+distinct — letting the practice file its OWN accounts twice for one
+year, which is the one duplicate the old key was right about:
+
+- `unique (org_id, corp_entity_id, fy_end) where corp_entity_id is not null`
+- `unique (org_id, fy_end) where corp_entity_id is null`
+
+Strictly weaker than what it replaces, so no existing row can violate
+them and the change cannot fail on live data.
+
+### The shape worth remembering from all of this
+
+Run 2176 failed on pos.sql. Fixing it did not make run 2177 green — it
+made run 2177 reach the NEXT latent failure, which had been sitting
+behind the first one. A serialised assertion run reports one problem at
+a time, and "the fix did not work" and "the fix worked and there is
+another" look identical from the outside until you read which assertion
+died.

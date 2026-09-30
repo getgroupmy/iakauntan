@@ -27,6 +27,7 @@ import 'phone_number.dart';
 import 'reset_cooldown.dart';
 import 'signup_consent.dart';
 import 'signin_links.dart';
+import 'signup_kinds.dart';
 import 'demo_accounts.dart';
 
 /// The password, asked in a box of its own.
@@ -483,6 +484,30 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// answer and the one the product is named for.
   UseKind _use = UseKind.business;
 
+  /// What this surface offers, and what to register as.
+  ///
+  /// `0725`. The console can withdraw any of the three answers, per
+  /// surface, so the one somebody tapped is not necessarily one the
+  /// platform still takes: the payload is re-read while the form is
+  /// open, and `_use` starts life as `business` whether or not business
+  /// is on offer here.
+  ///
+  /// So nothing reads `_use` directly any more. [_registeringAs] is
+  /// what the form asks for, what the blurb describes and what the
+  /// metadata carries, and it is the same value in all three because
+  /// it is one getter.
+  SignupKinds get _kinds => signupKinds(
+    currentSurface,
+    businessOnWeb: _brand?.signupShowBusinessWeb ?? true,
+    businessInTheApps: _brand?.signupShowBusinessMobile ?? true,
+    accountantOnWeb: _brand?.signupShowAccountantWeb ?? true,
+    accountantInTheApps: _brand?.signupShowAccountantMobile ?? true,
+    personalOnWeb: _brand?.signupShowPersonalWeb ?? true,
+    personalInTheApps: _brand?.signupShowPersonalMobile ?? true,
+  );
+
+  UseKind get _registeringAs => settledUse(_kinds, _use);
+
   /// What a business is asked on top of the five everybody gives.
   ///
   /// Setup asked for both of these as its first act, of somebody who
@@ -907,12 +932,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             'salutation': _salutation ?? '',
             'phone_dial': _dialCode,
             'phone_national': _phone.text.trim(),
-            'use_kind': storedUseKind(_use),
+            'use_kind': storedUseKind(_registeringAs),
             // Only what was actually asked. An empty string for a
             // person would be a person with a blank company name on
             // their profile, and `handle_new_user` would have to
             // decide what that meant.
-            if (_use == UseKind.business) ...{
+            if (_registeringAs == UseKind.business) ...{
               'business_name': _businessName.text.trim(),
               'entity_type': _entityType,
             },
@@ -1847,40 +1872,49 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   // setup. Registration already collects five things;
                   // handing somebody to a screen whose first act is to
                   // ask a sixth is a question in the wrong place.
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      useQuestion(SetupAudience.own),
-                      style: Theme.of(context).textTheme.bodySmall,
+                  if (_kinds.asks) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        useQuestion(SetupAudience.own),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
+                    const SizedBox(height: 6),
+                  ],
                   // Three answers and no icons. Two fitted a phone
                   // with a glyph each; three do not, and a
                   // SegmentedButton does not wrap -- it clips, so the
                   // third answer would be a truncated word somebody
                   // taps without being able to read. The words carry
                   // it on their own.
-                  SegmentedButton<UseKind>(
-                    key: const ValueKey('signup-use'),
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                        value: UseKind.business,
-                        label: Text(businessTitle),
-                      ),
-                      ButtonSegment(
-                        value: UseKind.accountant,
-                        label: Text(accountantTitle),
-                      ),
-                      ButtonSegment(
-                        value: UseKind.personal,
-                        label: Text(personalTitle(SetupAudience.own)),
-                      ),
-                    ],
-                    selected: {_use},
-                    onSelectionChanged: (v) => setState(() => _use = v.first),
-                  ),
+                  //
+                  // `0725`. And not always three: the console can
+                  // withdraw any of them, per surface, and a question
+                  // with one answer left is not a question. `asks` is
+                  // what decides whether this is drawn at all; where it
+                  // is false the form still registers somebody, as
+                  // `settledUse` below says.
+                  if (_kinds.asks)
+                    SegmentedButton<UseKind>(
+                      key: const ValueKey('signup-use'),
+                      showSelectedIcon: false,
+                      segments: [
+                        for (final kind in _kinds.offered)
+                          ButtonSegment(
+                            value: kind,
+                            label: Text(switch (kind) {
+                              UseKind.business => businessTitle,
+                              UseKind.accountant => accountantTitle,
+                              UseKind.personal => personalTitle(
+                                SetupAudience.own,
+                              ),
+                            }),
+                          ),
+                      ],
+                      selected: {_registeringAs},
+                      onSelectionChanged: (v) => setState(() => _use = v.first),
+                    ),
                   // What the answer means, in one line. A word on a
                   // segment cannot say that "Accountant" brings
                   // Multi-Company with it, and somebody choosing
@@ -1888,7 +1922,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   // each one does before they choose.
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text(switch (_use) {
+                    child: Text(switch (_registeringAs) {
                       UseKind.business => businessBlurb,
                       UseKind.accountant => accountantBlurb,
                       UseKind.personal => personalBlurb(SetupAudience.own),
@@ -1900,7 +1934,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   // setup's opening act was to ask a company for its
                   // name, which is the one thing somebody registering
                   // a company has certainly got to hand.
-                  if (_use == UseKind.business) ...[
+                  if (_registeringAs == UseKind.business) ...[
                     TextFormField(
                       key: const ValueKey('signup-business-name'),
                       controller: _businessName,
