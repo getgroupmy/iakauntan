@@ -4881,3 +4881,168 @@ all `current`, and one scan** — gemini, `status: ok`, twenty rows. That
 is the whole of the production evidence any of this work rests on, and
 it is worth re-measuring rather than assuming, because one scan is also
 what makes a four-state confidence ladder premature.
+
+## Six complaints about chat and calling, and six different causes
+
+Reported in two messages, the second while the first was being
+investigated. They are written up together because they were found
+together, not because they share a cause — they do not share one, and
+guessing that they did would have cost the whole afternoon.
+
+> - now when 1 user ends the call why the other user call screen does
+>   not close
+> - also for chat messaging why does it not have read reception double
+>   tick
+> - also for chat messaging why does it flicker when its updating
+> - also for chat messaging why does not get instant update
+> - also for chat messaging why attachment only file but no option to
+>   attach image or snap image to attach
+>
+> *(and, from a screenshot)* `PlatformException(DarwinAudioError, Failed
+> to set source … AVPlayerItem.Status.failed on setSourceUrl)` over a
+> voice note
+
+### One: a call is a database row, and hanging up wrote only the row
+
+`chat_end_call` marks every participant `left` and the call `ended` in
+the database. It tells the media server nothing — there is no signalling
+path from Postgres to mediasoup and there does not need to be, because
+the row is what a call IS.
+
+So on the other device: the websocket stayed up, `CallPhase` stayed
+`connected`, and the only thing that changed was that the grid emptied.
+`call_screen.dart` draws an empty grid as **"Waiting for somebody to
+answer"**, so a call that finished minutes ago went on saying it was
+waiting until somebody pressed back.
+
+`CallScreen` watched nothing. Its three exits were the hang-up button,
+the back gesture, and its own socket dying, and none of those is what
+the other person did. `chat_live.dart` was already invalidating
+`chatActiveCallProvider` on every `chat_calls` change — the answer was
+arriving and nothing was listening to it.
+
+It listens now, from `initState`, on three conditions: no row (the
+status is `ended`), a row for a different call, or a row in which this
+person is `left`. Plus a fourth that is not about ending at all:
+**everybody else has gone**. Only whoever STARTED a call may end it for
+everybody — `chat_end_call` refuses anybody else — so in a two-person
+call the one who did not start it can only *leave*, which writes their
+own participant row and nothing else, and leaves the starter alone with
+a live row and an empty grid. A high-water mark of the joined count
+catches that, and has to be a high-water mark rather than "is anybody
+else here", because at the start of every call the answer is no.
+
+**`listenManual`, not `ref.listen`.** `ref.listen` fires on CHANGES, and
+the value already in the provider when the screen opens is not one. The
+first version used it, the call the screen was opened for went unseen,
+and the flag that distinguishes "not started yet" from "already over"
+stayed false. Only the manual form takes `fireImmediately`. The four-second
+poll beside it is not decoration either: hanging up is the one thing
+that must not depend on a socket somebody else's network is in charge of.
+
+### Two: the grey tick was drawn against a column the RPC does not return
+
+The blue double tick works and always has — that is `chat_mark_read`,
+and the chat screen calls it on open. What has never appeared is the
+**grey** double tick, the middle state: delivered but not read.
+
+`chat_receipts.dart` was written to fix exactly that, and could not
+work. It read the conversation out of `c['id']`.
+`chat_my_conversations` returns **`conversation_id`**; there is no `id`
+column, and `chat_screen.dart` reads `c['conversation_id']` twice on its
+way down the same list. The `c['id'] != null` guard therefore threw away
+every row, `newlyDelivered` returned an empty list on every device since
+the day it was written, and `chat_mark_delivered` still had no caller.
+
+Nothing failed, because **the test's fixture used `'id'` too.** Twelve
+green assertions against a shape production never produces. This is
+number twelve for `docs/widget-tests.md`: a fixture that agrees with the
+code instead of with the database tests nothing but itself. The fixture
+is the fix; the mutant `read the id off a column the RPC never returns`
+now kills the test.
+
+A second defect underneath it: the "already reported" set was keyed on
+the conversation. Marking delivered does not change `unread`, so the
+first batch was reported and nothing after it ever was — message two
+would have sat on one tick until the app restarted. Keyed on the
+conversation *and* the message it was newest at now.
+
+### Three and four: one cause, two complaints
+
+Both the flicker and the lag came out of `chat_live.dart` treating six
+tables as one kind of event.
+
+Two of those tables are written by machines, not people. `chat_presence`
+takes a heartbeat from every signed-in colleague **every thirty
+seconds**. `chat_typing` takes a row every few seconds for as long as
+anybody is pressing keys — at both ends, because a client is sent its
+own writes back. Every one of those invalidated
+`chatConversationsProvider`, so the list, the open thread's header and
+the unread counts were refetched over and over while a conversation was
+simply being had. And a message — the one row anybody is waiting on —
+queued behind them and waited out the same 250 ms window.
+
+A screen that will not sit still and will not keep up is a strange pair
+of complaints until you notice they have one cause.
+
+Two speeds now. What a person did (`chat_messages`,
+`chat_participants`, `chat_calls`, `chat_call_participants`) flushes in
+150 ms and moves everything it touches. What a timer did flushes in two
+seconds and moves only the dot and the word it is about, with the
+conversation list allowed one refetch per twenty seconds out of the pair
+— presence does draw "online" beside a name and does have to arrive
+eventually.
+
+The fast window is also no longer a resettable debounce. `_settle
+?.cancel()` on every event has no upper bound: a steady trickle holds
+the flush off for as long as the trickle lasts, which is precisely a
+busy conversation.
+
+And `subscribe()` was called **with no callback**, so a subscription
+that was refused, timed out or quietly died was indistinguishable from
+one with nothing to deliver. Chat simply stopped updating and nothing
+anywhere knew. It takes `_onStatus` now: a channel that errors is
+resubscribed after three seconds, and a channel that comes back forces a
+full refetch rather than working out what it missed.
+
+All six chat tables were checked against production and all six are in
+`supabase_realtime` with `REPLICA IDENTITY FULL`. `chat_attachments` is
+not, and does not need to be — the message insert is what moves.
+
+### Five: `file_picker` cannot reach a camera
+
+There was one attach button and it opened a document browser. A
+photograph taken thirty seconds ago is somewhere inside that browser
+under a name nobody knows.
+
+`image_picker` was already a dependency, for the receipt camera, and
+already asks for the right permission on each platform. The attach
+button is a three-way menu now — take a photo, photo, file — with the
+shutter shown only where `cameraLikely` says there plausibly is one.
+Photos go out at quality 88 and a 2400px long edge, which is still wider
+than any screen they will be read on and is not four megabytes off
+somebody's data plan. The two iOS usage strings were widened to say
+chat as well as receipts.
+
+### Six: `BytesSource` is not a byte source on Apple platforms
+
+The voice note in the screenshot. `audioplayers` has no native
+`setSourceBytes` on iOS or macOS — the Swift side answers "not currently
+implemented on iOS" — so the Dart side writes the bytes to a temporary
+file **named after their hash, with no extension**, and plays that file
+instead. AVFoundation then has nothing to go on: no extension, no
+content type, no way to tell an m4a from a webm. Hence
+`AVPlayerItem.Status.failed on setSourceUrl`, from a call the app never
+made.
+
+A mime type is the entire fix — `audioplayers` forwards it to
+`AVURLAssetOverrideMIMETypeKey`, which is the hint AVFoundation is
+missing. The row already carries one; it was simply not passed down. It
+costs nothing on Android or the web, where the decoder sniffs the
+container itself.
+
+**Not verified on a device.** The same caveat the top of
+`chat_attachments.dart` already carries: this environment has no
+microphone, no camera and no AVFoundation. The mechanism is read out of
+the plugin's own source and the failure it explains is the one in the
+screenshot, but only a phone can say it plays.

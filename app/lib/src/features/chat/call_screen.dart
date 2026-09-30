@@ -24,6 +24,7 @@ class CallScreen extends ConsumerStatefulWidget {
   const CallScreen({
     super.key,
     required this.callId,
+    this.conversationId,
     this.isMine = false,
     required this.title,
     required this.video,
@@ -33,6 +34,16 @@ class CallScreen extends ConsumerStatefulWidget {
   final String callId;
   final String title;
   final bool video;
+
+  /// The conversation this call is in, so the screen can watch the call
+  /// row and close itself when somebody else ends it. See
+  /// `_watchTheCallRow`.
+  ///
+  /// Nullable because the CallKit path answers a call the app may never
+  /// have seen a row for — the system's screen is the only thing that
+  /// rang. Where it is null this screen behaves as it always did and
+  /// closes on the socket, the button, or the back gesture.
+  final String? conversationId;
 
   /// Whether this person started the call.
   ///
@@ -51,6 +62,41 @@ class CallScreen extends ConsumerStatefulWidget {
 class _CallScreenState extends ConsumerState<CallScreen> {
   late final CallEngine _engine;
   bool _leaving = false;
+  Timer? _poll;
+
+  /// Whether the call row has ever been seen while this screen was up.
+  ///
+  /// Without it the first answer to arrive could close the screen
+  /// before the join has landed — `chat_active_call` is asked from a
+  /// provider that may already be holding a null from before the call
+  /// existed, and "not started yet" and "already over" are the same
+  /// null.
+  bool _sawTheCall = false;
+
+  /// The most people this call has ever had in it at once.
+  ///
+  /// The other half of the hang-up. Only whoever STARTED a call may end
+  /// it for everybody — `chat_end_call` refuses anybody else — so in a
+  /// two-person call the person who did not start it can only leave,
+  /// and leaving writes their own participant row and nothing else.
+  /// `chat_leave_call` ends the call only when the last person goes, so
+  /// the one still sitting there keeps a live row, a live socket and an
+  /// empty grid.
+  ///
+  /// A high-water mark rather than "is anybody else here", because at
+  /// the start of every call the answer is no: the caller is alone in
+  /// the room until somebody picks up, and closing on that would hang
+  /// up on every call before it was answered.
+  int _mostEverHere = 0;
+
+  /// How often the call row is asked about when nothing has pushed it.
+  ///
+  /// The realtime subscription in `chat_live.dart` is what normally
+  /// carries the ending, and this is the belt to its braces: hanging up
+  /// is the one thing that must not depend on a socket somebody else's
+  /// network is in charge of. Slow enough to be free, fast enough that
+  /// nobody sits on a dead call wondering.
+  static const _rowCheck = Duration(seconds: 4);
 
   @override
   void initState() {
@@ -63,6 +109,38 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       unawaited(_start());
     }
     _engine.addListener(_onEngine);
+
+    final conversationId = widget.conversationId;
+    if (conversationId != null) {
+      _watchTheCallRow(conversationId);
+      _poll = Timer.periodic(_rowCheck, (_) {
+        if (mounted && !_leaving) {
+          ref.invalidate(chatActiveCallProvider(conversationId));
+        }
+      });
+    }
+  }
+
+  /// Closing because the call ended somewhere else.
+  ///
+  /// The other end hanging up used to leave this screen exactly as it
+  /// was: `chat_end_call` marks every participant left and the call
+  /// `ended` IN THE DATABASE and tells the media server nothing, so
+  /// this device's socket stayed up, `CallPhase` stayed `connected`,
+  /// and the only thing that changed was that the grid emptied — which
+  /// this screen draws as "Waiting for somebody to answer". A call that
+  /// had finished minutes ago went on saying it was waiting until
+  /// somebody pressed the back button.
+  ///
+  /// So the row is the truth, here as everywhere else in calling: the
+  /// screen is the media and the buttons, and the database is what a
+  /// call IS.
+  void _endedElsewhere(String why) {
+    if (_leaving || !mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(why)));
+    unawaited(_leave());
   }
 
   Future<void> _start() async {
@@ -139,6 +217,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     await _engine.close();
     if (!mounted) return;
     ref.invalidate(chatIncomingCallsProvider);
+    final conversationId = widget.conversationId;
+    if (conversationId != null) {
+      // So the thread behind this offers the call buttons again rather
+      // than the "Join call" this screen has just finished with.
+      ref.invalidate(chatActiveCallProvider(conversationId));
+    }
     // `pop`, not `maybePop`. `maybePop` asks the `PopScope` below, which
     // is set to refuse — that is how a hardware back button is turned
     // into a proper hang-up — so asking it here would refuse the very
@@ -149,9 +233,61 @@ class _CallScreenState extends ConsumerState<CallScreen> {
 
   @override
   void dispose() {
+    _poll?.cancel();
     _engine.removeListener(_onEngine);
     unawaited(_engine.close());
     super.dispose();
+  }
+
+  /// Leaves when the row says the call is over.
+  ///
+  /// Three ways it can be over, and all three end this screen:
+  ///
+  /// - no row at all — `chat_active_call` returns nothing once the
+  ///   status is `ended`, which is what `chat_end_call` writes;
+  /// - a row for a DIFFERENT call, which is the same conversation
+  ///   having started a second call while this one was being stared at;
+  /// - a row for this call in which this person is `left`, which is
+  ///   what `chat_end_call` writes for everybody it hangs up on.
+  ///
+  /// Only ever acted on once an answer has actually arrived. A refresh
+  /// carries the previous value and `isLoading`, and treating that as
+  /// "no call" would close the screen every four seconds.
+  ///
+  /// `listenManual`, from `initState`, rather than `ref.listen` from
+  /// `build`. `ref.listen` fires on CHANGES, and the value already
+  /// sitting in the provider when this screen opens is not one — so the
+  /// call this screen was opened for went unseen, [_sawTheCall] stayed
+  /// false, and the first thing that could have closed the screen was
+  /// read as "the call has not started yet". `fireImmediately` is the
+  /// whole difference, and only the manual form has it.
+  void _watchTheCallRow(String conversationId) {
+    ref.listenManual<AsyncValue<Map<String, dynamic>?>>(
+      chatActiveCallProvider(conversationId),
+      (_, next) {
+        if (_leaving || next.isLoading || !next.hasValue) return;
+        final row = next.requireValue;
+
+        if (row != null && row['id'] == widget.callId) {
+          _sawTheCall = true;
+          if (row['my_state'] == 'left') {
+            _endedElsewhere('The call was ended.');
+            return;
+          }
+          final here = int.tryParse('${row['joined'] ?? 0}') ?? 0;
+          if (here > _mostEverHere) _mostEverHere = here;
+          if (_mostEverHere >= 2 && here <= 1) {
+            _endedElsewhere('Everybody else has left.');
+          }
+          return;
+        }
+
+        // Nothing, or something else. Before the join has landed that
+        // is simply "not yet"; after it, it is over.
+        if (_sawTheCall) _endedElsewhere('The call has ended.');
+      },
+      fireImmediately: true,
+    );
   }
 
   @override

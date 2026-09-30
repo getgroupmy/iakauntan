@@ -5,10 +5,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../shared/file_viewer.dart';
+import '../shared/receipt_capture.dart' show cameraLikely;
+import '../../core/error_text.dart';
 import '../../core/providers.dart';
 import '../../core/recorded_audio.dart';
 import '../../core/theme.dart';
@@ -71,7 +74,74 @@ class _ChatComposerActionsState extends ConsumerState<ChatComposerActions> {
     final result = await FilePicker.platform.pickFiles(withData: true);
     final file = result?.files.singleOrNull;
     if (file == null || file.bytes == null || !mounted) return;
+    await _send(
+      fileName: file.name,
+      bytes: file.bytes!,
+      mimeType: _mimeFor(file.extension),
+    );
+  }
 
+  /// A photograph, from the shutter or from the roll.
+  ///
+  /// `file_picker` reaches neither. It opens a document browser, and a
+  /// photograph taken thirty seconds ago is somewhere inside it under a
+  /// name nobody knows — so the two ways people actually send a picture
+  /// get their own entries, through `image_picker`, which is already a
+  /// dependency for the receipt camera and already asks for the right
+  /// permission on each platform.
+  ///
+  /// Sized down on the way out. A modern phone camera produces four to
+  /// twelve megabytes a shot; nobody sending a picture to a colleague
+  /// wants that off their data plan, and the long edge kept here is
+  /// still wider than any screen it will be read on.
+  Future<void> _pickImage(ImageSource source) async {
+    final XFile? shot;
+    try {
+      shot = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 88,
+        maxWidth: 2400,
+      );
+    } catch (e) {
+      // A refused permission arrives as an exception, and "nothing
+      // happened" is the worst possible answer to a tapped shutter.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open it: ${errorText(e)}')),
+      );
+      return;
+    }
+    if (shot == null || !mounted) return;
+
+    final bytes = await shot.readAsBytes();
+    if (!mounted) return;
+
+    // The camera names its files `image_picker_9F3A….jpg`, which tells
+    // nobody anything in a thread a year later.
+    final stamp = DateTime.now();
+    final named = source == ImageSource.camera
+        ? 'photo-${stamp.year}'
+              '${stamp.month.toString().padLeft(2, '0')}'
+              '${stamp.day.toString().padLeft(2, '0')}'
+              '-${stamp.millisecondsSinceEpoch % 100000}.jpg'
+        : shot.name;
+
+    await _send(
+      fileName: named,
+      // `image_picker` reports the type on the web and leaves it null
+      // on a phone, where the extension is the only thing that knows.
+      // Without one, storage falls back to `application/octet-stream`
+      // and the picture downloads instead of opening.
+      mimeType: shot.mimeType ?? _mimeFor(named.split('.').last),
+      bytes: bytes,
+    );
+  }
+
+  Future<void> _send({
+    required String fileName,
+    required Uint8List bytes,
+    required String? mimeType,
+  }) async {
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -80,12 +150,12 @@ class _ChatComposerActionsState extends ConsumerState<ChatComposerActions> {
           .chatSendAttachment(
             conversationId: widget.conversationId,
             senderOrgId: widget.senderOrgId,
-            fileName: file.name,
-            bytes: file.bytes!,
-            mimeType: _mimeFor(file.extension),
+            fileName: fileName,
+            bytes: bytes,
+            mimeType: mimeType,
           ),
       successMessage: null,
-      pendingMessage: 'Sending ${file.name}…',
+      pendingMessage: 'Sending $fileName…',
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -216,11 +286,56 @@ class _ChatComposerActionsState extends ConsumerState<ChatComposerActions> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
+        // One button, three answers. Three icons in a composer that also
+        // holds a microphone and a text field leaves no room for the
+        // text field on a phone, which is the surface this is mostly
+        // used from.
+        PopupMenuButton<_Attach>(
           key: const ValueKey('chat-attach'),
-          tooltip: 'Attach a file',
-          onPressed: _busy ? null : _pickFile,
+          tooltip: 'Attach',
+          enabled: !_busy,
           icon: const Icon(Icons.attach_file, size: 20),
+          onSelected: (choice) => switch (choice) {
+            _Attach.camera => _pickImage(ImageSource.camera),
+            _Attach.gallery => _pickImage(ImageSource.gallery),
+            _Attach.file => _pickFile(),
+          },
+          itemBuilder: (_) => [
+            // Only where there is plausibly a camera. On a desktop
+            // browser `image_picker` falls back to a file dialog, which
+            // is the third entry wearing a shutter icon.
+            if (cameraLikely)
+              const PopupMenuItem(
+                key: ValueKey('chat-attach-camera'),
+                value: _Attach.camera,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.photo_camera_outlined, size: 20),
+                  title: Text('Take a photo'),
+                ),
+              ),
+            const PopupMenuItem(
+              key: ValueKey('chat-attach-gallery'),
+              value: _Attach.gallery,
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.photo_library_outlined, size: 20),
+                title: Text('Photo'),
+              ),
+            ),
+            const PopupMenuItem(
+              key: ValueKey('chat-attach-file'),
+              value: _Attach.file,
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.insert_drive_file_outlined, size: 20),
+                title: Text('File'),
+              ),
+            ),
+          ],
         ),
         IconButton(
           key: const ValueKey('chat-record'),
@@ -232,6 +347,9 @@ class _ChatComposerActionsState extends ConsumerState<ChatComposerActions> {
     );
   }
 }
+
+/// Where an attachment comes from.
+enum _Attach { camera, gallery, file }
 
 /// Enough of a content type for a browser to do the right thing when the
 /// signed link is opened. `file_picker` does not report one, and storage
@@ -278,6 +396,10 @@ class ChatAttachmentView extends ConsumerWidget {
       return _VoiceNote(
         path: attachment['storage_path'].toString(),
         durationMs: duration,
+        // What the recorder said it wrote. Carried down because on iOS
+        // it is the only thing that makes the note playable at all —
+        // see `_VoiceNoteState._toggle`.
+        mimeType: attachment['mime_type']?.toString(),
       );
     }
 
@@ -340,10 +462,19 @@ String _bytes(int n) {
 }
 
 class _VoiceNote extends ConsumerStatefulWidget {
-  const _VoiceNote({required this.path, required this.durationMs});
+  const _VoiceNote({
+    required this.path,
+    required this.durationMs,
+    this.mimeType,
+  });
 
   final String path;
   final int durationMs;
+
+  /// The content type the row carries — `audio/mp4` from a phone,
+  /// `audio/webm` from a browser. Null on a note recorded before the
+  /// column was filled, which is why the fallback below exists.
+  final String? mimeType;
 
   @override
   ConsumerState<_VoiceNote> createState() => _VoiceNoteState();
@@ -378,7 +509,7 @@ class _VoiceNoteState extends ConsumerState<_VoiceNote> {
         // an `<audio>` element where anything that can read the page
         // can read it. `BytesSource` keeps it in memory.
         final bytes = await ref.read(repoProvider)!.chatFileBytes(widget.path);
-        await _player.play(BytesSource(bytes));
+        await _player.play(BytesSource(bytes, mimeType: _containerType));
         _done ??= _player.onPlayerComplete.listen((_) {
           if (mounted) setState(() => _playing = false);
         });
@@ -390,6 +521,36 @@ class _VoiceNoteState extends ConsumerState<_VoiceNote> {
       _loading = false;
       _playing = ok;
     });
+  }
+
+  /// Which container these bytes are in, said out loud.
+  ///
+  /// iOS refused to play any voice note at all:
+  ///
+  /// > PlatformException(DarwinAudioError, Failed to set source ...
+  /// > AVPlayerItem.Status.failed on setSourceUrl)
+  ///
+  /// `BytesSource` is not a byte source on Apple platforms.
+  /// `audioplayers` has no `setSourceBytes` there — the native side
+  /// answers "not currently implemented on iOS" — so the Dart side
+  /// writes the bytes to a temporary file *named after their hash*,
+  /// with **no extension**, and plays that file instead. AVFoundation
+  /// then has nothing to go on: no extension, no content type, no way
+  /// to know an m4a from a webm, and `AVPlayerItem` fails to open it.
+  ///
+  /// A mime type is the whole fix. `audioplayers` forwards it to
+  /// `AVURLAssetOverrideMIMETypeKey`, which is exactly the hint
+  /// AVFoundation is missing. It costs nothing on Android or the web,
+  /// where the decoder sniffs the container itself.
+  ///
+  /// The fallback is what this app records: `_stopRecording` sends
+  /// `audio/mp4` off a phone and `audio/webm` off a browser, so a row
+  /// from before `mime_type` was carried is one of those two, and the
+  /// platform says which.
+  String get _containerType {
+    final stored = widget.mimeType;
+    if (stored != null && stored.startsWith('audio/')) return stored;
+    return kIsWeb ? 'audio/webm' : 'audio/mp4';
   }
 
   @override

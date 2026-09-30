@@ -100,6 +100,13 @@ class FakeCallEngine extends ChangeNotifier implements CallEngine {
   }
 }
 
+/// The call row, held somewhere a test can change it.
+///
+/// `chatActiveCallProvider` reads `chat_active_call`, which is the one
+/// thing that knows a call is over: ending a call writes the database
+/// and tells the media server nothing at all.
+final _theCallRow = StateProvider<Map<String, dynamic>?>((ref) => null);
+
 void main() {
   Widget harness(FakeCallEngine engine, {bool isMine = false}) =>
       ProviderScope(
@@ -382,6 +389,153 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('open'), findsOneWidget);
+  });
+
+  // -------------------------------------------------------------------
+  // The call ending somewhere else
+  // -------------------------------------------------------------------
+  //
+  // The screen used to close on exactly three things: the button, the
+  // back gesture, and its own socket dying. None of those is what
+  // happens when the person at the other end hangs up.
+  //
+  // `chat_end_call` marks every participant left and the call `ended`
+  // IN THE DATABASE. It does not touch the media server, so this
+  // device's websocket stays up, `CallPhase` stays `connected`, and the
+  // only visible change is that the grid empties — which this screen
+  // draws as "Waiting for somebody to answer". A call finished minutes
+  // ago went on saying it was waiting.
+  group('a call that ended somewhere else', () {
+    late ProviderContainer container;
+
+    setUp(() {
+      container = ProviderContainer(
+        overrides: [
+          repoProvider.overrideWithValue(null),
+          chatActiveCallProvider.overrideWith(
+            (ref, conversationId) => ref.watch(_theCallRow),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+    });
+
+    Future<void> openWatched(
+      WidgetTester tester,
+      FakeCallEngine engine,
+    ) async {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CallScreen(
+                          callId: 'call-1',
+                          conversationId: 'conv-1',
+                          title: 'Siti Nurhaliza',
+                          video: false,
+                          engine: engine,
+                        ),
+                      ),
+                    ),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    void rowSays(Map<String, dynamic>? row) =>
+        container.read(_theCallRow.notifier).state = row;
+
+    testWidgets('the row going away closes the screen', (tester) async {
+      rowSays({'id': 'call-1', 'my_state': 'joined', 'joined': 2});
+      final engine = FakeCallEngine();
+      await openWatched(tester, engine);
+      expect(find.text('Siti Nurhaliza'), findsOneWidget);
+
+      // `chat_active_call` returns nothing once the status is `ended`.
+      rowSays(null);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Siti Nurhaliza'), findsNothing);
+      expect(engine.closed, isTrue);
+    });
+
+    testWidgets('being marked left closes it, row or no row', (tester) async {
+      rowSays({'id': 'call-1', 'my_state': 'joined', 'joined': 2});
+      final engine = FakeCallEngine();
+      await openWatched(tester, engine);
+
+      // What `chat_end_call` writes for everybody it hangs up on.
+      //
+      // Three still joined, on purpose: with the count down at one this
+      // would also be closed by the "everybody else has left" rule, and
+      // the assertion would pass with the `my_state` rule deleted. It
+      // did, until a mutant said so.
+      rowSays({'id': 'call-1', 'my_state': 'left', 'joined': 3});
+      await tester.pumpAndSettle();
+
+      expect(find.text('Siti Nurhaliza'), findsNothing);
+      expect(engine.closed, isTrue);
+    });
+
+    testWidgets('the other person simply leaving closes it too', (
+      tester,
+    ) async {
+      // Only whoever STARTED a call may end it for everybody, so in a
+      // two-person call the other one can only leave — which writes
+      // their own row and nothing else, and used to leave this screen
+      // alone with an empty grid for ever.
+      rowSays({'id': 'call-1', 'my_state': 'joined', 'joined': 2});
+      final engine = FakeCallEngine();
+      await openWatched(tester, engine);
+
+      rowSays({'id': 'call-1', 'my_state': 'joined', 'joined': 1});
+      await tester.pumpAndSettle();
+
+      expect(find.text('Siti Nurhaliza'), findsNothing);
+      expect(engine.closed, isTrue);
+    });
+
+    testWidgets('but waiting for somebody to answer is not the call ending', (
+      tester,
+    ) async {
+      // The caller is alone in the room until somebody picks up. A
+      // screen that closed on "nobody else here" would hang up on every
+      // call before it was answered.
+      rowSays({'id': 'call-1', 'my_state': 'joined', 'joined': 1});
+      final engine = FakeCallEngine();
+      await openWatched(tester, engine);
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Siti Nurhaliza'), findsOneWidget);
+      expect(engine.closed, isFalse);
+    });
+
+    testWidgets('and neither is a row that has not arrived yet', (
+      tester,
+    ) async {
+      // Null before the join has landed is "not started", not "over".
+      rowSays(null);
+      final engine = FakeCallEngine();
+      await openWatched(tester, engine);
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Siti Nurhaliza'), findsOneWidget);
+      expect(engine.closed, isFalse);
+    });
   });
 }
 

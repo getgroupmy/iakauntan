@@ -126,6 +126,16 @@ class _IncomingCallWatcherState extends ConsumerState<IncomingCallWatcher> {
   Future<void> _answeredElsewhere(String callId) async {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
+    // Read BEFORE joining. A joined call is no longer an incoming one,
+    // so this is the last moment the conversation is on hand — and the
+    // conversation is what lets the call screen close itself when the
+    // other end hangs up. A CallKit answer that arrived with the app
+    // cold will not find it, and that is the case the nullable
+    // argument on `CallScreen` exists for.
+    final ringing = (ref.read(chatIncomingCallsProvider).valueOrNull ??
+            const <Map<String, dynamic>>[])
+        .cast<Map<String, dynamic>?>()
+        .firstWhere((c) => c?['id'] == callId, orElse: () => null);
     try {
       await repo.chatJoinCall(callId);
     } catch (_) {
@@ -144,6 +154,7 @@ class _IncomingCallWatcherState extends ConsumerState<IncomingCallWatcher> {
       MaterialPageRoute<void>(
         builder: (_) => CallScreen(
           callId: callId,
+          conversationId: ringing?['conversation_id']?.toString(),
           // What the system's own screen said, so the app does not
           // rename the call halfway through answering it.
           title: rang?.caller ?? 'Call',
@@ -221,6 +232,7 @@ class _IncomingCallWatcherState extends ConsumerState<IncomingCallWatcher> {
       MaterialPageRoute<void>(
         builder: (_) => CallScreen(
           callId: callId,
+          conversationId: call['conversation_id']?.toString(),
           title: call['conversation_title']?.toString() ?? 'Call',
           video: call['kind'] == 'video',
         ),
@@ -384,6 +396,7 @@ class CallButtons extends ConsumerWidget {
       MaterialPageRoute<void>(
         builder: (_) => CallScreen(
           callId: callId,
+          conversationId: conversationId,
           title: title ?? 'Call',
           video: video,
           isMine: isMine,

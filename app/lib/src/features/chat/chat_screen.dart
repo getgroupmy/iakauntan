@@ -103,9 +103,12 @@ class _ConversationList extends ConsumerStatefulWidget {
 }
 
 class _ConversationListState extends ConsumerState<_ConversationList> {
-  /// What this device has already said it holds. Marking delivered does
-  /// not change `unread`, so without this the list would say it again
-  /// on every rebuild, for ever.
+  /// What this device has already said it holds, as `deliveryMark`
+  /// spells it — the conversation AND the message it was newest at.
+  /// Marking delivered does not change `unread`, so without this the
+  /// list would say it again on every rebuild, for ever; and keyed on
+  /// the conversation alone it would say it once and then never again
+  /// for anything that arrived after.
   final _told = <String>{};
 
   /// The list is what fetched the messages, so the list is what knows
@@ -115,9 +118,9 @@ class _ConversationListState extends ConsumerState<_ConversationList> {
   void _reportDelivery(List<Map<String, dynamic>> conversations) {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
-    for (final id in newlyDelivered(conversations, _told)) {
-      _told.add(id);
-      repo.chatMarkDelivered(id).catchError((_) {});
+    for (final report in newlyDelivered(conversations, _told)) {
+      _told.add(report.mark);
+      repo.chatMarkDelivered(report.id).catchError((_) {});
     }
   }
 
