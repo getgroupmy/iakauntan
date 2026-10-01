@@ -53,14 +53,27 @@
 -- claimed to have moved.
 --
 -- ---------------------------------------------------------------------
--- And a second lookup tightened on the way past
+-- And a second lock on a door that is already bolted
 --
--- The bank account is now found by `id AND org_id`. It was found by
--- `id` alone, so a bank account belonging to another company would
--- have resolved and been credited. Nothing in production does this --
--- checked, zero rows -- and `0160` is where a bank account stopped
--- being shared between companies; this is the posting side of the same
--- rule, which had been left out.
+-- The bank account is now found by `id AND org_id` rather than by `id`
+-- alone. An earlier draft of this header said that without it another
+-- company's bank account "would have resolved and been credited".
+-- That is WRONG, and CI proved it: `0160` added
+--
+--     expenses_bank_account_same_org
+--       foreign key (org_id, bank_account_id)
+--       references public.bank_accounts (org_id, id)
+--
+-- so an expense naming another company's bank account cannot be
+-- INSERTED, let alone posted. The row does not exist to be found.
+--
+-- The scoping is kept all the same, and described honestly: it makes
+-- this function correct on its own terms rather than on a constraint
+-- declared in another file, so if that foreign key were ever dropped
+-- the posting would still refuse instead of quietly crediting a
+-- stranger. What it is not is a hole being closed.
+-- `supabase/tests/expenses.sql` asserts the constraint that actually
+-- fires.
 --
 -- Restated whole because PostgreSQL has no way to amend a function.
 -- The base is byte-identical to what was live: `0692`'s text hashes to
@@ -144,9 +157,10 @@ begin
       using errcode = '23514';
   end if;
 
-  -- `b.org_id` as well as `b.id`, so a bank account belonging to
-  -- another company cannot be credited by this one. `0160` is where a
-  -- bank account stopped being shared; this is the posting side of it.
+  -- `b.org_id` as well as `b.id`. Belt and braces, and the braces are
+  -- `0160`'s `expenses_bank_account_same_org`, which already makes the
+  -- row impossible to insert -- see the header. This keeps the
+  -- function right on its own terms if that constraint ever goes.
   select a.id into v_bank_acct from public.bank_accounts b
     join public.accounts a on a.id = b.account_id
    where b.id = v_exp.bank_account_id and b.org_id = v_exp.org_id;

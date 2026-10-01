@@ -235,29 +235,43 @@ end $$;
 -- ---------------------------------------------------------------------
 -- And not out of another company's account
 --
--- `0160` stopped a bank account being shared between companies and
--- `0727` is the posting side of the same rule, which had been left out:
--- the bank account was found by `id` alone, so another company's would
--- have resolved and been credited.
+-- This block was written to assert that `0727`'s `org_id` scoping in
+-- `post_expense` refuses another company's bank account. It could not
+-- be written that way, and finding out is the useful part: the
+-- POSTING is never reached, because `0160` already makes the row
+-- impossible.
+--
+--     expenses_bank_account_same_org
+--       foreign key (org_id, bank_account_id)
+--       references public.bank_accounts (org_id, id)
+--
+-- So the assertion is on the constraint that actually fires. The
+-- scoping in `post_expense` stays — it keeps that function correct on
+-- its own terms rather than on a constraint declared in another file —
+-- but it is a second lock on a bolted door and `0727`'s header says so.
 -- ---------------------------------------------------------------------
 do $$
 declare
   v_mine uuid := pg_temp.money_org('Kami Sdn Bhd');
   v_theirs uuid := pg_temp.money_org('Mereka Sdn Bhd');
-  v_bank uuid; v_exp uuid; v_said text;
+  v_bank uuid; v_said text;
 begin
   v_bank := pg_temp.a_bank(v_theirs, '1121', 'Maybank Current', 9000.00);
-  v_exp  := pg_temp.an_expense(v_mine, 'EXP-9', '6260', 50.00, 0, 50.00,
-                               v_bank);
 
   begin
-    perform public.post_expense(v_exp);
-    raise exception 'FAIL: credited another company''s bank account';
+    perform pg_temp.an_expense(v_mine, 'EXP-9', '6260', 50.00, 0, 50.00,
+                               v_bank);
+    raise exception 'FAIL: stored an expense against another company''s bank';
   exception when others then
     v_said := sqlerrm;
     if v_said like 'FAIL:%' then raise; end if;
   end;
 
+  perform pg_temp.check_true(
+    'an expense cannot even NAME another company''s bank account',
+    v_said like '%expenses_bank_account_same_org%');
+  perform pg_temp.check_eq('so nothing of theirs was written',
+    (select count(*) from public.expenses where org_id = v_mine), 0);
   perform pg_temp.check_eq('and their balance is untouched',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     9000.00);
