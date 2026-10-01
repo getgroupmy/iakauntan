@@ -1158,6 +1158,42 @@ class _ReceiptStrip extends StatelessWidget {
   }
 }
 
+/// Which account the money left, said in one line.
+///
+/// Three answers, and the third is the one worth building for.
+///
+///   * A named bank account, where one was chosen.
+///   * Nothing at all, where the expense is not posted: no journal has
+///     been written, so no account has been credited and saying one
+///     would be inventing it.
+///   * **The control account, named, where the expense was posted
+///     without one.** `post_expense` falls back to `1120 Bank
+///     Accounts` when `bank_account_id` is null — the control account
+///     itself, not any particular bank. That is a real posting with a
+///     real consequence: it appears on no bank reconciliation, because
+///     a reconciliation is per account and this one belongs to none.
+///     The dialog used to say nothing whatever, which is how an expense
+///     comes to sit in the books for a month with nobody able to see
+///     that the money never left a named account.
+///
+/// The code is repeated from `post_expense` rather than read back off
+/// the journal, and that is a deliberate smaller lie than the
+/// alternative: reading the credit line means a second query per row,
+/// and the fallback has been `1120` since `0013`. `expense_voucher_pdf`
+/// prints the same thing from the same column.
+({String label, String value})? expensePaidFrom(Map<String, dynamic> expense) {
+  final bank = (expense['bank_accounts'] as Map?)?['name']?.toString();
+  if (bank != null && bank.trim().isNotEmpty) {
+    return (label: 'Paid from', value: bank);
+  }
+  if ('${expense['status']}' != 'posted') return null;
+  return (
+    label: 'Paid from',
+    value: '1120 Bank Accounts — no account was chosen, so this is on '
+        'no bank reconciliation',
+  );
+}
+
 /// An expense after it has been recorded, and the receipt behind it.
 ///
 /// Read-only on purpose. A posted expense has a journal entry against
@@ -1206,6 +1242,23 @@ class _ExpenseDetail extends ConsumerWidget {
                 'Paid to',
                 (expense['contacts'] as Map?)?['name']?.toString() ?? '—',
               ),
+              // Which account the money LEFT. The other side of every
+              // expense, and the one an auditor and a bank
+              // reconciliation both ask for first.
+              ...switch (expensePaidFrom(expense)) {
+                final paidFrom? => [line(paidFrom.label, paidFrom.value)],
+                _ => const <Widget>[],
+              },
+              // And how. Shown beside it because the two can disagree
+              // with each other in a way that is invisible apart: an
+              // expense marked Cash and credited to a bank account, or
+              // marked Bank Transfer with no account chosen, is a
+              // question somebody should answer at the time rather
+              // than at the year end.
+              ...switch (_paymentMode(ref, expense)) {
+                final String mode => [line('Payment mode', mode)],
+                _ => const <Widget>[],
+              },
               line('Date', Fmt.date(Fmt.parseDate(expense['expense_date']))),
               // A split expense's header account is only its largest
               // line, so showing it alone would be a quarter of the
@@ -1258,6 +1311,22 @@ class _ExpenseDetail extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// The mode's own words, never its code.
+  ///
+  /// `01` is on the LHDN submission and in this column; it is not a
+  /// thing to show anybody. Null rather than the code when the list
+  /// has not loaded or the code is not in it, because a line reading
+  /// "Payment mode 01" is worse than no line.
+  String? _paymentMode(WidgetRef ref, Map<String, dynamic> expense) {
+    final code = expense['payment_mode_code']?.toString();
+    if (code == null || code.trim().isEmpty) return null;
+    final modes = ref.watch(paymentModesProvider).valueOrNull ?? const [];
+    for (final m in modes) {
+      if ('${m['code']}' == code) return m['description']?.toString();
+    }
+    return null;
   }
 
   Future<void> _printVoucher(BuildContext context, WidgetRef ref) async {

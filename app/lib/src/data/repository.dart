@@ -5022,6 +5022,12 @@ class Repo {
   // Expenses
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> expenses({int limit = 100}) async {
+    // `bank_accounts` is here because the detail dialog shows which
+    // account the money LEFT, and a dialog can only show what the list
+    // fetched. It did not, so the one line an expense is read for --
+    // what was it paid from -- was the one line missing, on a document
+    // whose other side is reconciled against a bank statement.
+    //
     // No bare `contacts(...)` here. An expense points at contacts twice —
     // contact_id for whoever was paid, billed_to_id for the client it is
     // rebilled to — so PostgREST cannot guess which one is meant and
@@ -5035,6 +5041,7 @@ class Repo {
         // PostgREST refuses an unqualified embed with PGRST201.
         .select(
           '*, accounts!expenses_account_id_fkey(code, name), '
+          'bank_accounts!expenses_bank_account_id_fkey(name), '
           'contacts!expenses_contact_id_fkey(name)',
         )
         .eq('org_id', orgId)
