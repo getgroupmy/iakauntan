@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0727",
+    "version": "0728",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -26813,7 +26813,7 @@
       "post": {
         "operationId": "clear_pdc",
         "summary": "Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes\u2026",
-        "description": "Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged. Accepts a cheque that is `held` or `deposited` and nothing else. The bank account, if given, is checked against the cheque's own company -- it was once org-checked only in the lookup that resolves the ledger account, while the balance update and the cheque row used it raw.\n\n`public.clear_pdc(p_id uuid, p_on date, p_bank uuid)` Writes. Requires a signed-in user.",
+        "description": "Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged. Accepts a cheque that is `held` or `deposited` and nothing else. The bank account, if given, is checked against the cheque's own company -- it was once org-checked only in the lookup that resolves the ledger account, while the balance update and the cheque row used it raw. One has to be known, from the argument or from the cheque: without it the clear used to debit 1120 Bank Accounts, so the cheque read as cleared while no bank balance moved.\n\n`public.clear_pdc(p_id uuid, p_on date, p_bank uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -30758,7 +30758,7 @@
       "post": {
         "operationId": "create_deposit",
         "summary": "Records and posts a deposit taken from a customer or paid to a supplier, once",
-        "description": "Records and posts a deposit taken from a customer or paid to a supplier, once. THE FORM TO CALL: a retry with the same `p_idempotency_key` returns the first call's deposit rather than taking the money twice, and the same key with different arguments is refused. A customer deposit posts as a LIABILITY rather than revenue, because it is not earned until the invoice it is held against exists. The key has no default, because a call that omits it resolves to the unprotected original (`0307`).\n\n`public.create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
+        "description": "Records and posts a deposit taken from a customer or paid to a supplier, once. THE FORM TO CALL: a retry with the same `p_idempotency_key` returns the first call's deposit rather than taking the money twice, and the same key with different arguments is refused. A customer deposit posts as a LIABILITY rather than revenue, because it is not earned until the invoice it is held against exists. The key has no default, because a call that omits it resolves to the unprotected original (`0307`). The bank account is required, for the reason `0728` gives.\n\n`public.create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -55239,7 +55239,7 @@
       "post": {
         "operationId": "post_purchase_payment",
         "summary": "Posts a payment to a supplier: money out of the bank, the payable discharged, and any exchange difference\u2026",
-        "description": "Posts a payment to a supplier: money out of the bank, the payable discharged, and any exchange difference struck as its own line. Refuses a payment already posted, so a retry cannot pay twice. Needs `can_post`. Returns the journal's id.\n\n`public.post_purchase_payment(p_id uuid)` Writes. Requires a signed-in user.",
+        "description": "Posts a payment to a supplier: money out of the bank, the payable discharged, and any exchange difference struck as its own line. Refuses a payment already posted, so a retry cannot pay twice. Needs `can_post`. Returns the journal's id. Refuses a payment that does not say which account it was paid from: one that named none was credited to 1120 Bank Accounts, the heading the real accounts hang under, so no bank balance moved and no reconciliation could match it.\n\n`public.post_purchase_payment(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -70074,7 +70074,7 @@
       "post": {
         "operationId": "settle_deposit",
         "summary": "Gives a deposit back or keeps it",
-        "description": "Gives a deposit back or keeps it. A customer's forfeited deposit is income; one we paid and lost is an expense.\n\n`public.settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` Writes. Requires a signed-in user.",
+        "description": "Gives a deposit back or keeps it. A customer's forfeited deposit is income; one we paid and lost is an expense. A REFUND has to name the account it is paid out of: one that named none was credited to 1120 Bank Accounts, the heading the real accounts hang under, so no bank balance moved and no reconciliation could match it. A forfeit names none, because no money moved.\n\n`public.settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

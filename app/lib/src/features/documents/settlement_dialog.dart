@@ -13,6 +13,7 @@ import '../../data/models.dart';
 // For the client-money methods on Repo, which live in an extension and
 // are only visible where the library defining it is imported (0549).
 import '../../data/repository.dart';
+import '../../core/named_account.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 import 'client_money_copy.dart';
@@ -233,6 +234,21 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Allocate the payment to at least one document.'),
       ));
+      return;
+    }
+
+    // Asked on BOTH sides, refused by the database on one. `0728` makes
+    // `post_purchase_payment` refuse a payment that names no account;
+    // `post_receipt_internal` is left alone because the counter writes
+    // receipts and every `pos_tender_types` row has no bank account, so
+    // refusing there would stop the till rather than correct it. The
+    // client-money paths above never reach here: they take a different
+    // door and their own account.
+    final wrong =
+        settlementAccountProblem(_bankAccountId, isReceipt: _isReceipt);
+    if (wrong != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(wrong)));
       return;
     }
 
@@ -736,7 +752,11 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                     onCreate: (typed) =>
                         createBankAccountFromPicker(context, typed: typed),
                     value: _bankAccountId,
-                    label: 'Bank account',
+                    // Required on the ordinary paths; see `_save`. The
+                    // picker offers no "none" row either way
+                    // (`allowEmpty` is false by default), so the star
+                    // and the disabled button are the whole signal.
+                    label: _isClientMoney ? 'Bank account' : 'Bank account *',
                     onChanged: (v) => setState(() => _bankAccountId = v),
                   ),
                 ),
@@ -885,7 +905,9 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
           onPressed: _saving ||
                   (_isFreeAmount
                       ? (double.tryParse(_clientAmount.text.trim()) ?? 0) <= 0
-                      : _allocated <= 0 || blocked)
+                      : _allocated <= 0 ||
+                            blocked ||
+                            (!_isClientMoney && _bankAccountId == null))
               ? null
               : () => _save(
                     currency: currency.code,

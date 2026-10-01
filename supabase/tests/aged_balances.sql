@@ -117,10 +117,14 @@ create or replace function pg_temp.pay(
 returns uuid language plpgsql as $$
 declare v_id uuid;
 begin
+  -- `0728` refuses a payment that does not say which account it was
+  -- paid from, so the helper names the company's account rather than
+  -- falling through to the 1120 heading.
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
-     currency, exchange_rate)
-  values (p_org, p_no, p_date, p_contact, p_amount, p_amount, 'MYR', 1)
+     currency, exchange_rate, bank_account_id)
+  values (p_org, p_no, p_date, p_contact, p_amount, p_amount, 'MYR', 1,
+          pg_temp.a_bank_account(p_org))
   returning id into v_id;
   if p_bill is not null then
     insert into public.payment_allocations (org_id, payment_id, bill_id, amount)

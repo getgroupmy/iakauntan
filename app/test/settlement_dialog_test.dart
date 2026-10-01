@@ -94,7 +94,19 @@ void main() {
       outstandingProvider.overrideWith(
         (ref, args) async => open[args.contactId] ?? const [],
       ),
-      bankAccountsProvider.overrideWith((ref) async => const []),
+      // `0728` requires an account on the ordinary paths, so a
+      // fixture with none could only ever assert the refusal. One
+      // account, chosen by `bank()` in the cases that go on to save.
+      bankAccountsProvider.overrideWith(
+        (ref) async => const [
+          {
+            'id': 'bank-1',
+            'name': 'Maybank current',
+            'bank_name': 'Maybank',
+            'account_number': '512345678901',
+          },
+        ],
+      ),
       paymentModesProvider.overrideWith(
         (ref) async => const [
           {'code': '03', 'description': 'Bank transfer'},
@@ -200,6 +212,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Picks the fixture's one bank account.
+  ///
+  /// Separate from `choose` rather than folded into it, because "no
+  /// account named" is itself a case worth asserting and a helper that
+  /// always filled it in would make that case unreachable.
+  Future<void> bank(WidgetTester tester) async {
+    await tester.tap(find.text('Bank account *'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Maybank current').last);
+    await tester.pumpAndSettle();
+  }
+
   bool saveEnabled(WidgetTester tester, String label) =>
       tester.widget<ButtonStyleButton>(find.widgetWithText(FilledButton, label))
           .onPressed !=
@@ -222,6 +246,73 @@ void main() {
     });
   });
 
+  group('the account the money moved through', () {
+    // `0728`. Account 1120 is "Bank Accounts" -- postable, but the
+    // heading the real accounts hang beneath. A settlement that named
+    // no account used to post there: it balanced, it reported, and it
+    // matched nothing on any statement. The database refuses it on the
+    // payment side now; this is the form not building it in the first
+    // place.
+    testWidgets('a fully allocated receipt still cannot be recorded without one',
+        (tester) async {
+      await show(tester);
+      await choose(tester, 'Kedai Runcit Aminah');
+      await allocate(tester, 'INV-0001', '1000');
+
+      // Everything else about this receipt is complete.
+      expect(find.text('RM 1,000.00'), findsWidgets);
+      expect(saveEnabled(tester, 'Record receipt'), isFalse);
+    });
+
+    testWidgets('and naming one is the only thing that was missing',
+        (tester) async {
+      await show(tester);
+      await choose(tester, 'Kedai Runcit Aminah');
+      await allocate(tester, 'INV-0001', '1000');
+      await bank(tester);
+
+      expect(saveEnabled(tester, 'Record receipt'), isTrue);
+    });
+
+    testWidgets('but client money is exempt, because it has its own account',
+        (tester) async {
+      // `_isClientMoney` takes a different door: `settleFromClientAccount`
+      // is given the matter, and the firm's own account is a detail of
+      // that transfer rather than the thing being named. Holding this
+      // path to the same rule would make the one lawful crossing
+      // between client and office money unrecordable.
+      //
+      // `fromClientAccount` is the case that matters: it is client
+      // money AND it allocates against documents, so it reaches the
+      // same button as an ordinary receipt. The mutation run found
+      // this -- "client money is held to the same rule" survived until
+      // this case existed.
+      await show(tester, legal: true);
+      await choose(tester, 'Kedai Runcit Aminah');
+      await tester.tap(find.text('Matter'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('LIT/2026/001').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(
+          const ValueKey('destination-fromClientAccount')));
+      await tester.pumpAndSettle();
+      await allocate(tester, 'INV-0001', '1000');
+
+      expect(find.text('Bank account'), findsOneWidget);
+      expect(find.text('Bank account *'), findsNothing);
+      expect(saveEnabled(tester, 'Record receipt'), isTrue);
+    });
+
+    testWidgets('the box is starred, so the star is not only on the contact',
+        (tester) async {
+      await show(tester);
+      await choose(tester, 'Kedai Runcit Aminah');
+
+      expect(find.text('Bank account *'), findsOneWidget);
+      expect(find.text('Bank account'), findsNothing);
+    });
+  });
+
   group('the total being settled', () {
     testWidgets('is what was allocated, not what is owed', (tester) async {
       // A part payment. The invoice still says 1,000 and the receipt is
@@ -230,6 +321,7 @@ void main() {
       await show(tester);
       await choose(tester, 'Kedai Runcit Aminah');
       await allocate(tester, 'INV-0001', '400');
+      await bank(tester);
 
       expect(find.text('RM 400.00'), findsOneWidget);
       expect(saveEnabled(tester, 'Record receipt'), isTrue);
@@ -389,6 +481,7 @@ void main() {
     await show(tester, contacts: [contact()]);
     await choose(tester, 'Kedai Runcit Aminah');
     await allocate(tester, 'INV-0001', '1000');
+    await bank(tester);
 
     expect(find.textContaining('different currencies'), findsNothing);
     expect(saveEnabled(tester, 'Record receipt'), isTrue);
@@ -458,6 +551,7 @@ void main() {
     // exists only because the screen did not carry the id across.
     await show(tester, preselect: 'd1');
     await choose(tester, 'Kedai Runcit Aminah');
+    await bank(tester);
 
     expect(find.text('RM 1,000.00'), findsWidgets);
     expect(saveEnabled(tester, 'Record receipt'), isTrue);

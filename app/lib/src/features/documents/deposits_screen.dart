@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../../core/named_account.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 import 'deposit_apply_sheet.dart';
@@ -204,6 +205,12 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
   Future<void> _save() async {
     final repo = ref.read(repoProvider);
     if (repo == null || _contact == null) return;
+    final wrong = depositAccountProblem(_bank);
+    if (wrong != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(wrong)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -309,7 +316,7 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
                 onCreate: (typed) =>
                     createBankAccountFromPicker(context, typed: typed),
                 value: _bank,
-                label: 'In or out of',
+                label: 'In or out of *',
                 onChanged: (v) => setState(() => _bank = v),
               ),
               TextField(
@@ -352,7 +359,9 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _busy || _contact == null || amount <= 0 ? null : _save,
+          onPressed: _busy || _contact == null || amount <= 0 || _bank == null
+              ? null
+              : _save,
           child: const Text('Record it'),
         ),
       ],

@@ -308,3 +308,83 @@ begin
   return v_org;
 end;
 $$;
+
+-- A bank account for a fixture, on an account of its OWN.
+--
+-- Not a convenience. Every fixture in this directory that needed a bank
+-- account wrote
+--
+--     insert into public.bank_accounts (org_id, account_id, ...)
+--     values (v_org, (select id from public.accounts
+--                      where org_id = v_org and code = '1120'), ...)
+--
+-- which hangs it on account 1120 ITSELF -- "Bank Accounts", the heading
+-- that `upsert_bank_account` puts the real ones beneath. Six posting
+-- functions used to fall back to that heading when no bank account was
+-- named, and with the fixtures written this way the fallback and the
+-- named account resolved to the same row: no assertion in 380 files
+-- could tell them apart, and `deposits.sql` even checked "the money
+-- leaves the bank" by looking at the credit on `code = '1120'`, which
+-- was true either way. `0728` is the migration that closed four of
+-- them, and this is what makes the difference observable.
+--
+-- So it does what `0529` does: the next free code in 1121-1199, a child
+-- of 1100, and the bank account on that. A test that uses this can
+-- assert WHICH account was debited and mean it.
+create or replace function pg_temp.test_bank_account(
+  p_org uuid,
+  p_name text default 'Current account',
+  p_type text default 'current')
+returns uuid language plpgsql as $$
+declare
+  v_code text;
+  v_gl   uuid;
+  v_id   uuid;
+begin
+  select to_char(n, 'FM0000') into v_code
+    from generate_series(1121, 1199) as n
+   where not exists (
+     select 1 from public.accounts a
+      where a.org_id = p_org and a.code = to_char(n, 'FM0000'))
+   order by n limit 1;
+  if v_code is null then
+    raise exception 'the fixture bank range 1121-1199 is full';
+  end if;
+
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, parent_id, is_group)
+  values (p_org, v_code, p_name, 'asset', 'bank',
+          (select id from public.accounts
+            where org_id = p_org and code = '1100'), false)
+  returning id into v_gl;
+
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, account_type,
+     currency, opening_balance, current_balance, is_default)
+  values (p_org, v_gl, p_name, 'Maybank', '5123' || v_code, p_type,
+          'MYR', 0, 0,
+          not exists (select 1 from public.bank_accounts b
+                       where b.org_id = p_org and b.is_active))
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+-- The org's bank account, made on first ask.
+--
+-- `test_bank_account` makes a NEW one every call, which is what a test
+-- about two accounts wants and the wrong thing for a fixture helper
+-- called once per invoice: the 1121-1199 range is 79 codes wide and
+-- `pg_temp.pay` is called more often than that in some files. This one
+-- hands back the one that is already there.
+create or replace function pg_temp.a_bank_account(p_org uuid)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  select b.id into v_id from public.bank_accounts b
+   where b.org_id = p_org and b.is_active
+   order by b.is_default desc, b.created_at
+   limit 1;
+  return coalesce(v_id, pg_temp.test_bank_account(p_org));
+end;
+$$;

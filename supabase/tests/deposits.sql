@@ -1127,7 +1127,12 @@ begin
   -- entered on Monday for money banked the previous week belongs in the
   -- earlier period: `app.guard_period_lock` and `report_trial_balance`
   -- both read entry_date, and so does every deposit ageing.
-  v_dep := public.create_deposit(v_org, 'customer', v_cust, v_when, 500);
+  -- `0728` requires an account: a deposit that named none used to be
+  -- posted to the 1120 heading. The four refusals above are unaffected
+  -- -- each one fires before the account is looked at, which is part of
+  -- what they assert.
+  v_dep := public.create_deposit(v_org, 'customer', v_cust, v_when, 500,
+                                 pg_temp.a_bank_account(v_org));
   select e.entry_date::text into v_t
     from public.gl_entries e
     join public.deposit_notes d on d.gl_entry_id = e.id
@@ -1188,9 +1193,11 @@ begin
   values (v_org, 'C-1', 'A customer', 'customer') returning id into v_cust;
 
   v_dep := public.create_deposit(v_org, 'supplier', v_sup,
-                                 current_date - 5, 700);
+                                 current_date - 5, 700,
+                                 pg_temp.a_bank_account(v_org));
   v_cdep := public.create_deposit(v_org, 'customer', v_cust,
-                                  current_date - 5, 900);
+                                  current_date - 5, 900,
+                                  pg_temp.a_bank_account(v_org));
   -- Something to read back. `settle_deposit` files a `deposit_events`
   -- row carrying the reason somebody typed, which is the part of this
   -- that is nobody else's business.

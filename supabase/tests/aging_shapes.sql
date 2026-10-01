@@ -213,10 +213,14 @@ begin
   -- PAYABLES side, whose fixtures never settle a bill in full.
   perform pg_temp.ag_bill(v_org, v_supp, 'BILL-PAID', 900,
                           date '2026-01-10', date '2026-02-10');
+  -- `0728` refuses a payment that does not say which account it was
+  -- paid from, so this one names a real bank account rather than
+  -- falling through to the 1120 heading.
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, amount, currency,
-     exchange_rate)
-  values (v_org, 'PY-PAID', date '2026-01-20', v_supp, 900, 'MYR', 1);
+     exchange_rate, bank_account_id)
+  values (v_org, 'PY-PAID', date '2026-01-20', v_supp, 900, 'MYR', 1,
+          pg_temp.test_bank_account(v_org));
   insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
   select v_org,
          (select id from public.purchase_payments

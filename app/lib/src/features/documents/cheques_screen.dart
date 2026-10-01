@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../../core/named_account.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 
@@ -377,6 +378,12 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
   Future<void> _save() async {
     final repo = ref.read(repoProvider);
     if (repo == null || _contact == null) return;
+    final wrong = chequeAccountProblem(_bank);
+    if (wrong != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(wrong)));
+      return;
+    }
     setState(() => _busy = true);
     final ok = await runWithFeedback(
       context,
@@ -510,9 +517,15 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                 onCreate: (typed) =>
                     createBankAccountFromPicker(context, typed: typed),
                 value: _bank,
+                // `clear_pdc` takes the account from the cheque when
+                // the caller names none, and the cheque list calls it
+                // that way -- so this box is the only place the
+                // account can be asked for, and `0728` refuses a clear
+                // that has none. Asked now, or the cheque can never be
+                // cleared.
                 label: incoming
-                    ? 'Where it will be banked'
-                    : 'Which of ours it is drawn on',
+                    ? 'Where it will be banked *'
+                    : 'Which of ours it is drawn on *',
                 onChanged: (v) => setState(() => _bank = v),
               ),
               ListTile(
@@ -563,6 +576,7 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                   _contact == null ||
                   amount <= 0 ||
                   _chequeNo.text.trim().isEmpty ||
+                  _bank == null ||
                   !settlesOk
               ? null
               : _save,
