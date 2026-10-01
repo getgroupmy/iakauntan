@@ -5390,25 +5390,47 @@ and said what measurement would settle it. That was the right call. What
 settled it in the end was reading the package's serialiser, which is
 cheaper than any device.
 
-### The quarter turn is still there, and now it asks
+### The quarter turn is GONE, on the user's instruction
 
-`CallPeer.cameraCarriesRotation` is read in `_attach` off the consumer
-the server actually built, and `incomingCameraQuarterTurns(peer)` is 0
-when the rotation rides with the frames and 1 when it does not. So:
+There were three versions of this in one day and the end state is the
+simple one: **nothing in the widget tree turns a camera.** The tile
+draws `RTCVideoView(peer.camera!)` as the frames arrive.
 
-- extension present → pixels already turned natively → no widget turn;
-- extension absent → raw frames → a quarter clockwise.
+The two that came before it are worth knowing about, because the middle
+one is the trap:
 
-Keeping both without the condition would have been the worst of the
-three options: once the fix lands, an unconditional `RotatedBox` turns
-already-upright pixels and the picture is 90° out the other way. The
-per-peer answer also fixes what the stopgap cost — a desktop browser
-peer, which rotates pixels before sending, was going to be drawn
-sideways *by* the correction.
+1. An unconditional `RotatedBox(quarterTurns: 1)` on every remote
+   camera. Asked for directly, and correct for a phone — but it would
+   have drawn a desktop browser peer sideways, since a browser rotates
+   pixels before sending.
+2. A per-peer turn, 0 or 1, off `CallPeer.cameraCarriesRotation`, read
+   from the consumer's negotiated extensions. Correct in every case and
+   now removed as well, because with the serialiser fixed the rotation
+   arrives for everything that sends it and the branch had nothing left
+   to decide.
+3. No turn at all.
 
-The engine also logs the extensions a camera did arrive with whenever
-the answer is 1, so a call that is still sideways says why in the
-console instead of needing this read again.
+**Putting one back is the easy mistake, and it is now asserted
+against.** `call_screen_test.dart` has four cases requiring no
+`RotatedBox` anywhere — the camera tile, two tiles in a grid, the
+self-view and a shared screen — and a mutation run putting the stopgap
+back in four shapes kills all four. With the rotation arriving natively
+a `RotatedBox` here draws an upright picture 90° out the OTHER way, so
+the absence is the assertion.
+
+One thing deliberately NOT asserted in those cases: `Transform`.
+Material builds four of its own in that tree (the floating button and
+the ink effects), so `findsNothing` fails on widgets this file has no
+opinion about and a count would pin somebody else's implementation.
+`RotatedBox` is the widget this screen would reach for and the one
+Material does not use.
+
+The engine still asks the consumer whether the rotation arrived, and
+nothing branches on the answer — it is logged. If that line ever
+appears, that peer's video is 90° out and the reason is that the
+rotation did not survive the trip. That is the only remaining way this
+failure can be seen, since it otherwise looks exactly like a working
+call.
 
 ### `scripts/check_rtp_capabilities.py`, and why a gate
 

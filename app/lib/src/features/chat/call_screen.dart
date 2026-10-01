@@ -10,44 +10,6 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'call_engine.dart';
 
-/// How far to turn an incoming camera, clockwise, in quarter turns.
-///
-/// Zero when the stream carries its own rotation, one when it does not.
-///
-/// ## What was actually wrong, and where it is fixed
-///
-/// A phone captures LANDSCAPE sensor frames and does not rotate the
-/// pixels. It sends the rotation beside them, in the
-/// `urn:3gpp:video-orientation` RTP header extension, and a receiver
-/// that never negotiated the extension draws raw sensor frames.
-///
-/// The extension was not being negotiated because
-/// `RtpCapabilities.toMap()` in `mediasfu_mediasoup_client 0.1.4`
-/// serialises the codecs and silently drops every header extension —
-/// see `call_rtp.dart`. The engine sends that set once, at `join`, so
-/// the server built every consumer against an empty extension list and
-/// stripped the rotation from every stream this device received.
-/// `rtpCapabilitiesToMap` is the fix, and it is in the engine rather
-/// than here, because this was never a widget problem.
-///
-/// ## So why is there still a turn here
-///
-/// Because the server decides, and this asks it rather than assuming.
-/// `CallPeer.cameraCarriesRotation` is read off the consumer the server
-/// actually built. Where the extension is there, the pixels arrive
-/// upright and turning them again would make them 90 degrees out in the
-/// other direction — so the answer is zero. Where it is not — an older
-/// server, a peer whose platform does not send it, a stream that lost it
-/// somewhere else — the frames are raw and the quarter turn is what they
-/// need.
-///
-/// That is also the measurement rather than a guess: the engine logs the
-/// extensions a camera did arrive with whenever the answer is one, so a
-/// call that is still sideways says why in the console instead of
-/// needing this read again.
-int incomingCameraQuarterTurns(CallPeer peer) =>
-    peer.cameraCarriesRotation ? 0 : 1;
-
 /// Being on a call.
 ///
 /// Opened once somebody has already joined in the database — the row is
@@ -473,25 +435,20 @@ class _CallScreenState extends ConsumerState<CallScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Turned a quarter clockwise. See
-                // `incomingCameraQuarterTurns` for what this is working
-                // around and what it costs.
-                //
-                // `RotatedBox`, not `Transform.rotate`: this rotates
-                // during LAYOUT, so the view is measured with the
-                // tile's width and height swapped and `cover` then
-                // crops against the box the picture actually occupies.
-                // `Transform.rotate` turns the pixels after layout, so
-                // a 3:4 tile would be filled as 3:4 and then spun,
-                // leaving the picture short on two edges and overhanging
-                // the other two.
-                RotatedBox(
-                  quarterTurns: incomingCameraQuarterTurns(peer),
-                  child: RTCVideoView(
-                    peer.camera!,
-                    objectFit:
-                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                  ),
+                // Drawn as it arrives. NOTHING HERE TURNS IT, and the
+                // comment is load-bearing: a remote camera was 90
+                // degrees out for a while and a `RotatedBox` around
+                // this view was the stopgap. The cause was the
+                // mediasoup package dropping every RTP header
+                // extension when it serialised this device's
+                // capabilities, so the rotation never reached the
+                // consumer -- `call_rtp.dart` has it, and
+                // `scripts/check_rtp_capabilities.py` keeps the fix in
+                // place. Turning pixels here as well would put an
+                // already-upright picture 90 degrees out the other way.
+                RTCVideoView(
+                  peer.camera!,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                 ),
                 Align(
                   alignment: Alignment.bottomLeft,

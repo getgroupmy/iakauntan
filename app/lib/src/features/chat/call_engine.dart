@@ -86,17 +86,6 @@ class CallPeer {
   bool micMuted = false;
   bool cameraOff = false;
 
-  /// Whether this camera's stream carries its own rotation.
-  ///
-  /// `urn:3gpp:video-orientation` on the consumer the server built. When
-  /// it is there the pixels arrive the right way up and the screen draws
-  /// them as they are; when it is not, the screen turns them a quarter
-  /// clockwise, which is what a phone's un-rotated sensor frames need.
-  ///
-  /// FALSE until a video consumer says otherwise, so a call that has
-  /// only just connected behaves the way every call behaved before
-  /// `call_rtp.dart` existed rather than guessing the better case.
-  bool cameraCarriesRotation = false;
 
   bool get hasVideo => camera != null && !cameraOff;
   bool get isSharing => screen != null;
@@ -728,17 +717,19 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
       peer.camera = renderer;
       peer.cameraConsumerId = consumer.id;
       peer.cameraOff = paused;
-      // Asked of the consumer the server actually built, because the
-      // server decides and once decided "no extensions at all" without
-      // saying so. True means the rotation rides with the frames and
-      // the pixels are already turned, so the screen must NOT turn them
-      // again; false means they arrive raw and it must.
-      peer.cameraCarriesRotation =
-          carriesVideoOrientation(consumer.rtpParameters.headerExtensions);
-      if (!peer.cameraCarriesRotation) {
+      // The one thing that says whether the picture will be the right
+      // way up, asked of the consumer the server actually built.
+      //
+      // Nothing BRANCHES on this any more -- the screen draws every
+      // camera as it arrives. It is logged because the failure it
+      // reports is otherwise silent and looks like a working call: if
+      // this line ever appears, that peer's video is 90 degrees out and
+      // the reason is that the rotation did not survive the trip. See
+      // `call_rtp.dart`.
+      if (!carriesVideoOrientation(consumer.rtpParameters.headerExtensions)) {
         debugPrint(
-          'call: no $videoOrientationUri on ${peer.displayName}\'s camera; '
-          'it carries '
+          'call: no $videoOrientationUri on ${peer.displayName}\'s camera, '
+          'so it will be drawn sideways; it carries '
           '${consumer.rtpParameters.headerExtensions.map((e) => e.uri).toList()}',
         );
       }
