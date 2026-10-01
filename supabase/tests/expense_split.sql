@@ -503,25 +503,58 @@ begin
       where l.entry_id = v_entry and a.code = '1410'), 6.00::numeric);
 
   -- ==================================================================
-  -- 5. An expense paid in cash
+  -- 5. An expense that does not say where the money came from
   --
-  -- No bank_accounts row to adjust. The ledger leg falls back to 1120,
-  -- and the balance update must NOT run -- there is nothing for it to
-  -- run against, and firing it unconditionally would move whichever
-  -- account a null id happened to reach, or none at all while claiming
-  -- to have.
+  -- `0727`. This probe asserted the opposite until then: that the
+  -- ledger leg fell back to `1120` and no bank balance moved. Both were
+  -- true, and together they are the bug -- `1120` is the CONTROL
+  -- account, so the credit said money left the bank while naming no
+  -- bank, and landed on no reconciliation at all.
+  --
+  -- A split expense is worth asserting separately from the unsplit one
+  -- in `expenses.sql`: the guard runs before the split is walked, so a
+  -- refusal here must leave no part of a multi-line journal behind.
   -- ==================================================================
-  declare v_before numeric;
+  declare v_before numeric; v_said text; v_lines int;
   begin
     select current_balance into v_before from public.bank_accounts where id = v_bank;
     v_exp := pg_temp.an_expense(v_org, 'EXP-P6', '6280', 50.00, 0, 50.00,
                                 null);
-    v_entry := public.post_expense(v_exp);
-    perform pg_temp.check_eq('cash comes out of the current account',
-      pg_temp.leg(v_entry, '1120'), -50.00::numeric);
+    perform public.set_expense_split(v_exp, jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '6280'),
+                         'amount', 30.00),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'),
+                         'amount', 20.00)));
+
+    begin
+      v_entry := public.post_expense(v_exp);
+      raise exception 'FAIL: posted an expense that names no account to pay from';
+    exception when others then
+      v_said := sqlerrm;
+      if v_said like 'FAIL:%' then raise; end if;
+    end;
+
+    perform pg_temp.check_true('a split expense with no bank account is refused',
+      v_said like '%paid from%');
+    perform pg_temp.check_true('and the refusal names it', v_said like '%EXP-P6%');
+    -- Scoped to this expense rather than to the org's 1120 balance:
+    -- this file posts a dozen expenses into one company, so an
+    -- org-wide count would be measuring its neighbours.
+    perform pg_temp.check_eq('no journal was written for it at all',
+      (select count(*) from public.gl_entries
+        where source_table = 'expenses' and source_id = v_exp), 0);
+    perform pg_temp.check_eq('the expense is still unposted',
+      (select count(*) from public.expenses
+        where id = v_exp and gl_entry_id is null), 1);
     perform pg_temp.check_eq('and no bank account balance moves',
       (select current_balance from public.bank_accounts where id = v_bank),
       v_before);
+    -- The split itself survives: the refusal is about the posting, not
+    -- about the lines, and somebody who chooses an account should not
+    -- have to split it again.
+    select count(*) into v_lines from public.expense_lines where expense_id = v_exp;
+    perform pg_temp.check_eq('the split it was refused on is still there',
+      v_lines, 2);
   end;
 
   -- ==================================================================
@@ -548,18 +581,18 @@ begin
       pg_temp.leg(v_entry, '6280'), 470.00::numeric);
   end;
 
-  -- TWO EQUIVALENT MUTANTS, the eleventh and twelfth of this programme,
-  -- both unreachable rather than untested.
+  -- ONE EQUIVALENT MUTANT, the eleventh of this programme, unreachable
+  -- rather than untested: `coalesce(v_exp.exchange_rate, 1)` cannot
+  -- fire, because expenses.exchange_rate is NOT NULL.
   --
-  -- `coalesce(v_exp.exchange_rate, 1)` cannot fire: expenses.exchange_rate
-  -- is NOT NULL.
-  --
-  -- And `if v_exp.bank_account_id is not null` around the balance
-  -- update cannot change an outcome either, because
-  -- `update bank_accounts where id = null` matches no row. It is kept
-  -- because it states the intent where a reader looks for it, and
-  -- because a later change joining that update to something else would
-  -- need it. The cash probe above asserts the behaviour it guards.
+  -- The twelfth is gone rather than answered. It was
+  -- `if v_exp.bank_account_id is not null` around the balance update,
+  -- which could not change an outcome because
+  -- `update bank_accounts where id = null` matches no row. `0727`
+  -- removed the conditional, because an expense with no bank account
+  -- is now refused twenty lines above it -- so the branch could only
+  -- ever be true, and a conditional that cannot be false reads as a
+  -- case somebody still has to think about.
 
   -- ==================================================================
   -- 7. Who may post one
