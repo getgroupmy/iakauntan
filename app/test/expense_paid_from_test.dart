@@ -55,6 +55,28 @@ void main() {
     expect(expensePaidFrom(expense(status: 'draft')), isNull);
   });
 
+  group('and it cannot be left out any more', () {
+    // `0727`. Asked for: "make the paid from required when recording an
+    // expense". The database refuses it as well — that is where the rule
+    // lives, because `expenses` is an ordinary table the client writes
+    // to directly — and this is the half that tells somebody while the
+    // form is still open.
+    test('no account chosen is a reason not to save', () {
+      final said = paidFromProblem(null);
+
+      expect(said, isNotNull);
+      // Says what to do, not that something is wrong. "Paid from is
+      // required" names the field and leaves the person to work out
+      // why it suddenly matters.
+      expect(said, contains('Choose the account'));
+      expect(said, contains('reconciled'));
+    });
+
+    test('and a chosen one is not', () {
+      expect(paidFromProblem('bank-1'), isNull);
+    });
+  });
+
   test('a blank name is not a name', () {
     // A join that came back with an empty string is the absent case
     // wearing the present case's clothes.

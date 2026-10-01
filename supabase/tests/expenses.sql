@@ -8,12 +8,14 @@
 -- mentioned it — nor `public.expenses` at all. It is the last posting
 -- function in the schema with no coverage.
 --
--- Three legs and one of them is a guess: the expense account it was
--- coded to, the SST input tax when there is any, and the credit, which
--- goes to the named bank account or falls back to 1120 when the expense
--- was paid in cash. A fallback that picks the wrong account is the
--- shape 0282 found in `post_client_transaction`, so it is asserted from
--- both sides here.
+-- Three legs: the expense account it was coded to, the SST input tax
+-- when there is any, and the credit -- which goes to the named bank
+-- account, and to nothing at all when none is named. `0727` made that
+-- second case a REFUSAL rather than a fallback to the 1120 control
+-- account; before it, an expense paid from nowhere was credited to the
+-- parent of every bank account and appeared on no reconciliation. A
+-- fallback that picks the wrong account is the shape 0282 found in
+-- `post_client_transaction`, so it is asserted from both sides here.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -144,43 +146,121 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- Paid in cash
+-- Paid from nowhere, which is not a thing
 --
--- No bank account named, so the credit has nowhere of its own to go and
--- 1120 is the fallback. Two things are asserted about that: it is the
--- account that takes the money, and no bank account's cached balance
--- moves — a cash expense that quietly drew down somebody's current
--- account would put the reconciliation out by an amount that never went
--- through the bank.
+-- `0727`. This block used to assert the opposite: that an expense
+-- naming no bank account was credited to `1120` and that no bank
+-- balance moved. Both were true, and together they describe the bug.
+--
+-- `1120` is "Bank Accounts" — the CONTROL account, the parent of the
+-- real ones. A credit there says the money left the bank while naming
+-- no bank, so it appears on NO reconciliation: a reconciliation is run
+-- per account and that credit belongs to none of them. The balance of
+-- 1120 then grows by every such expense and can be agreed against
+-- nothing.
+--
+-- So the posting is refused instead, and what is asserted is that the
+-- refusal leaves nothing behind.
 -- ---------------------------------------------------------------------
 do $$
 declare
   v_org uuid := pg_temp.money_org('Petty Sdn Bhd');
-  v_bank uuid; v_exp uuid; v_entry uuid;
+  v_bank uuid; v_exp uuid; v_said text;
 begin
   v_bank := pg_temp.a_bank(v_org, '1121', 'Maybank Current', 9000.00);
   v_exp  := pg_temp.an_expense(v_org, 'EXP-2', '6260', 50.00, 0, 50.00);
 
-  v_entry := public.post_expense(v_exp);
+  begin
+    perform public.post_expense(v_exp);
+    raise exception 'FAIL: posted an expense that says where no money came from';
+  exception when others then
+    v_said := sqlerrm;
+    if v_said like 'FAIL:%' then raise; end if;
+  end;
 
-  perform pg_temp.check_eq('a cash expense still lands on its own account',
-    pg_temp.leg(v_entry, '6260'), 50.00);
-  perform pg_temp.check_eq('and is credited to 1120, not to a bank',
-    pg_temp.leg(v_entry, '1120'), -50.00);
-  perform pg_temp.check_eq('the named bank is untouched',
-    pg_temp.leg(v_entry, '1121'), 0);
-  perform pg_temp.check_eq('and its cached balance has not moved',
+  -- Named, because a refusal about "an expense" in a list of forty is a
+  -- refusal somebody has to go looking for.
+  perform pg_temp.check_true('the refusal names the expense',
+    v_said like '%EXP-2%');
+  perform pg_temp.check_true('and says what to choose',
+    v_said like '%paid from%');
+
+  -- Nothing behind it. A refusal that half-posted would be worse than
+  -- the fallback it replaces.
+  perform pg_temp.check_eq('nothing is credited to 1120',
+    (select count(*) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '1120'), 0);
+  perform pg_temp.check_eq('the expense is still unposted',
+    (select count(*) from public.expenses
+      where id = v_exp and gl_entry_id is null and status <> 'posted'), 1);
+  perform pg_temp.check_eq('and no bank balance moved',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     9000.00);
+end $$;
 
-  -- No tax, so no tax line. A zero on 1410 would put a nil figure into
-  -- the SST-02 workings for a purchase that carried no input tax.
+-- ---------------------------------------------------------------------
+-- An expense that carried no tax
+--
+-- Asserted on its own since `0727` took the cash fixture away. It is
+-- about the TAX line and not about the bank: a zero on 1410 would put a
+-- nil figure into the SST-02 workings for a purchase that carried no
+-- input tax at all.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.money_org('Tanpa Cukai Sdn Bhd');
+  v_bank uuid; v_exp uuid; v_entry uuid;
+begin
+  v_bank := pg_temp.a_bank(v_org, '1121', 'Maybank Current', 9000.00);
+  v_exp  := pg_temp.an_expense(v_org, 'EXP-2', '6260', 50.00, 0, 50.00,
+                               v_bank);
+
+  v_entry := public.post_expense(v_exp);
+
+  perform pg_temp.check_eq('the cost lands on its own account',
+    pg_temp.leg(v_entry, '6260'), 50.00);
+  perform pg_temp.check_eq('and the credit on the bank that paid it',
+    pg_temp.leg(v_entry, '1121'), -50.00);
+  perform pg_temp.check_eq('never on the 1120 control account',
+    pg_temp.leg(v_entry, '1120'), 0);
   perform pg_temp.check_eq('an expense with no tax writes no tax line',
     (select count(*) from public.gl_lines l
        join public.accounts a on a.id = l.account_id
       where l.entry_id = v_entry and a.code = '1410'), 0);
   perform pg_temp.check_eq('so the journal is two lines',
     (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And not out of another company's account
+--
+-- `0160` stopped a bank account being shared between companies and
+-- `0727` is the posting side of the same rule, which had been left out:
+-- the bank account was found by `id` alone, so another company's would
+-- have resolved and been credited.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_mine uuid := pg_temp.money_org('Kami Sdn Bhd');
+  v_theirs uuid := pg_temp.money_org('Mereka Sdn Bhd');
+  v_bank uuid; v_exp uuid; v_said text;
+begin
+  v_bank := pg_temp.a_bank(v_theirs, '1121', 'Maybank Current', 9000.00);
+  v_exp  := pg_temp.an_expense(v_mine, 'EXP-9', '6260', 50.00, 0, 50.00,
+                               v_bank);
+
+  begin
+    perform public.post_expense(v_exp);
+    raise exception 'FAIL: credited another company''s bank account';
+  exception when others then
+    v_said := sqlerrm;
+    if v_said like 'FAIL:%' then raise; end if;
+  end;
+
+  perform pg_temp.check_eq('and their balance is untouched',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    9000.00);
 end $$;
 
 -- ---------------------------------------------------------------------

@@ -381,7 +381,13 @@ void main() {
                 accountSubtype: 'operating_expense',
               ),
             ]),
-            bankAccountsProvider.overrideWith((ref) async => []),
+            // One to pay from: `0727` made "Paid from" a condition of
+            // saving, so a form offered none cannot record anything.
+            bankAccountsProvider.overrideWith(
+              (ref) async => [
+                {'id': 'b-1', 'name': 'Maybank Current'},
+              ],
+            ),
             paymentModesProvider.overrideWith((ref) async => []),
             projectsProvider.overrideWith((ref) async => []),
             departmentsProvider.overrideWith((ref) async => []),
@@ -480,6 +486,13 @@ void main() {
       await choose(
         find.byKey(const ValueKey('expense-matter')),
         'M-1042 — Sale of a house',
+      );
+      await choose(
+        find.ancestor(
+          of: find.text('Paid from'),
+          matching: find.byType(SearchablePicker<String>),
+        ),
+        'Maybank Current',
       );
 
       await tester.tap(find.text('Record and post'));

@@ -454,7 +454,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final wrong = _split.problem;
+    final wrong = _split.problem ?? paidFromProblem(_bankAccountId);
     if (wrong != null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(wrong)));
@@ -830,10 +830,21 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                       ),
                   ],
                   value: _bankAccountId,
-                  allowEmpty: true,
-                  emptyLabel: 'The default bank account',
+                  // Required since `0727`. The helper text this
+                  // replaces was never true: it said "leave blank to use
+                  // the default bank account", and there is no such
+                  // thing anywhere in `post_expense`. A blank one was
+                  // credited to `1120`, the control account, which put
+                  // the money on no bank reconciliation at all.
+                  //
+                  // Spelt out although it is the default, because what
+                  // it says is the rule rather than the setting: the
+                  // line above it used to read `allowEmpty: true`, and
+                  // the diff that matters is this one.
+                  allowEmpty: false,
                   label: 'Paid from',
-                  helperText: 'Leave blank to use the default bank account',
+                  helperText: 'The account the money came out of. Petty '
+                      'cash is one too — add it as a bank account.',
                   createLabel: 'Add bank account',
                   onCreate: (typed) =>
                       createBankAccountFromPicker(context, typed: typed),
@@ -1157,6 +1168,25 @@ class _ReceiptStrip extends StatelessWidget {
     );
   }
 }
+
+/// Why this expense cannot be saved yet, when the reason is that it
+/// does not say where the money came from.
+///
+/// `0727` refuses the same thing at the database, which is where the
+/// rule lives: `expenses` is an ordinary table the client writes to
+/// directly under RLS, so a check in Dart alone would hold for whoever
+/// uses the app as written and for nobody else.
+///
+/// This one exists anyway, and not as belt and braces. It is the
+/// difference between finding out while the form is still open with the
+/// answer one tap away, and finding out through a round trip that comes
+/// back as an exception — on a form somebody has just spent a minute
+/// filling in.
+String? paidFromProblem(String? bankAccountId) => bankAccountId == null
+    ? 'Choose the account this was paid from. Every payment leaves an '
+        'account, and one that names none cannot be reconciled against '
+        'any statement.'
+    : null;
 
 /// Which account the money left, said in one line.
 ///

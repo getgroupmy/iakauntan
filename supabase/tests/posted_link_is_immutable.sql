@@ -27,10 +27,34 @@ create temporary table t_link (org uuid, acct uuid, exp uuid, entry uuid,
                                cat uuid, rcp uuid, other_entry uuid);
 grant select on t_link to authenticated;
 
+-- An account the money can come out of.
+--
+-- `0727` made `expenses.bank_account_id` a condition of posting: an
+-- expense that names none used to be credited to the `1120` control
+-- account, which put it on no bank reconciliation at all. These
+-- fixtures were written before that and said nothing about where the
+-- money came from, because nothing made them.
+create or replace function pg_temp.a_bank(p_org uuid)
+returns uuid language plpgsql as $f$
+declare v_bank uuid;
+begin
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, account_type,
+     currency)
+  values (p_org,
+          (select id from public.accounts where org_id = p_org
+            and not is_group and is_active and account_type = 'asset'
+           order by code limit 1),
+          'Maybank Semasa', 'Maybank', '512345678901', 'current', 'MYR')
+  returning id into v_bank;
+  return v_bank;
+end;
+$f$;
+
 do $$
 declare
   v_org uuid; v_owner uuid := pg_temp.test_user(); v_acct uuid;
-  v_exp uuid; v_entry uuid; v_cat uuid;
+  v_exp uuid; v_entry uuid; v_cat uuid; v_bank uuid;
   v_rcp uuid; v_other uuid; v_other_entry uuid;
 begin
   v_org := pg_temp.test_org('Sekali Sahaja Sdn Bhd');
@@ -40,21 +64,22 @@ begin
   select id into v_cat from public.accounts
    where org_id = v_org and not is_group and is_active
      and account_type = 'expense' order by code limit 1;
+  v_bank := pg_temp.a_bank(v_org);
 
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
-     total_amount, currency, exchange_rate, account_id)
+     total_amount, currency, exchange_rate, account_id, bank_account_id)
   values (v_org, 'EXP-1', current_date, 'Petrol', 100, 0, 100, 'MYR', 1,
-          v_cat) returning id into v_exp;
+          v_cat, v_bank) returning id into v_exp;
   v_entry := public.post_expense(v_exp);
 
   -- A second, unposted expense: setting the link for the first time is
   -- what posting is, and this migration must not have touched it.
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
-     total_amount, currency, exchange_rate, account_id)
+     total_amount, currency, exchange_rate, account_id, bank_account_id)
   values (v_org, 'EXP-2', current_date, 'Tol', 20, 0, 20, 'MYR', 1,
-          v_cat) returning id into v_rcp;
+          v_cat, v_bank) returning id into v_rcp;
 
   -- A journal belonging to something else, so the "pointed at a
   -- different one" probe below is refused by the rule rather than by a
@@ -64,9 +89,9 @@ begin
   -- mistake and left the same note.
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
-     total_amount, currency, exchange_rate, account_id)
+     total_amount, currency, exchange_rate, account_id, bank_account_id)
   values (v_org, 'EXP-OTHER', current_date, 'Parkir', 5, 0, 5, 'MYR', 1,
-          v_cat) returning id into v_other;
+          v_cat, v_bank) returning id into v_other;
   v_other_entry := public.post_expense(v_other);
 
   v_acct := pg_temp.another_user('sekali@example.test');
@@ -223,25 +248,19 @@ begin
   select id into v_cat from public.accounts
    where org_id = v_org and not is_group and is_active
      and account_type = 'expense' order by code limit 1;
+
+  -- BEFORE the expense, not after it. The bank account used to be made
+  -- further down, only because nothing needed it until the statement
+  -- line; `0727` means the expense cannot be posted without it.
+  v_bank := pg_temp.a_bank(v_org);
+
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
-     total_amount, currency, exchange_rate, account_id)
-  values (v_org, 'EXP-B', current_date, 'Yuran', 50, 0, 50, 'MYR', 1, v_cat)
+     total_amount, currency, exchange_rate, account_id, bank_account_id)
+  values (v_org, 'EXP-B', current_date, 'Yuran', 50, 0, 50, 'MYR', 1, v_cat,
+          v_bank)
   returning id into v_exp;
   v_entry := public.post_expense(v_exp);
-
-  select id into v_bank from public.bank_accounts where org_id = v_org limit 1;
-  if v_bank is null then
-    insert into public.bank_accounts
-      (org_id, account_id, name, bank_name, account_number, account_type,
-       currency)
-    values (v_org,
-            (select id from public.accounts where org_id = v_org
-              and not is_group and is_active and account_type = 'asset'
-             order by code limit 1),
-            'Maybank Semasa', 'Maybank', '512345678901', 'current', 'MYR')
-    returning id into v_bank;
-  end if;
 
   insert into public.bank_transactions
     (org_id, bank_account_id, transaction_date, description, amount,

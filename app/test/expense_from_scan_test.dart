@@ -70,7 +70,15 @@ void main() {
           accountSubtype: 'operating_expense',
         ),
       ]),
-      bankAccountsProvider.overrideWith((ref) async => []),
+      // One to pay from. Empty until `0727` made "Paid from" a
+      // condition of saving — a form with no bank account on offer
+      // cannot record an expense at all now, which is the cost of the
+      // rule and is why the picker can create one inline.
+      bankAccountsProvider.overrideWith(
+        (ref) async => [
+          {'id': 'b-1', 'name': 'Maybank Current', 'bank_name': 'Maybank'},
+        ],
+      ),
       paymentModesProvider.overrideWith((ref) async => modes),
       projectsProvider.overrideWith((ref) async => []),
       departmentsProvider.overrideWith((ref) async => []),
@@ -153,11 +161,23 @@ void main() {
     await tester.tap(find.text('6100 — Disbursements').last);
     await tester.pumpAndSettle();
 
+    await tester.tap(find.descendant(
+      of: find.ancestor(
+        of: find.text('Paid from'),
+        matching: find.byType(SearchablePicker<String>),
+      ),
+      matching: find.byType(TextFormField),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Maybank Current').last);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Record and post'));
     await tester.pumpAndSettle();
 
     expect(repo.called, isTrue,
         reason: 'nothing pressed Save, so nothing was asserted');
+    expect(repo.sawBank, 'b-1');
     expect(repo.sawAmount, 1000.00);
     // Computed by the form from the matched code's rate, and stored.
     expect(repo.sawTax, 60.00);
@@ -217,6 +237,41 @@ void main() {
     expect(find.byKey(const ValueKey('expense-foreign-currency')), findsNothing);
   });
 
+  // `0727`. Asked for: "make the paid from required when recording an
+  // expense".
+  //
+  // This is the assertion that the rule is WIRED IN, not merely
+  // written: `paidFromProblem` has its own unit test, and a mutant that
+  // deleted the call to it from `_save` survived that test completely —
+  // the rule was correct and reached nothing. The expense would have
+  // saved, posted, and been credited to the 1120 control account where
+  // no reconciliation could ever find it.
+  testWidgets('and nothing is recorded until it says where the money came '
+      'from', (tester) async {
+    await openForm(tester, voucher);
+
+    await tester.tap(find.descendant(
+      of: find.ancestor(
+        of: find.text('Expense account *'),
+        matching: find.byType(SearchablePicker<String>),
+      ),
+      matching: find.byType(TextFormField),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('6100 — Disbursements').last);
+    await tester.pumpAndSettle();
+
+    // Everything else answered, and "Paid from" deliberately not.
+    await tester.tap(find.text('Record and post'));
+    await tester.pumpAndSettle();
+
+    expect(repo.called, isFalse,
+        reason: 'an expense was recorded without saying what paid for it');
+    // And says what to do about it, on the screen, rather than leaving
+    // a button that appears to do nothing.
+    expect(find.textContaining('Choose the account'), findsOneWidget);
+  });
+
   testWidgets('a capture that could not be read fills nothing', (
     tester,
   ) async {
@@ -236,6 +291,7 @@ class _FakeRepo implements Repo {
   double? sawTax;
   String? sawTaxCode;
   String? sawMode;
+  String? sawBank;
   String? sawReference;
   String? sawDescription;
   DateTime? sawDate;
@@ -265,6 +321,7 @@ class _FakeRepo implements Repo {
     sawTax = taxAmount;
     sawTaxCode = taxCodeId;
     sawMode = paymentModeCode;
+    sawBank = bankAccountId;
     sawReference = reference;
     sawDescription = description;
     sawDate = date;
