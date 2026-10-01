@@ -117,12 +117,12 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `731e5b83`, the ninth commit of the 1 October session. What each one did is the table under **The 1 October session** below |
-| CI | **green through run 2187 (`78ae9817`)**; run 2188 (`731e5b83`) was in flight when this was written and is the one to check first. Read the runs rather than inferring them, and mind two traps that have each cost a round: `list_workflow_runs` SERVES STALE PAGES — it has answered with a run six days old — so filter by `status: in_progress`/`completed` or use `actions_get get_workflow_run` on a known id; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in its own commit; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0728` is the highest.** `0727` is applied live and verified against production — the null-bank refusal is in the live `post_expense` and the `code = '1120'` fallback is gone, read back out of the hosted database rather than inferred from a green run. `0728` goes live on run 2188 and wants the same check: `select 1 from supabase_migrations.schema_migrations where version like '0728%'`, then `pg_get_functiondef` on `settle_deposit`, `create_deposit`, `clear_pdc` and `post_purchase_payment` for a surviving `code = '1120'` |
+| Head at time of writing | `ca2386b1`, the fourteenth and last commit of the 1 October session. What each one did is the table under **The 1 October session** below |
+| CI | **green through run 2192 (`ca2386b1`)** — thirteen runs today for fourteen commits (`f217cd64` and `4dd97e4e` were pushed together and share 2189), and the last five green in a row. Read the runs rather than inferring them, and mind these traps, each of which has cost a round: `list_workflow_runs` SERVES STALE PAGES — it answered with run 2004 from 21 September three times in one afternoon — so filter by `status: in_progress` or use `actions_get get_workflow_run` on a known id; a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in the commit after it; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
+| Migrations | **`0728` is the highest, and it is applied live and VERIFIED against production** — not inferred from a green run. `schema_migrations` has it; the refusal is in each of the four live function bodies; and `app.post_receipt_internal` is the only surviving `code = '1120'` fallback, which `0728` deliberately left and documents at length. `0727` was verified the same way. The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **382 SQL assertion files, 58 Python gates (+24 gate self-tests), 6,590 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds now runs IN THIS CONTAINER** — see the next section, which corrects what this file and `CLAUDE.md` used to say |
+| Gates | **382 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,611 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
 | API description | 808 functions, 367 tables, version `0728`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
@@ -162,6 +162,13 @@ chase them unprompted either.
    the thing rebuilt, and it is still unanswered.
 6. **The seven-shot App Review recording** in
    `docs/apple-voip-review.md`.
+7. **Whether a video call is still sideways.** Not a chase — a thing to
+   report if it happens. The cause is fixed and there is now NO fallback
+   rotation, so a platform that never advertises
+   `urn:3gpp:video-orientation` would show that peer sideways with
+   nothing correcting it. The engine logs exactly that case, with the
+   extensions the camera did arrive with, so one line from a real call's
+   console settles it.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -180,8 +187,16 @@ extension at all. The engine now says which case a real call is in.
 
 ## The 1 October session
 
-Nine commits. Eight are green and the ninth was in flight when this was
-written.
+Fourteen commits, all green. Thirteen runs, because `f217cd64` and
+`4dd97e4e` were pushed together and share 2189.
+
+It began as "set up android push notifications" and turned into four
+separate pieces of work, three of which came out of the user looking at
+a screen and asking why it said nothing: an expense that would not say
+which account paid it, a reconciliation that posted without showing the
+journal, and a remote camera lying on its side. The fourth — the 1120
+audit — came out of fixing the first one properly and then asking where
+else the same shape was.
 
 | Commit | Run | What |
 | --- | --- | --- |
@@ -193,7 +208,115 @@ written.
 | `7c558fc6` | 2185 | The door was already bolted: assert the lock that fires. RED |
 | `4685a9ef` | 2186 | A function comment is published, so it may not lose three refusals. `0727` live |
 | `78ae9817` | 2187 | Reverse an expense from the expense, and enter it again |
-| `731e5b83` | 2188 | **`0728`**: the rest of the money that went to the heading — the 1120 audit, four more functions, three forms |
+| `731e5b83` | 2188 | **`0728`**: the rest of the money that went to the heading — the 1120 audit, four more functions, three forms. `0728` live and verified |
+| `f217cd64` | 2189 | This file, eight commits stale, and two of its claims disproved |
+| `4dd97e4e` | 2189 | The graph rebuilt over all of it: 35,975 nodes, 56,834 edges |
+| `df41280e` | 2190 | **The incoming video turned a quarter clockwise.** A stopgap, asked for directly, and superseded twice below |
+| `50d6c23f` | 2191 | **The real cause**: the mediasoup package's `RtpCapabilities.toMap()` drops every RTP header extension. `call_rtp.dart`, plus `check_rtp_capabilities.py` and its self-test |
+| `ca2386b1` | 2192 | Nothing in the widget tree turns a camera. The stopgap out, its absence asserted |
+
+### Android push: three things that all report success
+
+`68cbe84c`. The client half, written the way iOS was — a method channel
+and Kotlin behind it, **no Flutter plugin** — because `firebase_core` on
+the web injects the Firebase JS SDK into every page load and this app is
+used from a market stall's phone browser.
+
+Three traps, and what they share is that every layer of each one reports
+success:
+
+- **A channel that does not exist is DROPPED.** From Android 8 a
+  notification naming a channel the app has not created is not shown
+  quietly, it is dropped — while FCM answers 200 with a message name and
+  the register says the handset is live. `send-push` names `chat`,
+  `PushService` draws a call on `calls`, and they are two files in two
+  languages in two directories. `scripts/check_push_channels.py`
+  compares the two lists on every run, which is the only thing that can.
+- **`deleteToken()` mints a new one.** Pressing Turn off took the row
+  off the register; the next status read asked for the token; and
+  `getToken` on a handset that still has permission issues a FRESH one.
+  So the card read "on" for a handset nothing would ever reach again. An
+  off switch is now a fact about the installation, kept locally and
+  cleared by registering.
+- **`notConfigured` is not `unsupported`.** `google-services.json`
+  cannot live in this repository, so the Gradle plugin that reads it is
+  applied only when the file is present. The copy for the two states had
+  to be swapped as well: the old sentence sent somebody off to create a
+  Firebase project for a phone that can never use one.
+
+**And a widget test HUNG for ten minutes.** A `testWidgets` case that
+reaches an unmocked method channel does not fail — fake async never
+delivers the reply, so it stops. The coverage lives in
+`push_native_test.dart` instead, where the channel is mocked, and the
+trap is written into `docs/widget-tests.md`.
+
+### Three red runs in a row, each a different fault
+
+`0727` took runs 2183, 2184 and 2185 to land, and not one of them was
+the same mistake twice. Worth keeping because the THIRD is the one that
+would have shipped something wrong rather than merely failed.
+
+**2183 — grepping for a token is not grepping for the behaviour.**
+`expense_split.sql` section 5 was "An expense paid in cash": it posted
+with a null bank account and asserted the credit landed on `1120` and
+that no bank balance moved. Both true; together the bug. My check before
+pushing was `grep bank_account_id` on that file, which MATCHED — on the
+helper's signature and on a comment. The mechanical version is three
+lines: parse the seventh argument of every `pg_temp.an_expense(...)` and
+the column list of every bare `insert into public.expenses` in a file
+that posts. Over all of `supabase/tests` it finds exactly the two
+fixtures that posted without one.
+
+**2184 — the door was already bolted.** A new block asserted that
+`0727`'s `org_id` scoping refuses another company's bank account. It
+cannot: `0160`'s `expenses_bank_account_same_org` foreign key means such
+a row cannot be INSERTED, so the posting is never reached. `0727`'s own
+header had claimed the account "would have resolved and been credited",
+which was false — corrected in place, which was legitimate only because
+the migration had not been applied anywhere.
+
+**2185 — a `comment on function` is PUBLISHED.** `docs/api/` is
+generated from the schema: a function's summary is the first sentence of
+its comment and its description is the whole comment. `0727` replaced
+`post_expense`'s comment outright with one sentence about the new
+refusal, so the published description would have gone from documenting
+four refusals to one. The other three are all still true — nothing
+removed them, the comment just stopped mentioning them. **Extend such a
+comment; never rewrite it.** `0728` follows that rule for five
+comments, and `0571`'s wording is the base.
+
+### The expense screen, end to end
+
+`1eafa71b` and `78ae9817`, both from the user looking at a screen and
+asking why it said nothing.
+
+- The detail dialog now says which account the money left, in three
+  states, and the third is the one worth building for: a named bank
+  account; nothing at all where the expense is not posted, because no
+  journal exists and naming an account would be a claim; and the
+  heading, for a row posted before `0727`.
+- **Reverse, on the expense itself.** `0102`'s rule is the one to hold
+  on to: a reversal POSTS THE MIRROR AND LEAVES THE ORIGINAL STANDING.
+  It does not void it. Voiding and mirroring together leave the reports
+  holding the opposite of the entry, which is how that was learned.
+  `repository.dart`'s doc comment used to say "voids the original" and
+  now says otherwise.
+- `reEntryFields` carries the original's fields into a fresh dialog, so
+  correcting a posted expense is reverse-then-re-enter rather than
+  retyping it.
+
+### The reconciliation shows the journal before it is agreed to
+
+`597de7a1`. The "Post this line" dialog drew the account picker and
+nothing else, so somebody posting a bank charge could not see which way
+round the entry would go. `postingLegs` names both sides and
+`_LegsPreview` draws them.
+
+The contact picker there is fetched **in its own try/catch**, outside
+the one that gates the dialog: a company with no contacts, or a contacts
+query that fails, must still be able to post a bank charge to an
+account. Refusing to open the dialog over a picker nobody has to use
+would take the whole feature away to protect a nicety.
 
 ### THE LOCAL RUNNERS WORK IN THIS CONTAINER. USE THEM.
 
@@ -238,7 +361,8 @@ run. But find the fault here first.
 
 `0727` closed one 1120 fallback. `0728` found the same shape in five
 more functions, which raises the obvious question: how, with 380 files
-of assertions running in CI, had none of them noticed?
+of assertions running in CI — the count on the morning this was found —
+had none of them noticed?
 
 Because **every fixture in `supabase/tests/` that needed a bank account
 hung it on account 1120 itself**:
@@ -291,6 +415,32 @@ next piece of this work.
 `app.demo_legal_guaman` (`0549`) also still reaches for 1120. It is demo
 data rather than a rule, and it is reseeded rather than migrated, so it
 was seen and left.
+
+### The sideways camera, three times in one day
+
+The whole of it is further down, under **The incoming video was sideways,
+and it was five missing lines** — put there because it belongs with the
+calling work rather than with the accounting. The short version, because
+the middle step is a trap worth meeting before you read the detail:
+
+1. `df41280e` — an unconditional `RotatedBox(quarterTurns: 1)` on every
+   remote camera. Asked for directly. Correct for a phone and wrong for
+   a desktop browser peer, which rotates pixels before sending.
+2. `50d6c23f` — **the actual cause.** `RtpCapabilities.toMap()` in
+   `mediasfu_mediasoup_client 0.1.4` serialises the codecs and silently
+   drops every header extension, so the server built every consumer
+   against an empty extension list and stripped
+   `urn:3gpp:video-orientation` from every incoming stream. Five missing
+   lines in somebody else's serialiser, found by reading it rather than
+   by measuring a call.
+3. `ca2386b1` — the stopgap removed, and **its absence asserted**,
+   because with the rotation arriving natively a `RotatedBox` draws an
+   upright picture 90° out the other way.
+
+`scripts/check_rtp_capabilities.py` is what keeps step 2 in place:
+`device.rtpCapabilities.toMap()` is what every mediasoup example in
+every language writes, and nothing in the widget suite can reach that
+call site.
 
 ### The one inconsistency, and why it is right
 
