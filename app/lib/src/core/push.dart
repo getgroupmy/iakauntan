@@ -11,11 +11,14 @@
 /// no Google project in the middle of an Apple conversation, and the
 /// only way to send the PushKit push a real CallKit ring needs.
 ///
-/// Android is the exception and says so: Firebase is Google's transport
-/// all the way down, there is no direct equivalent, and it needs a
-/// `google-services.json` that cannot live in this repository. So
-/// `push_native.dart` answers `unsupported` there rather than
-/// registering a device nothing can send to.
+/// Android is the exception, and says which kind of exception it is.
+/// FCM is Google's transport all the way down, there is no direct
+/// equivalent, and it needs a `google-services.json` that cannot live
+/// in this repository — so the Firebase client is compiled in on every
+/// build and configured on almost none. A build with no project
+/// answers `notConfigured` rather than `unsupported`: the handset is
+/// perfectly capable, this copy of the app has nowhere to register.
+/// `app/android/app/build.gradle.kts` is where that conditional lives.
 ///
 /// The sender is `supabase/functions/send-push`. `0657` and `0658` are
 /// the register, and `docs/push-notifications.md` is the argument.

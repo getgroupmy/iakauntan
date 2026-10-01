@@ -8,11 +8,11 @@ arrived only where somebody was already looking. Since the reason to ring
 somebody is that they are doing something else, that is close to saying
 it did not work.
 
-**Browsers work today and need no account anywhere.** iOS has a sender
-that needs only a `.p8` from the Apple developer account and no Firebase
-project at all (`0657`); what it is still waiting for is the Flutter
-half that registers a device token. Android needs Firebase. The bottom
-of this page says what each is missing.
+**All three are built.** Browsers need no account anywhere, iOS needs
+only a `.p8` from the Apple developer account and no Firebase project at
+all (`0657`), and Android needs a Firebase project — which is the one
+thing on this page somebody has to go and create. "Configuring it"
+below is what each of the three wants.
 
 | Piece | Where |
 | --- | --- |
@@ -27,6 +27,11 @@ of this page says what each is missing.
 | Which service a token belongs to | `supabase/migrations/0657_reaching_an_iphone_without_google.sql` |
 | The service worker that draws the notification | `app/web/push_sw.js` |
 | Subscribing, from the browser | `app/lib/src/core/push_web.dart` |
+| Subscribing, from a handset | `app/lib/src/core/push_native.dart` |
+| The iOS native half | `app/ios/Runner/AppDelegate.swift` |
+| The Android native half | `app/android/app/src/main/kotlin/my/iakauntan/iakauntan/Push.kt` |
+| What Android does with a delivery | the `PushService.kt` beside it |
+| That the channels both halves name agree | `scripts/check_push_channels.py` (runs in CI) |
 | The switch somebody presses | Settings → Notifications |
 
 ## How a notification happens
@@ -119,8 +124,8 @@ to be trusted or paid. A Firebase project for iOS would put Google in
 the middle of an Apple conversation, carrying the notifications of an
 application whose chat mentions payslips.
 
-Android still needs Firebase. There is no direct equivalent — that is
-Google's transport all the way down.
+Android needs Firebase. There is no direct equivalent — that is Google's
+transport all the way down, and the section below is what it costs.
 
 ### The two traps, both silent
 
@@ -343,16 +348,90 @@ a profile that carries neither, naming the missing entitlement. The
 archive in `ios-release.yml` run 5 signed, so the profile carries both,
 so the App ID has both. Nobody had to go and look.
 
-### Android — Firebase
+### Android — Firebase, in two halves that must match
 
-| Name | What it is |
-| --- | --- |
-| `FCM_SERVICE_ACCOUNT` | the whole Firebase service account JSON, including `project_id` |
+Android is the only platform here that needs an account somewhere else,
+and it needs **two files out of the same Firebase project**, one for
+each end. Neither works without the other, and each fails quietly:
 
-Also the fallback for iOS, for a deployment that would rather have one
-Google project than an Apple key — `register_device` takes `fcm` for an
-iOS handset and the sender routes on it. What that costs is PushKit: a
-call arrives as a banner rather than a ringing phone.
+| Where | What | What is missing without it |
+| --- | --- | --- |
+| Edge Functions → Secrets | `FCM_SERVICE_ACCOUNT`, the whole service account JSON including `project_id` | the sender reports every Android handset as `skipped` |
+| GitHub → Actions secrets | `GOOGLE_SERVICES_JSON`, the whole `google-services.json` | the app registers nothing and says "not configured" |
+
+Make them both in one sitting:
+
+1. **Firebase console → Add project.** It may be a new Google Cloud
+   project or an existing one; nothing else here uses it.
+2. **Project settings → General → Your apps → Add app → Android.**
+   The package name is `my.iakauntan.iakauntan` — exactly, because the
+   plugin that reads the file checks it against the APK and refuses a
+   mismatch. No SHA-1 is needed: that is for Google Sign-In and
+   App Links, neither of which goes through Firebase here.
+3. **Download `google-services.json`** and put it in GitHub as
+   `GOOGLE_SERVICES_JSON`, whole. It is not a secret in the sense a key
+   is — it ships inside every APK — but it names a project, and a
+   project named in a public repository is one strangers can try to
+   register devices against.
+4. **Project settings → Service accounts → Generate new private key.**
+   That is the *other* file, and it IS a secret: it can send a
+   notification to any handset the project knows. Put it in Supabase as
+   `FCM_SERVICE_ACCOUNT`.
+
+`FCM_SERVICE_ACCOUNT` is also the fallback for iOS, for a deployment
+that would rather have one Google project than an Apple key —
+`register_device` takes `fcm` for an iOS handset and the sender routes
+on it. What that costs is PushKit: a call arrives as a banner rather
+than a ringing phone.
+
+#### Why `google-services.json` is not in the repository, and what that costs
+
+`app/android/app/build.gradle.kts` applies the Google plugin **only
+when the file is there**, and logs a line saying so when it is not. So:
+
+- every CI build and every developer's build has no Firebase project,
+  compiles the whole Firebase client anyway, and reports push as
+  `notConfigured` at run time — a sentence on the settings card instead
+  of a switch that would register a token nothing can send to;
+- `.github/workflows/android-release.yml` writes the file from the
+  secret for the length of one job and deletes it afterwards, the same
+  arrangement as the upload keystore.
+
+What it costs is that the first build which actually applies that
+plugin is a release build. If the plugin ever refuses the AGP version
+this project pins, that is where it will say so, and raising
+`com.google.gms.google-services` in `settings.gradle.kts` is the whole
+fix — nothing else in the build depends on it.
+
+#### The channel that does not exist is the silent one
+
+From Android 8 a notification naming a channel the app has not created
+is **dropped**: not shown quietly, not shown without sound — dropped,
+with FCM answering `200` and the register saying the handset is live. So
+`send-push` names `chat`, `PushService` draws a call on `calls`, and
+`Push.ensureChannels` creates both from two places — an activity
+starting, and the messaging service starting, because a push can start
+the process with no activity ever existing.
+
+`scripts/check_push_channels.py` compares the two lists on every CI run,
+because this is the most expensive shape of bug in this project: every
+layer reports success and nothing arrives.
+
+#### What Android does NOT get
+
+A **full-screen ring**. `USE_FULL_SCREEN_INTENT` is granted at install
+from Android 14 only to apps Google has accepted as calling or alarm
+apps, and declaring it puts a policy declaration in front of every Play
+release. A call arrives as a high-importance heads-up notification on
+its own channel, which shows on the lock screen and taps through — and
+`0658` already says the platform that rings the way a phone rings is
+iOS, through PushKit, which FCM cannot send at all.
+
+A **token registered the moment it rotates**. `onNewToken` can run with
+no Flutter engine and nobody signed in, so there is no session to
+register under; `pushRegistrarProvider` re-registers silently on every
+app start, which closes the window at the next launch. The sender drops
+tokens FCM reports as `UNREGISTERED` in the meantime.
 
 ### None of the three is required
 
@@ -362,17 +441,32 @@ response, and the 503 names which secret is missing for whoever was
 actually in the room — a half-configured system that *looks* like it
 worked is the failure this whole function is arranged to avoid.
 
-What does not exist yet on either phone platform is the **Flutter
-half**: nothing in the app registers a device token, so `PushStatus`
-answers `unsupported` there rather than offering a switch that would
-register a device no sender can reach.
+The app half exists on all three now, and each says which of its own
+four states it is in rather than a single "notifications are off":
+`unsupported` is a device that never can (a desktop, an old browser, an
+Android with no Play Services), `notConfigured` is a deployment
+somebody has not finished, `denied` is a refusal nothing can ask again
+about, and only `askable` draws a button. The three need three
+different things from whoever reads them, which is why they are four
+statuses and not one.
 
 ## What is left
 
-- **Android** needs Firebase: `google-services.json` or the equivalent
-  `FirebaseOptions` passed from Dart, plus the registration call. It is
-  the one platform where a call can ring the way people expect, via a
-  high-priority data message and a full-screen intent.
+- **Android is built**, alerts and calls: `Push.kt` is permission, the
+  token and the two channels, `PushService.kt` is what happens when
+  something arrives, and `push_native.dart` is the half that decides
+  what to register. What it needs is a Firebase project, which is the
+  section above and is nobody's job but the deployment's.
+
+  **Two parts are written from documentation rather than from a
+  handset**, and both are in the same place: what Android reports
+  through `NotificationManager.areNotificationsEnabled` for a person
+  who refused the prompt twice, and whether a data-only call message
+  reaches `PushService` on a handset whose app was swiped away. The
+  first decides whether the settings card says `denied` or `askable`,
+  the second whether a call to a closed app rings at all. Both are one
+  session with a real phone to settle, and the Dart side of each is
+  asserted in `app/test/push_native_test.dart` either way.
 - **iOS is built**, alerts and calls. `0657` is the sender, `0658` is
   the register, and `app/ios/Runner/AppDelegate.swift` with
   `app/lib/src/core/push_native.dart` and

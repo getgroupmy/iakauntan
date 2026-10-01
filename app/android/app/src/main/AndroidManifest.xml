@@ -19,6 +19,14 @@
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Notifications, from Android 13. A permission the manifest does
+         not declare cannot be granted however politely it is asked for:
+         the request returns "denied" with no dialog, which looks
+         exactly like somebody refusing. Below 13 there is no such
+         permission and notifications are on until switched off in
+         Settings, which is why `Push.authorization` reads
+         `areNotificationsEnabled` rather than this. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-feature android:name="android.hardware.camera"
         android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus"
@@ -55,6 +63,31 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Push. `Push.kt` is the argument for all three of these.
+
+             The service takes the data-only message a CALL is sent as,
+             which the Firebase SDK never draws by itself: without this
+             declaration a call to a phone with the app closed does
+             nothing at all, and nothing anywhere reports it. A message
+             is drawn by the SDK without reaching the service. -->
+        <service
+            android:name=".PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
+
+        <!-- The channel the SDK draws a message banner on when the
+             payload names one that no longer exists. `send-push` names
+             `chat` and `Push.ensureChannels` creates it; this is the
+             fallback for the case where somebody deleted it, because
+             the alternative is a notification Android drops in
+             silence. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="chat"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -9,6 +9,12 @@ app/ios/.symlinks/
 app/android/.gradle/
 app/android/local.properties
 app/android/key.properties
+# The Firebase project push goes through. Not a secret in the sense a
+# key is -- it ships inside every APK -- but a project named in a
+# public repository is one strangers can try to register devices
+# against, and the build works without it. See
+# docs/push-notifications.md.
+app/android/app/google-services.json
 *.iml
 .idea/
 .vscode/

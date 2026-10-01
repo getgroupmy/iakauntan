@@ -302,6 +302,44 @@ partway through it.** `expect(repo.saved, ...)` is true the moment the
 first call lands. `expect(find.text('Contact saved'), findsOneWidget)`
 is true only if the action finished.
 
+## An unanswered method channel does not fail, it stops
+
+A `testWidgets` case that reaches a platform channel nobody has mocked
+**hangs**. The message is handed to a platform that is not there, the
+reply never arrives, and because `testWidgets` runs under fake async
+there is nothing to time it out: the test does not fail, it stops, and
+the run sits there until the job's own timeout kills it with no failing
+assertion to look at.
+
+That is how it was found. `notifications_card_test.dart` had a case
+asserting that a device with no native half reports `unsupported`, and
+it passed for months because `push_native.dart` answered `unsupported`
+for Android in DART, without crossing the channel. The moment Android
+gained a native half, the same test on the same line went from passing
+in a millisecond to running for ten minutes.
+
+Two things follow:
+
+* **Mock the handler to throw, rather than leaving it absent.** A
+  handler that throws `MissingPluginException` is what a missing
+  plugin actually looks like to Dart, and it answers.
+
+  ```dart
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+        pushChannel,
+        (call) async => throw MissingPluginException(call.method),
+      );
+  ```
+
+* **A plain `test` is the better home for channel work.** Real async,
+  no pumping, and `push_native_test.dart` is the file that does it that
+  way — which is why the assertion now lives there.
+
+A VM widget test is `defaultTargetPlatform == android`, so this is not
+a rare corner: any code that newly reaches a channel on Android reaches
+it from every widget test that renders the widget containing it.
+
 ## Four more worth knowing
 
 **Rendering at phone width is itself an overflow test.** A `RenderFlex`

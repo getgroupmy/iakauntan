@@ -152,6 +152,25 @@ the repository root; check `git status` before committing anything.)
 | `ANDROID_KEY_PASSWORD` | the key password — usually the same as the store password |
 | `PLAY_SERVICE_ACCOUNT` | the whole service account JSON from part 2 |
 
+And one that is optional, and is the only secret here a release will go
+ahead without:
+
+| Secret | What it is |
+| --- | --- |
+| `GOOGLE_SERVICES_JSON` | `google-services.json` from the Firebase console, whole — base64 or as it comes |
+
+It is what makes notifications work on Android, and it is optional
+because a release should not stop for an unfinished Firebase project: a
+build without it ships, works, and says "not configured" on the
+notifications card. The workflow prints the project id it found in the
+job summary, or a note that there was none.
+
+`docs/push-notifications.md` is where the project gets created, and the
+server half — `FCM_SERVICE_ACCOUNT`, which is a *different* file from a
+*different* page of the same console — is set there rather than here.
+Both halves or neither: the app registers a handset the server cannot
+reach, or the server holds a key for an app that registers nothing.
+
 ## Part 5 — the version code offset
 
 **Settings → Secrets and variables → Actions → Variables →

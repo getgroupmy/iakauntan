@@ -1636,6 +1636,14 @@ jobs:
       - name: Check an assertion buckets on the product's clock
         run: python3 scripts/check_test_clock.py
 
+      # Android DROPS a notification naming a channel the app has not
+      # created — and FCM still answers 200, and the register still says
+      # the handset is live, so nothing anywhere reports it. One string
+      # in TypeScript and every Android notification silently stops
+      # arriving. Two files, two languages, two directories.
+      - name: Check every notification channel the sender names exists
+        run: python3 scripts/check_push_channels.py
+
       # Offered and not permitted is a save that fails; permitted and
       # not offered is a feature nobody can reach. Both were true of
       # `bank_accounts.account_type` at once.
@@ -2516,6 +2524,12 @@ jobs:
 
       - name: The clock gate's own assertions
         run: python3 scripts/check_test_clock_test.py
+
+      # This one more than most: the bug it catches is silent at every
+      # layer, so a gate that has stopped matching is indistinguishable
+      # from a system that works.
+      - name: The push-channel gate's own assertions
+        run: python3 scripts/check_push_channels_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py

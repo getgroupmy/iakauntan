@@ -212,6 +212,55 @@ jobs:
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             | grep -i "SHA256:" | head -1 | tee "$RUNNER_TEMP/sha256.txt"
 
+      # The Firebase project push goes through, if there is one.
+      #
+      # NOT gated in `creds` above, and deliberately: a release must not
+      # stop because Android notifications have not been set up yet. The
+      # app without this file reports push as "not configured" on the
+      # settings screen and works in every other respect, which is a
+      # much better outcome than a version that cannot be shipped.
+      #
+      # What it must not do is be silent about it, because the symptom
+      # of a missing file is a published app whose notifications never
+      # arrive and whose settings screen explains why to nobody but the
+      # person who opens it.
+      - name: Firebase project
+        id: firebase
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
+            {
+              echo "### Android notifications are not configured"
+              echo
+              echo "No \`GOOGLE_SERVICES_JSON\` secret, so this build has"
+              echo "no Firebase project and Android push will report"
+              echo "itself as not configured. Everything else works."
+              echo
+              echo "See docs/push-notifications.md."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Both shapes accepted. The keystore above is base64 because
+          # it is binary, and somebody setting these two up in one
+          # sitting will reasonably assume this one is too -- so rather
+          # than fail on it, take either.
+          case "$(printf '%s' "$GOOGLE_SERVICES_JSON" | head -c 1)" in
+            '{') printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json ;;
+            *)   printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json ;;
+          esac
+
+          # Checked here rather than left to the Gradle plugin, whose
+          # message for a malformed file is about parsing and not about
+          # this secret. A truncated paste is the likeliest mistake and
+          # the hardest to see.
+          project=$(python3 -c 'import json,sys; print(json.load(open("android/app/google-services.json"))["project_info"]["project_id"])')
+          echo "Firebase project: $project"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
       - name: Build the bundle
         id: build
         if: steps.creds.outputs.ready == 'true'
@@ -356,3 +405,7 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/upload.jks" || true
           rm -f android/key.properties || true
+          # Not a key, and removed for the same reason anyway: it names
+          # a Firebase project, and a shared runner image is not where
+          # that belongs once the build is over.
+          rm -f android/app/google-services.json || true

@@ -76,19 +76,58 @@ void main() {
     expect(find.byKey(const ValueKey('enable-push')), findsNothing);
   });
 
-  testWidgets('and an Android build names the thing that is missing', (
-    tester,
-  ) async {
+  testWidgets('and an Android build with no project names the thing that '
+      'is missing', (tester) async {
     // Not "this device cannot": somebody CAN make it, by creating a
     // Firebase project. Naming it is the difference between a dead end
     // and a task.
+    //
+    // `notConfigured`, not `unsupported`, and the two swapped places
+    // when the Android client was built. Before it, Android could not
+    // be notified at all; now the handset is perfectly capable and it
+    // is the BUILD that has nowhere to register — which is somebody's
+    // job to finish rather than a fact about the phone.
+    await tester.pumpWidget(
+      harness(PushStatus.notConfigured, surface: Surface.android),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Firebase'), findsOneWidget);
+    expect(find.textContaining('VAPID'), findsNothing);
+  });
+
+  testWidgets('and an Android handset that nothing can reach says that '
+      'instead', (tester) async {
+    // A Huawei sold after 2019, a de-Googled ROM, an Amazon tablet.
+    // There is no Firebase project to create and no button to press:
+    // FCM is delivered by Google Play Services, and this handset has
+    // none. Saying "this build has no Firebase project" here would send
+    // somebody to go and make one for nothing.
     await tester.pumpWidget(
       harness(PushStatus.unsupported, surface: Surface.android),
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Firebase'), findsOneWidget);
-    expect(find.textContaining('Chrome'), findsNothing);
+    expect(find.textContaining('Google Play Services'), findsOneWidget);
+    expect(find.textContaining('Firebase'), findsNothing);
+    expect(find.byKey(const ValueKey('enable-push')), findsNothing);
+  });
+
+  testWidgets('an Android refusal is sent to Android settings', (
+    tester,
+  ) async {
+    // Not iOS's sentence, which is what every handset used to get. Both
+    // platforms stop asking — Android after two refusals, iOS after
+    // one — so the only useful copy names the screen, and it is a
+    // different screen.
+    await tester.pumpWidget(
+      harness(PushStatus.denied, surface: Surface.android),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Android will not ask again'), findsOneWidget);
+    expect(find.textContaining('iOS'), findsNothing);
+    expect(find.byKey(const ValueKey('enable-push')), findsNothing);
   });
 
   testWidgets('a deployment with no keys says so rather than offering a '
@@ -119,27 +158,51 @@ void main() {
     expect(find.textContaining('never what it says'), findsOneWidget);
   });
 
-  testWidgets('a platform with no native half reports unsupported rather '
-      'than pretending', (tester) async {
-    // This test runs on the Dart VM with the default target platform,
-    // which is Android — and Android is exactly the case that has no
-    // way through: Firebase needs a `google-services.json` that cannot
-    // live in this repository. If it ever answered anything else, the
-    // settings card would offer a button that registers a device no
-    // sender can reach. iOS is covered in `push_native_test.dart`.
-    expect(await pushStatus('a-key'), PushStatus.unsupported);
-    expect(await subscribeToPush('a-key', ask: true), isEmpty);
-    expect(await currentPushTokens(), isEmpty);
-  });
+  // What a device with no answering native half reports — `unsupported`,
+  // never a button that would register a device no sender can reach —
+  // lives in `push_native_test.dart`, along with every other state the
+  // two handset platforms can be in. It was here, as a `testWidgets`
+  // case, and it HUNG when Android stopped being answered in Dart and
+  // started crossing the method channel: a channel round trip inside
+  // `testWidgets` runs under fake async and never completes without
+  // pumping, so the test did not fail, it stopped. The states belong
+  // beside each other in any case; this file is about the card.
 
-  test('and says which of the three reasons it is', () {
-    // One status, three quite different facts, and the person reading
-    // can only act on one of them: swap the browser, create a Firebase
-    // project, or nothing at all.
+  test('and says which of the four reasons it is', () {
+    // One status, four quite different facts, and the person reading can
+    // only act on one of them: swap the browser, or nothing at all.
+    //
+    // Android is NOT Firebase here any more, and that is the assertion
+    // worth having: this sentence is the one shown to a handset that
+    // can never be reached, and sending its owner off to create a
+    // Firebase project would waste their afternoon.
     expect(pushUnsupportedNote(Surface.web), contains('Chrome'));
-    expect(pushUnsupportedNote(Surface.android), contains('Firebase'));
+    expect(
+      pushUnsupportedNote(Surface.android),
+      contains('Google Play Services'),
+    );
+    expect(pushUnsupportedNote(Surface.android), isNot(contains('Firebase')));
     expect(pushUnsupportedNote(Surface.desktop), isNot(contains('Firebase')));
     expect(pushUnsupportedNote(Surface.desktop), isNot(contains('Chrome')));
+  });
+
+  test('and which half of the configuration is missing', () {
+    // Two deployments' worth of unfinished setup, and naming the wrong
+    // one sends somebody to the wrong dashboard: the VAPID pair lives
+    // in the edge function's secrets, the Firebase project does not.
+    expect(pushNotConfiguredNote(Surface.android), contains('Firebase'));
+    expect(pushNotConfiguredNote(Surface.android), isNot(contains('VAPID')));
+    expect(pushNotConfiguredNote(Surface.web), contains('VAPID'));
+    expect(pushNotConfiguredNote(Surface.ios), contains('VAPID'));
+  });
+
+  test('and where a refusal has to be undone, per platform', () {
+    expect(pushDeniedNote(Surface.web), contains('site settings'));
+    expect(pushDeniedNote(Surface.web), isNot(contains('iOS')));
+    expect(pushDeniedNote(Surface.android), contains('Android'));
+    expect(pushDeniedNote(Surface.android), isNot(contains('iOS')));
+    expect(pushDeniedNote(Surface.ios), contains('iOS'));
+    expect(pushDeniedNote(Surface.ios), isNot(contains('site settings')));
   });
 
   test('and what to call the thing being notified', () {

@@ -1,6 +1,7 @@
 package my.iakauntan.iakauntan
 
 import android.net.Uri
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -23,9 +24,39 @@ import io.flutter.plugin.common.MethodChannel
  * another dependency to track, and the alternative found on pub.dev is
  * a general-purpose file utility whose surface is far wider than the
  * one call needed here.
+ *
+ * ## It also hosts push
+ *
+ * `PushChannel` needs an activity because asking for a permission
+ * does, and the answer to that request arrives at
+ * `onRequestPermissionsResult` here rather than anywhere it could be
+ * handled on its own. `Push.kt` is the file to read; what is below is
+ * the three lines of wiring and the lifecycle flag that keeps a call
+ * notification off the screen of somebody already looking at the call.
  */
 class MainActivity : FlutterActivity() {
     private val channel = "my.iakauntan.iakauntan/content"
+
+    /** Held because a permission answer comes back here, not there. */
+    private var push: PushChannel? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Before any notification can arrive, and cheap enough to do on
+        // every start: Android drops a notification naming a channel
+        // that does not exist, silently. `Push` carries the argument.
+        Push.ensureChannels(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Push.inForeground = true
+    }
+
+    override fun onPause() {
+        Push.inForeground = false
+        super.onPause()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,6 +68,31 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        val push = PushChannel(this)
+        this.push = push
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, Push.CHANNEL)
+            .setMethodCallHandler(push)
+    }
+
+    /**
+     * Notification permission, answered.
+     *
+     * `super` is NOT skipped for anything that is not ours, and that
+     * matters more here than it reads: `FlutterActivity` forwards
+     * permission answers to every plugin, and this app has four that
+     * ask for one — the camera, the microphone, the document scanner
+     * and file access. Swallowing their answers would leave each of
+     * them waiting forever on a dialog the person had already
+     * dismissed.
+     */
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        if (push?.permissionAnswered(requestCode) == true) return
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     private fun readContentUri(uri: String?, result: MethodChannel.Result) {

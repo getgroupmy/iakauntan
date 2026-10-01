@@ -5,12 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/push.dart';
 
-/// The iOS half of push, without an iPhone.
+/// Both native halves of push, without a handset of either kind.
 ///
-/// Everything below the channel is Swift and cannot run here. What CAN
-/// run here is the whole of the decision-making — which tokens are
-/// returned, under which transport, and what the settings card is told
-/// — and that is where the mistakes with silent consequences live:
+/// Everything below the channel is Swift or Kotlin and cannot run here.
+/// What CAN run here is the whole of the decision-making — which tokens
+/// are returned, under which transport, and what the settings card is
+/// told — and that is where the mistakes with silent consequences live:
 ///
 ///   * a PushKit token returned as `apns` is a message delivered to a
 ///     VoIP token, which gets the app killed by iOS;
@@ -195,12 +195,15 @@ void main() {
       expect(await currentPushTokens(), isEmpty);
     });
 
-    test('and neither is Android, which has no way through at all',
+    test('and so is an Android whose Dart is ahead of its MainActivity',
         () async {
+      // The same case on the other platform: a hot restart onto a
+      // build whose Kotlin does not answer this channel yet.
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      nativeSide({'authorization': 'authorized', 'alert': alert});
+      nativeSide(null, missing: true);
       expect(await pushStatus(''), PushStatus.unsupported);
       expect(await subscribeToPush('', ask: true), isEmpty);
+      expect(await currentPushTokens(), isEmpty);
     });
   });
 
@@ -219,6 +222,134 @@ void main() {
 
       nativeSide({'alert': '', 'voip': voip});
       expect(await currentPushTokens(), [voip]);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Android
+  // -------------------------------------------------------------------
+  //
+  // The same channel and the same four methods, and a different shape
+  // of answer: one token instead of two, and a fourth state that iOS
+  // cannot be in. What is covered here is every one of those states,
+  // because the consequence of getting one wrong is a settings screen
+  // that lies — and the three lies are not equally cheap:
+  //
+  //   * `notConfigured` read as `askable` offers a switch that
+  //     registers nothing, so somebody believes they will be notified
+  //     and never is;
+  //   * `askable` read as `notConfigured` hides the only button that
+  //     would turn notifications on;
+  //   * a token registered for somebody who refused is a handset this
+  //     app is reaching against their answer, which FCM will happily
+  //     let it do.
+  group('the Android half', () {
+    const fcm =
+        'fK7xQw2hT0y:APA91bH-4Zq9mC3nV8pL1sR6tY_jD5wX2eG7hK0aQ9bN3cM';
+
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    });
+
+    test('one token, as an android/fcm row', () async {
+      nativeSide({
+        'authorization': 'authorized',
+        'token': fcm,
+        'label': 'Samsung SM-G991B',
+      });
+
+      final devices = await subscribeToPush('', ask: true);
+      expect(devices.single.token, fcm);
+      expect(devices.single.platform, 'android');
+      expect(devices.single.transport, 'fcm');
+      expect(devices.single.label, 'Samsung SM-G991B');
+      // Nothing to pair: one installation, one token. `0658`'s
+      // device_id exists because an iPhone holds two.
+      expect(devices.single.deviceId, isNull);
+      // A device token is not a browser subscription, and `0143`
+      // refuses one carrying encryption keys.
+      expect(devices.single.p256dh, isNull);
+      expect(devices.single.auth, isNull);
+      expect(await pushStatus(''), PushStatus.on);
+    });
+
+    test('a build with no Firebase project says so, and registers nothing',
+        () async {
+      // Every build made from this repository, because
+      // `google-services.json` is not in it. NOT `unsupported`: the
+      // handset is perfectly capable and this is somebody's job to
+      // finish, which is a different sentence and a different fix.
+      nativeSide({'authorization': 'unconfigured'});
+
+      expect(await pushStatus(''), PushStatus.notConfigured);
+      expect(await subscribeToPush('', ask: true), isEmpty);
+    });
+
+    test('a refusal registers nothing, although FCM would have', () async {
+      // The decision worth asserting. FCM issues a token with no
+      // permission at all, exactly as PushKit does on iOS, so this is
+      // the app declining to hold a registration for somebody who said
+      // no rather than the platform refusing to give it one.
+      nativeSide({'authorization': 'denied', 'token': fcm});
+
+      expect(await pushStatus(''), PushStatus.denied);
+      expect(await subscribeToPush('', ask: true), isEmpty);
+    });
+
+    test('nor does a prompt nobody has answered yet', () async {
+      nativeSide({'authorization': 'notDetermined'});
+
+      expect(await pushStatus(''), PushStatus.askable);
+      expect(await subscribeToPush('', ask: false), isEmpty);
+    });
+
+    test('a handset with no Play Services cannot be reached, ever', () async {
+      // A Huawei sold after 2019, a de-Googled ROM, an Amazon tablet.
+      // Permission granted, nothing to grant it to. `unsupported`
+      // rather than `askable`, because asking again will not help and
+      // the button would never do anything.
+      nativeSide({
+        'authorization': 'authorized',
+        'failure': 'SERVICE_NOT_AVAILABLE',
+      });
+
+      expect(await pushStatus(''), PushStatus.unsupported);
+      expect(await subscribeToPush('', ask: true), isEmpty);
+    });
+
+    test('but a token merely still in flight is askable', () async {
+      // Permission outliving a registration, the same case iOS has.
+      // Not `unsupported`: nothing has said this handset cannot.
+      nativeSide({'authorization': 'authorized'});
+
+      expect(await pushStatus(''), PushStatus.askable);
+    });
+
+    test('a blank token is not a token', () async {
+      nativeSide({'authorization': 'authorized', 'token': ''});
+
+      expect(await pushStatus(''), PushStatus.askable);
+      expect(await subscribeToPush('', ask: true), isEmpty);
+    });
+
+    test('and the app still does not ask on its own', () async {
+      nativeSide({'authorization': 'notDetermined'});
+      await subscribeToPush('', ask: false);
+      expect(lastRegisterArguments?['ask'], isFalse);
+
+      await subscribeToPush('', ask: true);
+      expect(lastRegisterArguments?['ask'], isTrue);
+    });
+
+    test('taking it off the register hands back the one token', () async {
+      // Reading `token`, not `alert`: the Android side answers in its
+      // own shape, and reading iOS's keys here would unregister
+      // nothing while reporting success.
+      nativeSide({'token': fcm});
+      expect(await currentPushTokens(), [fcm]);
+
+      nativeSide({'token': ''});
+      expect(await currentPushTokens(), isEmpty);
     });
   });
 }

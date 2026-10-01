@@ -20,25 +20,71 @@ String pushDeviceNoun(Surface surface) =>
 
 /// Why this build cannot be notified at all, said usefully.
 ///
-/// Three different facts wearing one [PushStatus], and the difference
+/// Four different facts wearing one [PushStatus], and the difference
 /// matters to whoever is reading: a browser is missing a feature and
-/// could be swapped, an Android build is missing a Firebase project
-/// that somebody has to create, and a desktop simply is not a thing
-/// this is built for.
+/// could be swapped, an Android handset has no Google Play Services and
+/// nothing can ever reach it, and a desktop simply is not a thing this
+/// is built for.
+///
+/// Android used to be here for having no Firebase project, and is not
+/// any more. That is [PushStatus.notConfigured] — a perfectly capable
+/// handset and a build with nowhere to register — and the two need
+/// opposite things from whoever reads them: one is somebody's job to
+/// finish, the other is a device that will never be reachable.
 String pushUnsupportedNote(Surface surface) => switch (surface) {
   Surface.web =>
     'This browser cannot be notified while the app is closed. '
         'Notifications work in Chrome, Edge and Firefox, and on Safari '
         'once the app has been added to the home screen.',
   Surface.android =>
-    'Notifications on Android go through Firebase, and this build has '
-        'no Firebase project. See docs/push-notifications.md.',
+    'This device cannot be notified. Notifications on Android are '
+        'delivered by Google Play Services, which this handset does '
+        'not have.',
   // iOS reaches this only on a build whose Dart is ahead of its
   // AppDelegate, which is a rebuild rather than anything a person can
   // act on. Said the same way as a desktop, which simply is not a thing
   // this is built for.
   Surface.ios || Surface.desktop =>
     'This device cannot be notified while the app is closed.',
+};
+
+/// What is missing, on the surface that is missing it.
+///
+/// Two deployments' worth of unfinished configuration, and naming the
+/// wrong one costs whoever is reading an afternoon: a browser needs the
+/// VAPID pair in the edge function's secrets and the public half in the
+/// web build, and an Android build needs a Firebase project and the
+/// `google-services.json` that comes out of it. Neither is something the
+/// person holding the phone can do, which is why this is a sentence
+/// rather than a button.
+String pushNotConfiguredNote(Surface surface) => switch (surface) {
+  Surface.android =>
+    'Notifications on Android go through Firebase, and this build has '
+        'no Firebase project. See docs/push-notifications.md.',
+  Surface.web || Surface.ios || Surface.desktop =>
+    'Notifications are not switched on for this installation. '
+        'It needs a VAPID key pair — see docs/push-notifications.md.',
+};
+
+/// A refusal, and where it has to be undone.
+///
+/// Nothing asks twice — not a browser, not iOS, and not Android, which
+/// stops showing the prompt after two refusals and answers instantly
+/// instead. So the only useful sentence here names the settings screen
+/// this app cannot open for them, and it is a different screen on each
+/// of the three.
+String pushDeniedNote(Surface surface) => switch (surface) {
+  Surface.web =>
+    'This browser has refused notifications for this site. It will not '
+        'ask again, so it has to be changed in the browser\'s own site '
+        'settings.',
+  Surface.android =>
+    'Notifications were refused on this device. Android will not ask '
+        'again, so they have to be allowed for iAkauntan in Settings → '
+        'Apps → Notifications.',
+  Surface.ios || Surface.desktop =>
+    'Notifications were refused on this device. iOS will not ask '
+        'again, so they have to be allowed for iAkauntan in Settings.',
 };
 
 /// Turning on the notification that arrives when the app is closed.
@@ -130,11 +176,7 @@ class _BodyState extends ConsumerState<_Body> {
           // Said as its own sentence rather than folded into a generic
           // failure: nothing will ask again, and the only way back is
           // settings this app cannot open.
-          PushStatus.denied => widget.surface == Surface.web
-              ? 'This browser refused. Allow notifications for this site '
-                    'in the browser\'s own settings, then try again.'
-              : 'Notifications were refused. iOS will not ask again — '
-                    'allow them for iAkauntan in Settings, then try again.',
+          PushStatus.denied => pushDeniedNote(widget.surface),
           _ => 'Could not turn notifications on for this ${pushDeviceNoun(widget.surface)}',
         }),
       ),
@@ -159,21 +201,13 @@ class _BodyState extends ConsumerState<_Body> {
         icon: Icons.notifications_off_outlined,
         text: pushUnsupportedNote(widget.surface),
       ),
-      PushStatus.notConfigured => const _Note(
+      PushStatus.notConfigured => _Note(
         icon: Icons.build_outlined,
-        text:
-            'Notifications are not switched on for this installation. '
-            'It needs a VAPID key pair — see docs/push-notifications.md.',
+        text: pushNotConfiguredNote(widget.surface),
       ),
       PushStatus.denied => _Note(
         icon: Icons.block,
-        text: widget.surface == Surface.web
-            ? 'This browser has refused notifications for this site. It '
-                  'will not ask again, so it has to be changed in the '
-                  'browser\'s own site settings.'
-            : 'Notifications were refused on this device. iOS will not '
-                  'ask again, so they have to be allowed for iAkauntan '
-                  'in Settings.',
+        text: pushDeniedNote(widget.surface),
       ),
       PushStatus.askable => Row(
         children: [

@@ -50,8 +50,9 @@ class PushRegistration {
 /// below need different things from the person reading them, and only
 /// one of them is worth offering a button for.
 enum PushStatus {
-  /// This build cannot do it at all — Android, a desktop, or a browser
-  /// too old.
+  /// This device cannot do it at all — a desktop, a browser too old, or
+  /// an Android handset with no Google Play Services, which nothing can
+  /// reach and nothing ever will.
   unsupported,
 
   /// The device can, and nobody has been asked yet.

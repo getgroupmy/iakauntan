@@ -3764,6 +3764,24 @@ message. Read those rather than the diffs.
    `docs/push-notifications.md`. `google-services.json` cannot live in
    this repository.
 
+   **The Android app half is now built** — `Push.kt`, `PushService.kt`
+   and the Android branch of `push_native.dart`. What is missing is
+   purely the Firebase project, and it is TWO files from the same
+   console that have to be set together: the service account JSON into
+   Supabase as `FCM_SERVICE_ACCOUNT`, and `google-services.json` into
+   GitHub Actions as `GOOGLE_SERVICES_JSON`. Either one alone is a
+   half-built system that reports success: the server holds a key for
+   an app that registers nothing, or the app registers a handset the
+   server reports as `skipped`.
+
+   The Gradle plugin that reads `google-services.json` is applied
+   **only when the file is there**, so every build without it still
+   compiles the whole Firebase client and reports push as
+   `notConfigured` at run time. Which also means the first build that
+   ever applies that plugin is a release build — see the note in
+   `docs/push-notifications.md` if it refuses the AGP version this
+   project pins.
+
    **`APNS_PRODUCTION` must now be `true`**, and that is a change of
    answer, not a restatement. It has to agree with the build's
    `aps-environment`, and the build that exists is a TestFlight one —

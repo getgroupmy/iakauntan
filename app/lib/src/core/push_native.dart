@@ -1,17 +1,25 @@
 /// Push on everything that is not a browser.
 ///
-/// Which today means iOS, straight to Apple, and nothing else.
+/// Which means iOS straight to Apple, and Android through Firebase.
 ///
-/// ## Why iOS is here and Android is not
+/// ## Two platforms, two shapes of answer
 ///
 /// An iPhone can be reached with an Apple `.p8` and no third party —
 /// `supabase/functions/_shared/apns.ts` is the sender and `0657` is the
-/// register. Android has no equivalent: Firebase is Google's transport
-/// all the way down, it needs a `google-services.json` that cannot live
-/// in a public repository, and the plugin that reads it pulls the whole
-/// Firebase SDK into the build. So Android answers `unsupported` here
-/// rather than pretending, exactly as this file did for both platforms
-/// before iOS was built.
+/// register. Android has no equivalent: FCM is Google's transport all
+/// the way down, there is no protocol underneath it to speak, and a
+/// stock handset will not wake an app for anybody else. So Android is
+/// the one platform where a project has to exist somewhere else before
+/// a notification can arrive — and where a build can therefore be
+/// *unconfigured* rather than merely unsupported.
+///
+/// That is the difference this file carries. iOS answers with up to two
+/// tokens and a permission state; Android answers with at most one
+/// token, and a fourth possible state — no Firebase project in this
+/// build at all, which is every build made from this repository until
+/// somebody puts `google-services.json` next to the Gradle file. The
+/// native sides are `app/ios/Runner/AppDelegate.swift` and
+/// `app/android/.../Push.kt`, both on the one channel below.
 ///
 /// ## Two tokens, and why the app asks for both
 ///
@@ -48,12 +56,23 @@
 /// without reporting it to CallKit — and `callkit.dart` is what the
 /// app does with the answer.
 ///
+/// ## One token on Android, and no pairing problem
+///
+/// FCM issues one registration token per installation, so Android has
+/// nothing to pair and writes no `device_id`. The pairing in `0658`
+/// exists because an iPhone holds two tokens from two Apple services
+/// and a handset being rung through CallKit must not also be sent a
+/// banner about that call; `appleDelivery` is the only thing that reads
+/// it, and it is Apple-only by name as well as by reason.
+///
 /// ## `currentSurface`, not `Platform.isIOS`
 ///
 /// Both answer the same question on a handset, and `surface.dart` is
 /// where this codebase answers it once. Only that one can be overridden
 /// in a test, which is the difference between this file being covered
-/// and being hoped about.
+/// and being hoped about — and on Android it is the difference between
+/// the tests below existing and not, because there is no other way to
+/// reach this half from a VM.
 library;
 
 import 'package:flutter/services.dart'
@@ -73,7 +92,11 @@ import 'surface.dart';
 const pushChannel = MethodChannel('my.iakauntan.iakauntan/push');
 
 /// Whether this build has a native half at all.
-bool get _capable => currentSurface == Surface.ios;
+bool get _capable =>
+    currentSurface == Surface.ios || currentSurface == Surface.android;
+
+/// Whether the answers coming back are Android's shape.
+bool get _android => currentSurface == Surface.android;
 
 /// What iOS says about notification permission, mapped to a status.
 ///
@@ -90,6 +113,50 @@ PushStatus statusFor(String? authorization, {required bool haveToken}) {
         // dropped, and somebody looking at "on" with no token is
         // looking at a lie. The same reasoning as the web half.
         : PushStatus.askable,
+    _ => PushStatus.askable,
+  };
+}
+
+/// What Android says, mapped to a status.
+///
+/// Four answers rather than iOS's three, and the extra one is the whole
+/// reason this is a separate function:
+///
+///   * `unconfigured` — this build has no Firebase project, which is
+///     every build made from this repository. Reported as
+///     [PushStatus.notConfigured], which is what the settings card
+///     turns into a sentence instead of a switch. The web half answers
+///     the same thing when the VAPID pair is unset, for the same
+///     reason: a registration nothing can send to is worse than none,
+///     because the person believes they will be notified.
+///
+///   * `notDetermined` — nobody has been asked. Android 13 and up.
+///
+///   * `denied` — refused, or switched off in Settings afterwards, or
+///     switched off on a version of Android that never asked. The app
+///     cannot ask again in any of those cases, which is why they are
+///     one answer rather than three.
+///
+///   * `authorized` — and then it depends on the token, exactly as on
+///     iOS. A `failure` key means FCM could not issue one and never
+///     will: a handset with no Google Play Services, which is a real
+///     thing to be. Nothing can reach it, and `unsupported` is what
+///     this app says about a device that cannot rather than a person
+///     who declined.
+PushStatus androidStatusFor(Map<String, dynamic> answer) {
+  final token = (answer['token'] as String?) ?? '';
+  return switch (answer['authorization'] as String?) {
+    'unconfigured' => PushStatus.notConfigured,
+    'denied' => PushStatus.denied,
+    'authorized' => switch (token.isNotEmpty) {
+      true => PushStatus.on,
+      // A permission that outlives the registration, same as iOS —
+      // unless FCM has said why, in which case it is not coming back.
+      false =>
+        answer['failure'] == null
+            ? PushStatus.askable
+            : PushStatus.unsupported,
+    },
     _ => PushStatus.askable,
   };
 }
@@ -125,13 +192,19 @@ Future<Map<String, dynamic>?> _ask(
 /// Kept in the signature because `push.dart` exports one of these two
 /// files and the caller cannot know which. What decides whether an
 /// iPhone can be reached is four secrets on the server, which the app
-/// cannot see — so this never answers `notConfigured`; an unreachable
-/// handset shows up as a notification that never arrives, and
-/// `send-push` reports it in its own response.
+/// cannot see — so on iOS this never answers `notConfigured`; an
+/// unreachable handset shows up as a notification that never arrives,
+/// and `send-push` reports it in its own response.
+///
+/// Android is the other way round, and that is not an inconsistency.
+/// The Firebase configuration is in the APK rather than on the server,
+/// so the app can see for itself that there is none — and says so,
+/// instead of offering a switch that registers nothing.
 Future<PushStatus> pushStatus(String vapidPublicKey) async {
   if (!_capable) return PushStatus.unsupported;
   final answer = await _ask('status');
   if (answer == null) return PushStatus.unsupported;
+  if (_android) return androidStatusFor(answer);
   return statusFor(
     answer['authorization'] as String?,
     haveToken: (answer['alert'] as String?)?.isNotEmpty ?? false,
@@ -156,6 +229,7 @@ Future<List<PushRegistration>> subscribeToPush(
   if (!_capable) return const [];
   final answer = await _ask('register', {'ask': ask});
   if (answer == null) return const [];
+  if (_android) return _androidRegistrations(answer);
 
   final authorization = answer['authorization'] as String?;
   if (authorization != 'authorized' && authorization != 'provisional') {
@@ -180,13 +254,47 @@ Future<List<PushRegistration>> subscribeToPush(
   ];
 }
 
+/// The one FCM registration this installation has, if it has one.
+///
+/// A list of at most one, so that the caller does not have to know
+/// which platform it is on. The shape is iOS's because iOS is the
+/// platform that needed a shape.
+List<PushRegistration> _androidRegistrations(Map<String, dynamic> answer) {
+  // Not `authorized` is every reason there is to register nothing: no
+  // Firebase project, a refusal, or a prompt nobody has seen yet. The
+  // second of those is the one worth naming — FCM issues a token
+  // without any permission, exactly as PushKit does, so this is a
+  // decision rather than something the platform enforces. Somebody who
+  // says no to being notified has not said yes to being notified
+  // quietly, and `Push.kt` does not even fetch the token.
+  if (answer['authorization'] != 'authorized') return const [];
+
+  final token = (answer['token'] as String?) ?? '';
+  if (token.isEmpty) return const [];
+
+  return [
+    PushRegistration(
+      token: token,
+      platform: 'android',
+      transport: 'fcm',
+      // Nothing to pair: one installation, one token. See the note at
+      // the top of this file.
+      deviceId: null,
+      label: answer['label'] as String?,
+    ),
+  ];
+}
+
 /// Every token this handset currently holds, so all of them can be
 /// taken off the register together.
+///
+/// Two on an iPhone and one on an Android, which is why this is a list
+/// and not a token.
 Future<List<String>> currentPushTokens() async {
   final answer = await _ask('tokens');
   if (answer == null) return const [];
   return [
-    for (final key in const ['alert', 'voip'])
+    for (final key in _android ? const ['token'] : const ['alert', 'voip'])
       if (answer[key] is String && (answer[key] as String).isNotEmpty)
         answer[key] as String,
   ];

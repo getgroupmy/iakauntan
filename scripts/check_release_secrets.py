@@ -42,6 +42,10 @@ OPTIONAL = {
     "WEB_PUSH_PUBLIC_KEY":
         "the build passes it as a dart-define and the app degrades to "
         "no web push without it, so a release should not stop for it",
+    "GOOGLE_SERVICES_JSON":
+        "the Android build writes it beside the Gradle file when it is "
+        "there, and reports push as not configured when it is not -- a "
+        "release must not stop because notifications are unfinished",
 }
 
 
