@@ -35,7 +35,7 @@ The harness mutates **one file**. Logic that lives in `models.dart` —
 `LeaveBalance.available`, `Todo.isOverdue`, `EinvoiceDocument.canCancel`
 — needs its own run against that file.
 
-## The eleven
+## The twelve
 
 ### 1. `find.byType` matches the exact runtime type
 
@@ -197,6 +197,43 @@ real phone *today*; it would not with two five-figure totals and a large
 system font scale. Treat an overflow found this way as a latent
 fragility to make unbreakable — `Flexible` costs nothing — rather than
 as a bug already in front of a customer.
+
+### 12. A fixture that collapses the thing under test into one row
+
+The twelfth, and the first that is about SQL rather than Dart — kept
+here because the shape is the same and this is where people look.
+
+`0727` closed one place where a posting function, handed no bank
+account, credited account **1120** instead. 1120 is "Bank Accounts":
+postable, but the HEADING that `upsert_bank_account` hangs the real
+accounts beneath in the range 1121-1199. `0728` then found the same
+fallback in five more functions.
+
+With 382 assertion files running in CI, not one had noticed — because
+every fixture that needed a bank account wrote
+
+    insert into public.bank_accounts (org_id, account_id, ...)
+    values (v_org, (select id from public.accounts
+                     where org_id = v_org and code = '1120'), ...)
+
+hanging it on 1120 ITSELF. So "the function used the account it was
+handed" and "the function fell through to the heading" were the same
+row, and nothing could tell them apart. `deposits.sql` even asserted
+*"the money leaves the bank"* by checking the credit on
+`code = '1120'`, which was true either way.
+
+The lesson generalises past bank accounts: **a fixture that makes the
+correct value and the fallback value identical cannot test which one
+was used.** It is the SQL twin of entry 8 — a `?? default` in a fixture
+helper undoing the null case — and of entry 11, where every provider
+answering `const []` made fifty dialogs indistinguishable.
+
+The remedy is a fixture that distinguishes them. `_helpers.sql` now has
+`pg_temp.test_bank_account(org)`, which does what the real path does —
+the next free code in 1121-1199, a child of 1100, the bank account on
+that — and `pg_temp.a_bank_account(org)`, which reuses the one already
+there. Use them, and then an assertion can say WHICH account was
+debited and mean it.
 
 ## Before you write the test, read the SQL it has to agree with
 

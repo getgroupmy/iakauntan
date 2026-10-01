@@ -24,9 +24,12 @@ Three things to know before you touch the code:
 - **A widget test that passes has not yet proved anything.** Break the screen
   on purpose and watch the test fail: `python3 scripts/mutate.py <source>
   <test> <mutants.py>`, always with a no-op control, because a harness that
-  errors on every run reports a clean sweep. `docs/widget-tests.md` lists eleven
+  errors on every run reports a clean sweep. `docs/widget-tests.md` lists twelve
   ways a green test covers a broken screen — every one of them happened here,
-  and three of them hid a real defect.
+  and four of them hid a real defect. The twelfth is about SQL, not widgets: a
+  fixture that makes the right value and the fallback value the same row cannot
+  test which one was used, and that is how a 1120 fallback survived in six
+  posting functions with 382 assertion files running.
 
 ## After every push: watch CI to green
 
@@ -47,6 +50,14 @@ runs the same list against a throwaway Postgres on this machine in about two
 minutes — use it to find a broken assertion before pushing, not to skip the
 push. It stubs Supabase's `auth` and `storage` schemas, and its own header says
 where the stubs stop being the real thing.
+
+**It needs no Docker, and a session has already concluded otherwise and gone
+without it.** The cluster is built with `initdb` directly; what it wants is
+`postgresql-16`, `pg_cron` and root, which the cloud container has. So "there
+is no Docker here" is not a reason to push SQL unrun — check for
+`/usr/lib/postgresql/16/bin` before believing it. Put `flutter` on `PATH`
+(`/opt/flutter-3.47.4/bin`) or `check_xlsx.py` fails for want of it, in a
+`subprocess` traceback that names nothing about Flutter.
 
 The edge functions have the same arrangement.
 `supabase/functions/_local_check/check_locally.sh` type-checks all of them here,

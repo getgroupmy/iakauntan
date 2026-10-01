@@ -33,7 +33,10 @@ it has to be committed.
 
 Not a hypothetical, and not one slip. In a single session on
 2026-09-28, five separate entries in this file described work as
-outstanding that had already been done:
+outstanding that had already been done, and the 1 October session
+found two more — including one that had cost an earlier session in
+this same container the use of every SQL assertion it could have run
+locally:
 
 | This file said | Actually |
 | --- | --- |
@@ -42,6 +45,8 @@ outstanding that had already been done:
 | The client-side general journal screen is not built | `legal/client_transfer_screen.dart`, routed |
 | Nothing reads `OcrExtraction.fields` | `scan_field_map.dart` does |
 | Statement lines are not turned into `bank_transactions` | `importBankTransactions`, wired |
+| No `bank_transactions` row ever reaches `gl_lines` | `postBankTransaction` and the "Post this line" dialog do exactly that |
+| CI is the only place the SQL assertions run | `supabase/tests/run_locally.sh` runs all 382 of them in this container; it uses `initdb`, not Docker |
 
 Each cost a round of reading to disprove, and one of them — the matter
 picker — nearly cost building something twice.
@@ -112,17 +117,182 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `4a04963f`, the ninth commit of this session. What each one did is the table under **What this session shipped** below |
-| CI | **green through run 2154 (`4a04963f`)** — every one of this session's nine commits green, four of them on the first attempt after the pull fix. Confirmed by reading the runs rather than inferring them; 2150 is the one that proved the authenticated docker pull works, see below. 2146 (`0ba8b12c`) applied `0721` live and deployed `platform-users`; both were verified against production — the two functions exist and the edge function is ACTIVE at `verify_jwt: true`. Do NOT take a green run as proof a migration landed: the apply job SKIPS when a newer commit is at the branch tip, which nearly had a `0719` reported live in this session when it was not. Check the database. | 2103 applied `0704` live and deployed. Eight runs went red in this stretch and only ONE was the diff: 2084 (Android JDK quota), 2085 (Deno dependency age), 2090 (**mine** — three imports left behind by a move), and 2097–2100 (`ghcr.io` refusing anonymous pulls — the backoff was widened first and run 2100 proved that was not it, so the images now come from `public.ecr.aws`). All written up below |
-| Migrations | `0721` is the highest, and `0716`–`0721` are ALL applied live and verified against production — `platform_users` and `platform_update_user` were read back out of the hosted database, not inferred from a green run. CI applies on green — see below |
+| Head at time of writing | `731e5b83`, the ninth commit of the 1 October session. What each one did is the table under **The 1 October session** below |
+| CI | **green through run 2187 (`78ae9817`)**; run 2188 (`731e5b83`) was in flight when this was written and is the one to check first. Read the runs rather than inferring them, and mind two traps that have each cost a round: `list_workflow_runs` SERVES STALE PAGES — it has answered with a run six days old — so filter by `status: in_progress`/`completed` or use `actions_get get_workflow_run` on a known id; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in its own commit; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
+| Migrations | **`0728` is the highest.** `0727` is applied live and verified against production — the null-bank refusal is in the live `post_expense` and the `code = '1120'` fallback is gone, read back out of the hosted database rather than inferred from a green run. `0728` goes live on run 2188 and wants the same check: `select 1 from supabase_migrations.schema_migrations where version like '0728%'`, then `pg_get_functiondef` on `settle_deposit`, `create_deposit`, `clear_pdc` and `post_purchase_payment` for a surviving `code = '1120'` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
-| Mobile | **iOS build 5 in TestFlight, Android version codes 5 and 6 on Play internal testing.** Both from this repository's own workflows |
-| Gates | 380 SQL assertion files, **53 Python gates (+17 gate self-tests)**, **6,439 Flutter tests**, 39 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test |
-| API description | 807 functions, 367 tables, version `0721` |
+| Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
+| Gates | **382 SQL assertion files, 58 Python gates (+24 gate self-tests), 6,590 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds now runs IN THIS CONTAINER** — see the next section, which corrects what this file and `CLAUDE.md` used to say |
+| API description | 808 functions, 367 tables, version `0728`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
-## What this session shipped
+## What is waiting on the user, as of 1 October
+
+Nothing on this list can be moved from inside a session. They are here
+so the next one does not spend a round rediscovering them — and does not
+chase them unprompted either.
+
+1. **Prove Android push on a handset.** Install the `android-release`
+   artifact (version code 14) → Settings → Notifications → **Turn on**.
+   Then `device_tokens` should hold an `android`/`fcm` row for that
+   account, and one message with the app CLOSED is what proves
+   `FCM_SERVICE_ACCOUNT`. Until that happens the Android half is built
+   and untested, and two of its behaviours are written from
+   documentation rather than observation: `areNotificationsEnabled`
+   after a refusal, and data-only call delivery to a swiped-away app.
+2. **Correct EXP-2026-00001.** The Reverse action is live on the expense
+   dialog (`78ae9817`). It needs one decision first: the expense records
+   payment mode **01 Cash**, and the only bank account on file is MBB
+   `1120-M001` with a balance of 0.00, so re-entering against MBB would
+   assert the money left Maybank. A cash till can be registered as a
+   `bank_accounts` row of type `cash` instead. Also whether to re-attach
+   the receipt PDF: a reversal LEAVES THE ORIGINAL STANDING, attachment
+   and all.
+3. **Where card and e-wallet money lands**, which is what the receipts
+   half of the 1120 audit is waiting on — see below.
+4. **CP39, KWSP Form A and PERKESO Lampiran 1** need their published
+   layout specifications. Not more code.
+5. **What is missing from client trust monies in practice.**
+   `ClientMoneyScreen`, `/legal/receipts`, `/legal/payouts` and
+   `/legal/transfers` are all built; the question was asked rather than
+   the thing rebuilt, and it is still unanswered.
+6. **The seven-shot App Review recording** in
+   `docs/apple-voip-review.md`.
+
+And four things that are **known-unverified and must be described that
+way** rather than as working: the voice-note mime-type fix, the sideways
+incoming video, whether the `google-services` Gradle plugin actually
+applied (the build log does not show it; the release run printing
+`Firebase project: iakauntan-2026` is suggestive and not the same
+thing), and the two Android push behaviours in item 1.
+
+**Do not start task #11, the MIA headless scraper.**
+
+## The 1 October session
+
+Nine commits. Eight are green and the ninth was in flight when this was
+written.
+
+| Commit | Run | What |
+| --- | --- | --- |
+| `68cbe84c` | 2180 | **Android push over FCM**: `Push.kt`, `PushService.kt`, the method channel, the conditional google-services plugin, `push_native.dart` for Android, and `check_push_channels.py` comparing the channel ids the sender names against the ones the client creates |
+| `1eafa71b` | 2181 | An expense detail says which account the money left — the screenshot that started it showed nothing at all |
+| `597de7a1` | 2182 | The bank reconciliation's "Post this line" dialog shows both legs before posting, and offers the contact |
+| `7d57ca78` | 2183 | **`0727`**: an expense says where the money left, or it is not posted. RED — see below |
+| `d5a42e59` | 2184 | The guard found a fixture my grep did not. RED |
+| `7c558fc6` | 2185 | The door was already bolted: assert the lock that fires. RED |
+| `4685a9ef` | 2186 | A function comment is published, so it may not lose three refusals. `0727` live |
+| `78ae9817` | 2187 | Reverse an expense from the expense, and enter it again |
+| `731e5b83` | 2188 | **`0728`**: the rest of the money that went to the heading — the 1120 audit, four more functions, three forms |
+
+### THE LOCAL RUNNERS WORK IN THIS CONTAINER. USE THEM.
+
+This file and `CLAUDE.md` have both said, in effect, that CI is the only
+place the SQL assertions run, and an earlier session in this very
+container concluded there was no Docker and therefore no local database.
+**Half of that was right and the conclusion was wrong.** There is no
+usable Docker here, and `supabase/tests/run_locally.sh` does not need
+it: it builds its cluster with `initdb` directly, and this container has
+`postgresql-16` and `pg_cron` installed and runs as root, which is
+exactly what the script asks for.
+
+So the whole gate set runs here in about four minutes:
+
+    supabase/tests/run_locally.sh          # migrations, 382 files, every python gate
+    supabase/tests/run_locally.sh --keep f.sql   # one file, no rebuild
+
+It found, before any push, every one of the following: that `0728`
+applies at all; the three fixtures that posted a payment or a deposit
+with no bank account; that my first `settle_deposit` assertion was
+premised on something false; that `docs/api/` needed regenerating; and
+that three `date_trunc('year', current_date)` of mine had pushed
+`check_test_clock.py` past its pinned budget. Every one of those would
+otherwise have been a red run — and runs 2183, 2184 and 2185 of this
+same session were exactly that, three reds in a row for faults a local
+run would have caught in minutes.
+
+Two things to know when using it:
+
+- **Put `flutter` on `PATH` or `check_xlsx.py` fails for want of it**
+  (`export PATH=/opt/flutter-3.47.4/bin:$PATH`). The failure is a
+  `subprocess` traceback and names nothing about Flutter.
+- The DB url the guards want is
+  `postgresql://postgres@localhost/postgres?host=/var/tmp&port=5599`.
+
+It is still not Supabase and still not a reason to skip CI — its own
+header says where the `auth` and `storage` stubs stop being the real
+thing, and one of them is MORE permissive than CI. Believe the hosted
+run. But find the fault here first.
+
+### A green SQL assertion can be green for the wrong reason, and 380 were
+
+`0727` closed one 1120 fallback. `0728` found the same shape in five
+more functions, which raises the obvious question: how, with 380 files
+of assertions running in CI, had none of them noticed?
+
+Because **every fixture in `supabase/tests/` that needed a bank account
+hung it on account 1120 itself**:
+
+    insert into public.bank_accounts (org_id, account_id, ...)
+    values (v_org, (select id from public.accounts
+                     where org_id = v_org and code = '1120'), ...)
+
+1120 is "Bank Accounts" — postable, but the heading that
+`upsert_bank_account` puts the real accounts beneath in the range
+1121–1199. With the fixtures written that way, "the function used the
+account it was handed" and "the function fell through to the heading"
+are the SAME ROW, and no assertion can tell them apart. `deposits.sql`
+even asserted *"the money leaves the bank"* by checking the credit on
+`code = '1120'`, which was true either way.
+
+`_helpers.sql` now has `pg_temp.test_bank_account(org)`, which does what
+`0529` does — the next free code in 1121–1199, a child of 1100, the bank
+account on that — and `pg_temp.a_bank_account(org)`, which reuses the
+one already there. **Use them in new fixtures.** The 1121-1199 range is
+only 79 codes wide, so a helper called once per invoice wants the
+second one.
+
+This is the twelfth entry for the list in `docs/widget-tests.md` and the
+first that is about SQL rather than Dart.
+
+### What `0728` deliberately did NOT do, and the question it leaves
+
+`app.post_receipt_internal` still has the fallback, on purpose.
+
+**Eleven posted receipts in production have no bank account** — all
+created 1 October, all from the counter, across five demo companies —
+and **all thirteen `pos_tender_types` rows that exist have
+`bank_account_id` null**, CASH and CARD and EWALLET alike. So every
+counter sale in the product debits the 1120 heading today. Refusing
+there would stop the till rather than correct it.
+
+`0357` already met one corner of this and its header names the fallback
+as the mechanism.
+
+What is missing is a fact, not a refusal: **where each tender's money
+lands.** Cash belongs in a till account — `bank_accounts.account_type`
+has permitted `cash` and `ewallet` since `0003`, so a till is an
+ordinary bank account with a ledger account of its own. A card and an
+e-wallet are the real question: they settle into a bank account days
+later, net of a fee, which this schema does not model and which cannot
+be guessed from here. **That is a question for the user**, and it is the
+next piece of this work.
+
+`app.demo_legal_guaman` (`0549`) also still reaches for 1120. It is demo
+data rather than a rule, and it is reseeded rather than migrated, so it
+was seen and left.
+
+### The one inconsistency, and why it is right
+
+`post_expense` refuses a null bank account outright, which the user
+asked for in those words. The three deposit and cheque functions refuse
+it too. But a **forfeited** deposit still names no account, because no
+money moved — so `settle_deposit` refuses on `refund` only, and
+`deposits.sql` asserts both halves. A refusal with no paired success is
+satisfied by a function that refuses everything.
+
+## The 28 September session
 
 Nine commits, all green. The first two are the product work; the rest came
 out of watching CI and reading its logs, which is where most of the
@@ -2065,6 +2235,18 @@ ever reaches `gl_lines`, so there is no line whose `matter_id` a
 picker there would set. The matter arrives with the receipt or
 payment the line is matched to, which `0691`/`0692` put on the
 document.
+
+~~The paragraph above was true when it was written and is NOT true
+now.~~ `Repo.postBankTransaction` and the "Post this line" dialog
+(`reconciliation_screen.dart:384`) post a statement line STRAIGHT to an
+account, writing `gl_lines` from a `bank_transactions` row — and
+`0723` put a matter picker on that very dialog. So the reasoning for
+"there is nowhere on it to put a matter" has been overtaken, and the
+matter picker is there. Left in place rather than deleted because the
+argument it makes about MATCHED lines is still right: a line matched to
+a receipt takes its matter from the document, not from the line. This
+is the fifth entry caught by the rule at the top of this file; it cost
+one grep.
 
 The nearest real thing, if it is wanted, is the other direction:
 SHOW the matched document's matter on the line tile and in the
