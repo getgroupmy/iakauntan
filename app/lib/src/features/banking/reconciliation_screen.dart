@@ -12,6 +12,7 @@ import '../../core/widgets.dart';
 import 'book_balance.dart';
 import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
+import '../contacts/new_contact_dialog.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
 import '../shared/scan_runner.dart';
@@ -383,6 +384,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
   Future<void> _post(Map<String, dynamic> line) async {
     final List<Account> accounts;
     final List<Matter> matters;
+    List<Contact> contacts;
     try {
       accounts = await ref.read(accountsProvider.future);
       // AWAITED, not read. `ref.read(provider).valueOrNull` on a future
@@ -407,7 +409,42 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
           .showSnackBar(SnackBar(content: Text(errorText(e))));
       return;
     }
+
+    // Separately, and swallowed on purpose. Everybody, not the
+    // suppliers alone: a statement line is money out OR money in and
+    // one dialog serves both, so filtering to suppliers would hide
+    // every customer who has just paid.
+    //
+    // NOT in the try above, because the counterparty is the one thing
+    // on this dialog that is optional. A company with no contacts, or
+    // a contacts query that fails, must still be able to post a bank
+    // charge to an account — refusing to open the dialog over a picker
+    // nobody has to use would take away the whole feature to protect a
+    // nicety.
+    try {
+      contacts = await ref
+          .read(contactsProvider((type: 'all', search: '')).future);
+    } catch (_) {
+      contacts = const [];
+    }
     if (!mounted) return;
+
+    // The chart-of-accounts id of the bank being reconciled. Needed
+    // twice below: to name the other leg of the journal, and to keep
+    // that account out of the picker.
+    //
+    // `_bankAccountId` where the line does not carry its own, which is
+    // every payload an older server sends. The two are the same account
+    // in any case — this screen only ever lists the lines belonging to
+    // the account it is reconciling — and preferring the line's own is
+    // the narrower claim of the two.
+    final ofThisLine = line['bank_account_id']?.toString() ?? _bankAccountId;
+    final bankLedgerAccountId =
+        (ref.read(bankAccountsProvider).valueOrNull ?? const [])
+            .cast<Map<String, dynamic>>()
+            .where((b) => b['id'] == ofThisLine)
+            .map((b) => b['account_id']?.toString())
+            .firstOrNull;
 
     final chosen = await showDialog<_PostChoice>(
       context: context,
@@ -415,6 +452,8 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
         line: line,
         accounts: accounts,
         matters: matters,
+        contacts: contacts,
+        bankLedgerAccountId: bankLedgerAccountId,
       ),
     );
     if (chosen == null || !mounted) return;
@@ -426,6 +465,7 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
             transactionId: line['id'] as String,
             accountId: chosen.accountId,
             description: chosen.description,
+            contactId: chosen.contactId,
             matterId: chosen.matterId,
           ),
       successMessage: 'Posted',
@@ -852,10 +892,26 @@ class _LineTile extends StatelessWidget {
 
 /// What was chosen in [_PostLineDialog].
 class _PostChoice {
-  const _PostChoice({required this.accountId, this.description, this.matterId});
+  const _PostChoice({
+    required this.accountId,
+    this.description,
+    this.contactId,
+    this.matterId,
+  });
 
   final String accountId;
   final String? description;
+
+  /// Who the money went to or came from.
+  ///
+  /// `post_bank_transaction` has taken `p_contact_id` and written it on
+  /// the chosen leg since `0717`, and `postBankTransaction` has passed
+  /// it since the same day. Nothing ever filled it in: the dialog did
+  /// not ask, so every line posted from a bank statement went into the
+  /// ledger with an account and no counterparty — and a supplier ledger
+  /// built from those lines has a hole in it exactly the size of
+  /// everything that was never an invoice.
+  final String? contactId;
 
   /// `0723`. Null on every company that is not a law firm, and on a firm
   /// posting its own costs — rent, salaries, its own bank charges.
@@ -872,11 +928,31 @@ class _PostLineDialog extends StatefulWidget {
   const _PostLineDialog({
     required this.line,
     required this.accounts,
+    this.contacts = const [],
+    this.bankLedgerAccountId,
     this.matters = const [],
   });
 
   final Map<String, dynamic> line;
   final List<Account> accounts;
+
+  /// Everybody this company deals with, for the counterparty picker.
+  final List<Contact> contacts;
+
+  /// The chart-of-accounts id of the bank this statement belongs to.
+  ///
+  /// Not decoration: it is the OTHER half of every journal this dialog
+  /// writes, so the preview can name it — and it is the one account the
+  /// picker must not offer, because `post_bank_transaction` refuses a
+  /// posting whose two legs are the same account. Offering it is
+  /// offering a refusal, which is the rule the group headings are
+  /// already dropped under.
+  ///
+  /// Another bank account is a different matter and stays on the list:
+  /// money moved between two of the company's own accounts is an
+  /// ordinary transfer and the commonest thing on a statement after
+  /// payments.
+  final String? bankLedgerAccountId;
 
   /// The OPEN matters, or empty. `0723`, and empty is the ordinary case:
   /// every company that is not a law firm has none, which is what keeps
@@ -894,6 +970,7 @@ class _PostLineDialogState extends State<_PostLineDialog> {
     text: widget.line['description']?.toString() ?? '',
   );
   String? _accountId;
+  String? _contactId;
   String? _matterId;
 
   @override
@@ -928,13 +1005,45 @@ class _PostLineDialogState extends State<_PostLineDialog> {
             const SizedBox(height: 16),
             SearchablePicker<String>(
               // Headings dropped: a group account cannot receive a
-              // posting, so offering one is offering a refusal.
-              options: accountPickerOptions(widget.accounts),
+              // posting, so offering one is offering a refusal. The
+              // bank being reconciled is dropped for the same reason —
+              // see `postLineAccountOptions`.
+              options: postLineAccountOptions(
+                widget.accounts,
+                widget.bankLedgerAccountId,
+              ),
               value: _accountId,
               onChanged: (v) => setState(() => _accountId = v),
               label: 'Account',
               hint: 'Search by code or name',
             ),
+            // The journal, before it is written rather than after.
+            if (id != null) ...[
+              const SizedBox(height: 12),
+              _LegsPreview(
+                amount: amount,
+                bank: ledgerAccountLabel(
+                  widget.accounts,
+                  widget.bankLedgerAccountId,
+                ),
+                chosen: ledgerAccountLabel(widget.accounts, id),
+              ),
+            ],
+            if (widget.contacts.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SearchablePicker<String>(
+                key: const ValueKey('post-line-contact'),
+                options: contactPickerOptions(widget.contacts),
+                value: _contactId,
+                allowEmpty: true,
+                emptyLabel: 'Nobody in particular',
+                label: counterpartyLabel(amount),
+                helperText: 'Who this was with. Leave blank for a bank '
+                    'charge, interest, or a transfer between your own '
+                    'accounts.',
+                onChanged: (v) => setState(() => _contactId = v),
+              ),
+            ],
             if (widget.matters.isNotEmpty) ...[
               const SizedBox(height: 12),
               SearchablePicker<String>(
@@ -976,12 +1085,69 @@ class _PostLineDialogState extends State<_PostLineDialog> {
                       description: _description.text.trim().isEmpty
                           ? null
                           : _description.text.trim(),
+                      contactId: _contactId,
                       matterId: _matterId,
                     ),
                   ),
           child: const Text('Post'),
         ),
       ],
+    );
+  }
+}
+
+/// The two lines that will reach the ledger, drawn as a journal.
+///
+/// Deliberately in the shape an accountant reads — debit above credit,
+/// amounts right-aligned, both sides the same figure — rather than as
+/// two more rows of this form. What somebody is being asked to approve
+/// IS a journal, and showing it as one is the difference between
+/// checking it and trusting it.
+class _LegsPreview extends StatelessWidget {
+  const _LegsPreview({
+    required this.amount,
+    required this.bank,
+    required this.chosen,
+  });
+
+  final double amount;
+  final String bank;
+  final String chosen;
+
+  @override
+  Widget build(BuildContext context) {
+    final legs = postingLegs(amount: amount, bank: bank, chosen: chosen);
+    // The movement, never the sign. `-10.00` on the credit line of a
+    // journal is not a thing: a journal has two positive figures and
+    // the sides carry the direction.
+    final money = Fmt.money(amount.abs());
+    final small = Theme.of(context).textTheme.bodySmall;
+
+    Widget leg(String side, String account) => Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(width: 28, child: Text(side, style: small)),
+            Expanded(child: Text(account, style: small)),
+            const SizedBox(width: 8),
+            Text(money, style: small),
+          ]),
+        );
+
+    return Container(
+      key: const ValueKey('post-line-legs'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(Space.sm),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          leg('Dr', legs.debit),
+          leg('Cr', legs.credit),
+        ],
+      ),
     );
   }
 }
@@ -995,6 +1161,65 @@ class _PostLineDialogState extends State<_PostLineDialog> {
 String postingSideNote(double amount) => amount < 0
     ? 'Money out. The account you choose will be debited.'
     : 'Money in. The account you choose will be credited.';
+
+/// What to call the other party, on a line going that way.
+///
+/// One picker, two words, because a bank statement is both directions
+/// and a dialog that said "Supplier" would be wrong on every line where
+/// somebody paid the company.
+String counterpartyLabel(double amount) =>
+    amount < 0 ? 'Paid to' : 'Received from';
+
+/// The two legs this posting will write, named.
+///
+/// The posting has always been a double entry — `post_bank_transaction`
+/// writes the bank's leg and the chosen account's leg in one
+/// `create_gl_entry_internal` call, and has since `0717`. What was
+/// missing was anywhere to SEE it: the dialog asked for one account and
+/// said one sentence about which way round it went, so the thing being
+/// agreed to was a sentence rather than a journal. Somebody checking
+/// their own bookkeeping had to post it and then go and look.
+///
+/// The sign is the whole rule, exactly as in [postingSideNote]:
+/// `bank_transactions.amount` is a GL-signed movement on the bank's own
+/// account, so money out debits whatever was chosen and credits the
+/// bank, and money in does the reverse.
+({String debit, String credit}) postingLegs({
+  required double amount,
+  required String bank,
+  required String chosen,
+}) => amount < 0
+    ? (debit: chosen, credit: bank)
+    : (debit: bank, credit: chosen);
+
+/// The chart's label for an account, or a sentence saying it is unknown.
+///
+/// The fallback is not cosmetic. The bank's own ledger account is read
+/// off `bank_accounts.account_id`, and a bank account set up before
+/// `0160` can have none — so a preview that assumed one would print a
+/// blank where the most important half of the journal goes.
+String ledgerAccountLabel(List<Account> accounts, String? id) {
+  for (final a in accounts) {
+    if (a.id == id) return '${a.code} — ${a.name}';
+  }
+  return 'this bank account';
+}
+
+/// The accounts a statement line may be posted to.
+///
+/// Everything postable except the bank being reconciled. Both sides of
+/// a posting being one account records no movement at all, and
+/// `post_bank_transaction` refuses it in those words — so leaving it on
+/// the list is offering a choice the server will always reject, which
+/// is how a bank account comes to be sitting in that picker looking
+/// like an answer.
+List<PickerOption<String>> postLineAccountOptions(
+  List<Account> accounts,
+  String? bankLedgerAccountId,
+) => accountPickerOptions([
+  for (final a in accounts)
+    if (bankLedgerAccountId == null || a.id != bankLedgerAccountId) a,
+]);
 
 class _PasteDialog extends ConsumerStatefulWidget {
   const _PasteDialog({this.intoAccountNumber});

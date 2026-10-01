@@ -57,7 +57,17 @@ void main() {
   };
 
   const oneBank = [
-    {'id': 'b1', 'name': 'Maybank Current', 'account_no': '5140 1234'},
+    // `account_id` is the bank's own line in the chart of accounts, and
+    // the posting dialog needs it twice: to name the other leg of the
+    // journal it is about to write, and to keep that account out of the
+    // picker — a posting whose two legs are one account is refused by
+    // `post_bank_transaction` and records no movement anyway.
+    {
+      'id': 'b1',
+      'name': 'Maybank Current',
+      'account_no': '5140 1234',
+      'account_id': 'a-bank',
+    },
   ];
 
   // Enough of a chart of accounts for the posting dialog to offer
@@ -71,6 +81,18 @@ void main() {
         accountType: 'expense', accountSubtype: 'operating_expense'),
     Account(id: 'a-sales', code: '4100', name: 'Sales',
         accountType: 'revenue', accountSubtype: 'sales'),
+    // The bank being reconciled, which IS in the chart and must not be
+    // in the picker.
+    Account(id: 'a-bank', code: '1120-1000', name: 'Maybank Current',
+        accountType: 'asset', accountSubtype: 'bank'),
+  ];
+
+  /// Somebody to have been paid. Empty by default, like the matters:
+  /// the counterparty picker is off the dialog on a company with no
+  /// contacts rather than being an empty box.
+  final someContacts = [
+    Contact(id: 'c-1', code: 'S-001', name: 'Lalamove Malaysia',
+        contactType: 'supplier'),
   ];
 
   /// A firm's open files. Empty by default, because that is what every
@@ -91,6 +113,7 @@ void main() {
     String? openAccountId,
     bool openImport = false,
     List<Matter> matters = const [],
+    List<Contact> contacts = const [],
   }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(repo ?? _FakeRepo(st)),
@@ -99,6 +122,8 @@ void main() {
       memberRoleProvider.overrideWith((ref) async => role),
       mattersProvider((status: 'open', search: ''))
           .overrideWith((ref) async => matters),
+      contactsProvider((type: 'all', search: ''))
+          .overrideWith((ref) async => contacts),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -119,6 +144,7 @@ void main() {
     String? openAccountId,
     bool openImport = false,
     List<Matter> matters = const [],
+    List<Contact> contacts = const [],
   }) async {
     if (width != null) {
       // `tester.view.physicalSize`, not `setSurfaceSize`: the latter
@@ -136,6 +162,7 @@ void main() {
       openAccountId: openAccountId,
       openImport: openImport,
       matters: matters,
+      contacts: contacts,
     ));
     await tester.pumpAndSettle();
   }
@@ -323,6 +350,9 @@ void main() {
         'accountId': 'a-rent',
         // The line's own wording, carried through untouched.
         'description': 'FPX PAYMENT',
+        // No counterparty, because this company has nobody on file and
+        // the picker is therefore not on the dialog at all.
+        'contactId': null,
         // No matter, because this company has none. `0723`.
         'matterId': null,
       });
@@ -434,6 +464,172 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.posted?['matterId'], isNull);
+    });
+
+    testWidgets('the journal is shown before it is agreed to', (tester) async {
+      // The complaint this came from, looking at this dialog: "why
+      // there is no double entry". There always was one — the server
+      // writes both legs — but the dialog showed neither, so what
+      // somebody approved was a sentence about which way round it would
+      // go rather than the posting itself.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      // Nothing chosen, nothing to preview: half a journal is not a
+      // journal, and drawing one leg would be worse than drawing none.
+      expect(find.byKey(const ValueKey('post-line-legs')), findsNothing);
+
+      final accountPicker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(SearchablePicker<String>),
+      ).first;
+      await tester.tap(find.descendant(
+        of: accountPicker,
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('6200 — Rental').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final legs = find.byKey(const ValueKey('post-line-legs'));
+      expect(legs, findsOneWidget);
+      expect(find.descendant(of: legs, matching: find.text('Dr')),
+          findsOneWidget);
+      expect(find.descendant(of: legs, matching: find.text('Cr')),
+          findsOneWidget);
+      // BOTH accounts by name. The bank is the half that was invisible,
+      // and it is the half somebody is checking.
+      expect(
+        find.descendant(
+            of: legs, matching: find.text('6200 — Rental')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+            of: legs, matching: find.text('1120-1000 — Maybank Current')),
+        findsOneWidget,
+      );
+      // The movement, not the sign: a journal has two positive figures
+      // and the sides carry the direction. The line is RM -10,000.
+      expect(find.descendant(of: legs, matching: find.text('RM 10,000.00')),
+          findsNWidgets(2));
+    });
+
+    testWidgets('the bank being reconciled is not in the picker',
+        (tester) async {
+      // It was, and `post_bank_transaction` refuses it: "Both sides of
+      // that posting would be the same account". So it sat in the list
+      // looking like an answer and could only ever produce an error.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      final accountPicker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(SearchablePicker<String>),
+      ).first;
+      await tester.tap(find.descendant(
+        of: accountPicker,
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('1120-1000 — Maybank Current'), findsNothing);
+      // And the list is still a list, so this is not passing because
+      // the picker failed to open.
+      expect(find.text('6200 — Rental'), findsWidgets);
+    });
+
+    testWidgets('who it was with reaches the posting', (tester) async {
+      // `post_bank_transaction` has written `contact_id` on the chosen
+      // leg since `0717` and `postBankTransaction` has passed one since
+      // the same day. Nothing ever filled it in, so every line posted
+      // from a statement went into the ledger with no counterparty —
+      // and a supplier ledger built from those lines has a hole in it
+      // the size of everything that was never an invoice.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo, contacts: someContacts);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      // The line is money out, so the question is who was PAID.
+      expect(find.text('Paid to'), findsOneWidget);
+      expect(find.text('Received from'), findsNothing);
+
+      final accountPicker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(SearchablePicker<String>),
+      ).first;
+      await tester.tap(find.descendant(
+        of: accountPicker,
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('6200 — Rental').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final contactPicker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byKey(const ValueKey('post-line-contact')),
+      );
+      await tester.tap(find.descendant(
+        of: contactPicker,
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Lalamove Malaysia').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Post'));
+      await tester.pumpAndSettle();
+
+      expect(repo.posted?['contactId'], 'c-1');
+      expect(repo.posted?['accountId'], 'a-rent');
+    });
+
+    testWidgets('and a company with nobody on file is not asked',
+        (tester) async {
+      // The same rule the matter picker follows: a dropdown with
+      // nothing in it teaches people to ignore dropdowns.
+      final repo = _FakeRepo(status())..lines = oneLine;
+      await show(tester, status(), repo: repo);
+
+      await tester.ensureVisible(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.post_add));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('post-line-contact')), findsNothing);
+      // And the dialog is still the dialog, which is the point: the
+      // picker is absent because there is nobody to pick, not because
+      // anything failed to open.
+      expect(find.text('Post this line'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(SearchablePicker<String>),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('and backing out of it posts nothing', (tester) async {
@@ -834,7 +1030,107 @@ void _theEmptyLedger() {
       expect(postingSideNote(-400), contains('Money out'));
     });
   });
+
+  // -------------------------------------------------------------------
+  // Both legs, and who they were with
+  // -------------------------------------------------------------------
+  //
+  // Asked, looking at the dialog: "why there is no double entry where
+  // it's paid to or received from which account". There always WAS one
+  // — `post_bank_transaction` writes the bank's leg and the chosen
+  // account's leg in one journal, and has since `0717`. Three things
+  // made it look otherwise, and all three were real:
+  //
+  //   * the dialog showed neither leg, only a sentence about which way
+  //     round it would go, so what somebody approved was a sentence;
+  //   * the picker offered the bank being reconciled, which is a
+  //     posting the server refuses outright — the screenshot that
+  //     prompted this had `1120-1000 Malayan Banking Berhad` sitting in
+  //     that box looking like an answer;
+  //   * there was nowhere to say WHO, although the function and the
+  //     repository had both taken a contact since the day they were
+  //     written. Every line posted from a statement went in with no
+  //     counterparty at all.
+  group('the journal a statement line becomes', () {
+    const bank = '1120-1000 — Malayan Banking Berhad';
+    const expense = '6250 — Transport and Travelling';
+
+    test('money out debits the account chosen and credits the bank', () {
+      final legs = postingLegs(amount: -10, bank: bank, chosen: expense);
+
+      expect(legs.debit, expense);
+      expect(legs.credit, bank);
+    });
+
+    test('and money in is the other way round', () {
+      final legs = postingLegs(amount: 500, bank: bank, chosen: expense);
+
+      expect(legs.debit, bank);
+      expect(legs.credit, expense);
+    });
+
+    test('the bank being reconciled is not offered as the other side', () {
+      // `post_bank_transaction`: "Both sides of that posting would be
+      // the same account, which would record no movement at all."
+      // Offering it is offering a refusal.
+      final accounts = [
+        _account('a-bank', '1120-1000', 'Malayan Banking Berhad'),
+        _account('a-other', '1120-2000', 'CIMB Current'),
+        _account('a-exp', '6250', 'Transport and Travelling'),
+      ];
+
+      final offered = postLineAccountOptions(accounts, 'a-bank')
+          .map((o) => o.value)
+          .toList();
+
+      expect(offered, isNot(contains('a-bank')));
+      // The OTHER bank account stays. Money moved between two of the
+      // company's own accounts is an ordinary transfer, and it is the
+      // commonest thing on a statement after payments — dropping every
+      // bank account would take that away to fix the one that was
+      // broken.
+      expect(offered, contains('a-other'));
+      expect(offered, contains('a-exp'));
+    });
+
+    test('and nothing is dropped when the bank has no ledger account', () {
+      // A bank account set up before `0160` can have none. A picker
+      // that silently lost a row on that company would be a worse bug
+      // than the one this fixes.
+      final accounts = [
+        _account('a-bank', '1120-1000', 'Malayan Banking Berhad'),
+        _account('a-exp', '6250', 'Transport and Travelling'),
+      ];
+
+      expect(postLineAccountOptions(accounts, null).length, 2);
+    });
+
+    test('an unknown account is named as such, never as a blank', () {
+      expect(ledgerAccountLabel(const [], 'missing'), 'this bank account');
+      expect(
+        ledgerAccountLabel(
+            [_account('a', '6250', 'Transport and Travelling')], 'a'),
+        '6250 — Transport and Travelling',
+      );
+    });
+
+    test('the counterparty is asked for in the direction of the money', () {
+      // One picker, two words. A dialog that said "Supplier" would be
+      // wrong on every line where somebody paid the company.
+      expect(counterpartyLabel(-10), 'Paid to');
+      expect(counterpartyLabel(500), 'Received from');
+    });
+  });
 }
+
+Account _account(String id, String code, String name) => Account(
+      id: id,
+      code: code,
+      name: name,
+      accountType: 'expense',
+      accountSubtype: 'operating_expense',
+      isGroup: false,
+    );
 
 class _FakeRepo implements Repo {
   _FakeRepo(this.status);
@@ -884,6 +1180,7 @@ class _FakeRepo implements Repo {
       'transactionId': transactionId,
       'accountId': accountId,
       'description': description,
+      'contactId': contactId,
       'matterId': matterId,
     };
     return 'entry-1';
