@@ -16,6 +16,7 @@ import 'package:mediasfu_mediasoup_client/src/handlers/handler_interface.dart'
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/error_text.dart';
+import 'call_rtp.dart';
 
 /// Where the media server is, and what this person may do there.
 ///
@@ -84,6 +85,18 @@ class CallPeer {
   /// exactly like somebody who had stopped talking.
   bool micMuted = false;
   bool cameraOff = false;
+
+  /// Whether this camera's stream carries its own rotation.
+  ///
+  /// `urn:3gpp:video-orientation` on the consumer the server built. When
+  /// it is there the pixels arrive the right way up and the screen draws
+  /// them as they are; when it is not, the screen turns them a quarter
+  /// clockwise, which is what a phone's un-rotated sensor frames need.
+  ///
+  /// FALSE until a video consumer says otherwise, so a call that has
+  /// only just connected behaves the way every call behaved before
+  /// `call_rtp.dart` existed rather than guessing the better case.
+  bool cameraCarriesRotation = false;
 
   bool get hasVideo => camera != null && !cameraOff;
   bool get isSharing => screen != null;
@@ -263,8 +276,14 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
       _send = await _makeTransport(producing: true);
       _recv = await _makeTransport(producing: false);
 
+      // `rtpCapabilitiesToMap`, not `device.rtpCapabilities.toMap()`.
+      // The package's own `toMap` serialises the codecs and drops every
+      // header extension, which is what made every incoming camera
+      // sideways -- see `call_rtp.dart` for the whole of it. This is
+      // the one message where that set is sent, so this one line is
+      // the fix.
       final joined = await _request('join', {
-        'rtpCapabilities': device.rtpCapabilities.toMap(),
+        'rtpCapabilities': rtpCapabilitiesToMap(device.rtpCapabilities),
         'displayName': credentials.displayName,
       });
       for (final peer in (joined['peers'] as List? ?? const [])) {
@@ -709,6 +728,20 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
       peer.camera = renderer;
       peer.cameraConsumerId = consumer.id;
       peer.cameraOff = paused;
+      // Asked of the consumer the server actually built, because the
+      // server decides and once decided "no extensions at all" without
+      // saying so. True means the rotation rides with the frames and
+      // the pixels are already turned, so the screen must NOT turn them
+      // again; false means they arrive raw and it must.
+      peer.cameraCarriesRotation =
+          carriesVideoOrientation(consumer.rtpParameters.headerExtensions);
+      if (!peer.cameraCarriesRotation) {
+        debugPrint(
+          'call: no $videoOrientationUri on ${peer.displayName}\'s camera; '
+          'it carries '
+          '${consumer.rtpParameters.headerExtensions.map((e) => e.uri).toList()}',
+        );
+      }
     } else {
       await peer.mic?.dispose();
       peer.mic = renderer;

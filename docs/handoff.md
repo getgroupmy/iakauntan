@@ -150,7 +150,10 @@ chase them unprompted either.
    the receipt PDF: a reversal LEAVES THE ORIGINAL STANDING, attachment
    and all.
 3. **Where card and e-wallet money lands**, which is what the receipts
-   half of the 1120 audit is waiting on — see below.
+   half of the 1120 audit is waiting on — see below. (The video-rotation
+   measurement that used to sit beside this is no longer wanted: the
+   cause was found by reading the mediasoup package rather than by
+   measuring a call.)
 4. **CP39, KWSP Form A and PERKESO Lampiran 1** need their published
    layout specifications. Not more code.
 5. **What is missing from client trust monies in practice.**
@@ -161,13 +164,17 @@ chase them unprompted either.
    `docs/apple-voip-review.md`.
 
 And four things that are **known-unverified and must be described that
-way** rather than as working: the voice-note mime-type fix; the quarter
-turn now applied to incoming video, which is a correction on the user's
-instruction and not a fix (see its own section below); whether the
+way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
 not show it, and the release run printing `Firebase project:
 iakauntan-2026` is suggestive rather than the same thing; and the two
 Android push behaviours in item 1.
+
+The incoming video's orientation has moved off that list. It is fixed at
+the cause — the mediasoup package's serialiser was dropping every RTP
+header extension — and what remains unproved is narrower and stated in
+its own section: whether a given platform advertises the rotation
+extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
@@ -5332,68 +5339,109 @@ per message. The grey tick arrived and took the whole screen with it.
 Worth remembering when a fix lands on top of a defect nobody has found
 yet.
 
-## The incoming video is sideways, and this is as far as reading gets
+## The incoming video was sideways, and it was five missing lines
 
-**Corrected in the widget on the user's instruction, NOT fixed.** The
-diagnosis below stands unchanged and the last step still needs a device.
-`incomingCameraQuarterTurns` in `call_screen.dart` is 1, and the remote
-camera tiles are wrapped in a `RotatedBox` of that many quarter turns —
-the self-view and a shared screen deliberately are not, and
-`call_screen_test.dart` asserts all three.
+**Fixed at the cause.** The diagnosis below was right about the
+mechanism and wrong about where the mechanism broke, and the difference
+is worth keeping because the wrong half is the more natural guess.
 
-It is a correction rather than a fix because it is **unconditional**: it
-turns every incoming camera, so it is right exactly as long as every
-camera on the call is a phone sending un-rotated sensor frames. A
-desktop browser peer, which rotates pixels before sending, will be drawn
-sideways BY THAT LINE. Nothing on the receiving side can tell the two
-apart — both arrive as 640x480 landscape pixels with no rotation — and
-distinguishing them needs the sender's platform, which the signalling
-does not carry. So when the measurement below is finally taken and the
-real cause closed, the constant goes to zero and the `RotatedBox` comes
-out.
+### What it actually was
 
-Both phones show the remote camera rotated 90° while their own
-picture-in-picture is upright. That pairing is the signature of
-**Coordination of Video Orientation (CVO) not surviving the trip**: the
-phone captures landscape sensor frames and sends the rotation as an RTP
-header extension rather than rotating the pixels, and a receiver that
-never negotiated the extension draws the raw sensor frames. The local
-preview is upright because it never goes through RTP at all.
+`RtpCapabilities.toMap()` in `mediasfu_mediasoup_client 0.1.4` is, in
+full:
 
-What was checked, and rules nothing out:
+    Map<String, dynamic> toMap() {
+      return <String, dynamic>{
+        'codecs': codecs.map((c) => c.toMap()).toList()
+      };
+    }
 
-- mediasoup **does** support `urn:3gpp:video-orientation` —
-  `supportedRtpCapabilities.js`, preferredId 8, `direction: 'sendrecv'`
-  — so the router is willing.
-- `mediasfu_mediasoup_client` never mentions the extension, so it is not
-  being stripped on purpose.
-- The app does **not** lock orientation: no `setPreferredOrientations`
-  anywhere, and `Info.plist` allows portrait and both landscapes. So the
-  device orientation the capturer reads is real.
-- `_cameraConstraints` asks for 640×480, i.e. landscape, which is what
-  makes the un-rotated frames look 90° out rather than merely cropped.
-- In `flutter_webrtc`, `RTCVideoValue.rotation` feeds **only**
-  `aspectRatio`; the pixels are rotated natively. So a sideways picture
-  means the frames arrived without rotation, not that the widget ignored
-  it.
+It serialises the codecs and **silently drops `headerExtensions` and
+`fecMechanisms`**. `RtpHeaderExtension` has no `toMap` at all, so the
+package cannot serialise one even when asked.
 
-The likeliest remaining cause, and the one to test first: mediasoup
-computes a consumer's header extensions from the **consuming** peer's
-`rtpCapabilities`, which `call_engine.dart:267` sends from
-`device.rtpCapabilities`. Those come from a dummy offer, and libwebrtc
-does not always advertise CVO on an offer with no video **sender**. If
-the receiving side never offered the extension, mediasoup will not put
-it on the consumer, and the rotation is dropped — while the sending side
-negotiated it perfectly well and is relying on it.
+A mediasoup client sends that set exactly once, at `join`, and the
+server uses it to decide what each CONSUMER may carry. Sending no header
+extensions had the server build every consumer against an empty list and
+strip every extension from every stream this device received —
+`urn:3gpp:video-orientation` among them, without which a receiver draws a
+phone's raw landscape sensor frames. Nothing errored: mediasoup treats a
+missing `headerExtensions` as an empty one, so the call connected and
+audio and video flowed.
 
-**The one measurement that settles it:** log
-`consumer.rtpParameters.headerExtensions` in `_attach` for a video
-consumer. `urn:3gpp:video-orientation` present means look elsewhere;
-absent means this is it.
+So it was never a widget problem, and never the libwebrtc capability
+round-trip the section below suspected. `app/lib/src/features/chat/call_rtp.dart`
+holds `rtpCapabilitiesToMap`, which serialises the whole set and drops
+only entries the server would reject (no uri, no `preferredId`, or a
+`kind` of `data`) — because a rejected capability set is not a sideways
+picture, it is a refused `join` and no call at all.
 
-Deliberately NOT changed on a guess. Calling was taken from a 503 to
-working across two networks over one long evening, and a speculative
-edit to the media path is the wrong trade against that.
+### Why the guess was wrong, and what it cost
+
+The earlier reading was *"mediasoup computes a consumer's header
+extensions from the consuming peer's `rtpCapabilities`, which come from
+a dummy offer, and libwebrtc does not reliably advertise CVO on an offer
+with no video sender."* The first clause is exactly right. The second
+was an assumption about libwebrtc that was never checked against the
+line of Dart in between — and that line was the bug.
+
+It cost nothing, because the session that wrote it **declined to guess**
+and said what measurement would settle it. That was the right call. What
+settled it in the end was reading the package's serialiser, which is
+cheaper than any device.
+
+### The quarter turn is still there, and now it asks
+
+`CallPeer.cameraCarriesRotation` is read in `_attach` off the consumer
+the server actually built, and `incomingCameraQuarterTurns(peer)` is 0
+when the rotation rides with the frames and 1 when it does not. So:
+
+- extension present → pixels already turned natively → no widget turn;
+- extension absent → raw frames → a quarter clockwise.
+
+Keeping both without the condition would have been the worst of the
+three options: once the fix lands, an unconditional `RotatedBox` turns
+already-upright pixels and the picture is 90° out the other way. The
+per-peer answer also fixes what the stopgap cost — a desktop browser
+peer, which rotates pixels before sending, was going to be drawn
+sideways *by* the correction.
+
+The engine also logs the extensions a camera did arrive with whenever
+the answer is 1, so a call that is still sideways says why in the
+console instead of needing this read again.
+
+### `scripts/check_rtp_capabilities.py`, and why a gate
+
+The fix is ONE call site and nothing in the widget suite can reach it:
+`CallEngine` is an interface precisely because the real one needs a
+camera, a network and an SFU. `app/test/call_rtp_test.dart` proves
+`rtpCapabilitiesToMap` is correct and proves the package's `toMap` loses
+the extensions — its first assertion is about the package, so a later
+version that fixes it fails that test and the failure is the notice that
+the helper can go — but no test can prove the engine calls the right one.
+
+Reverting that line would restore a user-visible bug silently, with a
+green suite, and `device.rtpCapabilities.toMap()` is what every mediasoup
+example in every language writes. So the call site is a gate. Its
+self-test puts the revert back in four shapes, checks a COMMENT naming
+the lossy call is not mistaken for one, and checks that an engine
+serialising nothing at all fails too.
+
+**And the self-test caught a harness error in its own first draft**: it
+invoked the real gate rather than the copy in its scratch tree, so every
+case was answered from the real repository and the whole run said
+nothing. Every case failed at once, which is the only reason it was
+visible. The same failure with the polarity reversed would have been a
+clean sweep over nothing.
+
+### What is still not proved
+
+That the extension is in this platform's receive capabilities at all. The
+fix sends whatever the device advertised; if a platform never advertises
+CVO, there is nothing to send and `cameraCarriesRotation` stays false,
+which is the stopgap's behaviour and visibly correct for a phone. The
+one thing a real call now tells you for free is which case you are in —
+the console says so.
 
 ## CI went red on a commit that contained no SQL
 

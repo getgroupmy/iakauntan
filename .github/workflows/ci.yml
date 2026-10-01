@@ -1645,6 +1645,16 @@ jobs:
       - name: Check every notification channel the sender names exists
         run: python3 scripts/check_push_channels.py
 
+      # `RtpCapabilities.toMap()` in the mediasoup package serialises the
+      # codecs and drops every header extension. The engine sends that
+      # set once, at `join`, so one reverted line has the server strip
+      # `urn:3gpp:video-orientation` from every stream and every remote
+      # camera arrives ninety degrees out. Nothing in the widget suite
+      # can reach the call site — the engine needs a camera and an SFU —
+      # so the call site is asserted here.
+      - name: The call engine sends its RTP capabilities whole
+        run: python3 scripts/check_rtp_capabilities.py
+
       # Offered and not permitted is a save that fails; permitted and
       # not offered is a feature nobody can reach. Both were true of
       # `bank_accounts.account_type` at once.
@@ -2531,6 +2541,12 @@ jobs:
       # from a system that works.
       - name: The push-channel gate's own assertions
         run: python3 scripts/check_push_channels_test.py
+
+      # And this one for the same reason: a connected call with a
+      # sideways picture looks like a working call to everything that
+      # is not a person looking at it.
+      - name: The RTP capabilities gate's own assertions
+        run: python3 scripts/check_rtp_capabilities_test.py
 
       - name: The icon gate's own assertions
         run: python3 scripts/check_app_icons_test.py

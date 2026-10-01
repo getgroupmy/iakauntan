@@ -321,12 +321,12 @@ void main() {
     );
   });
 
-  group('an incoming camera is turned a quarter clockwise', () {
-    // Every remote camera arrives 90° out because the sender's phone
-    // ships landscape sensor frames and the rotation beside them, as an
-    // RTP header extension this call is not negotiating. See
-    // `incomingCameraQuarterTurns` for the diagnosis and for what the
-    // correction costs.
+  group('an incoming camera is turned only when it has to be', () {
+    // A phone ships landscape sensor frames and sends the rotation
+    // beside them in `urn:3gpp:video-orientation`. Where that extension
+    // reached the consumer the pixels arrive upright and must be left
+    // alone; where it did not they arrive raw and need a quarter turn.
+    // `call_rtp.dart` is why it used not to reach anything.
     //
     // `quarterTurns`, read off the widget. `find.byType(RotatedBox)`
     // alone would pass with a turn of 2, 3 or 0 — three wrong answers
@@ -346,10 +346,12 @@ void main() {
       expect(turnsOn(tester, find.byType(RTCVideoView)), 1);
     });
 
-    testWidgets('each of them, on a call with two cameras', (tester) async {
+    testWidgets('each of them, on a call with two stripped cameras',
+        (tester) async {
       // The rotation is on the tile, so a grid must not leave one of
       // them upright — which is what putting it on the stage rather
-      // than inside the loop would do.
+      // than inside the loop would do. Neither peer here carries its
+      // own rotation, so both need the turn.
       await open(
         tester,
         FakeCallEngine(
@@ -363,6 +365,47 @@ void main() {
 
       expect(find.byType(RTCVideoView), findsNWidgets(2));
       expect(find.byType(RotatedBox), findsNWidgets(2));
+    });
+
+    testWidgets('NOT turned when the stream carries its own rotation',
+        (tester) async {
+      // The fix working. `cameraCarriesRotation` is read off the
+      // consumer the server built, and when it is true the pixels have
+      // already been turned natively — a RotatedBox here would put them
+      // 90° out in the other direction, which is the failure the
+      // stopgap would have caused for every desktop peer.
+      final upright = CallPeer(id: 'a', displayName: 'Ahmad')
+        ..camera = _StubRenderer()
+        ..cameraCarriesRotation = true;
+      await open(tester, FakeCallEngine(peers: [upright]));
+
+      expect(find.byType(RTCVideoView), findsOneWidget);
+      expect(turnsOn(tester, find.byType(RTCVideoView)), 0);
+    });
+
+    testWidgets('one of each on the same call, turned differently',
+        (tester) async {
+      // The reason this is per-peer and not a constant. A phone whose
+      // rotation was stripped and a browser whose was not are in the
+      // same grid, and one answer cannot be right for both.
+      await open(
+        tester,
+        FakeCallEngine(
+          peers: [
+            CallPeer(id: 'a', displayName: 'Ahmad')..camera = _StubRenderer(),
+            CallPeer(id: 'b', displayName: 'Mei Ling')
+              ..camera = _StubRenderer()
+              ..cameraCarriesRotation = true,
+          ],
+        ),
+      );
+
+      final turns = tester
+          .widgetList<RotatedBox>(find.byType(RotatedBox))
+          .map((b) => b.quarterTurns)
+          .toList();
+      expect(turns, hasLength(2));
+      expect(turns.toSet(), {0, 1}, reason: 'one turned, one left alone');
     });
 
     testWidgets('and MY OWN picture is left alone, because it is upright',
