@@ -263,7 +263,21 @@ end;
 
 $$;
 
+-- `0571`'s wording, with ONE sentence added before the last.
+--
+-- Not a rewrite. `docs/api/openapi.json` and `docs/api/llms.txt` are
+-- GENERATED from this comment -- the summary is its first sentence and
+-- the description is the whole of it -- so a comment that describes
+-- only the newest refusal publishes a function that appears to have
+-- lost the other three. They are all still true.
 comment on function public.post_expense(uuid) is
-  'Posts an expense to the ledger. Refuses one that does not say which '
-  'account it was paid from: the fallback to the 1120 control account '
-  'put money on no reconciliation at all. 0727.';
+  'Posts a recorded expense. Refuses one that has been deleted -- this '
+  'was the only posting function in the schema that did not, so an '
+  'expense somebody had removed from the list could still reach the '
+  'accounts, where no screen would ever show it to them again. Refuses '
+  'a total that does not equal amount plus tax, said plainly and BEFORE '
+  'any conversion, so the person who saved it is told which number is '
+  'wrong rather than what the ledger made of the result. Refuses one '
+  'that does not say which account it was paid from: until 0727 it fell '
+  'back to the 1120 control account, which put the money on no bank '
+  'reconciliation at all. Refuses one already posted. Needs `can_post`.';

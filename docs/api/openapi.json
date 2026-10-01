@@ -54770,7 +54770,7 @@
       "post": {
         "operationId": "post_expense",
         "summary": "Posts a recorded expense",
-        "description": "Posts a recorded expense. Refuses one that has been deleted -- this was the only posting function in the schema that did not, so an expense somebody had removed from the list could still reach the accounts, where no screen would ever show it to them again. Refuses a total that does not equal amount plus tax, said plainly and BEFORE any conversion, so the person who saved it is told which number is wrong rather than what the ledger made of the result. Refuses one already posted. Needs `can_post`.\n\n`public.post_expense(p_id uuid)` Writes. Requires a signed-in user.",
+        "description": "Posts a recorded expense. Refuses one that has been deleted -- this was the only posting function in the schema that did not, so an expense somebody had removed from the list could still reach the accounts, where no screen would ever show it to them again. Refuses a total that does not equal amount plus tax, said plainly and BEFORE any conversion, so the person who saved it is told which number is wrong rather than what the ledger made of the result. Refuses one that does not say which account it was paid from: until 0727 it fell back to the 1120 control account, which put the money on no bank reconciliation at all. Refuses one already posted. Needs `can_post`.\n\n`public.post_expense(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
