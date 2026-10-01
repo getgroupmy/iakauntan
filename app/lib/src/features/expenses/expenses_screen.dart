@@ -209,12 +209,60 @@ class ExpensesScreen extends ConsumerWidget {
   }
 }
 
+/// What this form is, when it is a correction rather than a new cost.
+///
+/// Its own small widget rather than a sentence in the layout because
+/// the one EMPTY box on an otherwise filled-in form is the entire
+/// reason the form is open, and somebody who does not know that reads
+/// it as the form having failed to load.
+class _ReEntryNote extends StatelessWidget {
+  const _ReEntryNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const ValueKey('re-entry-note'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(Space.sm),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.undo, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: Space.sm),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
 class _ExpenseDialog extends ConsumerStatefulWidget {
-  const _ExpenseDialog({this.scanned});
+  const _ExpenseDialog({this.scanned, this.againFrom, this.wasSplit = false});
 
   /// A receipt already captured, filed and read. The form opens filled
   /// in from it; abandoning the form still cleans the file up.
   final StagedReceipt? scanned;
+
+  /// An expense being re-entered after its journal was reversed.
+  ///
+  /// `reEntryFields` says what is carried and what is not. The two are
+  /// never both set: a scan is a new document and a re-entry is a
+  /// correction of an old one.
+  final Map<String, dynamic>? againFrom;
+
+  /// Whether the expense being re-entered was split across accounts.
+  /// The split is not carried, and the form says so rather than
+  /// flattening it onto the header account.
+  final bool wasSplit;
 
   @override
   ConsumerState<_ExpenseDialog> createState() => _ExpenseDialogState();
@@ -280,6 +328,24 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   @override
   void initState() {
     super.initState();
+
+    final again = widget.againFrom;
+    if (again != null) {
+      final from = reEntryFields(again);
+      if (from.date != null) _date = from.date!;
+      _description.text = from.description ?? '';
+      _amount.text = from.amount ?? '';
+      _reference.text = from.reference ?? '';
+      _accountId = from.accountId;
+      _contactId = from.contactId;
+      _taxCodeId = from.taxCodeId;
+      _projectCode = from.projectCode;
+      _departmentCode = from.departmentCode;
+      _matterId = from.matterId;
+      if (from.paymentMode != null) _paymentMode = from.paymentMode!;
+      // `_bankAccountId` is left null on purpose. See `reEntryFields`.
+    }
+
     final scanned = widget.scanned;
     if (scanned == null) return;
     _receipt = scanned;
@@ -565,8 +631,12 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
 
     final ocr = ref.watch(ocrStatusProvider).valueOrNull ?? OcrSettings.off;
 
+    final again = widget.againFrom;
+
     return AlertDialog(
-      title: const Text('Record expense'),
+      title: Text(again == null
+          ? 'Record expense'
+          : 'Enter ${again['expense_no']} again'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -575,6 +645,20 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // What this form is, when it is a correction. Said at
+                // the top because the one empty box on an otherwise
+                // filled-in form is the whole reason it is open, and a
+                // person who does not know that reads it as a glitch.
+                if (again != null)
+                  _ReEntryNote(
+                    text: '${again['expense_no']} has been reversed. This is '
+                        'the replacement, filled in from it — except '
+                        'Paid from, which is for you to answer.'
+                        '${widget.wasSplit ? ' The original was split '
+                            'across accounts; the split is not carried '
+                            'over, so set it again below.' : ''}',
+                  ),
+                if (again != null) const SizedBox(height: Space.md),
                 // Before the form, because this is the order the work
                 // happens in: somebody is holding a receipt and has not
                 // yet decided which account it belongs to.
@@ -1169,6 +1253,61 @@ class _ReceiptStrip extends StatelessWidget {
   }
 }
 
+/// What a re-entry copies from the expense being corrected.
+///
+/// A reversal and re-entry is two documents: the original stands with
+/// its journal contra'd, and a NEW expense carries the correction. So
+/// everything that was right the first time is copied — the date, the
+/// words, the figures, the account it was coded to, the payee, the tax
+/// code and the three dimensions — because retyping them is how a
+/// correction acquires a second mistake.
+///
+/// **`bank_account_id` is deliberately NOT copied**, and that is the
+/// whole point of the feature. The commonest reason to reverse an
+/// expense is that it went to the wrong account or to none at all, so
+/// carrying the old answer forward would re-enter the very thing being
+/// corrected. The form refuses to save without one — `0727` — so the
+/// person has to answer it rather than confirm it.
+///
+/// A SPLIT is not copied either, and the form says so rather than
+/// flattening it: `expense_lines` is a second table and a split
+/// silently collapsed into its header account is a correction that
+/// quietly loses three quarters of its coding.
+({
+  DateTime? date,
+  String? description,
+  String? amount,
+  String? reference,
+  String? accountId,
+  String? contactId,
+  String? taxCodeId,
+  String? projectCode,
+  String? departmentCode,
+  String? matterId,
+  String? paymentMode,
+}) reEntryFields(Map<String, dynamic> expense) {
+  String? text(Object? v) {
+    final s = v?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
+  }
+
+  return (
+    date: Fmt.parseDate(expense['expense_date']),
+    description: text(expense['description']),
+    // The NET, which is what the form's Amount box holds: it adds the
+    // tax back from the chosen code's rate.
+    amount: text(expense['amount']),
+    reference: text(expense['reference']),
+    accountId: text(expense['account_id']),
+    contactId: text(expense['contact_id']),
+    taxCodeId: text(expense['tax_code_id']),
+    projectCode: text(expense['project_code']),
+    departmentCode: text(expense['department_code']),
+    matterId: text(expense['matter_id']),
+    paymentMode: text(expense['payment_mode_code']),
+  );
+}
+
 /// Why this expense cannot be saved yet, when the reason is that it
 /// does not say where the money came from.
 ///
@@ -1324,6 +1463,23 @@ class _ExpenseDetail extends ConsumerWidget {
         ),
       ),
       actions: [
+        // Correcting a posted expense, which until now meant going to
+        // the journal screen and finding its entry by hand. The dialog
+        // has always said "correcting one means reversing it, which is
+        // a different verb and a different screen" -- and that screen
+        // only exists for journals, so the verb had no button anywhere
+        // near the thing it corrects.
+        //
+        // Only where there IS a journal to reverse. A draft has none,
+        // and offering to reverse nothing is offering a refusal.
+        if ('${expense['status']}' == 'posted' &&
+            expense['gl_entry_id'] != null)
+          TextButton.icon(
+            key: const ValueKey('reverse-expense'),
+            onPressed: () => _reverse(context, ref),
+            icon: const Icon(Icons.undo, size: 18),
+            label: const Text('Reverse'),
+          ),
         // The paper an SME staples the receipt to, and the one an
         // auditor asks for when a cash payment has no supplier invoice
         // behind it. Offered on a posted expense only: a voucher for
@@ -1340,6 +1496,83 @@ class _ExpenseDetail extends ConsumerWidget {
           child: const Text('Close'),
         ),
       ],
+    );
+  }
+
+  /// Contra the journal, then offer to enter it again.
+  ///
+  /// Two documents, not an edit. `0102` is the argument: a reversal
+  /// posts the mirror image and LEAVES THE ORIGINAL STANDING, because
+  /// a ledger you can erase is not a ledger. So the expense that was
+  /// wrong stays on the list, its journal nets to nothing, and the
+  /// correction is a new expense.
+  ///
+  /// The reversal is dated the ORIGINAL's day by default rather than
+  /// today. Both are correct bookkeeping; the original's day is the
+  /// kinder default, because the charge and its contra then fall in the
+  /// same month and the month comes to what it should. Where that
+  /// period is closed the server refuses and says so — `0059` — and
+  /// today is one tap away in the picker.
+  Future<void> _reverse(BuildContext context, WidgetRef ref) async {
+    final entry = expense['gl_entry_id']?.toString();
+    if (entry == null) return;
+    final spent = Fmt.parseDate(expense['expense_date']) ?? DateTime.now();
+
+    final on = await showDatePicker(
+      context: context,
+      initialDate: spent,
+      firstDate: DateTime(spent.year - 1),
+      lastDate: DateTime(DateTime.now().year + 1, 12, 31),
+      helpText: 'Date the reversal posts',
+    );
+    if (on == null || !context.mounted) return;
+
+    final ok = await confirm(
+      context,
+      title: 'Reverse ${expense['expense_no']}?',
+      message: 'This posts the opposite journal on ${Fmt.date(on)}, so the '
+          'two come to nothing. The expense itself stays on the list and '
+          'nothing is deleted — a ledger you can erase is not a ledger. '
+          'You can enter it again afterwards.',
+      confirmLabel: 'Reverse',
+    );
+    if (!ok || !context.mounted) return;
+
+    final done = await runWithFeedback(
+      context,
+      doing: 'reversing an expense',
+      action: () => ref.read(repoProvider)!.reverseJournal(entry, on),
+      successMessage: 'Reversed',
+    );
+    if (!done || !context.mounted) return;
+
+    ref.invalidate(expensesProvider);
+    refreshLedgerData(ref);
+
+    // Offered rather than done. Whether a reversal is followed by a
+    // re-entry is the difference between "this was wrong" and "this
+    // was wrong AND here is the right one", and only the person
+    // correcting it knows which.
+    final again = await confirm(
+      context,
+      title: 'Enter it again?',
+      message: 'A new expense, filled in from this one — except the '
+          'account it was paid from, which you choose. That is usually '
+          'what was wrong.',
+      confirmLabel: 'Enter it again',
+    );
+    if (!again || !context.mounted) return;
+
+    Navigator.of(context).pop();
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _ExpenseDialog(
+        againFrom: expense,
+        wasSplit: ref.read(expenseSplitProvider('${expense['id']}'))
+                .valueOrNull
+                ?.isNotEmpty ??
+            false,
+      ),
     );
   }
 

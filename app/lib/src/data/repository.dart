@@ -1313,8 +1313,15 @@ class Repo {
     return data as String;
   }
 
-  /// Posts the mirror image and voids the original. Nothing is deleted:
-  /// a ledger you can erase is not a ledger.
+  /// Posts the mirror image and LEAVES THE ORIGINAL STANDING.
+  ///
+  /// This comment used to say "and voids the original", which was true
+  /// until `0102` and is the exact bug that migration exists to undo:
+  /// doing both is the one combination that is wrong, because every
+  /// report filters `status = 'posted'`, so voiding the original left
+  /// the ledger holding the opposite of the entry instead of nothing.
+  /// Nothing is deleted either — a ledger you can erase is not a
+  /// ledger.
   Future<void> reverseJournal(String entryId, DateTime on) => callRpc(
     'reverse_gl_entry',
     params: {'p_entry_id': entryId, 'p_date': Fmt.iso(on)},

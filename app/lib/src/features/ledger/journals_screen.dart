@@ -218,9 +218,15 @@ class _JournalTile extends ConsumerWidget {
     final ok = await confirm(
       context,
       title: 'Reverse ${entry.entryNo}?',
-      message: 'This posts the mirror image on ${Fmt.date(on)} and marks the '
-          'original void. Nothing is deleted — a ledger you can erase is '
-          'not a ledger.',
+      // NOT "marks the original void", which is what this said and what
+      // `0102` stopped doing. An accountant deciding whether to press
+      // this needs to know the original stays on the ledger: that is
+      // the difference between a correction and an erasure, and it is
+      // the whole reason a reversal is the safe verb.
+      message: 'This posts the opposite journal on ${Fmt.date(on)}, so the '
+          'two come to nothing. The original stays exactly where it is '
+          'and nothing is deleted — a ledger you can erase is not a '
+          'ledger.',
       confirmLabel: 'Reverse',
     );
     if (!ok || !context.mounted) return;
