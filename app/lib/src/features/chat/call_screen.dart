@@ -10,6 +10,54 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'call_engine.dart';
 
+/// How far to turn an incoming camera, clockwise, in quarter turns.
+///
+/// One. Every remote camera on a call is drawn 90° out, while the
+/// sender's own picture-in-picture is upright on their screen — and the
+/// pairing of those two is the whole diagnosis. The local preview never
+/// goes through RTP; the remote one does.
+///
+/// ## What is actually wrong
+///
+/// A phone captures LANDSCAPE sensor frames and does not rotate the
+/// pixels. It sends the rotation beside them, as the
+/// `urn:3gpp:video-orientation` RTP header extension (CVO), and a
+/// receiver that never negotiated that extension draws the raw sensor
+/// frames. In `flutter_webrtc`, `RTCVideoValue.rotation` feeds only
+/// `aspectRatio` — the pixels are turned natively — so a sideways
+/// picture means the frames arrived with no rotation on them, not that
+/// the widget ignored one.
+///
+/// mediasoup supports the extension (`supportedRtpCapabilities.js`,
+/// preferredId 8, sendrecv) and computes a consumer's header extensions
+/// from the CONSUMING peer's `rtpCapabilities`, which
+/// `call_engine.dart` sends from `device.rtpCapabilities`. Those come
+/// from a dummy offer, and libwebrtc does not reliably advertise CVO on
+/// an offer with no video SENDER. If the receiving side never offered
+/// it, mediasoup will not put it on the consumer and the rotation is
+/// dropped — while the sending side negotiated it perfectly well and is
+/// relying on it.
+///
+/// ## WHAT THIS COSTS, because it is a correction and not a fix
+///
+/// It is unconditional. It turns EVERY incoming camera, so it is right
+/// exactly as long as every camera on the call is a phone that sends
+/// un-rotated sensor frames. A peer whose video arrives upright — a
+/// desktop browser, which rotates pixels before sending — will be drawn
+/// sideways BY THIS LINE. Nothing on the receiving side can tell the two
+/// apart: both arrive as 640×480 landscape pixels with no rotation, and
+/// the renderer sees the same thing either way. Distinguishing them
+/// needs the sender's platform, which the signalling does not carry.
+///
+/// So this is worth keeping only until the real cause is settled, and
+/// settling it needs one measurement on a device: log
+/// `consumer.rtpParameters.headerExtensions` in the engine's `_attach`
+/// for a video consumer. `urn:3gpp:video-orientation` present means look
+/// elsewhere; absent means it is the capability round-trip above, and
+/// the fix belongs there — after which this constant goes to zero and
+/// the `RotatedBox` comes out.
+const int incomingCameraQuarterTurns = 1;
+
 /// Being on a call.
 ///
 /// Opened once somebody has already joined in the database — the row is
@@ -435,9 +483,25 @@ class _CallScreenState extends ConsumerState<CallScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                RTCVideoView(
-                  peer.camera!,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                // Turned a quarter clockwise. See
+                // `incomingCameraQuarterTurns` for what this is working
+                // around and what it costs.
+                //
+                // `RotatedBox`, not `Transform.rotate`: this rotates
+                // during LAYOUT, so the view is measured with the
+                // tile's width and height swapped and `cover` then
+                // crops against the box the picture actually occupies.
+                // `Transform.rotate` turns the pixels after layout, so
+                // a 3:4 tile would be filled as 3:4 and then spun,
+                // leaving the picture short on two edges and overhanging
+                // the other two.
+                RotatedBox(
+                  quarterTurns: incomingCameraQuarterTurns,
+                  child: RTCVideoView(
+                    peer.camera!,
+                    objectFit:
+                        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  ),
                 ),
                 Align(
                   alignment: Alignment.bottomLeft,

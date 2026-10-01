@@ -321,6 +321,78 @@ void main() {
     );
   });
 
+  group('an incoming camera is turned a quarter clockwise', () {
+    // Every remote camera arrives 90° out because the sender's phone
+    // ships landscape sensor frames and the rotation beside them, as an
+    // RTP header extension this call is not negotiating. See
+    // `incomingCameraQuarterTurns` for the diagnosis and for what the
+    // correction costs.
+    //
+    // `quarterTurns`, read off the widget. `find.byType(RotatedBox)`
+    // alone would pass with a turn of 2, 3 or 0 — three wrong answers
+    // out of four — and 0 is the exact bug this is fixing.
+    int turnsOn(WidgetTester tester, Finder video) => tester
+        .widget<RotatedBox>(
+          find.ancestor(of: video, matching: find.byType(RotatedBox)).first,
+        )
+        .quarterTurns;
+
+    testWidgets('one quarter turn, not two and not none', (tester) async {
+      final seen = CallPeer(id: 'a', displayName: 'Ahmad')
+        ..camera = _StubRenderer();
+      await open(tester, FakeCallEngine(peers: [seen]));
+
+      expect(find.byType(RTCVideoView), findsOneWidget);
+      expect(turnsOn(tester, find.byType(RTCVideoView)), 1);
+    });
+
+    testWidgets('each of them, on a call with two cameras', (tester) async {
+      // The rotation is on the tile, so a grid must not leave one of
+      // them upright — which is what putting it on the stage rather
+      // than inside the loop would do.
+      await open(
+        tester,
+        FakeCallEngine(
+          peers: [
+            CallPeer(id: 'a', displayName: 'Ahmad')..camera = _StubRenderer(),
+            CallPeer(id: 'b', displayName: 'Mei Ling')
+              ..camera = _StubRenderer(),
+          ],
+        ),
+      );
+
+      expect(find.byType(RTCVideoView), findsNWidgets(2));
+      expect(find.byType(RotatedBox), findsNWidgets(2));
+    });
+
+    testWidgets('and MY OWN picture is left alone, because it is upright',
+        (tester) async {
+      // The local preview never goes through RTP, so it was never
+      // sideways. Turning it as well would fix the complaint and break
+      // the thing nobody complained about.
+      final engine = FakeCallEngine(
+        peers: [CallPeer(id: 'a', displayName: 'Ahmad')],
+      )..localVideo = _StubRenderer();
+      await open(tester, engine);
+
+      expect(find.byType(RTCVideoView), findsOneWidget,
+          reason: 'the self-view, and no remote camera');
+      expect(find.byType(RotatedBox), findsNothing);
+    });
+
+    testWidgets('and a shared screen is left alone too', (tester) async {
+      // A shared desktop is not a phone camera and arrives the right
+      // way up. A quarter turn here would make a trial balance
+      // unreadable, which is the one thing sharing exists for.
+      final sharer = CallPeer(id: 'a', displayName: 'Ahmad')
+        ..screen = _StubRenderer();
+      await open(tester, FakeCallEngine(peers: [sharer]));
+
+      expect(find.byType(RTCVideoView), findsOneWidget);
+      expect(find.byType(RotatedBox), findsNothing);
+    });
+  });
+
   testWidgets('somebody else sharing takes the stage, and is named', (
     tester,
   ) async {

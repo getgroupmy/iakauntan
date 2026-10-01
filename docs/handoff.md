@@ -161,11 +161,13 @@ chase them unprompted either.
    `docs/apple-voip-review.md`.
 
 And four things that are **known-unverified and must be described that
-way** rather than as working: the voice-note mime-type fix, the sideways
-incoming video, whether the `google-services` Gradle plugin actually
-applied (the build log does not show it; the release run printing
-`Firebase project: iakauntan-2026` is suggestive and not the same
-thing), and the two Android push behaviours in item 1.
+way** rather than as working: the voice-note mime-type fix; the quarter
+turn now applied to incoming video, which is a correction on the user's
+instruction and not a fix (see its own section below); whether the
+`google-services` Gradle plugin actually applied — the build log does
+not show it, and the release run printing `Firebase project:
+iakauntan-2026` is suggestive rather than the same thing; and the two
+Android push behaviours in item 1.
 
 **Do not start task #11, the MIA headless scraper.**
 
@@ -5332,7 +5334,23 @@ yet.
 
 ## The incoming video is sideways, and this is as far as reading gets
 
-Not fixed. Diagnosed, with the last step needing a device.
+**Corrected in the widget on the user's instruction, NOT fixed.** The
+diagnosis below stands unchanged and the last step still needs a device.
+`incomingCameraQuarterTurns` in `call_screen.dart` is 1, and the remote
+camera tiles are wrapped in a `RotatedBox` of that many quarter turns —
+the self-view and a shared screen deliberately are not, and
+`call_screen_test.dart` asserts all three.
+
+It is a correction rather than a fix because it is **unconditional**: it
+turns every incoming camera, so it is right exactly as long as every
+camera on the call is a phone sending un-rotated sensor frames. A
+desktop browser peer, which rotates pixels before sending, will be drawn
+sideways BY THAT LINE. Nothing on the receiving side can tell the two
+apart — both arrive as 640x480 landscape pixels with no rotation — and
+distinguishing them needs the sender's platform, which the signalling
+does not carry. So when the measurement below is finally taken and the
+real cause closed, the constant goes to zero and the `RotatedBox` comes
+out.
 
 Both phones show the remote camera rotated 90° while their own
 picture-in-picture is upright. That pairing is the signature of
