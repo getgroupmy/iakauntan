@@ -94,8 +94,9 @@ declare v_id uuid;
 begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
-     currency, exchange_rate)
-  values (p_org, p_no, p_date, p_contact, p_amount, p_amount, 'MYR', 1)
+     currency, exchange_rate, bank_account_id)
+  values (p_org, p_no, p_date, p_contact, p_amount, p_amount, 'MYR', 1,
+          pg_temp.a_bank_account(p_org))
   returning id into v_id;
   if p_invoice is not null then
     insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
@@ -479,8 +480,9 @@ begin
    where id = v_disc;
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
-     currency, exchange_rate)
-  values (v_org, 'RC-D', date '2026-02-08', v_cust, 950, 950, 'MYR', 1)
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'RC-D', date '2026-02-08', v_cust, 950, 950, 'MYR', 1,
+          pg_temp.a_bank_account(v_org))
   returning id into v_rec;
   perform public.post_receipt(v_rec);
   -- Inside the ten days the terms allow, which is the only window in

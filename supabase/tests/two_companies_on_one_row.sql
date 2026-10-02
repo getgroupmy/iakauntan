@@ -329,6 +329,7 @@ begin
   -- ==================================================================
   insert into public.pos_registers (org_id, outlet_id, code, name)
     values (a, out_a, 'T1', 'A''s till') returning id into reg;
+  perform pg_temp.a_till(a);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
     values (a, 'CASH', 'Cash', 'cash', '01', true, true) returning id into cash;

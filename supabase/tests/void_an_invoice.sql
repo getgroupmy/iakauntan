@@ -118,8 +118,9 @@ begin
   -- voiding it would leave that allocation pointing at nothing.
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
-     currency, exchange_rate)
-  values (v_org, 'RCP-1', date '2026-03-10', v_cust, 100, 100, 'MYR', 1)
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'RCP-1', date '2026-03-10', v_cust, 100, 100, 'MYR', 1,
+          pg_temp.a_bank_account(v_org))
   returning id into v_rcp;
   insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
   values (v_org, v_rcp, v_paid, 100);

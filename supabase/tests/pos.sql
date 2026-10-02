@@ -167,10 +167,12 @@ begin
   insert into public.pos_settings (org_id, round_cash_to_5sen)
   values (v_org, true);
 
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Cash', 'cash', '01', true, true)
   returning id into v_cash;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CARD', 'Card', 'card', '04', false, false)
@@ -793,12 +795,15 @@ begin
   values (v_org, v_outlet,'T1','Counter') returning id into v_reg;
   insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, false);
 
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org,'CASH','Cash','cash','01',true,true) returning id into v_cash;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org,'CARD','Card','card','03',false,false) returning id into v_card;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change,
      is_active)
@@ -810,6 +815,7 @@ begin
   insert into public.org_modules (org_id, module_code, is_enabled)
   values (v_them,'pos',true)
   on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.a_till(v_them);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_them,'CASH','Cash','cash','01',true,true) returning id into v_theirs;
@@ -999,12 +1005,15 @@ begin
   insert into public.pos_registers (org_id, outlet_id, code, name)
   values (v_org, v_outlet, 'T1', 'Kaunter') returning id into v_reg;
 
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Tunai', 'cash', '01', true, true) returning id into v_cash;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CARD', 'Kad', 'card', '03', false, false) returning id into v_card;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'ACCT', 'Akaun', 'on_account', '07', false, false)

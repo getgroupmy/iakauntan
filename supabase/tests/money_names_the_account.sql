@@ -194,6 +194,228 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- A receipt lands in an account, and the row says which -- 0731
+--
+-- `app.post_receipt_internal` was the last posting function with the
+-- heading fallback, and `0731` does not simply refuse a null, because
+-- three callers reach it without an account and none of them is a
+-- person who declined to answer: a counter sale takes it from the
+-- tender type, a basket cleared by loyalty points has no tender at
+-- all, and `record_group_payment` finds nothing when a company's
+-- default account has been closed.
+--
+-- So it RESOLVES one and WRITES IT ONTO THE RECEIPT. Both halves are
+-- asserted, because the write-back is the whole difference from the
+-- fallback it replaces: 1120 was chosen at posting time and left no
+-- trace, which is how a year of entries reached the heading unnoticed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org     uuid;
+  v_cust    uuid;
+  v_default uuid;
+  v_closed  uuid;
+  v_gateway uuid;
+  v_rcp     uuid;
+  v_entry   uuid;
+  v_today   date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_org := pg_temp.test_org('Resit Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_today)::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;
+
+  -- Three accounts, and the order the rule picks them in matters.
+  v_closed  := pg_temp.test_bank_account(
+    v_org, 'Akaun lama', 'current', 'MYR', 0, 0, '9001', 'RHB',
+    false, true, false);
+  v_default := pg_temp.test_bank_account(
+    v_org, 'Akaun semasa', 'current', 'MYR', 0, 0, '9002', 'Maybank',
+    false, true, true);
+  v_gateway := pg_temp.test_bank_account(
+    v_org, 'Akaun penyelesaian', 'current', 'MYR', 0, 0, '9003', 'CIMB');
+
+  -- ------------------------------------------------------------------
+  -- With no account named, the default one -- and not the closed one
+  -- ------------------------------------------------------------------
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-N1', v_today, v_cust, 500, 500, 'MYR', 1)
+  returning id into v_rcp;
+  v_entry := public.post_receipt(v_rcp);
+
+  perform pg_temp.check_true(
+    'a receipt that named no account is given the default one',
+    (select bank_account_id = v_default from public.receipts
+      where id = v_rcp));
+  perform pg_temp.check_true(
+    'and the row says so, rather than the choice living in a journal',
+    (select bank_account_id is not null from public.receipts
+      where id = v_rcp));
+  perform pg_temp.check_eq(
+    'the debit is on that account''s own ledger account',
+    (select round(sum(l.debit), 2) from public.gl_lines l
+      where l.entry_id = v_entry
+        and l.account_id = pg_temp.bank_gl(v_default)), 500.00);
+  perform pg_temp.check_eq(
+    'the 1120 heading gets nothing',
+    (select coalesce(round(sum(l.debit + l.credit), 2), 0)
+       from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '1120'), 0);
+  perform pg_temp.check_eq(
+    'and the balance moved on the account the row names',
+    (select current_balance from public.bank_accounts where id = v_default),
+    500.00);
+  perform pg_temp.check_eq(
+    'while the closed account is untouched',
+    (select current_balance from public.bank_accounts where id = v_closed), 0);
+
+  -- ------------------------------------------------------------------
+  -- A gateway's settlement account wins over the default
+  --
+  -- The user's rule for the till in so many words: card and e-wallet
+  -- settle into the company's own account, or into another where one
+  -- is defined. This is the "where one is defined" half.
+  -- ------------------------------------------------------------------
+  insert into public.org_payment_gateways
+    (org_id, gateway_code, mode, api_key, settlement_bank_account_id,
+     is_active)
+  values (v_org, 'billplz', 'sandbox', 'sandbox-key', v_gateway, true);
+
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-N2', v_today, v_cust, 300, 300, 'MYR', 1)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+
+  perform pg_temp.check_true(
+    'a defined settlement account is used ahead of the default',
+    (select bank_account_id = v_gateway from public.receipts
+      where id = v_rcp));
+
+  -- ------------------------------------------------------------------
+  -- And an account that WAS named is never second-guessed
+  -- ------------------------------------------------------------------
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate, bank_account_id)
+  values (v_org, 'RCP-N3', v_today, v_cust, 100, 100, 'MYR', 1, v_default)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+
+  perform pg_temp.check_true(
+    'an account the caller named is the one used, gateway or not',
+    (select bank_account_id = v_default from public.receipts
+      where id = v_rcp));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A client account is not the firm's to bank into
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_cust  uuid;
+  v_rcp   uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_org := pg_temp.test_org('Guaman Resit', array['legal']);
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_today)::date);
+  perform public.setup_legal_module(v_org);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Puan Aminah', 'customer') returning id into v_cust;
+
+  -- `setup_legal_module` made the client account, and it is the firm's
+  -- ONLY bank account at this point. Resolving to it would put a fee
+  -- into money held for a client, which is the breach of rule 7 of the
+  -- Solicitors' Accounts Rules 1990 that `0430` exists to show.
+  perform pg_temp.check_true('the client account is the only one so far',
+    (select count(*) = 1 from public.bank_accounts
+      where org_id = v_org and is_active));
+
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-CL', v_today, v_cust, 450, 450, 'MYR', 1)
+  returning id into v_rcp;
+
+  perform pg_temp.check_refused(
+    'a fee is not banked into the client account for want of another',
+    format($q$ select public.post_receipt(%L) $q$, v_rcp),
+    '%no bank account for it to arrive in%');
+
+  -- The control: give the firm an office account and the same receipt
+  -- posts, into that one.
+  perform pg_temp.test_bank_account(v_org, 'Office Current');
+  perform public.post_receipt(v_rcp);
+  perform pg_temp.check_true(
+    'and with an office account it lands there instead',
+    (select not b.is_client_account from public.receipts r
+       join public.bank_accounts b on b.id = r.bank_account_id
+      where r.id = v_rcp));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Where this tender's money lands -- 0731
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_till  uuid;
+  v_bank  uuid;
+  v_cash  uuid;
+  v_card  uuid;
+  v_named uuid;
+begin
+  v_org := pg_temp.test_org('Kedai Resit Sdn Bhd');
+
+  v_bank := pg_temp.test_bank_account(v_org, 'Akaun semasa');
+  v_till := pg_temp.test_bank_account(v_org, 'Tunai', 'cash');
+
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, counts_in_drawer)
+  values (v_org, 'TUNAI', 'Tunai', 'cash', true) returning id into v_cash;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind)
+  values (v_org, 'KAD', 'Kad', 'card') returning id into v_card;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, bank_account_id)
+  values (v_org, 'KAD2', 'Kad lain', 'card', v_till)
+  returning id into v_named;
+
+  perform pg_temp.check_true(
+    'cash lands in the drawer, which is a bank account of type cash',
+    (select bank_account_id = v_till from public.pos_tender_types
+      where id = v_cash));
+  perform pg_temp.check_true(
+    'a card settles into the bank account, days later',
+    (select bank_account_id = v_bank from public.pos_tender_types
+      where id = v_card));
+  perform pg_temp.check_true(
+    'and a tender that says where it lands is left alone',
+    (select bank_account_id = v_till from public.pos_tender_types
+      where id = v_named));
+
+  -- The control for the three above: with no account of either kind,
+  -- the column is left null rather than filled with something. The
+  -- refusal then belongs to the posting, which is where somebody can
+  -- be told to add an account.
+  declare v_bare uuid; v_t uuid;
+  begin
+    v_bare := pg_temp.test_org('Kedai Kosong Sdn Bhd');
+    insert into public.pos_tender_types (org_id, code, name, kind)
+    values (v_bare, 'TUNAI', 'Tunai', 'cash') returning id into v_t;
+    perform pg_temp.check_true(
+      'a company with no bank account gets a tender with no account',
+      (select bank_account_id is null from public.pos_tender_types
+        where id = v_t));
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
 -- A cheque clears into an account, or it has not cleared
 -- ---------------------------------------------------------------------
 do $$
@@ -272,12 +494,13 @@ end $$;
 do $$
 declare
   v_allowed text[] := array[
-    -- Deliberately still falling back, and documented at length in
-    -- `0728`: every `pos_tender_types` row has no bank account, so
-    -- refusing here would stop the till rather than correct it. What is
-    -- missing is where each tender's money lands, which is a question
-    -- for the people running the shop.
-    'app.post_receipt_internal(uuid)',
+    -- `app.post_receipt_internal` came OFF this list in `0731`. It was
+    -- the last posting function with the fallback, kept because every
+    -- `pos_tender_types` row had no bank account and refusing would
+    -- have stopped the till. The answer arrived -- card and e-wallet
+    -- settle into the company's own account, cash stays in the drawer
+    -- -- and the till it would have stopped turned out to be five demo
+    -- companies and no real one.
     -- Demo seeders that read the heading for a JOURNAL LINE and do not
     -- hang a bank account on it. Data rather than rules, reseeded
     -- rather than migrated.

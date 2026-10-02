@@ -76,8 +76,9 @@ declare v_id uuid;
 begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount,
-     unapplied_amount, currency, exchange_rate)
-  values (p_org, p_no, p_date, p_contact, p_amount, p_amount, 'MYR', 1)
+     unapplied_amount, currency, exchange_rate, bank_account_id)
+  values (p_org, p_no, p_date, p_contact, p_amount, p_amount, 'MYR', 1,
+          pg_temp.a_bank_account(p_org))
   returning id into v_id;
   perform public.post_receipt(v_id);
   return v_id;

@@ -254,6 +254,27 @@ fixture picks an account with `limit 1`, a `case`, or a code that is
 the parent of the right answer, the test cannot see the difference it
 was written to see.** Read what the fixture actually selected.
 
+`0731` found three more while closing the last fallback, and the third
+is the one to remember:
+
+* **28 POS files** created tender types and no bank account at all, so
+  every counter sale's takings went to the heading.
+* **Seven receipt fixtures** never named an account.
+* **`group_payment_shapes.sql` asserted that a closed account "is not
+  chosen even when it is the default" — and passed because the field
+  was NULL.** `is distinct from v_shut` is satisfied by nothing at all.
+  That is entry 9 above, in SQL: an assertion that a value is not the
+  wrong one is not an assertion that it is the right one. Assert what
+  it IS.
+
+Two more appeared in `demo_rebuild.sql` the moment a demo company had
+two bank accounts rather than one: `select b.current_balance into
+v_bank ... where b.org_id = v_sinar` took whichever row came first and
+was compared against the ledger for both, and a control asserting
+exactly two distinct balances became three. **`select ... into` a
+scalar from a query that can return more than one row is a `limit 1`
+nobody wrote.**
+
 ## Before you write the test, read the SQL it has to agree with
 
 The most expensive defect found this way was not a vacuous assertion.

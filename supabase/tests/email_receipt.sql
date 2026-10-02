@@ -74,9 +74,10 @@ declare v_id uuid;
 begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
-     currency, exchange_rate, payment_mode_code, reference)
+     currency, exchange_rate, payment_mode_code, reference, bank_account_id)
   values (p_org, p_no, date '2026-03-05', p_contact, p_amount, p_unapplied,
-          'MYR', 1, '03', 'FT26030512')
+          'MYR', 1, '03', 'FT26030512',
+          pg_temp.a_bank_account(p_org))
   returning id into v_id;
   if p_invoice is not null then
     insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)

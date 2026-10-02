@@ -448,7 +448,14 @@ begin
     'none, which is why every invoice sat unpaid',
     exists (select 1 from public.bank_accounts where org_id = v_sinar));
 
-  select b.current_balance into v_bank
+  -- SUM, not one row. `select b.current_balance into v_bank` took
+  -- whichever row came first, which was the same number as the total
+  -- for as long as Sinar had exactly one bank account. `0731` gives
+  -- every demo company a cash drawer at birth -- a counter sale needs
+  -- somewhere to put the takings -- so it has two, and comparing one
+  -- account's cache against both accounts' ledger is a mismatch of
+  -- 9,180.00 that says nothing about either.
+  select coalesce(sum(b.current_balance), 0) into v_bank
     from public.bank_accounts b where b.org_id = v_sinar;
   select coalesce(sum(l.debit - l.credit), 0) into v_gl
     from public.gl_lines l
@@ -458,6 +465,14 @@ begin
   perform pg_temp.check_eq(
     'the cached bank balance equals the ledger, which is the whole point '
     'of a cache nobody reconciles', v_bank, v_gl);
+
+  -- And that there is more than one, so the sum above is doing work.
+  -- With one account a sum and a first row cannot be told apart, which
+  -- is how the assertion above held while reading half the question.
+  perform pg_temp.check_true(
+    'Sinar has both a bank account and a drawer',
+    (select count(*) > 1 from public.bank_accounts
+      where org_id = v_sinar and is_active));
 
   -- --------------------------------------------------------------
   -- And no demo account on the heading -- 0730
@@ -1072,10 +1087,16 @@ begin
   begin
     select id into v_firm from public.organizations
      where is_demo and name like 'Guaman%';
+    -- At least two distinct balances, not exactly two. `= 2` was the
+    -- same thing for as long as the firm had a client account and an
+    -- office account; `0731` gives every demo company a cash drawer as
+    -- well, so there are three accounts and three numbers. What the
+    -- control is for is that the assertion above is reading more than
+    -- one figure -- which two of anything establishes.
     perform pg_temp.check_true(
-      'on a tenant that has two of them, holding different balances',
+      'on a tenant that has several of them, holding different balances',
       (select count(distinct current_balance) from public.bank_accounts
-        where org_id = v_firm) = 2);
+        where org_id = v_firm) >= 2);
   end;
 
   -- --------------------------------------------------------------

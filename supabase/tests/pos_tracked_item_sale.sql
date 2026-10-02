@@ -177,6 +177,7 @@ begin
   insert into public.pos_registers (org_id, outlet_id, code, name)
   values (v_org, v_outlet, 'C1', 'Kaunter') returning id into v_reg;
   insert into public.pos_settings (org_id) values (v_org);
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
      gives_change)

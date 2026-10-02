@@ -106,6 +106,7 @@ begin
           (select id from public.accounts where org_id = v_org and code = '1110'),
           'Cash in hand', 'cash', 'MYR')
   returning id into v_bank;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, bank_account_id,
      counts_in_drawer, gives_change)

@@ -393,6 +393,31 @@ begin
 end;
 $$;
 
+-- The till, made on first ask.
+--
+-- A counter needs somewhere for the cash to be. Every POS fixture in
+-- this directory created tender types and no bank account at all, so
+-- `pos_tender_types.bank_account_id` was null, the receipt was born
+-- without one, and `app.post_receipt_internal` debited the 1120
+-- heading -- which is the fallback `0731` refuses. Call this before
+-- inserting tender types and `app.tender_type_settlement_account`
+-- fills them in.
+--
+-- `cash` rather than `current`, because that is what a drawer is:
+-- `bank_accounts.account_type` has permitted it since `0003`.
+create or replace function pg_temp.a_till(p_org uuid)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  select b.id into v_id from public.bank_accounts b
+   where b.org_id = p_org and b.is_active and b.account_type = 'cash'
+   order by b.is_default desc, b.created_at
+   limit 1;
+  return coalesce(v_id,
+    pg_temp.test_bank_account(p_org, 'Tunai', 'cash'));
+end;
+$$;
+
 -- The GL account behind a fixture's bank account.
 --
 -- Fixtures used to read `code = '1120'` for this, which is the whole

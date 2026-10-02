@@ -88,12 +88,14 @@ begin
           'Cash in hand', 'cash', 'MYR')
   returning id into v_bank;
 
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, bank_account_id,
      counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Cash', 'cash', '01', v_bank, true, true)
   returning id into v_cash;
   -- No bank account, and none is possible: nothing was banked.
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, counts_in_drawer, gives_change)
   values (v_org, 'ACCT', 'On account', 'on_account', false, false)

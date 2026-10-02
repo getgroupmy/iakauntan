@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the 2 October session: `c891c3a4` (`0729`), two documentation commits, and `0730` — the trigger that shuts the door on the 1120 heading. The fourteen before it are the 1 October session, and what each one did is the table under **The 1 October session** below |
+| Head at time of writing | the 2 October session: `0729`, `0730` and `0731`, with documentation commits between them. `0731` closes the LAST heading fallback |
 | CI | **green through run 2197 (`2a0b01d0`, `0730`)** — and 2195, 2196 before it. 2197 ran twelve jobs, the iOS build skipped as it is on a push touching no iOS, and **"Apply the migrations" RAN rather than skipping** in both 2194 and 2197. Read the runs rather than inferring them, and mind these traps, each of which has cost a round: `list_workflow_runs` SERVES STALE PAGES — it answered with run 2004 from 21 September three times in one afternoon, and on 2 October it showed NO run at all for `28df6789` for eight minutes while run 2196 was in fact running, in none of the three status filters — so filter by `status: in_progress`, use `actions_get get_workflow_run` on a known id, and do not read an empty listing as a pass; a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in the commit after it; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0730` is the highest, and it is applied live and VERIFIED against production** — not inferred from a green run. `schema_migrations` has it; the trigger `bank_account_not_the_heading` is on `public.bank_accounts` in `pg_trigger`; `app.demo_bank_account` exists and all four restated seeders call it while **none of them inserts a bank account any more**; `unregistered_bank_accounts` carries the `<> '1120'` line; and the rows on the heading are **still twelve, in twelve companies**, which is what "0730 moves nothing posted" has to mean. `0729` was verified the same way, and its sweep for the heading as a literal still returns seven functions — the allow-list. **Not attempted: a write probe in production.** The trigger's refusal is asserted in `bank_accounts.sql` and was proved by mutation locally; production is read-only unless the user asks otherwise, and a rolled-back insert is still a write. The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep`: a case-sensitive match reported one definition of `demo_legal_guaman` where `0549` makes two |
+| Migrations | **`0731` is the highest**; `0730` and `0729` below it are applied live and VERIFIED against production (the trigger is in `pg_trigger`, the four restated seeders no longer insert a bank account, the picker excludes 1120, and the rows on the heading are still twelve). Verify `0731` the same way rather than inferring it from a green run — the apply job SKIPS when a newer commit is at the branch tip. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep`: a case-sensitive match reported one definition of `demo_legal_guaman` where `0549` makes two |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
 | Gates | **382 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,616 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 808 functions, 367 tables, version `0730`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| API description | 808 functions, 367 tables, version `0731`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -149,8 +149,12 @@ chase them unprompted either.
    `bank_accounts` row of type `cash` instead. Also whether to re-attach
    the receipt PDF: a reversal LEAVES THE ORIGINAL STANDING, attachment
    and all.
-3. **Where card and e-wallet money lands**, which is what the receipts
-   half of the 1120 audit is waiting on — see below. (The video-rotation
+3. ~~Where card and e-wallet money lands~~ — **answered on 2 October
+   and built as `0731`**: they settle into the company's own bank
+   account a few days later, or into another where one is defined, and
+   cash stays in the drawer. What is left of it is a SCREEN: there is
+   no editor for a tender type, so the "or another where one is
+   defined" half cannot be reached through the product yet. (The video-rotation
    measurement that used to sit beside this is no longer wanted: the
    cause was found by reading the mediasoup package rather than by
    measuring a call.)
@@ -286,6 +290,108 @@ that nothing lands there, and manual journals in `budgets.sql`,
 a ledger account and are not bank accounts at all).
 
 Read the section below for what the sweep found on the way.
+
+### `0731`: where the card money lands, and a correction to all of this
+
+The user answered the question the receipts half was waiting on: **card
+and e-wallet settle into the company's own bank account a few days
+later -- MBB for theirs -- or into another account where one is
+defined.** Cash stays in the drawer. Asked which way to record the
+lag, they chose the simple one: the receipt debits the bank on the sale
+date, and the days until the statement shows it are an unmatched item
+on the reconciliation, the same treatment a cheque in transit gets. The
+acquirer's fee was already modelled -- `receipts.bank_charges` posts to
+`app.bank_charge_account` (`0635`) -- so the bank is debited net. A
+card-settlement-in-transit account is the more accurate model and was
+explicitly deferred; the tender's account is a column, so that change
+stays additive.
+
+### THE CORRECTION, which matters more than the migration
+
+`0728`, `0729` and `0730` each describe the heading as a live mess in
+customers' books: "twelve companies have one, with real balances", "97
+lines across 14 companies". **The counts were right and the
+characterisation was wrong**, and all three inherited it from a
+sentence none of them had measured:
+
+| | demo | real |
+| --- | --- | --- |
+| bank accounts pointing at the heading | 11 | **1** — YUSOF ZAIN & CO / CIMB |
+| ledger lines on the heading | 96 | **1** — GESWANT & CO, −22.50 |
+| companies with a POS tender | 5 | **0** |
+
+So the real remainder of three days' work is one bank account to
+repoint and one expense of −22.50, which is `EXP-2026-00001` and was
+already waiting on a person. The eleven demo accounts put themselves
+right at the next `app.demo_rebuild()`, because `app.demo_bank_account`
+makes them in 1121-1199 now.
+
+And the reason `0728` gave for keeping the last fallback — refusing
+"would stop the till rather than correct it" — was sound reasoning
+about demo data. **There is no real till.** Read a count and a
+characterisation as two different claims; this file carried the second
+one for three days without anybody measuring it.
+
+### What `0731` actually does
+
+`app.post_receipt_internal` does NOT simply refuse a null account,
+because three callers reach it without one and none of them is a person
+who declined to answer:
+
+* `complete_pos_sale` takes it from the tender type, and every tender
+  row in production has none;
+* the same function gives a basket cleared entirely by loyalty points a
+  receipt for **zero** (`0212`), with no tender at all;
+* `record_group_payment` looks for `is_default and is_active` and finds
+  nothing when a company's default account has been closed. Its own
+  comment said what happened next: "left null the posting falls through
+  to cash (1120) and no bank balance moves at all".
+
+So it RESOLVES one — a gateway's settlement account, else the default
+active account, else the oldest active one, never a closed account and
+never a client account — and **writes it onto the receipt**. That
+write-back is the whole difference from the fallback it replaces: 1120
+was chosen at posting time and left no trace, which is how a year of
+entries reached the heading unnoticed. A resolved account is on the row,
+in every list that reads one, and on the reconciliation that has to
+agree with it. It refuses only when the company has no bank account at
+all, and says a cash drawer counts.
+
+`app.tender_type_settlement_account` fills the tender row by the same
+rule, so the answer is visible where somebody can change it. **There is
+no screen for editing a tender type** — tenders are read by the till
+and written only by demo seeders, which is why all thirteen rows were
+null. That editor is the follow-up this did not build.
+
+`app.demo_company` now gives every demo company a cash drawer at birth:
+`app.demo_warung` sells at a counter before `app.demo_purchases` has
+made it a bank account, and four more POS seeders are in the same
+position. Fixed in the 22-line function every demo company passes
+through rather than in five seeders totalling 1,080 lines.
+`app.demo_bank_account`'s lookup is now asked for a TYPE as well, so a
+till is not handed back as a current account.
+
+### Three more fixtures that could not see what they tested
+
+The same shape as `0730`'s four, found the same way:
+
+1. **28 POS fixture files created tender types and no bank account at
+   all**, so the takings went to the heading. `_helpers.sql` has
+   `pg_temp.a_till(org)` now, called at 42 sites.
+2. **Seven receipt fixtures never named an account** — `aged_balances`,
+   `aging_shapes` (twice), `statement_of_account`, `void_an_invoice`,
+   `knock_off`, `email_receipt`.
+3. **`group_payment_shapes.sql` asserted "a closed account is not
+   chosen even when it is the default" and passed because the field was
+   NULL.** `is distinct from v_shut` is satisfied by nothing at all —
+   the same trap as entry 9 in `docs/widget-tests.md`, in SQL.
+
+And two in `demo_rebuild.sql` that only appeared once a demo company
+had two bank accounts: `select b.current_balance into v_bank ... where
+b.org_id = v_sinar` took whichever row came first and was compared
+against the ledger for BOTH accounts, and a control asserting exactly
+two distinct balances became three. Both were right while every tenant
+had one account, which is the state that hid them.
 
 ### `0730`, and the four things the sweep found on the way
 

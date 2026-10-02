@@ -332,6 +332,7 @@ begin
   -- same invoice and receipt a counter sale does, and the table is
   -- released because the sale is no longer parked.
   perform public.move_pos_sale(v_sale, v_t7);
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Cash', 'cash', '01', true, true) returning id into v_cash;

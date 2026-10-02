@@ -73,6 +73,7 @@ begin
   insert into public.pos_registers (org_id, outlet_id, code, name)
   values (v_org, v_outlet, 'T1', 'Reception') returning id into v_reg;
   insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, true);
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Cash', 'cash', '01', true, true) returning id into v_cash;

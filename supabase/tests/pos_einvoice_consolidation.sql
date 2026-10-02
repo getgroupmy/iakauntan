@@ -163,6 +163,7 @@ begin
   values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
   insert into public.pos_settings (org_id, round_cash_to_5sen)
   values (v_org, false);
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Cash', 'cash', '01', true, true)
@@ -238,6 +239,7 @@ begin
   values (v_them, v_outlet, 'T1', 'Their counter') returning id into v_reg;
   insert into public.pos_settings (org_id, round_cash_to_5sen)
   values (v_them, false);
+  perform pg_temp.a_till(v_them);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_them, 'CASH', 'Cash', 'cash', '01', true, true)

@@ -84,6 +84,7 @@ begin
   insert into public.pos_registers (org_id, outlet_id, code, name)
   values (v_org, v_out2, 'C2', 'Branch counter') returning id into v_reg2;
   insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, true);
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change, opens_drawer)
   values (v_org, 'TUNAI', 'Tunai', 'cash', '01', true, true, true)
@@ -589,6 +590,7 @@ begin
   values (v_org, v_outlet, 'C1', 'Counter') returning id into v_reg;
   insert into public.pos_settings (org_id, round_cash_to_5sen)
   values (v_org, true) on conflict (org_id) do nothing;
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
      gives_change, opens_drawer)

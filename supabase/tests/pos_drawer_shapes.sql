@@ -56,6 +56,7 @@ begin
   insert into public.pos_registers (org_id, outlet_id, code, name)
   values (v_org, v_outlet, 'T1', 'Counter one'),
          (v_org, v_outlet, 'T2', 'Counter two');
+  perform pg_temp.a_till(v_org);
   insert into public.pos_tender_types
     (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
   values (v_org, 'CASH', 'Cash', 'cash', '01', true, true),
