@@ -117,19 +117,19 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `ca2386b1`, the fourteenth and last commit of the 1 October session. What each one did is the table under **The 1 October session** below |
-| CI | **green through run 2192 (`ca2386b1`)** — thirteen runs today for fourteen commits (`f217cd64` and `4dd97e4e` were pushed together and share 2189), and the last five green in a row. Read the runs rather than inferring them, and mind these traps, each of which has cost a round: `list_workflow_runs` SERVES STALE PAGES — it answered with run 2004 from 21 September three times in one afternoon — so filter by `status: in_progress` or use `actions_get get_workflow_run` on a known id; a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in the commit after it; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0728` is the highest, and it is applied live and VERIFIED against production** — not inferred from a green run. `schema_migrations` has it; the refusal is in each of the four live function bodies; and `app.post_receipt_internal` is the only surviving `code = '1120'` fallback, which `0728` deliberately left and documents at length. `0727` was verified the same way. The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated |
+| Head at time of writing | `c891c3a4`, the one commit of the 2 October session — migration `0729`. The fourteen before it are the 1 October session, and what each one did is the table under **The 1 October session** below |
+| CI | **green through run 2192; run 2194 (`c891c3a4`, `0729`) was still in progress when this line was written — check it before believing it.** 2192 was the last of the 1 October session — thirteen runs that day for fourteen commits (`f217cd64` and `4dd97e4e` were pushed together and share 2189), and the last five green in a row. Read the runs rather than inferring them, and mind these traps, each of which has cost a round: `list_workflow_runs` SERVES STALE PAGES — it answered with run 2004 from 21 September three times in one afternoon — so filter by `status: in_progress` or use `actions_get get_workflow_run` on a known id; a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in the commit after it; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
+| Migrations | **`0729` is the highest.** It is pushed and in run 2194, which had not finished when this was written, and it is **NOT yet re-verified against production** — read `schema_migrations` and the live function bodies before relying on it, because the apply job SKIPS when a newer commit is at the branch tip. `0728` below it IS applied and verified that way. Note that `0728`'s own claim that `app.post_receipt_internal` was the only surviving `code = '1120'` fallback **was wrong** — an unfiltered sweep found nine functions, and `0729` is what closed the two posting paths among them; see **The 2 October session** below. The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **382 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,611 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 808 functions, 367 tables, version `0728`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| Gates | **382 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,616 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| API description | 808 functions, 367 tables, version `0729`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
-## What is waiting on the user, as of 1 October
+## What is waiting on the user, as of 2 October
 
-Nothing on this list can be moved from inside a session. They are here
+Re-read on 2 October; nothing on it moved. Nothing on this list can be moved from inside a session. They are here
 so the next one does not spend a round rediscovering them — and does not
 chase them unprompted either.
 
@@ -184,6 +184,138 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## The 2 October session
+
+One commit, `c891c3a4`, migration `0729`, in run 2194 — which was still running when this
+was written, so read it rather than this sentence. It exists because
+the previous session's audit was asked to be re-run as a fresh sweep
+rather than taken on trust — and the sweep found that the audit had
+been wrong about its own scope.
+
+### ASKING A FILTERED QUESTION CANNOT TELL YOU WHAT YOU DID NOT ASK ABOUT
+
+`0727` closed the 1120 fallback in `post_expense`. `0728` said it had
+found "the same shape in five more places" and closed four. The number
+that matters:
+
+    select p.oid::regprocedure::text
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ('public','app') and p.prokind = 'f'
+       and pg_get_functiondef(p.oid) like '%code = ''1120''%';
+
+**Nine.** `0728` reported one. The difference is two posting paths
+nobody had looked at — `dispose_fixed_asset` and `remit_withholding` —
+plus six demo seeders, which are data rather than rules.
+
+Both earlier passes had asked a question with the answer already in its
+`where` clause: a query over the functions that were known about, and a
+grep of `supabase/migrations/` for `'1120'` that listed twenty files of
+which five were opened. That is run 2183's lesson — grepping for a
+token is not grepping for the behaviour — recurring one level up.
+
+`remit_withholding` had a second reason, and it is the better
+cautionary tale. `0506`'s header says it "already had the guard and an
+org-scoped update, so neither needed changing". True — about the
+CROSS-TENANT guard, and silent about the fallback. One sentence about
+one property of a function was read as a verdict on the function. Its
+own comment, meanwhile, described the harm while doing it: it documents
+refusing another company's bank account because "falling back to the
+default cash account would post the entry anyway and leave nobody any
+the wiser".
+
+### What `0729` changed
+
+* **`dispose_fixed_asset`** refuses when proceeds are positive and no
+  account is named, and — new, not a copy of `0728`'s work — **scopes
+  the bank lookup to the asset's org.** It matched on `b.id` alone.
+  `p_bank_account_id` is an ARGUMENT, so none of `0160`'s composite
+  foreign keys reach it (those constrain stored columns), and naming
+  another company's account would have debited THEIR ledger account
+  inside this company's journal. Same hole `0505` and `0506` closed
+  where the account is a column.
+* **`remit_withholding`** refuses a remittance paid from no account.
+* **`money_names_the_account.sql`** pins the ALLOW-LIST:
+  `app.post_receipt_internal` plus the six demo seeders, asserted in
+  **both directions**. A tenth function fails by name, and an
+  allow-list entry matching nothing fails too — that second half is the
+  one that rots, because a stale exemption reads as the truth, which is
+  exactly how this migration's own subject survived.
+* **Both dialogs** now ask. `disposal_dialog.dart` stars "Proceeds
+  into" the moment an amount is typed; `withholding_screen.dart`
+  replaces a yes-or-no `confirm` with a dialog that asks which account
+  the money left, keeping the confirmation's words, because "do it when
+  the money has actually gone" was always the right warning.
+
+The disposal dialog's helper text had said *"Left blank, they go to
+cash"* and **a widget test asserted that sentence.** It was not true —
+blank went to 1120. Same species as the SQL fixture that asserted the
+1120 credit and called it "the money leaves the bank": a test pinning a
+false claim in place, in prose this time.
+
+### The twelve accounts, and the door that is still open
+
+Refusing a MISSING account does not catch the other way in: a bank
+account whose `account_id` points AT the heading. **Twelve companies
+have one** — active, named "CIMB Current Account", "Maybank Current
+Account", with real balances — and a posting naming one of those passes
+every null check and lands on 1120 anyway. That is most of the 97 lines
+now sitting on the heading across 14 companies: 53 from receipts, 18
+from purchase payments, 25 from manual journals, 1 from
+`EXP-2026-00001`.
+
+**Those rows are left exactly as they are, by the user's decision.**
+Nothing in `0729` moves a posted line. Only two of the twelve companies
+have a second bank account and in both it is `1150 Client Account`, so
+no company has two accounts resolving to 1120 and nothing is
+misreconciled between accounts today. It is latent.
+
+Shutting the door behind them — a trigger refusing a NEW bank account
+that points at the heading — is wanted and is **not done**, and the
+reason is a measurement, not an estimate. I called it cheap. It is not:
+the trigger was written, and it **fails 29 of the 382 assertion files,
+because 69 fixture sites across 29 files hang their bank account on
+1120.** Four times what `0728`'s write-up of that blind spot implied.
+Several of those fixtures carry meaning in the insert they would lose —
+opening balances, `is_default`, a second account per company, the two
+`1150` client accounts — so the sweep onto `pg_temp.test_bank_account`
+is careful work and gets its own change. **Do not ride it along with a
+small fix.**
+
+### Four traps paid for in this one commit
+
+1. **`pg_get_function_identity_arguments` prints PARAMETER NAMES.** The
+   allow-list was first written in types, matched nothing, and the
+   assertion failed naming all seven allowed functions as new arrivals
+   — a formatting failure wearing the costume of a real finding. Use
+   `p.oid::regprocedure::text`, which prints types and schema-qualifies
+   only where it must.
+2. **`prokind = 'f'` is load-bearing.**
+   `pg_get_function_identity_arguments` raises on an aggregate
+   ("array_agg is an aggregate function").
+3. **`pg_get_functiondef` returns the COMMENTS as part of the body.** A
+   function whose comment quotes `code = '1120'` matches a body sweep.
+   The deferred trigger had to be restructured — `v_heading constant
+   text := '1120'` and a reworded comment — so that the thing enforcing
+   the rule did not fail the rule.
+4. **`implements Repo` inherits no bodies.** A fake answering only
+   `callRpc` sends `Repo.remitWithholding` to `noSuchMethod`, so the
+   method never runs and nothing is recorded; `runWithFeedback` catches
+   the throw and draws a snackbar, and the only symptom is an empty
+   list. This is the mirror image of the extension-method trap and is
+   now written up beside it in `docs/widget-tests.md`.
+
+### What was run before the push
+
+382 SQL assertion files, every Python gate and every gate self-test
+(`supabase/tests/run_locally.sh`, which needs no Docker — see the
+section below), `flutter analyze` clean, 6,616 Flutter tests, and two
+mutation runs: five mutants killed on the remit dialog and six on the
+disposal dialog, each with a surviving control. One remit mutant
+survived the first pass — flipping `allowEmpty: true` changed nothing
+any assertion could see — and the assertion that kills it is the one
+saying the picker offers no "None" row, because a disabled button above
+a list still offering a way out is a dead end rather than a rule.
 
 ## The 1 October session
 
@@ -379,6 +511,11 @@ are the SAME ROW, and no assertion can tell them apart. `deposits.sql`
 even asserted *"the money leaves the bank"* by checking the credit on
 `code = '1120'`, which was true either way.
 
+How wide the blind spot is, measured rather than guessed: **69 fixture
+sites across 29 files** hang their bank account on 1120 — a trigger
+refusing it fails 29 of the 382 files. That sweep is still to do, and
+has its own paragraph in the 2 October section above.
+
 `_helpers.sql` now has `pg_temp.test_bank_account(org)`, which does what
 `0529` does — the next free code in 1121–1199, a child of 1100, the bank
 account on that — and `pg_temp.a_bank_account(org)`, which reuses the
@@ -390,6 +527,12 @@ This is the twelfth entry for the list in `docs/widget-tests.md` and the
 first that is about SQL rather than Dart.
 
 ### What `0728` deliberately did NOT do, and the question it leaves
+
+**Read this with the 2 October section above:** `0728` was right about
+what it left on purpose and wrong about what was left by accident. Two
+posting paths it never examined are closed by `0729`, and the set of
+functions permitted to mention `code = '1120'` is now asserted rather
+than described.
 
 `app.post_receipt_internal` still has the fallback, on purpose.
 

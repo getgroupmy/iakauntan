@@ -339,6 +339,36 @@ partway through it.** `expect(repo.saved, ...)` is true the moment the
 first call lands. `expect(find.text('Contact saved'), findsOneWidget)`
 is true only if the action finished.
 
+### And the mirror image: answering `callRpc` is not enough either
+
+The advice above — "answer the thing the extension body calls instead,
+`callRpc`, usually" — is right for an extension method and **silently
+wrong for a method on the class.** `implements Repo` INHERITS NO
+BODIES. A double that answers only `callRpc` sends every other member
+to `noSuchMethod`, so a class method never runs and never reaches the
+RPC it would have made.
+
+`remit_withholding` is where this was met. The fake answered `callRpc`
+and recorded nothing, because `Repo.remitWithholding` — declared on the
+class, not in an extension — went to `noSuchMethod` and threw. The
+throw was caught by `runWithFeedback`, which drew its error snackbar,
+and the only visible symptom was an assertion failing on an empty list.
+
+So the question is not "is this an extension method" but **"will this
+member's body actually run against my double"**, and the answer differs
+for the two halves of the same class:
+
+| declared | a double that answers `callRpc` | what to do |
+| --- | --- | --- |
+| `extension ... on Repo` | real body runs, reaches `callRpc` | assert on the RPC |
+| `class Repo` | `noSuchMethod`, body never runs | override the method and record its ARGUMENTS |
+
+Overriding the method means the test no longer proves how its arguments
+become RPC parameters. Say so where the override is: that mapping wants
+a `SupabaseClient` nobody has in a widget test, so it belongs to the
+SQL assertions, and a test file that quietly loses the claim is worse
+than one that names the seam.
+
 ## An unanswered method channel does not fail, it stops
 
 A `testWidgets` case that reaches a platform channel nobody has mocked
