@@ -54,13 +54,9 @@ begin
   values (v_org, 'KERJA', 'Work done', 'service', false, 1)
   returning id into v_item;
 
-  select id into v_bank_a from public.accounts where org_id = v_org and code = '1120';
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org, v_bank_a, 'Current account', 'Maybank', '512345678901',
-          'MYR', 0, 0, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678901');
+  v_bank_a := pg_temp.bank_gl(v_bank);
 
   -- Forty thousand of work, invoiced.
   insert into public.sales_documents
@@ -92,7 +88,7 @@ begin
   perform pg_temp.check_eq('and nothing was posted to the bank account',
     (select count(*) from public.gl_lines gl
       join public.accounts a on a.id = gl.account_id
-     where gl.entry_id = v_entry and a.code = '1120'), 0::numeric);
+     where gl.entry_id = v_entry and a.id = v_bank_a), 0::numeric);
 
   -- But he has discharged the debt with a negotiable instrument, so the
   -- receivable goes and the aged listing stops chasing him.
@@ -136,7 +132,7 @@ begin
   perform pg_temp.check_eq('debited to the bank',
     (select round(sum(gl.debit), 2) from public.gl_lines gl
       join public.accounts a on a.id = gl.account_id
-     where gl.entry_id = v_entry and a.code = '1120'), 40000::numeric);
+     where gl.entry_id = v_entry and a.id = v_bank_a), 40000::numeric);
   perform pg_temp.check_eq('out of cheques on hand',
     (select round(sum(gl.credit), 2) from public.gl_lines gl
       join public.accounts a on a.id = gl.account_id
@@ -389,12 +385,9 @@ begin
   values (v_org, 'CUST', 'Pembeli Bhd', 'customer') returning id into v_cust;
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'SUP', 'Pembekal Bhd', 'supplier') returning id into v_sup;
-  select id into v_bank_a from public.accounts where org_id = v_org and code = '1120';
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org, v_bank_a, 'Maybank', 'Maybank', '514011', 'MYR', 0, 0, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank', 'current', 'MYR', 0, 0, '514011');
+  v_bank_a := pg_temp.bank_gl(v_bank);
 
   -- Dated relative to today on purpose: `days_to_go` is measured against
   -- today, so a fixed date would make the assertion drift by a day every
@@ -549,23 +542,14 @@ begin
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CUST', 'Encik Zul', 'customer') returning id into v_cust;
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Our account', 'Maybank', '544444444444', 'MYR', 0, 0, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Our account', 'current', 'MYR', 0, 0, '544444444444');
 
   v_org2 := pg_temp.test_org('Cek Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org2,
-          (select id from public.accounts where org_id = v_org2 and code = '1120'),
-          'Their account', 'RHB', '555555555555', 'MYR', 0, 6000, true)
-  returning id into v_theirs;
+  v_theirs := pg_temp.test_bank_account(
+    v_org2, 'Their account', 'current', 'MYR', 0, 6000, '555555555555',
+    'RHB');
 
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount,
@@ -644,11 +628,8 @@ begin
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'KERJA', 'Kerja', 'service', false, 1) returning id into v_item;
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org, (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Semasa', 'Maybank', '111', 'MYR', 0, 0, true) returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Semasa', 'current', 'MYR', 0, 0, '111');
 
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,

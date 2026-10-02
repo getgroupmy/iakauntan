@@ -459,6 +459,32 @@ begin
     'the cached bank balance equals the ledger, which is the whole point '
     'of a cache nobody reconciles', v_bank, v_gl);
 
+  -- --------------------------------------------------------------
+  -- And no demo account on the heading -- 0730
+  --
+  -- Four seeders used to insert one there, and the trigger refuses it
+  -- now, so a regression breaks the rebuild rather than reaching here.
+  -- This asserts the STATE as well, for the case where the trigger is
+  -- not what broke: a seeder reviving an account, or somebody loading
+  -- these companies from a dump taken before 0730.
+  --
+  -- Named by company and code, because "0 rows" says nothing about
+  -- which seeder put the row there.
+  select count(*) into v_bad
+    from public.bank_accounts b
+    join public.accounts a on a.id = b.account_id
+    join public.organizations o on o.id = b.org_id
+   where o.is_demo and (a.code = '1120' or a.is_group);
+  select string_agg(o.name || ' -> ' || a.code, ', ' order by o.name)
+    into v_missing
+    from public.bank_accounts b
+    join public.accounts a on a.id = b.account_id
+    join public.organizations o on o.id = b.org_id
+   where o.is_demo and (a.code = '1120' or a.is_group);
+  perform pg_temp.check_eq(
+    'no demo company banks on the heading'
+    || coalesce(': ' || v_missing, ''), v_bad, 0);
+
   -- Both aging buckets. Either extreme is a screen with nothing to read.
   select count(*) into v_units from public.sales_documents
    where org_id = v_sinar and doc_type = 'invoice' and status = 'posted';

@@ -1230,20 +1230,16 @@ begin
   -- ==================================================================
   -- 6. The receipt, and where the money was banked
   -- ==================================================================
-  declare v_r record; v_bank uuid; v_bank2 uuid; v_acct_id uuid;
+  declare v_r record; v_bank uuid; v_bank2 uuid;
   begin
-    select id into v_acct_id from public.accounts
-     where org_id = v_org and code = '1120';
-    insert into public.bank_accounts
-      (org_id, account_id, name, bank_name, account_number, currency,
-       opening_balance, current_balance)
-    values (v_org, v_acct_id, 'Kad', 'Maybank', '9001', 'MYR', 0, 0)
-    returning id into v_bank;
-    insert into public.bank_accounts
-      (org_id, account_id, name, bank_name, account_number, currency,
-       opening_balance, current_balance)
-    values (v_org, v_acct_id, 'Tunai', 'Maybank', '9002', 'MYR', 0, 0)
-    returning id into v_bank2;
+    -- Two accounts on two ledger accounts. They used to share 1120,
+    -- which is the one shape that cannot test "the money is banked
+    -- against the FIRST tender that is not on account": both tenders
+    -- credited the same row either way.
+    v_bank := pg_temp.test_bank_account(
+      v_org, 'Kad', 'current', 'MYR', 0, 0, '9001');
+    v_bank2 := pg_temp.test_bank_account(
+      v_org, 'Tunai', 'cash', 'MYR', 0, 0, '9002');
     update public.pos_tender_types set bank_account_id = v_bank where id = v_card;
     update public.pos_tender_types set bank_account_id = v_bank2 where id = v_cash;
 

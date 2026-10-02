@@ -28,6 +28,7 @@ declare
   v_gl2     uuid;
   v_ar      uuid;
   v_head    uuid;
+  v_twelve  uuid;
   v_ok      boolean;
   v_txt     text;
   v_n       integer;
@@ -112,15 +113,107 @@ begin
   -- ---------------------------------------------------------------
   -- Pointing at an account that already exists
   -- ---------------------------------------------------------------
+  --
+  -- A caller MAY name a ledger account rather than have one made --
+  -- that is what `p_account_id` is for -- and until `0730` it could
+  -- name the heading. This block asserted that it could, by name:
+  --
+  --     check_eq('a caller may name the GL account itself', ..., '1120')
+  --
+  -- It was true, it was the product's own route to the twelve
+  -- companies whose bank account points at 1120, and the assertion
+  -- pinned it. `upsert_bank_account`'s own guard let it through because
+  -- 1120 is seeded `is_group = false` with subtype `bank`, which is
+  -- exactly what that guard asks for.
+  --
+  -- So: the account it may name is one of its own children.
   v_second := public.upsert_bank_account(
-    p_name       => 'Shares the heading',
+    p_name       => 'Shares an account made by hand',
     p_account_id => (select id from public.accounts
-                      where org_id = v_org and code = '1120'),
+                      where org_id = v_org and code = '1123'),
     p_org_id     => v_org);
-  perform pg_temp.check_eq('a caller may name the GL account itself',
+  perform pg_temp.check_eq('a caller may name a ledger account of its own',
     (select a.code from public.accounts a
       join public.bank_accounts b on b.account_id = a.id
-     where b.id = v_second), '1120');
+     where b.id = v_second), '1123');
+
+  -- ---------------------------------------------------------------
+  -- And may not name the heading -- 0730
+  -- ---------------------------------------------------------------
+  perform pg_temp.check_refused(
+    'the bank heading itself is refused',
+    format($q$ select public.upsert_bank_account(
+                 p_name => 'On the heading', p_account_id => %L,
+                 p_org_id => %L) $q$,
+           (select id from public.accounts
+             where org_id = v_org and code = '1120'), v_org),
+    '%hang beneath%');
+
+  -- Through the front door AND through the table, because the rule is a
+  -- trigger: a guard in the function would leave every other writer --
+  -- an import, a seeder, a migration, a hand-written insert in a test
+  -- -- free to do it, and four of those had.
+  perform pg_temp.check_refused(
+    'and refused to a direct insert as well',
+    format($q$ insert into public.bank_accounts (org_id, account_id, name)
+               values (%L, (select id from public.accounts
+                             where org_id = %L and code = '1120'),
+                       'Straight at the table') $q$, v_org, v_org),
+    '%hang beneath%');
+
+  -- A real heading, which is the general form of the same rule. 1100
+  -- "Cash and Bank" is `is_group`, and a fixture in
+  -- `client_money_crossing.sql` had a law firm's office account on it.
+  perform pg_temp.check_refused(
+    'a group account is refused too, with the reason it is wrong',
+    format($q$ insert into public.bank_accounts (org_id, account_id, name)
+               values (%L, (select id from public.accounts
+                             where org_id = %L and code = '1100'),
+                       'On the group') $q$, v_org, v_org),
+    '%is a heading%');
+
+  -- The control: the refusals above are not a trigger that refuses
+  -- everything. `v_second` was just made on 1123 and is still there.
+  perform pg_temp.check_eq('and an account of its own still goes in',
+    (select count(*)::numeric from public.bank_accounts
+      where id = v_second), 1);
+
+  -- And the twelve. A row ALREADY on the heading must keep working:
+  -- `current_balance` is written by every posting function, and a
+  -- trigger that refused those updates would stop a reconciliation to
+  -- make a point about a column nobody is changing. Made here the only
+  -- way left -- the trigger disabled for one statement -- because the
+  -- product can no longer produce one.
+  alter table public.bank_accounts disable trigger
+    bank_account_not_the_heading;
+  insert into public.bank_accounts (org_id, account_id, name,
+    current_balance, is_default)
+  values (v_org, (select id from public.accounts
+                   where org_id = v_org and code = '1120'),
+          'One of the twelve', 0, false)
+  returning id into v_twelve;
+  alter table public.bank_accounts enable trigger
+    bank_account_not_the_heading;
+
+  update public.bank_accounts set current_balance = 9000 where id = v_twelve;
+  perform pg_temp.check_eq('a row already on the heading can still be banked',
+    (select current_balance from public.bank_accounts where id = v_twelve),
+    9000.00);
+  update public.bank_accounts set name = 'Renamed in place' where id = v_twelve;
+  perform pg_temp.check_eq('and renamed',
+    (select name from public.bank_accounts where id = v_twelve),
+    'Renamed in place');
+
+  -- What it cannot do is move to the heading, which is the other half
+  -- of the door: an existing account repointed at 1120 would arrive at
+  -- the same place as a new one.
+  perform pg_temp.check_refused(
+    'but an existing account cannot be repointed at the heading',
+    format($q$ update public.bank_accounts
+                  set account_id = (select id from public.accounts
+                                     where org_id = %L and code = '1120')
+                where id = %L $q$, v_org, v_first),
+    '%hang beneath%');
 
   -- ---------------------------------------------------------------
   -- What it refuses

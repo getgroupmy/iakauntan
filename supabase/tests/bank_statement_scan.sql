@@ -109,12 +109,8 @@ begin
   -- The seam: the names the reader answers under are the names the
   -- import reads
   -- -------------------------------------------------------------------
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current', 'Maybank', '514011223344', 'MYR')
-  returning id into v_acct;
+  v_acct := pg_temp.test_bank_account(
+    v_org, 'Current', 'current', 'MYR', 0, 0, '514011223344');
 
   -- Built from the ticked names themselves rather than typed out, so
   -- the assertion moves when the ticks move.

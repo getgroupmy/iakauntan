@@ -72,12 +72,9 @@ begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
   perform public.setup_legal_module(v_org);
 
-  select id into v_gl from public.accounts
-   where org_id = v_org and code = '1120';
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number)
-  values (v_org, v_gl, 'Maybank current', 'Maybank', '1234')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '1234');
+  v_gl   := pg_temp.bank_gl(v_bank);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL1', 'Puan Aminah', 'customer') returning id into v_client;

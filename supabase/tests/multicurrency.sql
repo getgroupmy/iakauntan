@@ -131,9 +131,7 @@ begin
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'FXC-1', 'Overseas Buyer Inc', 'customer') returning id into v_cust;
 
-  insert into public.bank_accounts (org_id, account_id, name)
-  values (v_org, (select id from public.accounts where org_id=v_org and code='1120'),
-          'Current account') returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account');
 
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
   values (v_org,'USD','MYR',4.70,current_date - 10,'manual'),
@@ -194,9 +192,7 @@ begin
   select id into v_ar from public.accounts where org_id=v_org and code='1210';
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org,'FXC-2','Overseas Buyer Inc','customer') returning id into v_cust;
-  insert into public.bank_accounts (org_id, account_id, name)
-  values (v_org,(select id from public.accounts where org_id=v_org and code='1120'),
-          'Current account') returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account');
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
   values (v_org,'USD','MYR',4.50,current_date - 10,'manual');
 
@@ -262,9 +258,7 @@ begin
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'FXS-1', 'Overseas Supplier Inc', 'supplier')
   returning id into v_sup;
-  insert into public.bank_accounts (org_id, account_id, name)
-  values (v_org, (select id from public.accounts where org_id=v_org and code='1120'),
-          'Current account') returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account');
 
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
   values (v_org,'USD','MYR',4.70,current_date - 10,'manual'),
@@ -368,9 +362,7 @@ begin
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org,'FXC-3','Overseas Buyer Inc','customer') returning id into v_cust;
-  insert into public.bank_accounts (org_id, account_id, name)
-  values (v_org,(select id from public.accounts where org_id=v_org and code='1120'),
-          'Current account') returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account');
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
   values (v_org,'USD','MYR',4.50,current_date,'manual');
 

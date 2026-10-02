@@ -35,12 +35,8 @@ begin
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Service', 'service', false, 100);
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current', 'Maybank', '512345678901', 'MYR', 0, 0, true);
+  perform pg_temp.test_bank_account(
+    v_org, 'Current', 'current', 'MYR', 0, 0, '512345678901');
   return v_org;
 end $$;
 

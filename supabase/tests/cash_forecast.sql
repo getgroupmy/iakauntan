@@ -61,13 +61,8 @@ begin
   values (v_org, 'KERJA', 'Work', 'service', false, 1)
   returning id into v_item;
 
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current account', 'Maybank', '512345678901', 'MYR', 0, 10000, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 10000, '512345678901');
 
   -- ------------------------------------------------------------------
   -- 1. The opening position is what the bank actually holds

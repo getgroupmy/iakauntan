@@ -36,19 +36,16 @@ declare
   v_clerk uuid;
   v_org   uuid;
   v_acct  uuid;
-  v_gl    uuid;
 begin
   v_owner := pg_temp.test_user();
   perform pg_temp.sign_in_as(v_owner);
   v_org := pg_temp.test_org('Suapan Bank Sdn Bhd');
 
-  select id into v_gl from public.accounts
-   where org_id = v_org and account_type = 'asset' limit 1;
-
-  insert into public.bank_accounts
-    (org_id, name, bank_name, account_number, currency, account_id)
-  values (v_org, 'Current', 'Maybank', '512345678901', 'MYR', v_gl)
-  returning id into v_acct;
+  -- `account_type = 'asset' limit 1` used to choose this account, and
+  -- what it chose was 1000 -- the top of the asset side of the chart.
+  -- A bank account on the root of the balance sheet.
+  v_acct := pg_temp.test_bank_account(
+    v_org, 'Current', 'current', 'MYR', 0, 0, '512345678901');
 
   v_clerk := pg_temp.another_user('clerk@iakauntan.test');
   insert into public.org_members (org_id, user_id, role, status)

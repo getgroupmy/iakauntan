@@ -42,14 +42,8 @@ $$;
 
 create or replace function pg_temp.an_account(p_org uuid, p_name text)
 returns uuid language plpgsql as $$
-declare v_id uuid;
 begin
-  insert into public.bank_accounts (org_id, name, account_id, currency)
-  values (p_org, p_name,
-          (select id from public.accounts
-            where org_id = p_org and code = '1120'), 'MYR')
-  returning id into v_id;
-  return v_id;
+  return pg_temp.test_bank_account(p_org, p_name);
 end;
 $$;
 

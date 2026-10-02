@@ -53,12 +53,8 @@ begin
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Consulting', 'service', false, 100);
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current account', 'Maybank', '512345678901', 'MYR', 0, 0, true);
+  perform pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678901');
   return v_org;
 end $$;
 
@@ -385,18 +381,15 @@ begin
   -- A second account that is NOT the default, and a third that is
   -- closed. Both are ordinary: a company keeps a savings account, and
   -- keeps the old current account on file after switching banks.
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default, is_active)
-  values (v_org, v_acct, 'Savings account', 'CIMB', '700111222333',
-          'MYR', 0, 0, false, true)
-  returning id into v_second;
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default, is_active)
-  values (v_org, v_acct, 'Old account', 'RHB', '800111222333',
-          'MYR', 0, 0, false, false)
-  returning id into v_shut;
+  -- Three accounts, three ledger accounts. They used to share the
+  -- main one's, which is the shape that cannot tell "it chose the
+  -- default" from "it chose whichever row came first".
+  v_second := pg_temp.test_bank_account(
+    v_org, 'Savings account', 'savings', 'MYR', 0, 0, '700111222333',
+    'CIMB', false, false);
+  v_shut := pg_temp.test_bank_account(
+    v_org, 'Old account', 'current', 'MYR', 0, 0, '800111222333',
+    'RHB', false, false, false);
 
   -- Nothing named: the DEFAULT, and not merely the oldest active one.
   -- The savings account is made the default while the current account

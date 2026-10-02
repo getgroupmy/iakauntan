@@ -32,10 +32,13 @@ create or replace function pg_temp.bank_with_receipt(
 language plpgsql as $$
 declare v_acct uuid; v_cust uuid; v_inv uuid;
 begin
-  select id into v_acct from public.accounts where org_id = p_org and code = '1120';
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (p_org, v_acct, 'Maybank current', 'Maybank', '1234')
-  returning id into bank_id;
+  -- On its own ledger account, and `v_acct` read back off it. Every
+  -- assertion below that names an account names this one, and on the
+  -- 1120 heading "the reconciliation posted to the bank it was given"
+  -- and "it posted to the parent of every bank" were the same row.
+  bank_id := pg_temp.test_bank_account(
+    p_org, 'Maybank current', 'current', 'MYR', 0, 0, '1234');
+  v_acct  := pg_temp.bank_gl(bank_id);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (p_org, 'C-001', 'Buyer', 'customer') returning id into v_cust;
@@ -622,9 +625,9 @@ create or replace function pg_temp.sug_foreign_receipt(
 returns uuid language plpgsql as $$
 declare v_acct uuid; v_bank uuid; v_c uuid; v_id uuid;
 begin
-  select id into v_acct from public.accounts where org_id = p_org and code = '1120';
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (p_org, v_acct, 'Their bank', 'CIMB', '7777') returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    p_org, 'Their bank', 'current', 'MYR', 0, 0, '7777', 'CIMB');
+  v_acct := pg_temp.bank_gl(v_bank);
   insert into public.contacts (org_id, code, name, contact_type)
   values (p_org, 'C-X', 'Their buyer', 'customer') returning id into v_c;
   insert into public.receipts
@@ -648,10 +651,9 @@ declare
   v_spare uuid; v_taken uuid;
   v_n integer; r record;
 begin
-  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (v_org, v_acct, 'Maybank current', 'Maybank', '9001')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '9001');
+  v_acct := pg_temp.bank_gl(v_bank);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-001', 'Buyer Bhd', 'customer') returning id into v_cust;
@@ -827,10 +829,9 @@ declare
   v_march uuid; v_april uuid; v_err1 uuid; v_err2 uuid; v_rec uuid;
   v_clerk uuid; v_owner uuid := pg_temp.test_user();
 begin
-  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (v_org, v_acct, 'Maybank current', 'Maybank', '5001')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '5001');
+  v_acct := pg_temp.bank_gl(v_bank);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-001', 'Buyer Bhd', 'customer') returning id into v_cust;
 
@@ -1169,10 +1170,9 @@ declare
   v_cust uuid; v_rcp uuid; v_inv uuid;
 begin
   v_org := pg_temp.br_org('Books After The Statement Sdn Bhd');
-  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (v_org, v_acct, 'Maybank current', 'Maybank', '9001')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '9001');
+  v_acct := pg_temp.bank_gl(v_bank);
 
   perform public.import_bank_transactions(v_bank, jsonb_build_array(
     jsonb_build_object('transaction_date','2026-02-10','description','Payment in',
@@ -1284,14 +1284,14 @@ declare
   v_entry uuid; v_st jsonb; v_said text; v_rec uuid;
 begin
   v_org := pg_temp.br_org('Nothing Posted Yet Sdn Bhd');
-  select id into v_gl from public.accounts where org_id = v_org and code = '1120';
+  -- `v_gl` is set from the bank account below, not looked up.
   select id into v_sales from public.accounts where org_id = v_org and code = '4100';
   select id into v_rent from public.accounts where org_id = v_org and code = '6200';
   select id into v_group from public.accounts where org_id = v_org and code = '4000';
 
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (v_org, v_gl, 'Maybank current', 'Maybank', '7001')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '7001');
+  v_gl   := pg_temp.bank_gl(v_bank);
 
   perform public.import_bank_transactions(v_bank, jsonb_build_array(
     jsonb_build_object('transaction_date','2026-04-02','description','Sale settled',
@@ -1363,12 +1363,12 @@ declare
   v_other uuid; v_theirs uuid; v_entry uuid; v_said text;
 begin
   v_org := pg_temp.br_org('Refusals Sdn Bhd');
-  select id into v_gl from public.accounts where org_id = v_org and code = '1120';
+  -- `v_gl` is set from the bank account below, not looked up.
   select id into v_sales from public.accounts where org_id = v_org and code = '4100';
   select id into v_group from public.accounts where org_id = v_org and code = '4000';
-  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
-  values (v_org, v_gl, 'Maybank current', 'Maybank', '7002')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '7002');
+  v_gl   := pg_temp.bank_gl(v_bank);
 
   perform public.import_bank_transactions(v_bank, jsonb_build_array(
     jsonb_build_object('transaction_date','2026-04-02','description','In',

@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `c891c3a4`, the one commit of the 2 October session — migration `0729`. The fourteen before it are the 1 October session, and what each one did is the table under **The 1 October session** below |
+| Head at time of writing | the 2 October session: `c891c3a4` (`0729`), two documentation commits, and `0730` — the trigger that shuts the door on the 1120 heading. The fourteen before it are the 1 October session, and what each one did is the table under **The 1 October session** below |
 | CI | **green through run 2194 (`c891c3a4`, `0729`)** — twelve jobs, the iOS build skipped as it is on a push that touches no iOS, and **"Apply the migrations" RAN rather than skipping**, which is worth noting because it is not guaranteed. 2195 (`a6513027`, docs only) was still running when this line was written. 2192 was the last of the 1 October session — thirteen runs that day for fourteen commits (`f217cd64` and `4dd97e4e` were pushed together and share 2189), and the last five green in a row. Read the runs rather than inferring them, and mind these traps, each of which has cost a round: `list_workflow_runs` SERVES STALE PAGES — it answered with run 2004 from 21 September three times in one afternoon — so filter by `status: in_progress` or use `actions_get get_workflow_run` on a known id; a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. The cheap failure probe is `get_job_logs` with `failed_only: true, return_content: false`, which returns a count and no log. Earlier history, still worth knowing: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault and each written up in the commit after it; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0729` is the highest, and it is applied live and VERIFIED against production** — not inferred from a green run. `schema_migrations` has it; both refusals are in the live bodies; `dispose_fixed_asset`'s bank lookup is org-scoped; and the unfiltered sweep that found NINE functions mentioning `code = '1120'` now returns **seven — exactly the allow-list** (`app.post_receipt_internal` plus the six demo seeders). Note that `0728`'s own claim that `app.post_receipt_internal` was the only survivor **was wrong**, which is what `0729` is; see **The 2 October session** below. The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — and a sweep rather than a lookup where the question is "is it gone" |
+| Migrations | **`0730` is the highest. `0729` below it is applied live and VERIFIED against production** — not inferred from a green run. `schema_migrations` has it; both refusals are in the live bodies; `dispose_fixed_asset`'s bank lookup is org-scoped; and the unfiltered sweep that found NINE functions mentioning `code = '1120'` now returns **seven — exactly the allow-list** (`app.post_receipt_internal` plus the six demo seeders). Note that `0728`'s own claim that `app.post_receipt_internal` was the only survivor **was wrong**, which is what `0729` is; see **The 2 October session** below. The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — and a sweep rather than a lookup where the question is "is it gone" |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
 | Gates | **382 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,616 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 808 functions, 367 tables, version `0729`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| API description | 808 functions, 367 tables, version `0730`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -256,7 +256,7 @@ blank went to 1120. Same species as the SQL fixture that asserted the
 1120 credit and called it "the money leaves the bank": a test pinning a
 false claim in place, in prose this time.
 
-### The twelve accounts, and the door that is still open
+### The twelve accounts, and the door — now shut, in `0730`
 
 Refusing a MISSING account does not catch the other way in: a bank
 account whose `account_id` points AT the heading. **Twelve companies
@@ -273,17 +273,112 @@ have a second bank account and in both it is `1150 Client Account`, so
 no company has two accounts resolving to 1120 and nothing is
 misreconciled between accounts today. It is latent.
 
-Shutting the door behind them — a trigger refusing a NEW bank account
-that points at the heading — is wanted and is **not done**, and the
-reason is a measurement, not an estimate. I called it cheap. It is not:
-the trigger was written, and it **fails 29 of the 382 assertion files,
-because 69 fixture sites across 29 files hang their bank account on
-1120.** Four times what `0728`'s write-up of that blind spot implied.
-Several of those fixtures carry meaning in the insert they would lose —
-opening balances, `is_default`, a second account per company, the two
-`1150` client accounts — so the sweep onto `pg_temp.test_bank_account`
-is careful work and gets its own change. **Do not ride it along with a
-small fix.**
+Shutting the door behind them is `0730`, and it cost what the
+measurement said it would. `app.bank_account_not_the_heading()` is a
+BEFORE INSERT OR UPDATE trigger on `public.bank_accounts` refusing an
+`account_id` that is a group heading, or is 1120 itself. The sweep it
+needed: **23 of the 382 assertion files failed its first run**, and 29
+test files plus `_helpers.sql` were changed to fix them — 39 of the 72
+heading literals in `supabase/tests` are gone, and the 33 that remain
+are about the heading rather than on it (the allow-list, the assertions
+that nothing lands there, and manual journals in `budgets.sql`,
+`general_ledger.sql` and `matter_trial_balance.sql`, which post to it as
+a ledger account and are not bank accounts at all).
+
+Read the section below for what the sweep found on the way.
+
+### `0730`, and the four things the sweep found on the way
+
+The trigger is five lines of rule. Everything else in that commit is
+what shutting the door disturbed, and three of the four were found by
+looking for writers BEFORE writing the trigger rather than after.
+
+**1. Four demo seeders insert a bank account on the heading**, so the
+trigger would have broken `app.demo_rebuild()` in production on the next
+reseed — `demo_sinar_bank`, `demo_purchases`, `demo_practice_books`,
+`demo_legal_guaman`, all restated in `0730` from `pg_get_functiondef`
+with their md5s recorded in the header. They now call
+`app.demo_bank_account`, which returns the account a company already has
+— heading and all, because a seeder has no business repointing an
+account that carries postings — and otherwise makes one in 1121-1199.
+
+`demo_sinar_bank` needed one more line than the others:
+its paid-up capital journal debits `v_bank_gl`, which was the heading,
+so the GL account is now read OFF the bank account. Posting the capital
+to the heading and the receipts to the child would have left the demo's
+bank balance disagreeing with the demo's bank ledger, and
+`app.demo_sync_bank_balance` would have "fixed" the wrong one.
+
+**2. `app.demo_purchases` was never on `0729`'s allow-list and should
+have been.** Its lookup reads
+
+    where org_id = p_org and code = case when p_bank_type = 'cash'
+                                         then '1110' else '1120' end
+
+and the allow-list sweep matches a literal comparison, so it never saw
+it. **That list is a net with a known mesh**, which is now written into
+`money_names_the_account.sql` beside the list itself. Third instance in
+three days of a pattern-match standing in for a question about
+behaviour.
+
+And the fourth instance, in the same hour: the query that found the
+writers used `like '%insert into public.bank_accounts%'`, which is
+CASE-SENSITIVE, and `0549` redefines `demo_legal_guaman` with
+`CREATE OR REPLACE FUNCTION` in capitals. A lowercase `grep` for
+`function app.demo_legal_guaman` reported one definition where there are
+two, and the live one was the one it missed. **Use `ilike` and `grep -i`
+when asking which code exists.**
+
+**3. Two fixtures had a bank account on a REAL group heading**, which
+the trigger's other branch caught: `client_money_crossing.sql` put a law
+firm's office account on 1100 "Cash and Bank" — the parent of its own
+client account, so a crossing from client to office moved between a
+child and its parent — and `bank_feed.sql` chose its ledger account with
+`account_type = 'asset' limit 1`, which is **1000**, the root of the
+asset side of the chart.
+
+**4. `opening_trial_balance.sql` had the two accounts the wrong way
+round.** The "Current account" sat on 1110 Cash in hand and the "Petty
+cash" on 1120, the BANK heading. The comment beside them says the point
+is to cover the `bank` AND `cash` subtypes in the resync loop — and it
+did, with each name pointing at the other one's account. Now the current
+account is a bank account of its own and the petty cash is on 1130, and
+the opening-balance file reads the bank's code off the account instead
+of naming 1110.
+
+### What `0730` deliberately leaves
+
+**`budgets.sql`, `general_ledger.sql` and `matter_trial_balance.sql`
+post manual journals to 1120** and still do. The heading is seeded
+`is_group = false` and is therefore postable, and whether a manual
+journal should be allowed onto it is a different question from whether a
+BANK ACCOUNT may be hung on it. The trigger is on `bank_accounts` and
+says nothing about `gl_lines`.
+
+**The twelve rows themselves.** By the user's decision, and the trigger
+returns early on an UPDATE that leaves `account_id` alone so they keep
+reconciling — `current_balance` is written by every posting function.
+`bank_accounts.sql` asserts that: a row on the heading can still be
+banked and renamed, and cannot be repointed at the heading, with the
+row made the only way left, by disabling the trigger for one statement.
+
+### And the claim that had to go
+
+`bank_accounts.sql` asserted, by name, that **"a caller may name the GL
+account itself"** — by naming 1120 and checking it was accepted. It was.
+That was the product's own route to the twelve, through
+`upsert_bank_account`, whose guard lets it through because the heading is
+`is_group = false` with subtype `bank`, which is exactly what that guard
+asks for. The assertion is now the refusal, with the control beside it,
+and `public.unregistered_bank_accounts` stops offering the heading in
+the registration dialog — a list whose own comment says it excludes
+groups because "offering them is offering a refusal".
+
+Proved by breaking it: the three branches of the trigger were removed
+one at a time against the live local database and each killed a named
+assertion, with a comment-only control surviving. The demo-rebuild
+assertion was proved the other way, by planting a heading-pointed row
+with the trigger disabled and watching the detector name it.
 
 ### Four traps paid for in this one commit
 

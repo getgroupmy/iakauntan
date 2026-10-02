@@ -53,15 +53,16 @@ begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
   perform pg_temp.sign_in_as(v_owner);
 
-  select id into v_acct from public.accounts
-   where org_id = v_org and code = '1120';          -- Bank
   select id into v_cash from public.accounts
    where org_id = v_org and code = '1110';          -- Cash in hand
 
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, opening_balance, current_balance)
-  values (v_org, v_acct, 'Current account', 'Maybank', 5000, 0)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 5000, 0);
+  -- The bank's OWN ledger account, read off the bank account rather
+  -- than looked up by code. Every journal below posts to this, which is
+  -- the point: on the heading, "the resync read the right account" and
+  -- "the resync read the heading" were the same row.
+  v_acct := pg_temp.bank_gl(v_bank);
 
   -- ==================================================================
   -- The opening balance, before anything has moved

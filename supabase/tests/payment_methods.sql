@@ -130,12 +130,7 @@ begin
       where l.entry_id = v_entry and a.code = '1110'), 508.00);
 
   -- The third path. A transfer names no payment method by design.
-  insert into public.bank_accounts
-    (org_id, account_id, name, account_type, currency)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Savings', 'savings', 'MYR')
-  returning id into v_bank2;
+  v_bank2 := pg_temp.test_bank_account(v_org, 'Savings', 'savings');
 
   v_tr := public.create_bank_transfer(
     v_bank, v_bank2, 200, date '2026-03-12', 195, 5, 'TRF ref', null);

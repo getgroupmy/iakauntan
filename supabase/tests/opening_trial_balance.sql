@@ -340,7 +340,8 @@ declare
   v_rows  jsonb;
   v_msg   text;
   v_n     integer;
-  v_bank  uuid;
+  v_bank    uuid;
+  v_bank_ba uuid;
   v_cash  uuid;
   v_entry uuid;
   v_fresh uuid;
@@ -359,23 +360,26 @@ begin
   v_fresh2 := pg_temp.test_org('Buka Sapu Tiga Sdn Bhd');
   perform public.create_fiscal_year(v_fresh2, date '2026-01-01');
 
-  select id into v_bank from public.accounts
-   where org_id = v_org and code = '1110';
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance)
-  values (v_org, v_bank, 'Current account', 'Maybank', '512345678901',
-          'MYR', 0, 0);
+  -- These two were the wrong way round, and it mattered. The "current
+  -- account" sat on 1110 Cash in hand and the "petty cash" on 1120, the
+  -- BANK heading -- so both subtypes were covered by accident and
+  -- neither account was what its name said. Now the current account is
+  -- on a bank account of its own and the petty cash on 1130 Petty Cash,
+  -- which is where the `cash` subtype actually lives.
+  v_bank_ba := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678901');
+  v_bank := pg_temp.bank_gl(v_bank_ba);
 
-  -- A cash account too, because the resync loop takes 'bank' AND 'cash'
-  -- and the difference between the two is a mutation nothing else here
+  -- The cash one, because the resync loop takes 'bank' AND 'cash' and
+  -- the difference between the two is a mutation nothing else here
   -- would see.
   select id into v_cash_ac from public.accounts
-   where org_id = v_org and code = '1120';
+   where org_id = v_org and code = '1130';
   insert into public.bank_accounts
     (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance)
-  values (v_org, v_cash_ac, 'Petty cash', 'Cash', 'CASH-1', 'MYR', 0, 0)
+     opening_balance, current_balance, account_type)
+  values (v_org, v_cash_ac, 'Petty cash', 'Cash', 'CASH-1', 'MYR', 0, 0,
+          'cash')
   returning id into v_cash;
 
   -- ==================================================================
@@ -501,10 +505,16 @@ begin
   -- 3200 carries nothing. It is not an error -- "Nothing on this line."
   -- is an ok row -- so the commit goes ahead and the posting loop is the
   -- only thing that keeps it out of the journal.
+  -- The bank's code is read off the account rather than written in, so
+  -- the file brings 5,000 in at the account the bank account IS. It
+  -- used to say 1110 for the bank and 1120 for the cash, which is both
+  -- names pointing at the other one's account.
   v_rows := jsonb_build_array(
-    jsonb_build_object('account_code','1110','debit','5000',
+    jsonb_build_object('account_code',
+                       (select code from public.accounts where id = v_bank),
+                       'debit','5000',
                        'description','Bank at handover'),
-    jsonb_build_object('account_code','1120','debit','300'),
+    jsonb_build_object('account_code','1130','debit','300'),
     jsonb_build_object('account_code','2110','credit','800'),
     jsonb_build_object('account_code','3200','debit','0','credit','0'),
     jsonb_build_object('account_code','3100','credit','4500'));
@@ -514,15 +524,13 @@ begin
   perform pg_temp.check_eq('the description in the file reaches the journal',
     (select gl.description from public.gl_lines gl
        join public.gl_entries e on e.id = gl.entry_id
-       join public.accounts a on a.id = gl.account_id
       where e.org_id = v_org and e.source = 'opening_balance'
-        and a.code = '1110'),
+        and gl.account_id = v_bank),
     'Bank at handover');
 
   perform pg_temp.check_eq('the bank account carries what was brought in',
-    (select b.current_balance from public.bank_accounts b
-       join public.accounts a on a.id = b.account_id
-      where b.org_id = v_org and a.code = '1110'), 5000::numeric);
+    (select current_balance from public.bank_accounts where id = v_bank_ba),
+    5000::numeric);
   -- The cash account too. The resync loop takes 'bank' and 'cash', and
   -- taking only 'bank' would leave the petty cash tin reading nought on
   -- a screen that says it holds three hundred.

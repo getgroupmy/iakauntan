@@ -60,9 +60,7 @@ begin
       v_acct_a, v_acct_b;
   end if;
 
-  insert into public.bank_accounts (org_id, account_id, name)
-  values (v_org_b, v_acct_b, 'B''s current account')
-  returning id into v_bank_b;
+  v_bank_b := pg_temp.test_bank_account(v_org_b, 'B''s current account');
 
   insert into public.contacts (org_id, code, name)
   values (v_org_a, 'FKTEST', 'A customer of A')

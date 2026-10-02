@@ -45,12 +45,8 @@ begin
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Consulting', 'service', false, 100);
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current account', 'Maybank', '512345678901', 'MYR', 0, 0, true);
+  perform pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678901');
   return v_org;
 end $$;
 
@@ -183,15 +179,17 @@ begin
   -- The money is in each company's own bank, not pooled anywhere.
   perform pg_temp.check_eq('the money reached the first company''s bank',
     (select round(sum(gl.debit), 2) from public.gl_lines gl
-       join public.accounts ac on ac.id = gl.account_id
        join public.receipts r on r.gl_entry_id = gl.entry_id
-      where r.batch_id = v_batch and r.org_id = v_a and ac.code = '1120'),
+       join public.bank_accounts ba on ba.account_id = gl.account_id
+                                   and ba.org_id = r.org_id
+      where r.batch_id = v_batch and r.org_id = v_a),
     1000::numeric);
   perform pg_temp.check_eq('and the second company''s',
     (select round(sum(gl.debit), 2) from public.gl_lines gl
-       join public.accounts ac on ac.id = gl.account_id
        join public.receipts r on r.gl_entry_id = gl.entry_id
-      where r.batch_id = v_batch and r.org_id = v_b and ac.code = '1120'),
+       join public.bank_accounts ba on ba.account_id = gl.account_id
+                                   and ba.org_id = r.org_id
+      where r.batch_id = v_batch and r.org_id = v_b),
     2500::numeric);
 
   perform pg_temp.check_eq('the first invoice is settled',
@@ -393,13 +391,9 @@ begin
 
   -- Two bank accounts for one company's share of the payment. One
   -- company, one receipt, one place the money landed.
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_a,
-          (select id from public.accounts where org_id = v_a and code = '1120'),
-          'Second account', 'CIMB', '700000000001', 'MYR', 0, 0, false)
-  returning id into v_bank2;
+  v_bank2 := pg_temp.test_bank_account(
+    v_a, 'Second account', 'current', 'MYR', 0, 0, '700000000001', 'CIMB',
+    false, false);
 
   begin
     perform public.record_group_payment(current_date, 'X',
@@ -899,9 +893,10 @@ begin
     4.70::numeric);
   perform pg_temp.check_eq('and the ringgit that reached the bank says so',
     (select round(sum(gl.debit), 2) from public.gl_lines gl
-       join public.accounts ac on ac.id = gl.account_id
        join public.receipts r on r.gl_entry_id = gl.entry_id
-      where r.batch_id = v_batch and ac.code = '1120'),
+       join public.bank_accounts ba on ba.account_id = gl.account_id
+                                   and ba.org_id = r.org_id
+      where r.batch_id = v_batch),
     4700::numeric);
 
   -- ==================================================================

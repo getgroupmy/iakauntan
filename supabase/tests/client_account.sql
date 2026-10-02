@@ -38,7 +38,6 @@ declare
   v_m2      uuid;
   v_bank    uuid;
   v_office  uuid;
-  v_office_acct uuid;
   v_txn     uuid;
   v_entry   uuid;
   v_msg     text;
@@ -64,12 +63,10 @@ begin
              having count(*) = 2));
 
   -- The firm's own current account, which is where this goes wrong.
-  select id into v_office_acct from public.accounts
-   where org_id = v_org and code = '1120';
-  insert into public.bank_accounts
-    (org_id, account_id, name, account_type, is_client_account, is_active)
-  values (v_org, v_office_acct, 'Office Current', 'current', false, true)
-  returning id into v_office;
+  -- On its own ledger account, not the 1120 heading: a breach of rule 7
+  -- is money moving from the CLIENT account to the OFFICE one, and two
+  -- accounts that resolve to the same row cannot show that happening.
+  v_office := pg_temp.test_bank_account(v_org, 'Office Current');
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL1', 'Puan Aminah', 'customer') returning id into v_c1;

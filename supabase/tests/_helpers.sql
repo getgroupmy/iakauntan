@@ -331,10 +331,26 @@ $$;
 -- So it does what `0529` does: the next free code in 1121-1199, a child
 -- of 1100, and the bank account on that. A test that uses this can
 -- assert WHICH account was debited and mean it.
+-- The extra arguments are the shapes the 69 fixture sites across 29
+-- files actually wrote by hand -- an opening balance, a known account
+-- number the import matches on, a currency for the multicurrency
+-- files, a client account for the law firm. They are arguments rather
+-- than something each file patches after the fact because a fixture
+-- that inserts and then updates has two rows' worth of history where
+-- the real thing has one, and `0529`'s own numbering is what decides
+-- the code either way.
 create or replace function pg_temp.test_bank_account(
   p_org uuid,
   p_name text default 'Current account',
-  p_type text default 'current')
+  p_type text default 'current',
+  p_currency text default 'MYR',
+  p_opening numeric default 0,
+  p_balance numeric default 0,
+  p_account_number text default null,
+  p_bank_name text default 'Maybank',
+  p_client boolean default false,
+  p_default boolean default null,
+  p_active boolean default true)
 returns uuid language plpgsql as $$
 declare
   v_code text;
@@ -360,14 +376,32 @@ begin
 
   insert into public.bank_accounts
     (org_id, account_id, name, bank_name, account_number, account_type,
-     currency, opening_balance, current_balance, is_default)
-  values (p_org, v_gl, p_name, 'Maybank', '5123' || v_code, p_type,
-          'MYR', 0, 0,
-          not exists (select 1 from public.bank_accounts b
-                       where b.org_id = p_org and b.is_active))
+     currency, opening_balance, current_balance, is_client_account,
+     is_active, is_default)
+  values (p_org, v_gl, p_name, p_bank_name,
+          coalesce(p_account_number, '5123' || v_code), p_type,
+          upper(p_currency), p_opening, p_balance, p_client, p_active,
+          -- The first ACTIVE one a company has is its default, which is
+          -- what `0529` does, so a fixture that makes one account does
+          -- not have to say so and one that makes two does not end up
+          -- with two defaults.
+          coalesce(p_default,
+            not exists (select 1 from public.bank_accounts b
+                         where b.org_id = p_org and b.is_active)))
   returning id into v_id;
   return v_id;
 end;
+$$;
+
+-- The GL account behind a fixture's bank account.
+--
+-- Fixtures used to read `code = '1120'` for this, which is the whole
+-- defect in miniature: the heading was both where the account hung and
+-- what the assertion looked at. Ask the bank account instead and the
+-- answer is right whatever the numbering did.
+create or replace function pg_temp.bank_gl(p_bank uuid)
+returns uuid language sql as $$
+  select account_id from public.bank_accounts where id = p_bank;
 $$;
 
 -- The org's bank account, made on first ask.

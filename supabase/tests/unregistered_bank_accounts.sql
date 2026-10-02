@@ -18,8 +18,10 @@
 --     against one ledger account -- the same money in two pickers, and
 --     a reconciliation that can be run twice.
 --   * IT DOES NOT OFFER WHAT MONEY CANNOT SIT IN. A group heading, a
---     receivables control. `upsert_bank_account` refuses those, so
---     offering them is offering a refusal.
+--     receivables control, and -- since `0730` -- the 1120 bank
+--     heading, which is the one the group test misses because it is
+--     seeded `is_group = false`. `upsert_bank_account` and the trigger
+--     refuse those, so offering them is offering a refusal.
 --   * AND IT ANSWERS NOBODY WHO COULD NOT ACT ON IT.
 --
 -- Nothing is written; the file rolls back.
@@ -86,6 +88,25 @@ begin
     'a group heading is not offered; upsert refuses one',
     not exists (select 1 from public.unregistered_bank_accounts(v_org)
                  where account_id = v_group));
+
+  -- And the 1120 heading, which is the case the group test MISSES: it
+  -- is seeded `is_group = false` with subtype `bank`, so it satisfies
+  -- every condition above and was offered in any company that had not
+  -- registered it. `0730` refuses a bank account on it, so offering it
+  -- would be offering a refusal -- which is this list's whole reason
+  -- for excluding the other two.
+  perform pg_temp.check_true(
+    'nor the bank heading, which is not a group and is still a heading',
+    not exists (select 1 from public.unregistered_bank_accounts(v_org)
+                 where code = '1120'));
+
+  -- The control for all three. A list that offered nothing would
+  -- satisfy every assertion above, and the report this function exists
+  -- for was that the account somebody added was NOT in it.
+  perform pg_temp.check_true(
+    'and the account that was added is still offered',
+    exists (select 1 from public.unregistered_bank_accounts(v_org)
+             where account_id = v_sub));
 
   select id into v_recv from public.accounts
    where org_id = v_org and account_subtype = 'accounts_receivable' limit 1;

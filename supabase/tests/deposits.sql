@@ -58,13 +58,8 @@ begin
   values (v_org, 'DAPUR', 'Fitted kitchen', 'service', false, 1000)
   returning id into v_item;
 
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current account', 'Maybank', '512345678901', 'MYR', 0, 0, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678901');
 
   -- ------------------------------------------------------------------
   -- 1. The assertion this migration is built around
@@ -77,10 +72,13 @@ begin
 
   select n.gl_entry_id into v_entry from public.deposit_notes n where n.id = v_dep;
 
+  -- The account the deposit NAMED, not the heading. This assertion read
+  -- `code = '1120'` and was true either way, which is the whole reason
+  -- the fallback lived for a year.
   perform pg_temp.check_eq('the bank has the money',
     (select round(sum(gl.debit), 2) from public.gl_lines gl
-      join public.accounts a on a.id = gl.account_id
-     where gl.entry_id = v_entry and a.code = '1120'), 10000::numeric);
+     where gl.entry_id = v_entry
+       and gl.account_id = pg_temp.bank_gl(v_bank)), 10000::numeric);
   perform pg_temp.check_eq(
     'and it is owed back to her, as a liability',
     (select round(sum(gl.credit), 2) from public.gl_lines gl
@@ -165,8 +163,8 @@ begin
   v_entry := public.settle_deposit(v_dep, 'refund', 1000, null, v_bank);
   perform pg_temp.check_eq('the money leaves the bank',
     (select round(sum(gl.credit), 2) from public.gl_lines gl
-      join public.accounts a on a.id = gl.account_id
-     where gl.entry_id = v_entry and a.code = '1120'), 1000::numeric);
+     where gl.entry_id = v_entry
+       and gl.account_id = pg_temp.bank_gl(v_bank)), 1000::numeric);
   perform pg_temp.check_eq('the bank balance is what is left of it',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     9000::numeric);
@@ -393,13 +391,8 @@ begin
   values (v_org, 'C-001', 'Puan Siti', 'customer') returning id into v_cust;
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-001', 'Pembekal Bhd', 'supplier') returning id into v_supp;
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current account', 'Maybank', '512345678999', 'MYR', 0, 0, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678999');
 
   -- Money in from a customer, money out to a supplier.
   v_in := public.create_deposit(v_org, 'customer', v_cust, current_date,
@@ -566,13 +559,8 @@ begin
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'KERJA', 'Site work', 'service', false, 1000)
   returning id into v_item;
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Current account', 'Maybank', '598765432101', 'MYR', 0, 0, true)
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '598765432101');
 
   v_dep := public.create_deposit(
     v_org, 'customer', v_cust, current_date - 20, 5000, v_bank, '02',
@@ -835,28 +823,16 @@ begin
   -- Two bank accounts with ledger accounts of their own, so paying out
   -- of the one the caller named rather than the one on the note is
   -- visible in the journal as well as in the balances.
-  select id into v_acct_a from public.accounts
-   where org_id = v_org and code = '1120';
-  insert into public.accounts
-    (org_id, code, name, account_type, account_subtype, is_group,
-     parent_id, sort_order)
-  values (v_org, '1125', 'Second current account', 'asset', 'bank', false,
-          (select parent_id from public.accounts
-            where org_id = v_org and code = '1120'), 1500)
-  returning id into v_acct_b;
-
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org, v_acct_a, 'First account', 'Maybank', '511111111111',
-          'MYR', 0, 0, true)
-  returning id into v_bank_a;
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org, v_acct_b, 'Second account', 'CIMB', '522222222222',
-          'MYR', 0, 0, false)
-  returning id into v_bank_b;
+  -- Two accounts, two ledger accounts. The second one used to be made
+  -- by hand at 1125 precisely so the two could be told apart -- which
+  -- was the right instinct, and the first one was still on the heading.
+  v_bank_a := pg_temp.test_bank_account(
+    v_org, 'First account', 'current', 'MYR', 0, 0, '511111111111');
+  v_bank_b := pg_temp.test_bank_account(
+    v_org, 'Second account', 'current', 'MYR', 0, 0, '522222222222',
+    'CIMB', false, false);
+  v_acct_a := pg_temp.bank_gl(v_bank_a);
+  v_acct_b := pg_temp.bank_gl(v_bank_b);
 
   v_dep := public.create_deposit(
     v_org, 'customer', v_cust, current_date - 20, 4000, v_bank_a, '02',
@@ -895,13 +871,9 @@ begin
   -- own 1120 instead.
   v_org2 := pg_temp.test_org('Bank Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, currency,
-     opening_balance, current_balance, is_default)
-  values (v_org2,
-          (select id from public.accounts where org_id = v_org2 and code = '1120'),
-          'Their account', 'RHB', '533333333333', 'MYR', 0, 9000, true)
-  returning id into v_bank_theirs;
+  v_bank_theirs := pg_temp.test_bank_account(
+    v_org2, 'Their account', 'current', 'MYR', 0, 9000, '533333333333',
+    'RHB');
 
   begin
     perform public.settle_deposit(v_dep, 'refund', 100, 'Wrong bank',

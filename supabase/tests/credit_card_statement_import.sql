@@ -40,11 +40,13 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name); v_acct uuid;
 begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
-  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
-  insert into public.bank_accounts
-    (org_id, account_id, name, bank_name, account_number, account_type)
-  values (v_org, v_acct, 'Maybank current', 'Maybank', '4001', 'current'),
-         (v_org, v_acct, 'Maybank card', 'Maybank', '4011', 'credit_card');
+  -- A current account and a card, each on its own ledger account.
+  -- They shared 1120, so "the card's lines went to the card" and "they
+  -- went to the heading both accounts hung on" were one row.
+  perform pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '4001');
+  perform pg_temp.test_bank_account(
+    v_org, 'Maybank card', 'credit_card', 'MYR', 0, 0, '4011');
   return v_org;
 end;
 $$;

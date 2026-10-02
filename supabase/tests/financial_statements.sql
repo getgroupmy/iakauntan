@@ -106,10 +106,8 @@ begin
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-001', 'Supplier Bhd', 'supplier') returning id into v_supp;
 
-  insert into public.bank_accounts (org_id, name, account_id, is_active)
-  values (v_org, 'Current account', pg_temp.acct(v_org, '1120'), true)
-  returning id into v_bank;
-  v_bank_acct := pg_temp.acct(v_org, '1120');
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account');
+  v_bank_acct := pg_temp.bank_gl(v_bank);
 
   v_inv := pg_temp.invoice(v_org, v_cust, 'INV-1', 10000, date '2026-02-01');
   insert into public.receipts

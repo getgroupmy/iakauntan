@@ -62,12 +62,7 @@ begin
   values (v_org, 'SVC', 'Consulting', 'service', false, 'C62', 500.00)
   returning id into v_item;
 
-  insert into public.bank_accounts
-    (org_id, account_id, name, account_type, currency)
-  values (v_org,
-          (select id from public.accounts where org_id = v_org and code = '1120'),
-          'Maybank current', 'current', 'MYR')
-  returning id into v_bank;
+  v_bank := pg_temp.test_bank_account(v_org, 'Maybank current');
 
   -- An invoice, posted, so there is a receivable for a payment to come
   -- off. Nothing below asserts anything about a draft.
@@ -129,12 +124,7 @@ begin
   -- had anything to probe is not a probe.
   v_other := pg_temp.test_org('Syarikat Seberang Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  insert into public.bank_accounts
-    (org_id, account_id, name, account_type, currency)
-  values (v_other,
-          (select id from public.accounts where org_id = v_other and code = '1120'),
-          'Their account', 'current', 'MYR')
-  returning id into v_other_bank;
+  v_other_bank := pg_temp.test_bank_account(v_other, 'Their account');
 
   begin
     perform public.set_org_payment_settlement(

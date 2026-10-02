@@ -48,12 +48,12 @@ begin
   select b.id into v_office from public.bank_accounts b
    where b.org_id = v_org and not b.is_client_account limit 1;
   if v_office is null then
-    insert into public.bank_accounts
-      (org_id, name, account_number, currency, account_id, is_client_account)
-    select v_org, 'Office account', '111', 'MYR', a.id, false
-      from public.accounts a
-     where a.org_id = v_org and a.code = '1100' limit 1
-    returning id into v_office;
+    -- This used to hang the office account on 1100 "Cash and Bank",
+    -- which is a GROUP: the firm's own money sat on the parent of its
+    -- own client account, so a crossing from client to office moved
+    -- between a child and its parent and the difference was invisible.
+    v_office := pg_temp.test_bank_account(
+      v_org, 'Office account', 'current', 'MYR', 0, 0, '111');
   end if;
 
   insert into public.contacts (org_id, code, name, contact_type)

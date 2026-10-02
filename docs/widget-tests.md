@@ -229,11 +229,30 @@ helper undoing the null case — and of entry 11, where every provider
 answering `const []` made fifty dialogs indistinguishable.
 
 The remedy is a fixture that distinguishes them. `_helpers.sql` now has
-`pg_temp.test_bank_account(org)`, which does what the real path does —
-the next free code in 1121-1199, a child of 1100, the bank account on
-that — and `pg_temp.a_bank_account(org)`, which reuses the one already
-there. Use them, and then an assertion can say WHICH account was
-debited and mean it.
+`pg_temp.test_bank_account(org, ...)`, which does what the real path
+does — the next free code in 1121-1199, a child of 1100, the bank
+account on that — `pg_temp.a_bank_account(org)`, which reuses the one
+already there, and `pg_temp.bank_gl(bank)`, which hands back the ledger
+account behind one. Use them, and then an assertion can say WHICH
+account was debited and mean it.
+
+**`0730` finished the sweep**, because a trigger refusing a new bank
+account on the heading cannot be added while the fixtures depend on
+one: its first run failed 23 of the 382 files. Writing them the right
+way round then found four more defects of exactly this kind, in
+fixtures nobody was suspicious of — a law firm's office account on 1100
+"Cash and Bank", the parent of its own client account; a bank account
+on **1000**, the root of the asset side, chosen by
+`account_type = 'asset' limit 1`; a card and a current account sharing
+one ledger account, in the file asserting which of them the money was
+banked against; and an opening trial balance whose "current account"
+was on 1110 Cash in hand while its "petty cash" was on the bank
+heading, each name pointing at the other one's account.
+
+So the shape is not rare and it is not only about 1120. **When a
+fixture picks an account with `limit 1`, a `case`, or a code that is
+the parent of the right answer, the test cannot see the difference it
+was written to see.** Read what the fixture actually selected.
 
 ## Before you write the test, read the SQL it has to agree with
 

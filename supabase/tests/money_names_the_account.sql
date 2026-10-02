@@ -278,14 +278,21 @@ declare
     -- missing is where each tender's money lands, which is a question
     -- for the people running the shop.
     'app.post_receipt_internal(uuid)',
-    -- Demo seeders. Data rather than rules, reseeded rather than
-    -- migrated, and they are what put a bank account on the heading in
-    -- the twelve companies `0729` leaves alone.
+    -- Demo seeders that read the heading for a JOURNAL LINE and do not
+    -- hang a bank account on it. Data rather than rules, reseeded
+    -- rather than migrated.
+    --
+    -- The three that did hang one there -- `demo_sinar_bank`,
+    -- `demo_practice_books`, `demo_legal_guaman` -- came off this list
+    -- in `0730`, which had to change them: a trigger refusing a bank
+    -- account on the heading would otherwise have broken
+    -- `app.demo_rebuild()` on the next reseed. `app.demo_purchases` did
+    -- the same and was never on the list at all, because it asks for
+    -- the heading through a `case` expression and the sweep below
+    -- matches a literal comparison. **This list is a net with a known
+    -- mesh.**
     'app.demo_assets_harta(uuid,uuid)',
-    'app.demo_legal_guaman(uuid,uuid)',
-    'app.demo_practice_books(uuid,uuid,text,numeric,text)',
     'app.demo_sinar_assets(uuid,uuid)',
-    'app.demo_sinar_bank(uuid,uuid)',
     'app.demo_sinar_payroll(uuid,uuid)'
   ];
   v_found text[];
