@@ -10809,6 +10809,64 @@ extension RepoPos on Repo {
         .order('code', ascending: true),
   );
 
+  /// Every way of paying this shop has, switched off ones included.
+  ///
+  /// The till reads [posTenderTypes], which is the active ones in code
+  /// order — a button nobody can press is worse than no button. The
+  /// SETUP screen needs the others too, because switching one back on
+  /// is the thing a shop does after a season, and in `sort_order`,
+  /// which is the order the buttons appear in.
+  Future<List<Map<String, dynamic>>> posTenderTypesAll() async => Repo.rows(
+    await client
+        .from('pos_tender_types')
+        .select()
+        .eq('org_id', orgId)
+        .order('sort_order', ascending: true)
+        .order('code', ascending: true),
+  );
+
+  /// `0732`. Where the money lands is the field this exists for: a
+  /// tender with none has its filled in by
+  /// `app.tender_type_settlement_account`, so passing null on an
+  /// amendment leaves whatever is there rather than clearing it.
+  Future<String> savePosTenderType({
+    String? id,
+    required String code,
+    required String name,
+    required String kind,
+    String? paymentMode,
+    String? bankAccountId,
+    bool? countsInDrawer,
+    bool? givesChange,
+    bool? opensDrawer,
+    int? sortOrder,
+    bool? active,
+  }) async =>
+      (await callRpc(
+        'upsert_pos_tender_type',
+        params: {
+          'p_id': id,
+          'p_org': orgId,
+          'p_code': code,
+          'p_name': name,
+          'p_kind': kind,
+          'p_payment_mode': paymentMode,
+          'p_bank_account': bankAccountId,
+          'p_counts_in_drawer': countsInDrawer,
+          'p_gives_change': givesChange,
+          'p_opens_drawer': opensDrawer,
+          'p_sort': sortOrder,
+          'p_active': active,
+        },
+      )) as String;
+
+  /// Refuses a tender that has taken money, and says to switch it off
+  /// instead. See `0732`: `pos_tenders` references the type `on delete
+  /// restrict` so that retiring one cannot change what last month's
+  /// drawer was counted against.
+  Future<void> deletePosTenderType(String id) async =>
+      await callRpc('delete_pos_tender_type', params: {'p_id': id});
+
   /// Takes an unsent line off a parked bill. Refuses once the kitchen
   /// has been told — that is [voidPosSaleLine], which wants a reason.
   Future<void> removePosSaleLine(String lineId) async =>

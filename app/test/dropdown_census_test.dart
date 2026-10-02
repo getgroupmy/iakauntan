@@ -152,6 +152,15 @@ const dropdownCensus = <String, int>{
   'features/onboarding/create_org_screen.dart': 3,
   'features/pos/pos_reports_screen.dart': 1,
   'features/pos/scales_screen.dart': 1,
+  // `0732`. The seven kinds a tender can be: `app.pos_tender_kind`,
+  // which is an enum and not a list that grows -- an eighth arrives by
+  // migration, and whoever writes it has to come here anyway because
+  // `app.tender_type_settlement_account` and
+  // `upsert_pos_tender_type` both ask which kinds take money. Somebody
+  // choosing between Cash, Card and E-wallet is reading all seven,
+  // which is what a dropdown is for. The LHDN payment mode beside it
+  // IS a growing list and is a `SearchablePicker` for that reason.
+  'features/pos/tenders_screen.dart': 1,
   'features/property/site_editor.dart': 1,
   'features/property/statutory_charge_sheet.dart': 2,
   'features/property/strata_sheet.dart': 1,

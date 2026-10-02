@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0731` (the highest applied migration).
-808 functions and 367 readable tables, of which
+Schema version `0732` (the highest applied migration).
+810 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**667 of 808 functions carry a `comment on
+**669 of 810 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -207,7 +207,7 @@ Refused unless the company has the `payroll` module switched on and the caller m
 - `ea_statement(p_employee_id uuid, p_tax_year integer)` — One employee's EA form (C.P.8A) figures for a year of assessment: this employer's payslips only, by the year of the PAY DATE, from posted runs.
 - `ea_statements(p_org_id uuid, p_tax_year integer)` — Who is owed an EA form for a year of assessment and what each one comes to, leavers included.
 
-### pos (124)
+### pos (126)
 
 Refused unless the company has the `pos` module switched on and the caller may use it.
 
@@ -227,6 +227,7 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `complete_pos_sale(p_sale uuid, p_tenders jsonb, p_contact uuid)` *(writes)* — Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually paid, records the tenders and awards the points.
 - `delete_pos_recipe(p_recipe uuid)` *(writes)* — Removes the ingredient list behind a dish.
 - `delete_pos_report(p_id uuid)` *(writes)* — Removes a saved report.
+- `delete_pos_tender_type(p_id uuid)` *(writes)* — Removes a way of paying that has never been used.
 - `delete_scale_format(p_id uuid)` *(writes)* — Deletes a scale barcode format.
 - `ingest_offline_sales(p_register uuid, p_sales jsonb)` *(writes)* — Lands a batch of sales rung up with no signal.
 - `item_modifier_group_ids(p_item uuid)` — Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually attached.
@@ -331,6 +332,7 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` *(writes)* — Creates or edits what a dish is made of, so selling one takes the ingredients off the shelf.
 - `upsert_pos_report(p_org uuid, p_name text, p_source app.pos_report_source, p_dimensions text[], p_measures text[], p_period text, p_from date, p_to date, p_outlets uuid[], p_channels text[], p_sort_by text, p_sort_desc boolean, p_limit integer, p_shared boolean, p_id uuid)` *(writes)* — Saves a built report, checking every key through the same allow-list the query uses — so a report that cannot run cannot be saved.
 - `upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` *(writes)* — Creates or edits a stall in a food court, with the operator who runs it and the commission the court takes.
+- `upsert_pos_tender_type(p_id uuid, p_org uuid, p_code text, p_name text, p_kind app.pos_tender_kind, p_payment_mode text, p_bank_account uuid, p_counts_in_drawer boolean, p_gives_change boolean, p_opens_drawer boolean, p_sort integer, p_active boolean)` *(writes)* — Adds or amends a way of paying at the till: its button name, its short code, its kind, the LHDN payment mode an e-Invoice reports, and WHERE THE MONEY LANDS.
 - `upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` *(writes)* — Describes how a weighing scale's barcodes are laid out, so the till can read a price or a weight out of the label.
 - `void_pos_sale(p_sale uuid, p_reason app.pos_void_reason, p_note text)` *(writes)* — Writes off a whole parked bill, behind the pos_void grant without exception: one void record per line the kitchen cooked, the live dockets cancelled, and the sale marked voided with a reason and a name.
 - `void_pos_sale_line(p_line uuid, p_reason app.pos_void_reason, p_note text)` *(writes)* — Takes a line off after the kitchen was told, recording what it said, why it went and who did it.

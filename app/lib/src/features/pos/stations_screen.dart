@@ -11,6 +11,7 @@ import '../../data/repository.dart';
 import 'channels.dart';
 import 'menu_links_screen.dart';
 import 'receipt_settings_screen.dart';
+import 'tenders_screen.dart';
 import 'scales_screen.dart';
 
 /// Setting a shop up: its counters, and how orders reach it.
@@ -192,6 +193,13 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
             icon: const Icon(Icons.scale_outlined),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const ScalesScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Ways of paying',
+            icon: const Icon(Icons.payments_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const TendersScreen()),
             ),
           ),
           IconButton(

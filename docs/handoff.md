@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the 2 October session: `0729`, `0730` and `0731`, with documentation commits between them. `0731` closes the LAST heading fallback |
+| Head at time of writing | the 2 October session: `0729`, `0730`, `0731` and `0732`, with documentation commits between them. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
 | CI | **green through run 2199 (`fdb0301f`, `0731`)** — 2194 through 2199, and "Apply the migrations" RAN rather than skipping in 2194, 2197 and 2199. **The run listings are worse than this file has said, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER as its newest. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0731` is the highest, and `0729`, `0730` and `0731` are all applied live and VERIFIED against production** — not inferred from a green run. For `0731`: `schema_migrations` has it; `tender_type_settlement_account` is on `public.pos_tender_types` in `pg_trigger`; `app.post_receipt_internal`'s live body no longer looks up the heading and does write `bank_account_id` back onto the receipt; `app.demo_company` calls `app.demo_bank_account`; **all 13 `pos_tender_types` rows now have an account and none points at the heading** (they were 13 nulls); and the sweep for the heading as a literal returns **three** functions — the three demo seeders that read it for a journal line, which is exactly the allow-list. **And the eleven demo accounts on the heading have put themselves right: they are all on 1121 now**, so the rows pointing at the heading are down from twelve to **one**, which is YUSOF ZAIN & CO's CIMB and is the one real decision left. (GESWANT & CO's account is on `1120-M001`, a child code, not the heading.) The query to repeat after any migration: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Migrations | **`0732` is the highest**; `0729`, `0730` and `0731` are each applied live and VERIFIED against production, and the bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. Verify `0732` the same way rather than inferring it from a green run — the apply job SKIPS when a newer commit is at the branch tip. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **382 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,616 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 808 functions, 367 tables, version `0731`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| Gates | **383 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,619 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| API description | 810 functions, 367 tables, version `0732`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -150,11 +150,11 @@ chase them unprompted either.
    the receipt PDF: a reversal LEAVES THE ORIGINAL STANDING, attachment
    and all.
 3. ~~Where card and e-wallet money lands~~ — **answered on 2 October
-   and built as `0731`**: they settle into the company's own bank
-   account a few days later, or into another where one is defined, and
-   cash stays in the drawer. What is left of it is a SCREEN: there is
-   no editor for a tender type, so the "or another where one is
-   defined" half cannot be reached through the product yet. (The video-rotation
+   and built as `0731` and `0732`**: they settle into the company's own
+   bank account a few days later, or into another where one is defined,
+   and cash stays in the drawer. `0732` is the editor, so both halves
+   are now reachable: **Counters → Ways of paying**. Nothing is
+   outstanding on this one. (The video-rotation
    measurement that used to sit beside this is no longer wanted: the
    cause was found by reading the mediasoup package rather than by
    measuring a call.)
@@ -290,6 +290,73 @@ that nothing lands there, and manual journals in `budgets.sql`,
 a ledger account and are not bank accounts at all).
 
 Read the section below for what the sweep found on the way.
+
+### `0732`: a shop can say where its money goes
+
+`0731` recorded that there was **no screen for editing a tender type**
+— the table is read by the till and was written only by demo seeders,
+which is why all thirteen rows had a null bank account and why "or into
+another account where one is defined" was a half of the user's rule
+nobody could reach. This is that screen, plus the two functions behind
+it.
+
+`public.upsert_pos_tender_type` and `public.delete_pos_tender_type`
+exist rather than the client writing the table directly — which it
+could, since `0208` gave `pos_tender_types` a write policy and a grant
+— for the reason `CLAUDE.md` gives: a rule enforced only in Dart is not
+enforced. The rules are: a name and a code, the code upper-cased
+because it is what a report groups by, a duplicate refused **by naming
+the tender that already holds it**, an LHDN payment mode that exists, a
+bank account that belongs to this company, and `can_write_module`.
+
+**Two kinds take no money, and the editor is what made that obvious.**
+`0731`'s trigger filled an account for any tender that was not a
+drawer, which was wrong for `on_account` — the customer owing it, and
+`complete_pos_sale` writes no receipt at all for a basket wholly on
+account — and for `loyalty`, points coming off the basket, where `0212`
+gives a receipt for zero and `app.post_receipt_internal` resolves that
+zero's account itself. Both are now left alone by the trigger and
+refused an account by the upsert. A VOUCHER deliberately is not: one
+the shop sold was paid for when it was sold, one a third party issued
+is settled later, and which a shop means is the shop's to say.
+
+Two things the screen cannot do, each said out loud rather than offered
+as a control that undoes itself:
+
+* **Clear the account on a tender that takes money.** The trigger fills
+  it again, by design — money has to land somewhere.
+* **Delete a tender that has taken money.** `pos_tenders` references
+  the type `on delete restrict` on purpose, because `0208` copies the
+  KIND onto each tender so retiring a type cannot change what last
+  month's drawer was counted against. The refusal names how many times
+  it has taken money and says to switch it off instead.
+
+### What the mutation run changed about the code
+
+A surviving mutant was right and the code was wrong. `_kindChanged`
+cleared `_bank` when the kind stopped taking money, and that line
+turned out to be both unobservable — `_save` already sends null for
+those kinds — and mildly harmful: somebody who looked at On account and
+changed their mind back to Card lost the account they had picked. **The
+line is gone**, which is the other thing a surviving mutant can mean.
+
+The other survivor was a real missing assertion: a new tender takes its
+kind's habits (cash counts in the drawer, gives change, opens it; a
+card does none), and nothing checked it. Three mutants on the sheet and
+five on `tenderSummary` are killed now, each with a comment-only
+control surviving.
+
+### Two gates nobody warned me about, both right
+
+`dropdown_census_test.dart` failed twice on the new screen: a
+`DropdownButtonFormField` has to be **on the census with a reason** —
+the seven kinds are `app.pos_tender_kind`, an enum, so a dropdown is
+right and the LHDN mode beside it is a `SearchablePicker` because that
+list grows — and it has to set `isExpanded: true` or "Bank transfer"
+overflows instead of ellipsising. And `check_test_clock.py` refused a
+152nd `date_trunc('year', current_date)`: a new fixture uses
+`(now() at time zone 'Asia/Kuala_Lumpur')::date`, because `current_date`
+is the session's UTC date and from 16:00 UTC they are different days.
 
 ### `0731`: where the card money lands, and a correction to all of this
 

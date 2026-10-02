@@ -3159,6 +3159,17 @@ final posTenderTypesProvider =
       (ref) => requireRepo(ref).posTenderTypes(),
     );
 
+/// Every tender a shop has, for the setup screen rather than the till.
+///
+/// autoDispose, and separate from `posTenderTypesProvider`: that one is
+/// the till's list and holds only the active ones. A screen that edits
+/// them has to show the switched-off ones too, or turning one back on
+/// is impossible from the only place it can be done. `0732`.
+final posTenderTypesAdminProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posTenderTypesAll(),
+    );
+
 final posSaleProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>(
       (ref, saleId) => requireRepo(ref).posSale(saleId),

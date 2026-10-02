@@ -39,6 +39,7 @@ import 'package:iakauntan/src/features/pos/menu_times_screen.dart';
 import 'package:iakauntan/src/features/pos/promotions_screen.dart';
 import 'package:iakauntan/src/features/pos/recipes_screen.dart';
 import 'package:iakauntan/src/features/pos/scales_screen.dart';
+import 'package:iakauntan/src/features/pos/tenders_screen.dart';
 import 'package:iakauntan/src/features/pos/stalls_screen.dart';
 import 'package:iakauntan/src/features/stock/bundles_screen.dart';
 import 'package:iakauntan/src/features/stock/landed_cost_screen.dart';
@@ -2134,6 +2135,198 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Off'), findsOneWidget);
+    });
+  });
+
+  group('the ways of paying', () {
+    // `0732`. The screen exists because `0731` found every
+    // `pos_tender_types` row in production with a null bank account and
+    // nobody able to set one: the table is read by the till and was
+    // written only by the demo seeders.
+    testWidgets('read back as what they do and where the money lands',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TendersScreen(), [
+          posTenderTypesAdminProvider.overrideWith(
+            (ref) async => [
+              {
+                'id': 't1',
+                'code': 'TUNAI',
+                'name': 'Tunai',
+                'kind': 'cash',
+                'bank_account_id': 'b-till',
+                'counts_in_drawer': true,
+                'gives_change': true,
+                'opens_drawer': true,
+                'is_active': true,
+              },
+              {
+                'id': 't2',
+                'code': 'KAD',
+                'name': 'Kad',
+                'kind': 'card',
+                'bank_account_id': 'b-bank',
+                'counts_in_drawer': false,
+                'gives_change': false,
+                'opens_drawer': false,
+                'is_active': true,
+              },
+              {
+                'id': 't3',
+                'code': 'AKAUN',
+                'name': 'Akaun',
+                'kind': 'on_account',
+                'bank_account_id': null,
+                'is_active': false,
+              },
+              {
+                'id': 't4',
+                'code': 'TNG',
+                'name': 'TnG',
+                'kind': 'ewallet',
+                'bank_account_id': null,
+                'is_active': true,
+              },
+              {
+                'id': 't5',
+                'code': 'MATA',
+                'name': 'Mata',
+                'kind': 'loyalty',
+                'bank_account_id': null,
+                'is_active': true,
+              },
+            ],
+          ),
+          bankAccountsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'b-till', 'name': 'Tunai di kaunter'},
+              {'id': 'b-bank', 'name': 'Maybank Current Account'},
+            ],
+          ),
+        ]),
+      );
+
+      // Cash goes INTO the drawer; a card SETTLES INTO the bank days
+      // later. Both are the same column and they are not the same
+      // sentence, which is the distinction `0208`'s own comment asked
+      // for and nothing could say until there was a screen.
+      expect(
+        find.text(
+          'Cash · into Tunai di kaunter · counts in the drawer, gives '
+          'change, opens the drawer',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Card · settles into Maybank Current Account'),
+        findsOneWidget,
+      );
+
+      // On account takes no money, so there is nothing to bank and the
+      // row says that rather than naming an account.
+      expect(find.text('On account · nothing is banked'), findsOneWidget);
+      // Points are the other one: they come off the basket, and `0212`
+      // gives a basket cleared by them a receipt for zero so the sale
+      // is a completed sale rather than a stuck one. No money either
+      // way, so this row is not the "nowhere yet" warning below.
+      expect(find.text('Points · nothing is banked'), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget);
+
+      // And the state `0731` refuses to post against: a tender that
+      // takes money with nowhere for it to go. Saying so here is
+      // kinder than a red snackbar at the till.
+      expect(
+        find.text('E-wallet · NOWHERE YET — add a bank account'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and the sheet asks where the money lands, unless none does',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TendersScreen(), [
+          posTenderTypesAdminProvider.overrideWith((ref) async => []),
+          bankAccountsProvider.overrideWith(
+            (ref) async => [
+              {'id': 'b-bank', 'name': 'Maybank Current Account'},
+            ],
+          ),
+          paymentModesProvider.overrideWith(
+            (ref) async => [
+              {'code': '03', 'description': 'Bank transfer'},
+            ],
+          ),
+        ]),
+      );
+
+      await tester.tap(find.widgetWithText(FloatingActionButton, 'Tender'));
+      await tester.pumpAndSettle();
+
+      // A new tender is cash, and cash has somewhere to go.
+      expect(find.text('Money lands in *'), findsOneWidget);
+      expect(find.textContaining('Cash belongs in a till account'),
+          findsOneWidget);
+      // Nothing is saveable until it has a name and a code: the server
+      // refuses both, and a form that lets you press Save to find that
+      // out is a form that wasted the trip.
+      expect(
+        tester
+            .widget<ButtonStyleButton>(
+              find.widgetWithText(FilledButton, 'Save'),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      // A new cash tender arrives with the habits cash has, which is
+      // what `upsert_pos_tender_type` defaults to when it is not told.
+      // `0208` holds them as columns rather than inferring them,
+      // because a shop that takes cheques over the counter puts those
+      // in the drawer too — so these are a starting point, not a rule.
+      bool switchFor(String title) => tester
+          .widget<SwitchListTile>(find.widgetWithText(SwitchListTile, title))
+          .value;
+      expect(switchFor('Counts in the drawer'), isTrue);
+      expect(switchFor('Gives change'), isTrue);
+      expect(switchFor('Opens the drawer'), isTrue);
+
+      // And a card does none of the three.
+      await tester.tap(find.text('Cash').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Card').last);
+      await tester.pumpAndSettle();
+      expect(switchFor('Counts in the drawer'), isFalse);
+      expect(switchFor('Gives change'), isFalse);
+      expect(switchFor('Opens the drawer'), isFalse);
+
+      // On account takes no money, so the picker goes and says why
+      // rather than sitting there refusing to be filled in.
+      await tester.tap(find.text('Card').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('On account').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Money lands in *'), findsNothing);
+      expect(
+        find.textContaining('On account is the customer owing it'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and a shop with no tenders is told a till needs one',
+        (tester) async {
+      await onAPhone(
+        tester,
+        wrap(const TendersScreen(), [
+          posTenderTypesAdminProvider.overrideWith((ref) async => []),
+          bankAccountsProvider.overrideWith((ref) async => []),
+        ]),
+      );
+      expect(find.text('No ways of paying yet'), findsOneWidget);
+      expect(find.textContaining('A till needs at least one button'),
+          findsOneWidget);
     });
   });
 
