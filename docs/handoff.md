@@ -129,9 +129,15 @@ finish without printing.
 
 ## What is waiting on the user, as of 2 October
 
-Re-read on 2 October; nothing on it moved. Nothing on this list can be moved from inside a session. They are here
-so the next one does not spend a round rediscovering them — and does not
-chase them unprompted either.
+Re-read and reworked on 2 October: item 3 was answered and built, and
+item 8 is new — it is what three days of the 1120 audit leaves for a
+person. Nothing on this list can be moved from inside a session. They
+are here so the next one does not spend a round rediscovering them —
+and does not chase them unprompted either.
+
+The numbering is stable on purpose: a new item is APPENDED rather than
+inserted, because item 1 is referred to by number further down this
+page and renumbering would quietly break the reference.
 
 1. **Prove Android push on a handset.** Install the `android-release`
    artifact (version code 14) → Settings → Notifications → **Turn on**.
@@ -173,6 +179,29 @@ chase them unprompted either.
    nothing correcting it. The engine logs exactly that case, with the
    extensions the camera did arrive with, so one line from a real call's
    console settles it.
+8. **YUSOF ZAIN & CO's CIMB account points at the 1120 heading, and it
+   is the last one that does.** The whole remainder of `0727`-`0732` in
+   anybody's real books: eleven of the twelve were demo companies and
+   have put themselves right on 1121 at a rebuild, and this one is a
+   real firm's. Nothing is broken today — `0730` lets an existing row
+   keep reconciling, and the firm's other account is `1150 Client
+   Account`, so no two accounts resolve to the same place. What it
+   needs is a decision:
+
+   * **Repoint the bank account** onto a child account in 1121-1199,
+     which is what `upsert_bank_account` would make. The balance and
+     the movements then agree on an account a statement can be matched
+     against. `0730`'s trigger refuses the move while it points AT the
+     heading, so this is a migration rather than a screen.
+   * **And whether to move the posted lines with it.** Nothing in
+     `0727`-`0732` moves a posted line, deliberately. Leaving them puts
+     the history on the heading and the future on the child; moving
+     them restates figures in somebody's books, which is not a thing a
+     session should do on its own initiative.
+
+   Say which and it is a short change. The one real ledger line on the
+   heading is a separate thing: `EXP-2026-00001` at GESWANT & CO, item
+   2 above.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
