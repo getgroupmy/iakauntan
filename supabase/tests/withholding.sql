@@ -249,14 +249,14 @@ begin
   -- Remitting before posting would credit the bank for a liability the
   -- ledger has never heard of.
   begin
-    perform public.remit_withholding(v_cert, date '2026-03-05');
+    perform public.remit_withholding(v_cert, date '2026-03-05', (select pg_temp.a_bank_account(c.org_id) from public.withholding_certificates c where c.id = v_cert));
     raise exception 'FAIL: remitted a certificate that was never posted';
   exception when sqlstate '22023' then
     raise notice 'ok   the certificate has to be posted first';
   end;
 
   perform public.post_withholding(v_cert);
-  perform public.remit_withholding(v_cert, date '2026-03-05',
+  perform public.remit_withholding(v_cert, date '2026-03-05', (select pg_temp.a_bank_account(c.org_id) from public.withholding_certificates c where c.id = v_cert),
                                    p_reference => 'CP37D/2026/001');
 
   perform pg_temp.check_eq('the liability is cleared',
@@ -269,7 +269,7 @@ begin
 
   -- Paying LHDN twice for one deduction.
   begin
-    perform public.remit_withholding(v_cert, date '2026-03-06');
+    perform public.remit_withholding(v_cert, date '2026-03-06', (select pg_temp.a_bank_account(c.org_id) from public.withholding_certificates c where c.id = v_cert));
     raise exception 'FAIL: remitted the same certificate twice';
   exception when sqlstate '22023' then
     raise notice 'ok   a certificate is only remitted once';

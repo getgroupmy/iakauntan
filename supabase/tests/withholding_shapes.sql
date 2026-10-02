@@ -608,7 +608,7 @@ begin
   -- says WHICH of the two turned this away: the outer guard, before any
   -- of the bank balance or the certificate has been touched.
   begin
-    perform public.remit_withholding(v_id, date '2026-03-15');
+    perform public.remit_withholding(v_id, date '2026-03-15', (select pg_temp.a_bank_account(c.org_id) from public.withholding_certificates c where c.id = v_id));
     raise exception 'FAIL: a viewer remitted a certificate';
   exception when sqlstate '42501' then
     get stacked diagnostics v_said = message_text;

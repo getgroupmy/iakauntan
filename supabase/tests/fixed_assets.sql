@@ -162,7 +162,7 @@ begin
   perform public.run_depreciation(v_org, date '2026-06-30');
   -- Six months at RM 1,000 leaves a net book value of RM 54,000. Sold
   -- for RM 58,000, so a gain of RM 4,000.
-  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 58000);
+  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 58000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_asset));
 
   -- 4930, not 4920. 0156 gave disposals their own accounts: 4920 is
   -- Foreign Exchange Gain in the seeded chart, and a van sold at a
@@ -184,7 +184,7 @@ begin
     (select status = 'disposed' from public.fixed_assets where id = v_asset));
 
   begin
-    perform public.dispose_fixed_asset(v_asset, date '2026-07-31', 100);
+    perform public.dispose_fixed_asset(v_asset, date '2026-07-31', 100, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_asset));
     raise exception 'FAIL: the same asset was disposed of twice';
   exception when sqlstate '23514' then
     raise notice 'ok   an asset cannot be disposed of twice';
@@ -223,7 +223,7 @@ begin
   -- Never depreciated, sold at the end of June for RM 50,000. Six months
   -- of charge is recognised first, leaving RM 54,000 and a loss of
   -- RM 4,000 — not RM 10,000.
-  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 50000);
+  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 50000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_asset));
 
   perform pg_temp.check_eq('the loss is measured after catching up',
     (select coalesce(sum(l.debit), 0) from public.gl_lines l
@@ -280,7 +280,7 @@ begin
   returning id into v_asset;
 
   perform public.run_depreciation(v_org, date '2026-06-30');
-  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 54000);
+  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 54000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_asset));
 
   perform pg_temp.check_eq('one run, not two',
     (select count(*) from public.depreciation_runs where org_id = v_org), 1);

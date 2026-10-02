@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/core/widgets.dart';
+import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/documents/withholding_screen.dart';
 
 /// Tax deducted from non-residents, and when it has to reach LHDN.
@@ -27,6 +28,14 @@ import 'package:iakauntan/src/features/documents/withholding_screen.dart';
 ///
 /// AND WHO MAY REMIT. Marking tax as remitted says the money went to
 /// LHDN. A viewer must not be offered that button.
+///
+/// WHICH ACCOUNT IT WENT FROM is the fourth, added with `0729`. The
+/// button used to ask yes-or-no and send no account, and
+/// `remit_withholding` fell back to account `1120` — the HEADING the
+/// real bank accounts hang beneath — so the liability cleared, no bank
+/// balance moved, and a payment to LHDN appeared on no reconciliation.
+/// The SQL refuses that now; these cases are the dialog not building
+/// the refusal in the first place.
 void main() {
   Map<String, dynamic> cert({
     String id = 'c1',
@@ -54,11 +63,19 @@ void main() {
     'remitted_on': remittedOn,
   };
 
-  Widget wrap(List<Map<String, dynamic>> rows, {String role = 'owner'}) =>
+  Widget wrap(
+    List<Map<String, dynamic>> rows, {
+    String role = 'owner',
+    Repo? repo,
+  }) =>
       ProviderScope(
         overrides: [
           withholdingReportProvider.overrideWith((ref) async => rows),
           memberRoleProvider.overrideWith((ref) async => role),
+          // `bankAccountsProvider` goes through `requireRepo`, so this
+          // one override feeds both the picker's list and the RPC the
+          // dialog ends in.
+          if (repo != null) repoProvider.overrideWithValue(repo),
         ],
         child: MaterialApp(
           theme: AppTheme.light(),
@@ -70,10 +87,23 @@ void main() {
     WidgetTester tester,
     List<Map<String, dynamic>> rows, {
     String role = 'owner',
+    Repo? repo,
   }) async {
-    await tester.pumpWidget(wrap(rows, role: role));
+    await tester.pumpWidget(wrap(rows, role: role, repo: repo));
     await tester.pumpAndSettle();
   }
+
+  /// Whether the dialog's confirming button will do anything if pressed.
+  ///
+  /// `onPressed != null`, read off the widget. Finding the button proves
+  /// only that one is drawn, which is as true of a dead one.
+  bool remitReady(WidgetTester tester) =>
+      tester
+          .widget<ButtonStyleButton>(
+            find.widgetWithText(FilledButton, 'Remitted'),
+          )
+          .onPressed !=
+      null;
 
   group('the form is the unit of work', () {
     testWidgets('each form gets its own heading and its own total',
@@ -219,6 +249,97 @@ void main() {
     });
   });
 
+  group('which account the money left', () {
+    final maybank = <String, dynamic>{
+      'id': 'bank-1',
+      'name': 'Maybank current',
+      'bank_name': 'Maybank',
+      'account_number': '512345678901',
+    };
+
+    testWidgets('the button asks, and will not post until it is answered',
+        (tester) async {
+      final repo = _Repo(banks: [maybank]);
+      await show(tester, [cert()], repo: repo);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Remit'));
+      await tester.pumpAndSettle();
+
+      // The words that were already right are still there. This records
+      // a payment that has ALREADY left, and doing it early is the
+      // mistake people make, so losing that sentence while adding a
+      // field would be a trade the other way.
+      expect(
+        find.textContaining('Do it when the money has actually gone'),
+        findsOneWidget,
+      );
+      expect(find.text('Paid from *'), findsOneWidget,
+          reason: 'starred, because the SQL now refuses a null account');
+      expect(remitReady(tester), isFalse);
+
+      // The FIELD, not the floating label over it: the label is a
+      // `Text` the editable sits on top of, so tapping the text warns
+      // that it missed and only works because the tap lands on the box
+      // anyway.
+      await tester.tap(find.widgetWithText(TextFormField, 'Paid from *'));
+      await tester.pumpAndSettle();
+      // And no way back out through the list. `allowEmpty` would put a
+      // row here whose meaning is "from nowhere", which is the state
+      // this dialog exists to make unreachable — a mutation run found
+      // that flipping it on changed nothing any assertion could see.
+      expect(find.text('None'), findsNothing);
+      await tester.tap(find.text('Maybank current').last);
+      await tester.pumpAndSettle();
+
+      expect(remitReady(tester), isTrue,
+          reason: 'naming one was the only thing missing');
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Remitted'));
+      await tester.pumpAndSettle();
+
+      expect(repo.remitted, hasLength(1));
+      expect(repo.remitted.single.id, 'c1');
+      // The whole point of the change. `bankAccountId` is nullable all
+      // the way down and the old screen left it null, which is what
+      // `remit_withholding` used to answer with account 1120.
+      expect(repo.remitted.single.bankAccountId, 'bank-1');
+    });
+
+    testWidgets('backing out posts nothing at all', (tester) async {
+      // "Cancelled" and "paid from nowhere" are both the absence of an
+      // account, and the dialog returning null for one of them is the
+      // only thing keeping them apart.
+      final repo = _Repo(banks: [maybank]);
+      await show(tester, [cert()], repo: repo);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Remit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(repo.remitted, isEmpty);
+      // And the certificate is still outstanding, still offered.
+      expect(find.widgetWithText(TextButton, 'Remit'), findsOneWidget);
+    });
+
+    testWidgets('a company with no bank account on file is told to add one',
+        (tester) async {
+      // Not a dead end: `bank_accounts.account_type` has permitted
+      // `cash` and `ewallet` since `0003`, so a till is an ordinary row
+      // here and "the money went from the cash box" is something this
+      // picker can be made to say -- once somebody says which box.
+      await show(tester, [cert()], repo: _Repo(banks: const []));
+
+      await tester.tap(find.widgetWithText(TextButton, 'Remit'));
+      await tester.pumpAndSettle();
+
+      expect(remitReady(tester), isFalse);
+      await tester.tap(find.widgetWithText(TextFormField, 'Paid from *'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add bank account'), findsOneWidget);
+    });
+  });
+
   group('nothing withheld', () {
     testWidgets('says how one comes to exist', (tester) async {
       // An empty list here is the ordinary case for most companies, so
@@ -231,4 +352,48 @@ void main() {
       expect(find.textContaining('Withhold tax'), findsOneWidget);
     });
   });
+}
+
+/// Enough of `Repo` to answer the picker and record the remittance.
+///
+/// `remitWithholding` is overridden rather than caught at `callRpc`,
+/// because `implements Repo` INHERITS NO BODIES: a fake that answers
+/// only `callRpc` sends every other member to `noSuchMethod`, so the
+/// real method never runs and the RPC never happens. That is not a
+/// detail of style — it is the difference between recording what the
+/// dialog chose and recording nothing at all, and the first draft of
+/// these tests failed on exactly it.
+///
+/// Which also marks the edge of what they can prove: that
+/// `remitWithholding` turns a non-null id into `p_bank_account_id` is
+/// `Repo`'s business, and `Repo` wants a live `SupabaseClient`, so the
+/// server's side of the bargain is asserted in
+/// `supabase/tests/withholding.sql` instead.
+class _Repo implements Repo {
+  _Repo({this.banks = const []});
+
+  final List<Map<String, dynamic>> banks;
+
+  /// Every remittance this screen asked for, in order.
+  final List<({String id, DateTime paidOn, String? bankAccountId})> remitted =
+      [];
+
+  @override
+  Future<List<Map<String, dynamic>>> bankAccounts() async => banks;
+
+  @override
+  Future<void> remitWithholding({
+    required String id,
+    required DateTime paidOn,
+    String? bankAccountId,
+    String? reference,
+  }) async {
+    remitted.add((id: id, paidOn: paidOn, bankAccountId: bankAccountId));
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        'the withholding screen called Repo.${invocation.memberName} and '
+        'this fake does not answer it.',
+      );
 }

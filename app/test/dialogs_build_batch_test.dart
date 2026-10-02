@@ -126,6 +126,16 @@ void main() {
   /// `showJournalEditor` takes one. A `Builder` cannot supply it, so
   /// the button lives inside a `Consumer` instead — which is what the
   /// screens that open it do.
+  /// Whether a dialog's confirming button will do anything if pressed.
+  ///
+  /// `onPressed != null`, read off the widget. `find.byType(FilledButton)`
+  /// proves only that a button is drawn, which is true of a dead one.
+  bool saveReady(WidgetTester tester, String label) =>
+      tester
+          .widget<ButtonStyleButton>(find.widgetWithText(FilledButton, label))
+          .onPressed !=
+      null;
+
   Future<void> openedWithRef(
     WidgetTester tester,
     List<Override> overrides,
@@ -2009,9 +2019,98 @@ void main() {
 
       expect(find.text('Loss of about RM 18,000.00'), findsOneWidget);
       expect(find.textContaining('Gain of about'), findsNothing);
-      // Blank proceeds go to cash, and the picker has to offer a way
-      // back to that once an account has been chosen.
-      expect(find.textContaining('they go to cash'), findsOneWidget);
+      // This used to assert the helper said "Left blank, they go to
+      // cash", and THEY DID NOT: `dispose_fixed_asset` fell back to
+      // account 1120, the heading the real bank accounts hang under, so
+      // the proceeds moved no bank balance and showed on no
+      // reconciliation. The assertion pinned the untrue sentence in
+      // place — the same species as the SQL fixture that asserted the
+      // 1120 credit and called it "an expense paid in cash".
+      //
+      // Scrapping takes nothing, so there is nothing to bank and the
+      // box is genuinely optional. That is what it says now.
+      expect(find.textContaining('they go to cash'), findsNothing);
+      expect(
+        find.textContaining('nothing to bank'),
+        findsOneWidget,
+        reason: 'a disposal for nothing needs no account, and says why',
+      );
+      expect(find.text('Proceeds into'), findsOneWidget,
+          reason: 'and is not starred, because it is not required');
+      expect(saveReady(tester, 'Dispose'), isTrue,
+          reason: 'scrapping with no account is savable');
+
+      // The other half of the discrimination: here the empty row IS
+      // offered, because here it is the truth.
+      await tester.tap(find.text('Proceeds into'));
+      await tester.pumpAndSettle();
+      expect(find.text('No proceeds'), findsOneWidget);
+    });
+
+    testWidgets('but proceeds must say which account they went into',
+        (tester) async {
+      // `0729`. The refusal is in SQL, where the rule lives; this is
+      // the dialog not building the refusal in the first place.
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_Repo(banks: const [
+            {
+              'id': 'bank-1',
+              'name': 'Maybank current',
+              'bank_name': 'Maybank',
+            },
+          ])),
+        ],
+        (context, ref) => showDisposalDialog(context, ref, asset: van),
+      );
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Proceeds'), '26000');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Proceeds into *'), findsOneWidget,
+          reason: 'the star arrives with the proceeds');
+      expect(find.textContaining('nothing to bank'), findsNothing);
+      expect(saveReady(tester, 'Dispose'), isFalse);
+
+      await tester.tap(find.text('Proceeds into *'));
+      await tester.pumpAndSettle();
+      // The picker must not offer its way out either. `allowEmpty` is
+      // what used to put a row labelled "Cash" here, and choosing it
+      // sent null — so a disabled button with an empty row still on
+      // offer would be a dead end rather than a rule. The mutation run
+      // found this: flipping `allowEmpty` back to `true` survived until
+      // this line existed.
+      expect(find.text('No proceeds'), findsNothing,
+          reason: 'with proceeds there is no "none" to choose');
+      await tester.tap(find.text('Maybank current').last);
+      await tester.pumpAndSettle();
+
+      expect(saveReady(tester, 'Dispose'), isTrue,
+          reason: 'naming one was the only thing missing');
+    });
+
+    testWidgets('and typing the proceeds back to nothing lets it go again',
+        (tester) async {
+      // The box is required by the AMOUNT, not by having once been
+      // shown — so a mistyped figure corrected to zero must not leave
+      // the dialog stuck behind a field it no longer needs.
+      await openedWithRef(
+        tester,
+        [repoProvider.overrideWithValue(_Repo(banks: const []))],
+        (context, ref) => showDisposalDialog(context, ref, asset: van),
+      );
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Proceeds'), '26000');
+      await tester.pumpAndSettle();
+      expect(saveReady(tester, 'Dispose'), isFalse);
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Proceeds'), '0');
+      await tester.pumpAndSettle();
+      expect(saveReady(tester, 'Dispose'), isTrue);
     });
 
     testWidgets('the depreciation run prices every asset before posting',

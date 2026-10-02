@@ -249,4 +249,94 @@ begin
   raise notice 'clear_pdc: an account named, or it has not cleared';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- THE ALLOW-LIST: which functions may still mention the heading at all
+-- ---------------------------------------------------------------------
+--
+-- This exists because a human got the count wrong. `0728` reported that
+-- `app.post_receipt_internal` was the only function left containing
+-- `code = '1120'`. The real number was NINE, and the evidence for "one"
+-- was a query filtered to the functions already known -- it could only
+-- confirm what had been put into it. Two live posting paths,
+-- `dispose_fixed_asset` and `remit_withholding`, were never examined
+-- and `0729` closed them.
+--
+-- So the question is asked the other way round here: sweep EVERY
+-- function body in `public` and `app`, and require the set that mentions
+-- the heading to be exactly the set named below. A tenth cannot appear
+-- quietly, and fixing one of these requires deleting its line, which is
+-- a visible act in a diff.
+--
+-- `prokind = 'f'` excludes aggregates: `pg_get_function_identity_arguments`
+-- raises on one, which is a confusing error to meet from a test.
+do $$
+declare
+  v_allowed text[] := array[
+    -- Deliberately still falling back, and documented at length in
+    -- `0728`: every `pos_tender_types` row has no bank account, so
+    -- refusing here would stop the till rather than correct it. What is
+    -- missing is where each tender's money lands, which is a question
+    -- for the people running the shop.
+    'app.post_receipt_internal(uuid)',
+    -- Demo seeders. Data rather than rules, reseeded rather than
+    -- migrated, and they are what put a bank account on the heading in
+    -- the twelve companies `0729` leaves alone.
+    'app.demo_assets_harta(uuid,uuid)',
+    'app.demo_legal_guaman(uuid,uuid)',
+    'app.demo_practice_books(uuid,uuid,text,numeric,text)',
+    'app.demo_sinar_assets(uuid,uuid)',
+    'app.demo_sinar_bank(uuid,uuid)',
+    'app.demo_sinar_payroll(uuid,uuid)'
+  ];
+  v_found text[];
+  v_new   text[];
+  v_gone  text[];
+begin
+  -- `p.oid::regprocedure::text`, NOT
+  -- `pg_get_function_identity_arguments` -- that one prints PARAMETER
+  -- NAMES, so a seeder comes back as `app.demo_sinar_bank(p_org uuid,
+  -- p_owner uuid)` and never matches a list written in types. The first
+  -- run of this assertion failed for exactly that and named all seven
+  -- allowed functions as new ones, which is a formatting failure
+  -- wearing the costume of a real finding.
+  --
+  -- `regprocedure` also schema-qualifies only where it must, so an
+  -- entry in `public` appears bare: `dispose_fixed_asset(...)`, not
+  -- `public.dispose_fixed_asset(...)`. The list below is spelled the
+  -- way this prints it.
+  select coalesce(array_agg(fn order by fn), array[]::text[]) into v_found
+    from (
+      select p.oid::regprocedure::text as fn
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname in ('public', 'app')
+         and p.prokind = 'f'
+         and pg_get_functiondef(p.oid) like '%code = ''1120''%'
+    ) s;
+
+  select coalesce(array_agg(f order by f), array[]::text[]) into v_new
+    from unnest(v_found) f where not f = any(v_allowed);
+
+  select coalesce(array_agg(a order by a), array[]::text[]) into v_gone
+    from unnest(v_allowed) a where not a = any(v_found);
+
+  -- A NEW one is the failure this file exists for.
+  perform pg_temp.check_true(
+    'no function outside the allow-list falls back to the 1120 heading'
+    || case when cardinality(v_new) = 0 then ''
+       else ': ' || array_to_string(v_new, ', ') end,
+    cardinality(v_new) = 0);
+
+  -- And the other direction, which is the one that rots. An allow-list
+  -- entry matching nothing means somebody fixed a function and left its
+  -- exemption behind, and the next person reads the list as the truth.
+  perform pg_temp.check_true(
+    'and every allow-list entry still matches something'
+    || case when cardinality(v_gone) = 0 then ''
+       else ': ' || array_to_string(v_gone, ', ') end,
+    cardinality(v_gone) = 0);
+
+  raise notice 'the 1120 allow-list holds % functions', cardinality(v_found);
+end $$;
+
 rollback;

@@ -124,11 +124,11 @@ begin
                              date '2026-01-01', 6000, 60);
 
   -- Three months at 100 a month: net book value 5,700 at 31 March.
-  v_e := public.dispose_fixed_asset(v_win, date '2026-03-31', 9000, null);
+  v_e := public.dispose_fixed_asset(v_win, date '2026-03-31', 9000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_win));
   perform pg_temp.check_eq('a gain is the proceeds over the book value',
     pg_temp.ad_code_line(v_e, v_org, '4930'), -3300);
 
-  v_e := public.dispose_fixed_asset(v_lose, date '2026-03-31', 1000, null);
+  v_e := public.dispose_fixed_asset(v_lose, date '2026-03-31', 1000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_lose));
   perform pg_temp.check_eq('and a loss is the book value over the proceeds',
     pg_temp.ad_code_line(v_e, v_org, '6510'), 4700);
 
@@ -166,7 +166,7 @@ begin
   begin
     v_fa2 := pg_temp.ad_asset(v_org, 'FA-L3', 'Another loser', 'Plant',
                               date '2026-01-01', 6000, 60);
-    v_e := public.dispose_fixed_asset(v_fa2, date '2026-03-31', 1000, null);
+    v_e := public.dispose_fixed_asset(v_fa2, date '2026-03-31', 1000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_fa2));
     select id into v_again from public.accounts
      where org_id = v_org and code = '6510' and deleted_at is null;
     perform pg_temp.check_eq(
@@ -195,7 +195,7 @@ begin
   begin
     v_fa := pg_temp.ad_asset(v_clean, 'FA-L2', 'Loser', 'Plant',
                              date '2026-01-01', 6000, 60);
-    v_j := public.dispose_fixed_asset(v_fa, date '2026-03-31', 1000, null);
+    v_j := public.dispose_fixed_asset(v_fa, date '2026-03-31', 1000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_fa));
     select a.id, a.account_type::text, a.account_subtype::text,
            (select p.code from public.accounts p where p.id = a.parent_id)
       into v_ac, v_type, v_subtype, v_parent
@@ -473,7 +473,7 @@ begin
      set accumulated_depreciation = 3000, depreciated_to = date '2026-03-31'
    where id = v_fa;
 
-  v_e := public.dispose_fixed_asset(v_fa, date '2026-06-30', 1500, null);
+  v_e := public.dispose_fixed_asset(v_fa, date '2026-06-30', 1500, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_fa));
 
   perform pg_temp.check_eq(
     'what left with the asset is what the asset said it had, not what '
@@ -553,7 +553,7 @@ begin
     v_source, 'Depreciation run');
 
   -- And the real thing, so the label is not simply never used.
-  v_e := public.dispose_fixed_asset(v_fa, date '2026-06-30', 5000, null);
+  v_e := public.dispose_fixed_asset(v_fa, date '2026-06-30', 5000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_fa));
   select h.source into v_source
     from public.report_depreciation_history(v_org, v_fa) h
    where h.run_date = date '2026-06-30';

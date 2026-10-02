@@ -10,6 +10,23 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../banking/new_bank_account_dialog.dart';
 
+/// Why a disposal cannot be saved yet.
+///
+/// Null when there is nothing wrong. Proceeds have to land somewhere
+/// nameable: `dispose_fixed_asset` refuses proceeds with no account
+/// since `0729`, because it used to debit account 1120 -- the heading
+/// the real bank accounts hang beneath -- so the money moved no bank
+/// balance and appeared on no reconciliation. A disposal for NOTHING
+/// needs no account, which is why this asks about the amount and not
+/// just the box.
+String? disposalProblem({
+  required double proceeds,
+  required String? bankAccountId,
+}) => proceeds > 0 && bankAccountId == null
+    ? 'Say which account the proceeds were received into. Proceeds with '
+          'no account named cannot be reconciled against any statement.'
+    : null;
+
 /// Sells or scraps an asset.
 ///
 /// The gain or loss shown here is provisional in one specific way, and
@@ -125,12 +142,21 @@ class _DisposalDialogState extends ConsumerState<_DisposalDialog> {
                 onCreate: (typed) =>
                     createBankAccountFromPicker(context, typed: typed),
                 value: _bankAccountId,
-                label: 'Proceeds into',
-                helperText: 'Left blank, they go to cash',
-                // The dropdown said proceeds could go to cash but gave
-                // no way back to it once an account had been chosen.
-                allowEmpty: true,
-                emptyLabel: 'Cash',
+                label: _proceedsValue > 0 ? 'Proceeds into *' : 'Proceeds into',
+                helperText: _proceedsValue > 0
+                    ? null
+                    : 'Nothing was received, so there is nothing to bank',
+                // `allowEmpty` only where it is honest. It used to be
+                // true always, with the empty row labelled "Cash" and a
+                // helper saying "Left blank, they go to cash" -- and
+                // THEY DID NOT. `dispose_fixed_asset` fell back to
+                // account 1120, the heading the real bank accounts hang
+                // under: no bank balance moved and the proceeds showed
+                // on no reconciliation. `0729` refuses that, so where
+                // there are proceeds this box is required, and where
+                // there are none it is irrelevant and says so.
+                allowEmpty: _proceedsValue <= 0,
+                emptyLabel: 'No proceeds',
                 onChanged: (v) => setState(() => _bankAccountId = v),
               ),
               const SizedBox(height: 16),
@@ -171,7 +197,13 @@ class _DisposalDialogState extends ConsumerState<_DisposalDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _working ? null : _dispose,
+          onPressed: _working || disposalProblem(
+                    proceeds: _proceedsValue,
+                    bankAccountId: _bankAccountId,
+                  ) !=
+                  null
+              ? null
+              : _dispose,
           child: _working
               ? const SizedBox(
                   height: 18,

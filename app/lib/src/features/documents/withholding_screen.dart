@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/skeletons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../banking/new_bank_account_dialog.dart';
 
 /// Tax deducted from non-residents, and when it has to reach LHDN.
 ///
@@ -131,19 +134,23 @@ class _CertificateTile extends ConsumerWidget {
   final bool canPost;
 
   Future<void> _remit(BuildContext context, WidgetRef ref) async {
-    final ok = await confirm(
-      context,
-      title: 'Mark as remitted?',
-      message: 'This records the payment to LHDN and clears the liability. '
-          'Do it when the money has actually gone.',
-      confirmLabel: 'Remitted',
+    // A `confirm` is no longer enough. This used to ask yes-or-no and
+    // send no bank account, and `remit_withholding` fell back to
+    // account 1120 -- the heading the real accounts hang under -- so
+    // the liability cleared, no bank balance moved, and the payment to
+    // LHDN appeared on no reconciliation. `0729` refuses that, which
+    // means the one question it never asked is now the one it must.
+    final account = await showDialog<String>(
+      context: context,
+      builder: (_) => const _RemitDialog(),
     );
-    if (!ok || !context.mounted) return;
+    if (account == null || !context.mounted) return;
     await runWithFeedback(
       context,
       action: () => ref.read(repoProvider)!.remitWithholding(
             id: row['certificate_id'] as String,
             paidOn: DateTime.now(),
+            bankAccountId: account,
           ),
       successMessage: 'Remitted',
     );
@@ -193,6 +200,73 @@ class _CertificateTile extends ConsumerWidget {
           ),
         ],
       ]),
+    );
+  }
+}
+
+/// Which account the money reached LHDN from.
+///
+/// Returns the chosen bank account, or null if the person backed out —
+/// so the caller cannot mistake "cancelled" for "paid from nowhere",
+/// which is the shape of the bug this dialog exists to close.
+///
+/// It keeps the old confirmation's words, because they were the right
+/// words: this records a payment that has already left, and doing it
+/// early is the mistake people make. What it adds is the account.
+class _RemitDialog extends ConsumerStatefulWidget {
+  const _RemitDialog();
+
+  @override
+  ConsumerState<_RemitDialog> createState() => _RemitDialogState();
+}
+
+class _RemitDialogState extends ConsumerState<_RemitDialog> {
+  String? _bankAccountId;
+
+  @override
+  Widget build(BuildContext context) {
+    final banks =
+        ref.watch(bankAccountsProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+
+    return AlertDialog(
+      title: const Text('Mark as remitted?'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This records the payment to LHDN and clears the liability. '
+              'Do it when the money has actually gone.',
+            ),
+            const SizedBox(height: Space.md),
+            SearchablePicker<String>(
+              options: bankPickerOptions(banks),
+              value: _bankAccountId,
+              label: 'Paid from *',
+              hint: 'Which account the money left',
+              createLabel: 'Add bank account',
+              onCreate: (typed) =>
+                  createBankAccountFromPicker(context, typed: typed),
+              onChanged: (v) => setState(() => _bankAccountId = v),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _bankAccountId == null
+              ? null
+              : () => Navigator.of(context).pop(_bankAccountId),
+          child: const Text('Remitted'),
+        ),
+      ],
     );
   }
 }

@@ -78,7 +78,7 @@ begin
   returning id into v_lathe;
 
   v_x := public.run_depreciation(v_org, date '2026-03-31');
-  v_x := public.dispose_fixed_asset(v_van, date '2026-06-30', 10000, null);
+  v_x := public.dispose_fixed_asset(v_van, date '2026-06-30', 10000, (select pg_temp.a_bank_account(f.org_id) from public.fixed_assets f where f.id = v_van));
   v_x := public.run_depreciation(v_org, date '2026-12-31');
 
   perform set_config('app.test_van', v_van::text, true);
