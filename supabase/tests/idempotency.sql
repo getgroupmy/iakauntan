@@ -488,11 +488,26 @@ begin
   --
   -- A document sent ONLY with a key has exactly one link, and it is the
   -- wrapper's.
+  --
+  -- MEASURED AGAINST THE LINK'S OWN `created_at`, not against today.
+  -- It was `expires_at::date - pg_temp.today()`, and that is a date in
+  -- UTC minus a date in Kuala Lumpur: true for sixteen hours a day and
+  -- short by one for the other eight. It passed every run of this
+  -- tranche and first failed at 16:31 UTC, which is 00:31 the next day
+  -- in KL -- `expires_at::date` had not moved and `pg_temp.today()`
+  -- had. A green run proved nothing about the hour it did not run in.
+  --
+  -- `created_at` and `expires_at` are both `now()` in the same
+  -- transaction and are cast with the same session time zone, so their
+  -- difference is exactly the window at any hour. It still separates 30
+  -- from the 45 that `app.issue_share_token` falls back to when the
+  -- wrapper passes the null through, which is the only thing this
+  -- assertion is for.
   v_fresh := pg_temp.an_invoice(v_org, v_contact, 'INV-9');
   perform public.email_document(v_fresh, null, 'document_new', null,
     'queued', null, null, 'SEND-9');
   perform pg_temp.check_eq('a null share window takes the function''s 30 days',
-    (select (expires_at::date - pg_temp.today())
+    (select (expires_at::date - created_at::date)
        from public.document_share_links where document_id = v_fresh), 30);
 
   -- A key reused for a different request is a client bug, not a retry.
