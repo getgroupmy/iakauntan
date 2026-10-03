@@ -157,8 +157,14 @@ class Verdicts(unittest.TestCase):
         for name, verdict in gate.VERDICTS.items():
             kind, sep, detail = verdict.partition(':')
             self.assertEqual(sep, ':', f'{name} has no kind')
-            self.assertIn(kind, ('unique', 'natural', 'repeats'), name)
+            self.assertIn(kind, ('unique', 'state', 'natural', 'repeats'), name)
             self.assertTrue(detail.strip(), f'{name} names no evidence')
+
+    def test_a_state_verdict_names_text_long_enough_to_be_distinctive(self):
+        """A one-word `state:` verdict would match almost any body."""
+        for name, verdict in gate.VERDICTS.items():
+            if verdict.startswith('state:'):
+                self.assertGreater(len(verdict.split(':', 1)[1]), 12, name)
 
     def test_a_unique_verdict_names_an_index_not_a_table(self):
         for name, verdict in gate.VERDICTS.items():
@@ -246,6 +252,28 @@ class TheRatchet(unittest.TestCase):
             backlog=0, verdicts={'gone_away': 'natural:it used to upsert'})
         self.assertEqual(code, 1)
         self.assertIn('gone_away', out)
+
+    def test_a_stale_state_verdict_fails(self):
+        """The refusal reworded, the excuse left behind."""
+        code, out = self.run_gate(
+            volatile=['make_thing'], keyed=[],
+            defs={'make_thing': "begin raise exception 'that is new'; "
+                                "insert into public.t values (1); end"},
+            uniques=[], client="callRpc('make_thing', params: {})",
+            backlog=99,
+            verdicts={'make_thing': 'state:that is already here'})
+        self.assertEqual(code, 1)
+        self.assertIn('already here', out)
+
+    def test_a_live_state_verdict_passes(self):
+        code, out = self.run_gate(
+            volatile=['make_thing'], keyed=[],
+            defs={'make_thing': "begin raise exception 'that is already "
+                                "here'; insert into public.t values (1); end"},
+            uniques=[], client="callRpc('make_thing', params: {})",
+            backlog=0,
+            verdicts={'make_thing': 'state:that is already here'})
+        self.assertEqual(code, 0, out)
 
     def test_a_keyed_write_is_protected_not_undecided(self):
         code, out = self.run_gate(

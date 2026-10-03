@@ -71,17 +71,20 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 99
+BACKLOG = 93
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
 #
 #   unique:<index>  a unique index refuses the second write
+#   state:<text>    it refuses a repeat in words the GUARD vocabulary
+#                   does not know; the text must still be in the body
 #   natural:<why>   repeating it writes the state the first call wrote
 #   repeats:<why>   it is MEANT to repeat; a key would be a bug
 #
-# `natural` and `repeats` are prose and cannot be machine-checked, so
-# they are few and each names what was read.
+# `unique` and `state` are re-checked against the schema on every run.
+# `natural` and `repeats` are prose and cannot be, so they are few and
+# each names what was read.
 VERDICTS: dict[str, str] = {
     "save_payment_method":
         "unique:payment_methods_name_key",
@@ -118,6 +121,34 @@ VERDICTS: dict[str, str] = {
         "repeats:as audit_list_payslips -- a download log",
     "open_tax_computation":
         "unique:tax_computations_org_id_fiscal_year_id_key",
+
+    # The import family. `0734` was written to wrap six of these and
+    # wrapped two: four refuse a second run in their own words, which the
+    # census's automatic check could not see because they guard BEFORE
+    # the insert -- a refusal raised ahead of the loop, or an
+    # `if exists ... then continue` inside it.
+    "import_accounts":
+        "state:is already in the chart",
+    "import_opening_balances":
+        "state:An opening trial balance has already been brought into this",
+    "import_opening_stock":
+        "state:Opening stock has already been brought into this company.",
+    "import_bank_transactions":
+        "natural:tests `if exists` for each line and counts the repeats as "
+        "`skipped` rather than importing them -- asserted since it was "
+        "built, in bank_reconciliation.sql: 'the repeat is skipped', 'and "
+        "nothing was added'",
+    # These two were MEASURED rather than read. `next_document_number`
+    # appears in their call graph, which is what made them look like the
+    # worst hazards in the whole census -- a retried file under the next
+    # numbers. Running the same file twice refuses it: the importer
+    # requires a doc_no in the file (a row without one is a row with a
+    # problem), so the number always comes from the caller and
+    # `(org_id, doc_type, doc_no)` always collides.
+    "import_sales_transactions":
+        "unique:sales_documents_org_id_doc_type_doc_no_key",
+    "import_purchase_transactions":
+        "unique:purchase_documents_org_id_doc_type_doc_no_key",
 }
 
 VOLATILE_SQL = """
@@ -280,7 +311,13 @@ def run(db: str) -> int:
                 f"'{name}' is excused because the unique index '{detail}' "
                 f"refuses the second write, and there is no such index any "
                 f"more. Either it was renamed or the protection is gone.")
-        if kind not in ("unique", "natural", "repeats"):
+        if kind == "state" and detail not in transitive(defs, name):
+            problems.append(
+                f"'{name}' is excused because it refuses a repeat with "
+                f"\"{detail}\", and that text is not in its body any more. "
+                f"A refusal that has been reworded is still a refusal; a "
+                f"refusal that has been deleted is not.")
+        if kind not in ("unique", "state", "natural", "repeats"):
             problems.append(
                 f"'{name}' has verdict kind '{kind}', which is not one of "
                 f"unique, natural, repeats.")

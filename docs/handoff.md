@@ -218,6 +218,61 @@ extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
+## The import family was the loudest hazard, and is the best-protected
+
+A migration `0734` was written, applied locally, and then DELETED. It
+wrapped the six `import_*` functions, on the grounds that a retried
+import is not one duplicated row but one duplicated SPREADSHEET — and
+`import_sales_transactions` says so in its own comment: "is a file nobody
+can run again: the good half is now a duplicate."
+
+Every one of the six already refuses a second run, and each was found a
+different way:
+
+| | |
+| --- | --- |
+| `import_accounts` | "%s is already in the chart." Read. |
+| `import_opening_balances` | "An opening trial balance has already been brought into this company." Read. |
+| `import_opening_stock` | "Opening stock has already been brought into this company." Read. |
+| `import_bank_transactions` | not a refusal but a SKIP: `if exists` per line, counted as `skipped`, asserted in `bank_reconciliation.sql` since it was built. Found by reading a test. |
+| `import_sales_transactions` | **measured.** Ran the same file twice: "Nothing was imported: 1 of 1 rows have a problem." |
+| `import_purchase_transactions` | **measured**, the same way. |
+
+The last two are the ones worth the paragraph. `next_document_number`
+appears in their call graph, which is what made them look like the worst
+entries in the whole census: a file re-landing under the next numbers,
+where the unique index on `(org_id, doc_type, doc_no)` cannot help. The
+probe that was meant to demonstrate that found the opposite — the
+importer REQUIRES a `doc_no` in the file (a row without one is a row with
+a problem, and the whole file is refused), so the number always comes
+from the caller and the index always collides.
+
+**So `0734` is not in the repository.** The verdicts are, in
+`scripts/check_write_idempotency.py`, and four of them are re-checked on
+every run: two `unique:` naming the index, two `state:` naming the
+refusal text, which the gate now looks for in the function's body.
+
+### `state:` as a verdict kind
+
+Because the automatic check reads each INSERT STATEMENT and these four
+guard EARLIER — a refusal raised ahead of the loop, or an
+`if exists … then continue` inside it. Widening the statement pattern to
+catch that shape would make it catch things that merely look like it, so
+instead a verdict may name the refusal text and the gate fails if that
+text leaves the body. A refusal that has been reworded is still a
+refusal; one that has been deleted is not.
+
+### Where the backlog stands
+
+99 → **93**. Three times now a function that read like a
+duplicate-on-retry defect has turned out to be guarded by something not
+visible in its own body: a unique index absent from `pg_constraint`
+(`save_payment_method`), a per-line `if exists` (`import_bank_transactions`),
+and a required argument that makes an index bite
+(`import_sales_transactions`). The rule that keeps falling out of this is
+the same one: **read the body to find the candidates, then make the
+duplicate happen.** Nothing else distinguishes the three.
+
 ## The 3 October session, third change: deciding the 137
 
 Asked for: "now do the remaining 137". This commit takes the backlog from
