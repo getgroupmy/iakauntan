@@ -713,4 +713,240 @@ begin
 end $$;
 
 
+-- =====================================================================
+-- 0734 :: four ways to pay an invoice twice
+--
+-- The first tranche where the duplicate is MONEY against a customer's
+-- account. Each block does the unguarded double first, because that is
+-- what makes the replay assertion mean anything -- and here the double
+-- is not hypothetical: it is how these functions behaved until this
+-- migration, and the figures below are the ones that were measured.
+--
+-- Nothing in the schema could have stopped it. There is no unique index
+-- on `payment_allocations` and no "already allocated" check, because a
+-- receipt may legitimately be applied to the same invoice twice, in two
+-- instalments on two days. The database cannot tell that from a retry.
+-- =====================================================================
+
+create or replace function pg_temp.money_org(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.test_org(p_name);
+begin
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'SVC', 'Service', 'service', false, 100);
+  perform pg_temp.test_bank_account(
+    v_org, 'Current', 'current', 'MYR', 0, 0, '512345678901');
+  return v_org;
+end $$;
+
+create or replace function pg_temp.a_posted_invoice(
+  p_org uuid, p_contact uuid, p_no text, p_amount numeric)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (p_org, 'invoice', p_no, pg_temp.today(), pg_temp.today(),
+          p_contact, 'draft', 'MYR', 1)
+  returning id into v_id;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (p_org, v_id, 1, 'item',
+          (select id from public.items where org_id = p_org and code = 'SVC'),
+          'Work', 1, p_amount);
+  perform public.post_sales_document(v_id);
+  return v_id;
+end $$;
+
+create or replace function pg_temp.a_receipt(
+  p_org uuid, p_contact uuid, p_no text, p_amount numeric)
+returns uuid language sql as $$
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
+     currency, exchange_rate, amount, unapplied_amount)
+  values (p_org, p_no, pg_temp.today(), p_contact,
+          (select id from public.bank_accounts where org_id = p_org limit 1),
+          'MYR', 1, p_amount, p_amount)
+  returning id;
+$$;
+
+-- ---------------------------------------------------------------------
+-- allocate_with_discount: the measurement that started this migration
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_cust uuid; v_inv uuid; v_rcp uuid; v_first uuid; v_again uuid;
+  v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.money_org('Allocations Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
+  v_inv := pg_temp.a_posted_invoice(v_org, v_cust, 'INV-1', 1000);
+  v_rcp := pg_temp.a_receipt(v_org, v_cust, 'RCP-1', 1000);
+
+  -- The defect, as measured: 300 twice takes 600 off a 1,000 invoice.
+  perform public.allocate_with_discount(v_rcp, v_inv, 300, 0, pg_temp.today());
+  perform public.allocate_with_discount(v_rcp, v_inv, 300, 0, pg_temp.today());
+  perform pg_temp.check_eq('without a key, a retry allocates twice',
+    (select count(*)::integer from public.payment_allocations
+      where receipt_id = v_rcp), 2);
+  perform pg_temp.check_eq('and the invoice is 300 further down than asked',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    400);
+
+  -- With one, the second call returns the first allocation and moves
+  -- nothing.
+  v_first := public.allocate_with_discount(v_rcp, v_inv, 100, 0,
+    pg_temp.today(), 'ALLOC-1');
+  v_again := public.allocate_with_discount(v_rcp, v_inv, 100, 0,
+    pg_temp.today(), 'ALLOC-1');
+  perform pg_temp.check_true('a replayed allocation returns the first one',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and makes no third allocation',
+    (select count(*)::integer from public.payment_allocations
+      where receipt_id = v_rcp), 3);
+  perform pg_temp.check_eq('so the balance moved once, by 100',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    300);
+
+  -- A different amount under the same key is a client bug, not a retry.
+  begin
+    perform public.allocate_with_discount(v_rcp, v_inv, 50, 0,
+      pg_temp.today(), 'ALLOC-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different amount is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- allocate_payment_with_discount: the purchase side
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_supp uuid; v_bill uuid; v_pay uuid; v_first uuid; v_again uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.money_org('Payments Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S1', 'Pembekal', 'supplier') returning id into v_supp;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), pg_temp.today(),
+          v_supp, 'draft', 'MYR', 1)
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'Stationery', 1, 1000);
+  perform public.post_purchase_document(v_bill);
+
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, bank_account_id,
+     currency, exchange_rate, amount, unapplied_amount)
+  values (v_org, 'PAY-1', pg_temp.today(), v_supp,
+          (select id from public.bank_accounts where org_id = v_org limit 1),
+          'MYR', 1, 1000, 1000)
+  returning id into v_pay;
+
+  perform public.allocate_payment_with_discount(v_pay, v_bill, 300, 0,
+    pg_temp.today());
+  perform public.allocate_payment_with_discount(v_pay, v_bill, 300, 0,
+    pg_temp.today());
+  perform pg_temp.check_eq('the purchase side doubles the same way',
+    (select count(*)::integer from public.payment_allocations
+      where payment_id = v_pay), 2);
+
+  v_first := public.allocate_payment_with_discount(v_pay, v_bill, 100, 0,
+    pg_temp.today(), 'PAY-ALLOC-1');
+  v_again := public.allocate_payment_with_discount(v_pay, v_bill, 100, 0,
+    pg_temp.today(), 'PAY-ALLOC-1');
+  perform pg_temp.check_true('and a replay returns the first allocation',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('without a third',
+    (select count(*)::integer from public.payment_allocations
+      where payment_id = v_pay), 3);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- apply_deposit and knock_off
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_cust uuid; v_inv uuid; v_dep uuid; v_cn uuid;
+  v_lines jsonb; v_first uuid; v_again uuid; v_n integer; v_again_n integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.money_org('Deposits Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
+  v_inv := pg_temp.a_posted_invoice(v_org, v_cust, 'INV-1', 1000);
+
+  v_dep := public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(),
+    500, (select id from public.bank_accounts where org_id = v_org limit 1),
+    '02', 'DEP-1', null);
+
+  perform public.apply_deposit(v_dep, v_inv, 100, pg_temp.today());
+  perform public.apply_deposit(v_dep, v_inv, 100, pg_temp.today());
+  perform pg_temp.check_eq('without a key, a deposit applies twice',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    800);
+
+  v_first := public.apply_deposit(v_dep, v_inv, 100, pg_temp.today(),
+    'DEP-APPLY-1');
+  v_again := public.apply_deposit(v_dep, v_inv, 100, pg_temp.today(),
+    'DEP-APPLY-1');
+  perform pg_temp.check_true('a replayed deposit returns the first one',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and takes 100 off, not 200',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    700);
+
+  -- knock_off settles a batch and returns how many lines it settled. A
+  -- replay must return the SAME COUNT: zero would read as "there was
+  -- nothing to settle", which is the opposite of what happened.
+  v_cn := pg_temp.a_posted_invoice(v_org, v_cust, 'CN-SRC', 1);
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (v_org, 'credit_note', 'CN-1', pg_temp.today(), pg_temp.today(),
+          v_cust, 'draft', 'MYR', 1)
+  returning id into v_cn;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_cn, 1, 'item',
+          (select id from public.items where org_id = v_org and code = 'SVC'),
+          'Credit', 1, 300);
+  perform public.post_sales_document(v_cn);
+
+  v_lines := jsonb_build_array(jsonb_build_object(
+    'kind', 'credit_note', 'source_id', v_cn, 'invoice_id', v_inv,
+    'amount', 50));
+
+  perform public.knock_off(v_cust, v_lines);
+  perform public.knock_off(v_cust, v_lines);
+  perform pg_temp.check_eq('without a key, a knock-off batch lands twice',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    600);
+
+  v_n := public.knock_off(v_cust, v_lines, 'KNOCK-1');
+  v_again_n := public.knock_off(v_cust, v_lines, 'KNOCK-1');
+  perform pg_temp.check_eq('a replayed batch reports the same count', v_n, 1);
+  perform pg_temp.check_eq('and not zero, which would read as "nothing to do"',
+    v_again_n, 1);
+  perform pg_temp.check_eq('and settles 50 once',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    550);
+end $$;
+
+
 rollback;

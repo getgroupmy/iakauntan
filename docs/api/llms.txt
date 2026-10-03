@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0733` (the highest applied migration).
-814 functions and 367 readable tables, of which
+Schema version `0734` (the highest applied migration).
+818 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**673 of 814 functions carry a `comment on
+**677 of 818 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -51,12 +51,16 @@ rather than quietly answered. The key has no default, because a
 call that omits one merely-optional argument would otherwise
 resolve to the unprotected original and return a plausible id.
 
+- `allocate_payment_with_discount`
+- `allocate_with_discount`
+- `apply_deposit`
 - `assign_ticket`
 - `bulk_email_documents`
 - `create_contra`
 - `create_deposit`
 - `email_document`
 - `email_receipt`
+- `knock_off`
 - `post_manual_journal`
 - `record_pdc`
 
@@ -379,7 +383,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (599)
+### general (603)
 
 Not gated on any module.
 
@@ -399,11 +403,14 @@ Not gated on any module.
 - `ai_tool_catalogue(p_org_id uuid)`
 - `allocate_credit_note(p_credit_note uuid, p_invoice uuid, p_amount numeric)` *(writes)* — Sets a posted credit note against a posted invoice.
 - `allocate_payment_with_discount(p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date)` *(writes)* — The purchase side of `0385`.
+- `allocate_payment_with_discount(p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text)` *(writes)* — The purchase side of allocate_with_discount: sets a payment against a bill, at most once per idempotency key, with the same reasoning and the same refusals.
 - `allocate_with_discount(p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date)` *(writes)* — Takes a settlement discount and posts it: Dr 4300, Cr receivable.
+- `allocate_with_discount(p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text)` *(writes)* — Sets a receipt against an invoice, at most once per idempotency key.
 - `am_i_a_beta_tester()` — Whether the caller sees the floating report button.
 - `am_i_platform_admin()`
 - `apply_business_type(p_org_id uuid, p_business_type text, p_modules text[])` *(writes)* — Records what the company said it does and switches on the modules it was shown.
 - `apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` *(writes)* — Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation.
+- `apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date, p_idempotency_key text)` *(writes)* — Applies part or all of a deposit note to a document, at most once per idempotency key -- measured: without one, two identical calls apply it twice.
 - `apply_statutory_leave_bands(p_leave_type_id uuid, p_preset text)` *(writes)* — Writes the Employment Act service bands onto a leave type — 8/12/16 days for annual, 14/18/22 for sick, by years of service — and switches the type to scale with service.
 - `apply_tax_submission(p_submission_id uuid)` *(writes)* — Accepts a customer's submitted tax details over what the contact already held.
 - `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
@@ -618,6 +625,7 @@ Not gated on any module.
 - `item_price(p_item_id uuid, p_contact_id uuid, p_quantity numeric)`
 - `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)* — Moves a company into a group, or out of one when `p_group_id` is null.
 - `knock_off(p_contact_id uuid, p_lines jsonb)` *(writes)* — Sets several credit notes and on-account receipts against several invoices, all or none.
+- `knock_off(p_contact_id uuid, p_lines jsonb, p_idempotency_key text)` *(writes)* — Settles credit notes and money on account against invoices in one batch and returns how many lines were settled, at most once per idempotency key -- measured: without one the whole batch applies twice.
 - `landing_page()` — The marketing site's own contents, for the signed-out landing page.
 - `layout_rows(p_layout_id uuid)` — One layout's rows, in order, for the builder.
 - `ledger_dimensions(p_org_id uuid)`

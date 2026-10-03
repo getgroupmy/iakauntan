@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0733",
+    "version": "0734",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -20464,8 +20464,8 @@
     "/rpc/allocate_payment_with_discount": {
       "post": {
         "operationId": "allocate_payment_with_discount",
-        "summary": "The purchase side of `0385`",
-        "description": "The purchase side of `0385`. `app.apply_allocation` clears a bill by cash plus discount and the payment posting debits the payable by the cash alone, so a supplier discount would leave the payable understated \u2014 the same disagreement as on the sales side, in the direction that flatters the balance sheet.\n\n`public.allocate_payment_with_discount(p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date)` Writes. Requires a signed-in user.",
+        "summary": "The purchase side of allocate_with_discount: sets a payment against a bill, at most once per idempotency key\u2026",
+        "description": "The purchase side of allocate_with_discount: sets a payment against a bill, at most once per idempotency key, with the same reasoning and the same refusals. The organization comes from the payment.\n\n`public.allocate_payment_with_discount(p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -20497,12 +20497,18 @@
                   "p_as_at": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_payment",
                   "p_bill",
-                  "p_amount"
+                  "p_amount",
+                  "p_discount",
+                  "p_as_at",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -20529,14 +20535,17 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/allocate_with_discount": {
       "post": {
         "operationId": "allocate_with_discount",
-        "summary": "Takes a settlement discount and posts it: Dr 4300, Cr receivable",
-        "description": "Takes a settlement discount and posts it: Dr 4300, Cr receivable. The tax is untouched \u2014 reducing the taxable value takes a credit note, and doing it here would understate what LHDN was told.\n\n`public.allocate_with_discount(p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date)` Writes. Requires a signed-in user.",
+        "summary": "Sets a receipt against an invoice, at most once per idempotency key",
+        "description": "Sets a receipt against an invoice, at most once per idempotency key. Without one a retry allocates AGAIN: a receipt may legitimately be applied to the same invoice twice in two instalments, so neither a unique index nor a state check can tell that from a dropped connection. Pass p_as_at as null for today. The key is required and has no default -- that is what makes PostgREST choose this overload rather than the unprotected one, so every parameter must be named. Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of the receipt's organization.\n\n`public.allocate_with_discount(p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -20568,12 +20577,18 @@
                   "p_as_at": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_receipt",
                   "p_invoice",
-                  "p_amount"
+                  "p_amount",
+                  "p_discount",
+                  "p_as_at",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -20600,7 +20615,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/am_i_a_beta_tester": {
@@ -20762,8 +20780,8 @@
     "/rpc/apply_deposit": {
       "post": {
         "operationId": "apply_deposit",
-        "summary": "Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation",
-        "description": "Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation. Refuses more than the deposit has left, more than the document has outstanding, a voided deposit, a document that is not posted or partly paid, and a deposit belonging to a different contact. Refuses a currency mismatch on purpose and says why: the exchange difference belongs where the rest of them are struck, so settle that one with a receipt. Returns the journal's id.\n\n`public.apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` Writes. Requires a signed-in user.",
+        "summary": "Applies part or all of a deposit note to a document, at most once per idempotency key -- measured: without\u2026",
+        "description": "Applies part or all of a deposit note to a document, at most once per idempotency key -- measured: without one, two identical calls apply it twice. Pass p_date as null for today. Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of the deposit's organization.\n\n`public.apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_deposit uuid, p_document uuid, p_amount numeric, p_date date, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -20792,12 +20810,17 @@
                   "p_date": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_deposit",
                   "p_document",
-                  "p_amount"
+                  "p_amount",
+                  "p_date",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -20824,7 +20847,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_deposit uuid, p_document uuid, p_amount numeric, p_date date, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/apply_pos_coupon": {
@@ -39700,8 +39726,8 @@
     "/rpc/knock_off": {
       "post": {
         "operationId": "knock_off",
-        "summary": "Sets several credit notes and on-account receipts against several invoices, all or none",
-        "description": "Sets several credit notes and on-account receipts against several invoices, all or none. Each line goes through the allocator for its own kind. See 0630.\n\n`public.knock_off(p_contact_id uuid, p_lines jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Settles credit notes and money on account against invoices in one batch and returns how many lines were\u2026",
+        "description": "Settles credit notes and money on account against invoices in one batch and returns how many lines were settled, at most once per idempotency key -- measured: without one the whole batch applies twice. A REPLAY RETURNS THE SAME COUNT, not zero, because zero would read as \"nothing was there to settle\". Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of the contact's organization.\n\n`public.knock_off(p_contact_id uuid, p_lines jsonb, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_contact_id uuid, p_lines jsonb, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -39720,11 +39746,15 @@
                     "type": "string",
                     "format": "uuid"
                   },
-                  "p_lines": {}
+                  "p_lines": {},
+                  "p_idempotency_key": {
+                    "type": "string"
+                  }
                 },
                 "required": [
                   "p_contact_id",
-                  "p_lines"
+                  "p_lines",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -39751,7 +39781,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_contact_id uuid, p_lines jsonb, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/landed_cost_preview": {

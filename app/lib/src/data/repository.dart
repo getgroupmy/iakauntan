@@ -2637,13 +2637,17 @@ class Repo {
     required num amount,
     num? discount,
   }) async {
-    final id = await callRpc(
+    // `p_as_at` named explicitly, as null for today. The wrapper has no
+    // defaults -- see [callRpcOnce] -- and a call that left it out would
+    // resolve to the unprotected overload and allocate twice on a retry.
+    final id = await callRpcOnce(
       'allocate_with_discount',
       params: {
         'p_receipt': receiptId,
         'p_invoice': invoiceId,
         'p_amount': amount,
         'p_discount': discount,
+        'p_as_at': null,
       },
     );
     return id.toString();
@@ -2656,13 +2660,14 @@ class Repo {
     required num amount,
     num? discount,
   }) async {
-    final id = await callRpc(
+    final id = await callRpcOnce(
       'allocate_payment_with_discount',
       params: {
         'p_payment': paymentId,
         'p_bill': billId,
         'p_amount': amount,
         'p_discount': discount,
+        'p_as_at': null,
       },
     );
     return id.toString();
@@ -9023,7 +9028,7 @@ extension RepoHrSetup on Repo {
     String contactId,
     List<Map<String, dynamic>> lines,
   ) async {
-    final n = await callRpc(
+    final n = await callRpcOnce(
       'knock_off',
       params: {'p_contact_id': contactId, 'p_lines': lines},
     );
@@ -13697,12 +13702,13 @@ extension RepoDeposits on Repo {
     required String depositId,
     required String documentId,
     required num amount,
-  }) async => await callRpc(
+  }) async => await callRpcOnce(
     'apply_deposit',
     params: {
       'p_deposit': depositId,
       'p_document': documentId,
       'p_amount': amount,
+      'p_date': null,
     },
   );
 
