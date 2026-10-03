@@ -119,11 +119,11 @@ finish without printing.
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | `685a3156`, the 3 October change: **the call stage is laid out to fit the window**, green in run 2204, front end only, no migration — reported from a handset as a rotated call going dark, and a second defect unrelated to the rotation fix of 1 October. Before it, the 2 October session: `0729`, `0730`, `0731` and `0732`, with documentation commits between them. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
 | CI | **green through run 2204 (`685a3156`, the call stage fitting the window)**; 2194 to 2204 are all green. Earlier in that span, green through run 2201 (`9e42ebf1`, `0732`); 2194 to 2201 are all green, and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0734` is the highest. `0733` is live and VERIFIED; `0734` is on the branch and NOT yet verified in production** — it adds four idempotency-key overloads and four `comment on function`s, nothing destructive. `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Migrations | **`0735` is the highest. `0733` is live and VERIFIED; `0734` and `0735` are on the branch and NOT yet verified in production** — it adds four idempotency-key overloads and four `comment on function`s, nothing destructive. `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
 | Gates | **383 SQL assertion files, 60 Python gates (+26 gate self-tests, one of which is 25 assertions of its own), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 818 functions, 367 tables, version `0734`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| API description | 824 functions, 367 tables, version `0735`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -217,6 +217,68 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0735`: a second ticket, a second link, a second transfer
+
+56 → **48**. Six wrappers and two more verdicts, all measured:
+
+    create_ticket         -> 2 tickets
+    escalate_ticket       -> escalation_level 2, from one press
+    share_ticket          -> 2 live tokens
+    share_document        -> the same, for a sales document
+    report_feedback       -> 2 reports
+    create_bank_transfer  -> 2 transfers
+
+**`escalate_ticket` is the first in this programme whose damage is not a
+row.** Everything else leaves two of something a person can see and
+delete. An escalation level is a single integer: a retry escalates past
+the person it was meant to reach, and nothing on the ticket says it
+happened twice.
+
+The two share functions are the second-worst shape. A retry mints a
+second live token and does not revoke the first, so the number of ways
+into somebody's invoice doubles until they expire. Their wrappers return
+the SAME url on a replay, which has its own mutant.
+
+### Two came out, measured
+
+`attach_feedback_file` raised a unique violation on the second call —
+`feedback_attachments_storage_path_key` is on `storage_path`, which comes
+straight from the caller. A `unique:` verdict.
+
+`open_tax_estimate` ran twice and left ONE row, which is neither a
+refusal nor a duplicate: it looks for the live estimate and hands it
+back. Its own comment says so — *"Pressing the button again means 'show
+me it' rather than 'make a second'"* — and that is a third shape the
+census had no name for. It has one now: **`existing:`**, checked against
+the body exactly like `state:`.
+
+### An overload broke an assertion in a file nobody was looking at
+
+`ai_assistant.sql` asserted
+
+    (select p.provolatile::text from pg_proc p
+      where p.proname = 'report_feedback') = 'v'
+
+— a scalar subquery over a function name, which started raising "more
+than one row returned by a subquery used as an expression" the moment
+`report_feedback` had two forms. The same shape as `outbound_email.sql`'s
+"there is exactly one email_document", and the second time this
+programme has hit it.
+
+It is `bool_and(p.provolatile = 'v')` over every form now, which also
+says something stronger than before: a volatile function cannot acquire a
+STABLE overload that the AI assistant would then be offered as a reader.
+
+**The lesson for the remaining 48 is procedural.** An overload is
+invisible to the Dart analyzer and to the gates, and it is NOT invisible
+to any assertion that reads `pg_proc` by name. There are two such
+assertions in `supabase/tests/` and both have now been found by breaking
+them. A third would be found the same way, which is the argument for
+running the whole suite — not the one file a tranche touches — before
+every push.
+
+Six mutants, all killed, control surviving.
 
 ## `0734`: four ways to pay an invoice twice
 

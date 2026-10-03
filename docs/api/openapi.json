@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0734",
+    "version": "0735",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -30576,8 +30576,8 @@
     "/rpc/create_bank_transfer": {
       "post": {
         "operationId": "create_bank_transfer",
-        "summary": "Records a transfer between two of the company's own bank accounts, ready to post",
-        "description": "Records a transfer between two of the company's own bank accounts, ready to post. Refuses two accounts belonging to different companies -- one journal spanning two companies would breach the boundary the rest of this system is built on -- the same account at both ends, an amount of nothing, and a same-currency transfer where sent does not equal received plus charges. Across currencies the residual is carried as exchange difference. Needs `can_post`.\n\n`public.create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` Writes. Requires a signed-in user.",
+        "summary": "Draws up one bank transfer per idempotency key -- measured: without one, two identical calls draw up two\u2026",
+        "description": "Draws up one bank transfer per idempotency key -- measured: without one, two identical calls draw up two, each taking the next transfer number, both waiting to be posted. The organization comes from the account the money leaves. Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of that organization.\n\n`public.create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -30618,12 +30618,21 @@
                   },
                   "p_notes": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_from_account_id",
                   "p_to_account_id",
-                  "p_amount_sent"
+                  "p_amount_sent",
+                  "p_transfer_date",
+                  "p_amount_received",
+                  "p_bank_charges",
+                  "p_reference",
+                  "p_notes",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -30650,7 +30659,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/create_contact_as": {
@@ -31615,8 +31627,8 @@
     "/rpc/create_ticket": {
       "post": {
         "operationId": "create_ticket",
-        "summary": "Raises a support ticket",
-        "description": "Raises a support ticket. With neither requester given, the caller is raising it for themselves, which is the self-service case. A contact or asset that does not exist is refused with a sentence rather than a foreign-key name: a support desk that picked the wrong customer from a stale list should read English, not `tickets_contact_fk`. Needs the `ticketing` module.\n\n`public.create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Raises one ticket per idempotency key -- measured: without one, two identical calls raise two, each with its\u2026",
+        "description": "Raises one ticket per idempotency key -- measured: without one, two identical calls raise two, each with its own number, and somebody closes one of them. The key is required and has no default, which is what makes PostgREST choose this overload rather than the unprotected one, so every parameter must be named. Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of the organization.\n\n`public.create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "ticketing"
         ],
@@ -31684,11 +31696,23 @@
                   "p_asset_id": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_org_id",
-                  "p_subject"
+                  "p_subject",
+                  "p_description",
+                  "p_category",
+                  "p_priority",
+                  "p_type",
+                  "p_channel",
+                  "p_requester_user_id",
+                  "p_requester_contact_id",
+                  "p_asset_id",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -31715,7 +31739,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/create_withholding": {
@@ -35377,8 +35404,8 @@
     "/rpc/escalate_ticket": {
       "post": {
         "operationId": "escalate_ticket",
-        "summary": "Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an\u2026",
-        "description": "Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an event that records both levels and the reason. A functional escalation must name a team and a hierarchic one must name a person -- an escalation with nowhere to go is a level counter and nothing else. THE PERSON MUST BE AN ACTIVE MEMBER OF THIS COMPANY, checked here because `tickets.assignee_id` points at `auth.users`, which is platform-wide and carries no company, so no foreign key can hold it: escalating to somebody outside would hand the ticket to a name that row level security stops from ever seeing it, while the resolution clock ran on. A `new` ticket becomes `open` on the way past, because somebody has now looked at it. Needs the ticketing module.\n\n`public.escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Escalates a ticket once per idempotency key",
+        "description": "Escalates a ticket once per idempotency key. What a retry duplicates here is not a row but a STEP: escalate_ticket adds one to escalation_level, so without a key a dropped connection escalates past the person it was meant to reach, and nothing on the ticket says it happened twice. Refuses a key already used for different arguments (22023) and a caller who is not a member of the ticket's organization.\n\n`public.escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "ticketing"
         ],
@@ -35414,11 +35441,18 @@
                   },
                   "p_reason": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_ticket",
-                  "p_kind"
+                  "p_kind",
+                  "p_to_team",
+                  "p_to_user",
+                  "p_reason",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -35444,7 +35478,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/exchange_rate_board": {
@@ -60046,8 +60083,8 @@
     "/rpc/report_feedback": {
       "post": {
         "operationId": "report_feedback",
-        "summary": "Files a bug report or a suggestion, and is the ONE WRITE IN THIS API THAT DOES NOT STAY WITH THE TENANT\u2026",
-        "description": "Files a bug report or a suggestion, and is the ONE WRITE IN THIS API THAT DOES NOT STAY WITH THE TENANT: `feedback_reports` is the platform's table, read by whoever runs the service rather than by the company. `p_org_id` is optional and is only a label saying which company the person was in at the time -- it is checked for membership when given, so it cannot be used to file against somebody else. `p_severity` is kept only for a bug; a severity on a suggestion is dropped rather than refused. Needs a signed-in user and a one-line title, and nothing else.\n\n`public.report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Files one feedback report per idempotency key -- measured: without one, two identical calls file two",
+        "description": "Files one feedback report per idempotency key -- measured: without one, two identical calls file two. The key is scoped to p_org_id, and feedback sent from a screen belonging to no company passes a null one and claims no key, because idempotency_keys.org_id is not null by design.\n\n`public.report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -60089,10 +60126,20 @@
                   "p_org_id": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_title"
+                  "p_title",
+                  "p_kind",
+                  "p_body",
+                  "p_screen",
+                  "p_app_version",
+                  "p_severity",
+                  "p_org_id",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -60119,7 +60166,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/report_fs_deadlines": {
@@ -70620,8 +70670,8 @@
     "/rpc/share_document": {
       "post": {
         "operationId": "share_document",
-        "summary": "Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN \u2014 the only time\u2026",
-        "description": "Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN \u2014 the only time it can be read. Only the hash is stored, so nothing can recover it afterwards and a caller that discards the return value has made a link nobody holds. REVOKES ANY LIVE LINK FOR THE SAME DOCUMENT first: reissuing means the newest link is the one that should work, and leaving the old one alive would make \"revoke\" mean nothing. Refuses a draft, void or rejected document \u2014 a link is for something that has actually been issued. `p_valid_days` is clamped to between 1 and 365, so there is no such thing as a link that never expires. Needs `can_write`.\n\n`public.share_document(p_document_id uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user.",
+        "summary": "As share_ticket, for a sales document: one link per idempotency key, the same URL on a replay, and without a\u2026",
+        "description": "As share_ticket, for a sales document: one link per idempotency key, the same URL on a replay, and without a key a second live token that will open the invoice until it expires.\n\n`public.share_document(p_document_id uuid, p_valid_days integer, p_email text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_document_id uuid, p_valid_days integer, p_email text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -70646,10 +70696,16 @@
                   },
                   "p_email": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_document_id"
+                  "p_document_id",
+                  "p_valid_days",
+                  "p_email",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -70675,14 +70731,17 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_document_id uuid, p_valid_days integer, p_email text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/share_ticket": {
       "post": {
         "operationId": "share_ticket",
-        "summary": "The same for a support ticket, and returns the token once for the same reason",
-        "description": "The same for a support ticket, and returns the token once for the same reason. REFUSES A TICKET RAISED BY STAFF: they can already read it with their own login, and a link is for a requester who has none \u2014 handing one to a colleague creates a credential that outlives their employment. Refuses a cancelled ticket. Revokes any live link for the ticket, and clamps the life to 1\u2013365 days. Needs `can_write_module('ticketing')`.\n\n`public.share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Mints one share link per idempotency key and returns THE SAME URL on a replay",
+        "description": "Mints one share link per idempotency key and returns THE SAME URL on a replay. Without a key a retry mints a second live token and does not revoke the first, so the number of ways into somebody's ticket doubles until they expire. p_valid_days is coalesced to 30 inside, so null is safe. Refuses a key already used for different arguments (22023) and a caller who is not a member of the ticket's organization.\n\n`public.share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "ticketing"
         ],
@@ -70707,10 +70766,16 @@
                   },
                   "p_email": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_ticket"
+                  "p_ticket",
+                  "p_valid_days",
+                  "p_email",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -70736,7 +70801,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/shared_payment_options": {

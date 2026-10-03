@@ -54,10 +54,19 @@ begin
   -- The guard that matters most about registration. `report_feedback`
   -- is named like a report and inserts a row; Postgres knows it is
   -- volatile, and that is the authority rather than the prefix.
-  perform pg_temp.check_eq('report_feedback really is a writer',
-    (select p.provolatile::text from pg_proc p
+  --
+  -- `bool_and` over EVERY form of the name, not the one form there used
+  -- to be. `0735` gave `report_feedback` an idempotency-key overload and
+  -- this assertion's scalar subquery started raising "more than one row
+  -- returned by a subquery used as an expression" -- a true failure
+  -- about a test, not about the schema. Written this way it also says
+  -- something stronger than before: a volatile function cannot acquire a
+  -- STABLE overload that the assistant would then be offered as a
+  -- reader.
+  perform pg_temp.check_true('every report_feedback really is a writer',
+    (select bool_and(p.provolatile = 'v') from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname = 'report_feedback'), 'v');
+      where n.nspname = 'public' and p.proname = 'report_feedback'));
 
   begin
     insert into public.ai_tools (name, function_name, description)

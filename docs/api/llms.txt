@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0734` (the highest applied migration).
-818 functions and 367 readable tables, of which
+Schema version `0735` (the highest applied migration).
+824 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**677 of 818 functions carry a `comment on
+**683 of 824 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -56,13 +56,19 @@ resolve to the unprotected original and return a plausible id.
 - `apply_deposit`
 - `assign_ticket`
 - `bulk_email_documents`
+- `create_bank_transfer`
 - `create_contra`
 - `create_deposit`
+- `create_ticket`
 - `email_document`
 - `email_receipt`
+- `escalate_ticket`
 - `knock_off`
 - `post_manual_journal`
 - `record_pdc`
+- `report_feedback`
+- `share_document`
+- `share_ticket`
 
 ## Reachable without signing in
 
@@ -369,7 +375,7 @@ Refused unless the company has the `sales` module switched on and the caller may
 - `pdc_maturing(p_org uuid, p_from date, p_to date)` — The post-dated cheques falling due between two dates, which is the list somebody works from on a Monday.
 - `void_contra(p_id uuid, p_reason text)` *(writes)* — Reverses a contra note, putting the balance back on both the invoices and the bills it settled.
 
-### ticketing (9)
+### ticketing (12)
 
 Refused unless the company has the `ticketing` module switched on and the caller may use it.
 
@@ -377,13 +383,16 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `assign_ticket(p_ticket uuid, p_user uuid)` *(writes)* — Hands a ticket to somebody.
 - `assign_ticket(p_ticket uuid, p_user uuid, p_idempotency_key text)` *(writes)* — Assigns a ticket, or unassigns it when p_user is null, and writes one line of the ticket's history per idempotency key -- without a key a repeated call says it twice.
 - `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` *(writes)* — Raises a support ticket.
+- `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid, p_idempotency_key text)` *(writes)* — Raises one ticket per idempotency key -- measured: without one, two identical calls raise two, each with its own number, and somebody closes one of them.
 - `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)* — Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an event that records both levels and the reason.
+- `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text, p_idempotency_key text)` *(writes)* — Escalates a ticket once per idempotency key.
 - `module_dashboard(p_org_id uuid)` — One figure set per module for the company's home screen, built in Kuala Lumpur time.
 - `revoke_ticket_share(p_ticket uuid)` *(writes)* — Turns off every share link for one support ticket, returning the count.
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
+- `share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — Mints one share link per idempotency key and returns THE SAME URL on a replay.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (603)
+### general (606)
 
 Not gated on any module.
 
@@ -528,6 +537,7 @@ Not gated on any module.
 - `correct_company_name(p_entity uuid, p_name text)` *(writes)* — Corrects a company name that was recorded wrongly.
 - `correct_registered_office(p_entity uuid, p_address text)` *(writes)* — Corrects a registered office address that was recorded wrongly.
 - `create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` *(writes)* — Records a transfer between two of the company's own bank accounts, ready to post.
+- `create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text, p_idempotency_key text)` *(writes)* — Draws up one bank transfer per idempotency key -- measured: without one, two identical calls draw up two, each taking the next transfer number, both waiting to be posted.
 - `create_contact_as(p_contact_id uuid, p_type app.contact_type)` *(writes)* — A second record of the same company, in another role: the details, addresses and people copied, a code from that role's own series, the source left as it was.
 - `create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text)` *(writes)* — Records a deposit taken from a customer or paid to a supplier, and posts it: money moved, and a LIABILITY for a customer deposit rather than revenue, because it is not earned until the invoice it is held against exists.
 - `create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` *(writes)* — Records and posts a deposit taken from a customer or paid to a supplier, once.
@@ -826,6 +836,7 @@ Not gated on any module.
 - `report_expiring_stock(p_org_id uuid, p_within_days integer)`
 - `report_failed_sign_in(p_email text)` *(writes)* — Lets the browser tell the audit log that a password was rejected, which Supabase's own sign-in does not tell this database.
 - `report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid)` *(writes)* — Files a bug report or a suggestion, and is the ONE WRITE IN THIS API THAT DOES NOT STAY WITH THE TENANT: `feedback_reports` is the platform's table, read by whoever runs the service rather than by the company.
+- `report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid, p_idempotency_key text)` *(writes)* — Files one feedback report per idempotency key -- measured: without one, two identical calls file two.
 - `report_fs_deadlines(p_org_id uuid, p_within_days integer)`
 - `report_general_ledger(p_org_id uuid, p_from date, p_to date, p_account_id uuid)` — The ledger by account: balance brought forward, every posted line in date order, and the balance carried down.
 - `report_group_consolidated_trial_balance(p_org_id uuid, p_from date, p_to date)`
@@ -927,6 +938,7 @@ Not gated on any module.
 - `setup_legal_module(p_org_id uuid)` *(writes)* — Creates the client account, client monies liability and disbursement accounts a law firm needs.
 - `share_customer_portal(p_contact_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues one customer a link to their whole account and emails it.
 - `share_document(p_document_id uuid, p_valid_days integer, p_email text)` *(writes)* — Creates a link that shows one sales document to somebody with no login, and RETURNS THE TOKEN — the only time it can be read.
+- `share_document(p_document_id uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — As share_ticket, for a sales document: one link per idempotency key, the same URL on a replay, and without a key a second live token that will open the invoice until it expires.
 - `shared_payment_options(p_token text)` — Which acquirers a customer can pay a shared invoice through: the gateway code and its name, and nothing else.
 - `signup_reference()` — Everything the registration form needs before anybody is signed in: whether registration is open and what to say if not, the dialling codes, the salutations, the Malaysian states, and the kinds of business a company may be.
 - `site_pages()` — The published pages of the marketing site, plus `signin`, `signup` and `login` whether or not they are published.

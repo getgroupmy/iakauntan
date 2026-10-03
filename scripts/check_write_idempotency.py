@@ -71,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 56
+BACKLOG = 48
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -79,6 +79,11 @@ BACKLOG = 56
 #   unique:<index>  a unique index refuses the second write
 #   state:<text>    it refuses a repeat in words the GUARD vocabulary
 #                   does not know; the text must still be in the body
+#   existing:<text> it does not refuse a repeat -- it RETURNS the thing
+#                   the first call made. `open_tax_estimate` looks for
+#                   the live estimate and hands it back: "Pressing the
+#                   button again means 'show me it' rather than 'make a
+#                   second'". Checked against the body like `state:`
 #   natural:<why>   repeating it writes the state the first call wrote
 #   repeats:<why>   it is MEANT to repeat; a key would be a bug
 #
@@ -235,6 +240,12 @@ VERDICTS: dict[str, str] = {
         "state:This employee already has an open % checklist",
     "transfer_document":
         "state:every line has already been taken forward",
+
+    # Measured while `0735` was being written, and both came out of it.
+    "attach_feedback_file":
+        "unique:feedback_attachments_storage_path_key",
+    "open_tax_estimate":
+        "existing:means \"show me it\" rather than \"make a second\"",
 }
 
 VOLATILE_SQL = """
@@ -397,16 +408,16 @@ def run(db: str) -> int:
                 f"'{name}' is excused because the unique index '{detail}' "
                 f"refuses the second write, and there is no such index any "
                 f"more. Either it was renamed or the protection is gone.")
-        if kind == "state" and detail not in transitive(defs, name):
+        if kind in ("state", "existing") and detail not in transitive(defs, name):
             problems.append(
                 f"'{name}' is excused because it refuses a repeat with "
                 f"\"{detail}\", and that text is not in its body any more. "
                 f"A refusal that has been reworded is still a refusal; a "
                 f"refusal that has been deleted is not.")
-        if kind not in ("unique", "state", "natural", "repeats"):
+        if kind not in ("unique", "state", "existing", "natural", "repeats"):
             problems.append(
                 f"'{name}' has verdict kind '{kind}', which is not one of "
-                f"unique, natural, repeats.")
+                f"unique, state, existing, natural, repeats.")
 
     guarded, decided, inert, replaced, undecided = [], [], [], [], []
     for name in population:

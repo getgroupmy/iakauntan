@@ -157,7 +157,8 @@ class Verdicts(unittest.TestCase):
         for name, verdict in gate.VERDICTS.items():
             kind, sep, detail = verdict.partition(':')
             self.assertEqual(sep, ':', f'{name} has no kind')
-            self.assertIn(kind, ('unique', 'state', 'natural', 'repeats'), name)
+            self.assertIn(kind, ('unique', 'state', 'existing', 'natural', 'repeats'),
+                              name)
             self.assertTrue(detail.strip(), f'{name} names no evidence')
 
     def test_a_state_verdict_names_text_long_enough_to_be_distinctive(self):

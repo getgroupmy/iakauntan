@@ -949,4 +949,151 @@ begin
 end $$;
 
 
+-- =====================================================================
+-- 0735 :: a second ticket, a second link, a second transfer
+--
+-- Four shapes of harm, and the third one is new to this file: what
+-- `escalate_ticket` duplicates is not a row but a STEP. It adds one to
+-- `escalation_level`, so a retry escalates past the person it was meant
+-- to reach and nothing on the ticket says it happened twice.
+-- =====================================================================
+
+do $$
+declare
+  v_org uuid; v_user uuid; v_cust uuid; v_ticket uuid; v_contact_ticket uuid;
+  v_first uuid; v_again uuid; v_url text; v_url2 text; v_rep uuid;
+  v_b1 uuid; v_b2 uuid; v_inv uuid; v_took boolean;
+begin
+  v_user := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_user);
+  v_org := pg_temp.test_org('Helpdesk Two Sdn Bhd',
+    array['crm', 'ticketing', 'feedback', 'tax']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
+
+  -- ---- create_ticket ----
+  perform public.create_ticket(v_org, 'The printer again', null, null,
+    'p3', 'incident', 'web', v_user, null, null);
+  perform public.create_ticket(v_org, 'The printer again', null, null,
+    'p3', 'incident', 'web', v_user, null, null);
+  perform pg_temp.check_eq('without a key, one complaint raises two tickets',
+    (select count(*)::integer from public.tickets where org_id = v_org), 2);
+
+  v_first := public.create_ticket(v_org, 'And the scanner', null, null,
+    'p3', 'incident', 'web', v_user, null, null, 'TICKET-1');
+  v_again := public.create_ticket(v_org, 'And the scanner', null, null,
+    'p3', 'incident', 'web', v_user, null, null, 'TICKET-1');
+  perform pg_temp.check_true('a replayed complaint returns the first ticket',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and raises no third',
+    (select count(*)::integer from public.tickets where org_id = v_org), 3);
+
+  -- ---- escalate_ticket: a step, not a row ----
+  v_ticket := v_first;
+  perform public.escalate_ticket(v_ticket, 'hierarchic', null, v_user, 'Late');
+  perform public.escalate_ticket(v_ticket, 'hierarchic', null, v_user, 'Late');
+  perform pg_temp.check_eq('without a key, one escalation counts twice',
+    (select escalation_level from public.tickets where id = v_ticket), 2);
+
+  perform public.escalate_ticket(v_ticket, 'hierarchic', null, v_user,
+    'Later', 'ESC-1');
+  perform public.escalate_ticket(v_ticket, 'hierarchic', null, v_user,
+    'Later', 'ESC-1');
+  perform pg_temp.check_eq('with one, it counts once', 
+    (select escalation_level from public.tickets where id = v_ticket), 3);
+
+  -- ---- share_ticket: a second live token ----
+  v_contact_ticket := public.create_ticket(v_org, 'Contact raised', null,
+    null, 'p3', 'incident', 'web', null, v_cust, null, 'TICKET-2');
+  perform public.share_ticket(v_contact_ticket, 30, 'x@example.test');
+  perform public.share_ticket(v_contact_ticket, 30, 'x@example.test');
+  perform pg_temp.check_eq('without a key, two links open the same ticket',
+    (select count(*)::integer from public.ticket_share_links
+      where ticket_id = v_contact_ticket), 2);
+
+  v_url := public.share_ticket(v_contact_ticket, 30, 'y@example.test',
+    'SHARE-T-1');
+  v_url2 := public.share_ticket(v_contact_ticket, 30, 'y@example.test',
+    'SHARE-T-1');
+  perform pg_temp.check_true('a replayed share returns the SAME url',
+    v_url is not null and v_url2 = v_url);
+  perform pg_temp.check_eq('and mints no third token',
+    (select count(*)::integer from public.ticket_share_links
+      where ticket_id = v_contact_ticket), 3);
+
+  -- ---- share_document ----
+  v_inv := pg_temp.a_posted_invoice(v_org, v_cust, 'INV-1', 100);
+  perform public.share_document(v_inv, 30, 'x@example.test');
+  perform public.share_document(v_inv, 30, 'x@example.test');
+  perform pg_temp.check_eq('without a key, two links open the same invoice',
+    (select count(*)::integer from public.document_share_links
+      where document_id = v_inv), 2);
+
+  v_url := public.share_document(v_inv, 30, 'y@example.test', 'SHARE-D-1');
+  v_url2 := public.share_document(v_inv, 30, 'y@example.test', 'SHARE-D-1');
+  perform pg_temp.check_true('a replayed document share returns the same url',
+    v_url is not null and v_url2 = v_url);
+  perform pg_temp.check_eq('and mints no third token',
+    (select count(*)::integer from public.document_share_links
+      where document_id = v_inv), 3);
+
+  -- ---- report_feedback ----
+  perform public.report_feedback('It beeps', 'bug', null, null, null, null,
+    v_org);
+  perform public.report_feedback('It beeps', 'bug', null, null, null, null,
+    v_org);
+  perform pg_temp.check_eq('without a key, one complaint files two reports',
+    (select count(*)::integer from public.feedback_reports
+      where org_id = v_org), 2);
+
+  v_rep := public.report_feedback('It whirrs', 'bug', null, null, null, null,
+    v_org, 'FEEDBACK-1');
+  perform pg_temp.check_true('a replayed report returns the first',
+    public.report_feedback('It whirrs', 'bug', null, null, null, null,
+      v_org, 'FEEDBACK-1') = v_rep);
+  perform pg_temp.check_eq('and files no third',
+    (select count(*)::integer from public.feedback_reports
+      where org_id = v_org), 3);
+
+  -- ---- create_bank_transfer ----
+  perform pg_temp.test_bank_account(v_org, 'A', 'current', 'MYR', 5000, 5000,
+    '111');
+  perform pg_temp.test_bank_account(v_org, 'B', 'current', 'MYR', 0, 0, '222');
+  select id into v_b1 from public.bank_accounts
+   where org_id = v_org and name = 'A';
+  select id into v_b2 from public.bank_accounts
+   where org_id = v_org and name = 'B';
+
+  perform public.create_bank_transfer(v_b1, v_b2, 100, pg_temp.today(),
+    null, 0, null, null);
+  perform public.create_bank_transfer(v_b1, v_b2, 100, pg_temp.today(),
+    null, 0, null, null);
+  perform pg_temp.check_eq('without a key, one transfer is drawn up twice',
+    (select count(*)::integer from public.bank_transfers where org_id = v_org),
+    2);
+
+  v_first := public.create_bank_transfer(v_b1, v_b2, 200, pg_temp.today(),
+    null, 0, null, null, 'XFER-1');
+  v_again := public.create_bank_transfer(v_b1, v_b2, 200, pg_temp.today(),
+    null, 0, null, null, 'XFER-1');
+  perform pg_temp.check_true('a replayed transfer returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and draws up no third',
+    (select count(*)::integer from public.bank_transfers where org_id = v_org),
+    3);
+
+  -- And the fingerprint still refuses a different amount under that key.
+  begin
+    perform public.create_bank_transfer(v_b1, v_b2, 999, pg_temp.today(),
+      null, 0, null, null, 'XFER-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different amount is refused',
+    not v_took);
+end $$;
+
+
 rollback;

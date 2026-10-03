@@ -402,7 +402,7 @@ class Repo {
     String? appVersion,
     int? severity,
   }) async {
-    final data = await callRpc(
+    final data = await callRpcOnce(
       'report_feedback',
       params: {
         'p_title': title,
@@ -1793,17 +1793,17 @@ class Repo {
     String? notes,
   }) async {
     final id =
-        await callRpc(
+        await callRpcOnce(
               'create_bank_transfer',
               params: {
                 'p_from_account_id': fromAccountId,
                 'p_to_account_id': toAccountId,
                 'p_amount_sent': amountSent,
                 'p_transfer_date': Fmt.iso(date),
-                if (amountReceived != null) 'p_amount_received': amountReceived,
+                'p_amount_received': amountReceived,
                 'p_bank_charges': bankCharges,
-                if (reference != null) 'p_reference': reference,
-                if (notes != null) 'p_notes': notes,
+                'p_reference': reference,
+                'p_notes': notes,
               },
             )
             as String;
@@ -9148,12 +9148,14 @@ extension RepoHrSetup on Repo {
     int validDays = 30,
     String? email,
   }) async {
-    final data = await callRpc(
+    final data = await callRpcOnce(
       'share_document',
       params: {
         'p_document_id': documentId,
         'p_valid_days': validDays,
-        if (email != null && email.trim().isNotEmpty) 'p_email': email.trim(),
+        'p_email': (email == null || email.trim().isEmpty)
+            ? null
+            : email.trim(),
       },
     );
     return data as String;
@@ -10478,19 +10480,26 @@ extension RepoTicketing on Repo {
     String? requesterContactId,
     Map<String, dynamic> customFields = const {},
   }) async {
-    final id = await callRpc(
+    // Every parameter named, including the two this call never set:
+    // `p_requester_user_id` and `p_asset_id`. The wrapper has no
+    // defaults, so an omitted one resolves to the unprotected overload
+    // and raises a second ticket on a retry. Both default to null in the
+    // inner function, so an explicit null is the same call.
+    final id = await callRpcOnce(
       'create_ticket',
       params: {
         'p_org_id': orgId,
         'p_subject': subject,
-        if (description != null && description.isNotEmpty)
-          'p_description': description,
-        if (categoryCode != null) 'p_category': categoryCode,
-        if (priority != null) 'p_priority': priority,
-        if (type != null) 'p_type': type,
+        'p_description': (description == null || description.isEmpty)
+            ? null
+            : description,
+        'p_category': categoryCode,
+        'p_priority': priority,
+        'p_type': type,
         'p_channel': channel,
-        if (requesterContactId != null)
-          'p_requester_contact_id': requesterContactId,
+        'p_requester_user_id': null,
+        'p_requester_contact_id': requesterContactId,
+        'p_asset_id': null,
       },
     );
     // Same gap as `openMatter`, closed by the same method.
@@ -10534,13 +10543,14 @@ extension RepoTicketing on Repo {
     int validDays = 30,
     String? email,
   }) async =>
-      (await callRpc(
+      (await callRpcOnce(
             'share_ticket',
             params: {
               'p_ticket': id,
               'p_valid_days': validDays,
-              if (email != null && email.trim().isNotEmpty)
-                'p_email': email.trim(),
+              'p_email': (email == null || email.trim().isEmpty)
+                  ? null
+                  : email.trim(),
             },
           ))
           as String;
@@ -10565,14 +10575,14 @@ extension RepoTicketing on Repo {
     String? toUser,
     String? reason,
   }) async {
-    await callRpc(
+    await callRpcOnce(
       'escalate_ticket',
       params: {
         'p_ticket': id,
         'p_kind': kind,
-        if (toTeam != null) 'p_to_team': toTeam,
-        if (toUser != null) 'p_to_user': toUser,
-        if (reason != null) 'p_reason': reason,
+        'p_to_team': toTeam,
+        'p_to_user': toUser,
+        'p_reason': reason,
       },
     );
   }
