@@ -85,6 +85,57 @@ class ReadingAFunction(unittest.TestCase):
         self.assertEqual(gate.transitive(defs, 'a').count('perform'), 1)
 
 
+class EveryInsertCovered(unittest.TestCase):
+    """The per-statement check, which is the gate's only automatic verdict
+    about an INSERT rather than about the absence of one."""
+
+    def test_on_conflict_counts(self):
+        self.assertTrue(gate.every_insert_is_covered(
+            "begin insert into public.t (a) values (1) "
+            "on conflict (a) do nothing; end"))
+
+    def test_where_not_exists_counts(self):
+        self.assertTrue(gate.every_insert_is_covered(
+            "begin insert into public.t (a) select 1 "
+            "where not exists (select 1 from public.t); end"))
+
+    def test_delete_then_insert_counts(self):
+        self.assertTrue(gate.every_insert_is_covered(
+            "begin delete from public.lines where id = p_id; "
+            "insert into public.lines (a) values (1); end"))
+
+    def test_a_bare_insert_does_not(self):
+        self.assertFalse(gate.every_insert_is_covered(
+            "begin insert into public.t (a) values (1); end"))
+
+    def test_one_guarded_and_one_not_is_NOT_covered(self):
+        """The chat_create_group shape, and the reason this is per
+        statement. A flag that looked for `on conflict` anywhere in the
+        body would call this safe while the conversation doubles."""
+        self.assertFalse(gate.every_insert_is_covered(
+            "begin insert into public.chat_conversations (a) values (1) "
+            "returning id into v_id; "
+            "insert into public.chat_participants (b) values (2) "
+            "on conflict do nothing; end"))
+
+    def test_a_delete_from_a_DIFFERENT_table_does_not_count(self):
+        self.assertFalse(gate.every_insert_is_covered(
+            "begin delete from public.other where id = p_id; "
+            "insert into public.lines (a) values (1); end"))
+
+    def test_inserting_only_through_a_callee_is_undecided(self):
+        """Not safe: this function cannot see the statement."""
+        self.assertFalse(gate.every_insert_is_covered(
+            "begin perform app.do_it(p_id); end"))
+
+    def test_the_statement_ends_at_its_semicolon(self):
+        """An `on conflict` belonging to the NEXT statement must not
+        excuse this one."""
+        self.assertFalse(gate.every_insert_is_covered(
+            "begin insert into public.a (x) values (1); "
+            "insert into public.b (y) values (2) on conflict do nothing; end"))
+
+
 class TheGuardPhrase(unittest.TestCase):
     def test_the_refusals_this_schema_actually_writes(self):
         for phrase in ("Adjustment % is already posted",

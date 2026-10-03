@@ -122,7 +122,7 @@ finish without printing.
 | Migrations | **`0733` is the highest. `0733` is on the branch and NOT yet verified in production** — it adds four idempotency-key overloads and four `comment on function`s, nothing destructive. `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **383 SQL assertion files, 60 Python gates (+26 gate self-tests), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| Gates | **383 SQL assertion files, 60 Python gates (+26 gate self-tests, one of which is 25 assertions of its own), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
 | API description | 814 functions, 367 tables, version `0733`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
@@ -217,6 +217,73 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## The 3 October session, third change: deciding the 137
+
+Asked for: "now do the remaining 137". This commit takes the backlog from
+137 to **99** and the way it does it is the point — the 38 it removed
+were decided by a check the gate RE-RUNS, not by prose somebody has to
+be trusted about.
+
+### The gate now reads INSERT statements, not function bodies
+
+A function is idempotent if every row it creates would collide with one
+already there. Three shapes in this schema say so, and all three are
+machine-checkable: `on conflict` on the statement, `where not exists` on
+the statement, and a `delete from` the same table earlier in the body —
+the replace-the-lot shape `set_budget_lines` and `upsert_pos_recipe` use.
+
+**Per statement, and that is the whole design.** `chat_create_group`
+inserts a conversation with no guard and then participants `on conflict`.
+A flag that looked for `on conflict` anywhere in the body would call the
+whole function safe while the conversation doubles — so the check takes
+each `insert into T …` up to its own semicolon, and one bare insert is
+enough to leave the function undecided. Eight self-tests cover it,
+including that shape and the case where the `on conflict` belongs to the
+NEXT statement.
+
+That absorbed **34**: `invite_member`, `file_sst_return`,
+`post_payroll_run`, `clock_in`, `route_item_to_station`,
+`set_budget_lines` and the rest, each spot-checked by hand against the
+real body as well.
+
+### Four verdicts written by hand
+
+Three `repeats:` — `audit_list_payslips`, `audit_view_payslip` and
+`log_document_download` are access and download logs, and a log that
+drops a repeated access is worse than one that records it twice. One
+`unique:` — `open_tax_computation` inserts `(p_org_id, p_fiscal_year_id)`
+into a table with `tax_computations_org_id_fiscal_year_id_key` on exactly
+those two columns, both straight from the arguments.
+
+### What the remaining 99 are, and why they are not a prose problem
+
+The decisive question for each is narrower than it looks: **does a unique
+index cover columns the ARGUMENTS determine, or ones the function mints?**
+`tax_computations` is unique on `(org_id, fiscal_year_id)` and both come
+from the caller, so a retry collides. `bank_transfers`,
+`payroll_runs` and `withholding_certificates` are unique on
+`(org_id, <number>)` where the number comes from
+`next_document_number` — so a retry gets the next one and does not
+collide. The index looks identical in `pg_indexes`; only the insert says
+which it is. That is not machine-decidable, which is why it is a verdict
+and not a category.
+
+Of the 99: **38 carry an org argument**, so their wrapper is mechanical
+in the way `save_payment_method`'s would have been. The other **61 need
+the organization resolved from one of their arguments** — the document,
+the ticket, the receipt — which is the per-function decision
+`email_document` and `assign_ticket` each needed.
+
+The worst of them, in order of what a retry costs: the five `import_*`
+functions, where a retried import is a duplicated FILE;
+`allocate_with_discount`, `allocate_payment_with_discount`, `apply_deposit`
+and `knock_off`, which duplicate a payment allocation; then
+`create_bank_transfer`, `create_payroll_run`, `create_withholding`,
+`quote_opportunity`, `create_po_from_suggestions`,
+`draft_bill_from_received_einvoice` and `accept_intercompany_bill`, each
+of which mints a second numbered document. `escalate_ticket` is its own
+shape: it increments `escalation_level`, so a retry escalates twice.
 
 ## The 3 October session, second change: idempotency keys
 

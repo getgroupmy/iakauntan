@@ -21,6 +21,11 @@ those are the population. Each one is then one of:
     `insert`, so there is no row for a retry to duplicate. These are the
     `retire_*`, `delete_*`, `mark_*`, `reopen_*`, `set_*` family: a
     second call writes the state the first one wrote.
+  * **replaced** — every `insert` in its own body either carries an
+    `on conflict`, or inserts `where not exists`, or targets a table the
+    same body deletes from first. Checked per INSERT STATEMENT, not per
+    function: a body with one guarded insert and one unguarded one is not
+    safe, and a flag that looked anywhere in the text would call it safe.
   * **guarded** — its own transitive definition refuses a repeat by name:
     "Adjustment % is already posted", "That contra is already void.".
     This is `0307`'s argument for leaving the `post_*(p_id uuid)` family
@@ -66,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 137
+BACKLOG = 99
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -104,6 +109,15 @@ VERDICTS: dict[str, str] = {
         "repeats:as add_line_modifier",
     "add_ticket_comment":
         "repeats:somebody saying the same thing twice said it twice",
+    "audit_list_payslips":
+        "repeats:an access log, and a log that drops a repeated access is "
+        "worse than one that records it twice",
+    "audit_view_payslip":
+        "repeats:as audit_list_payslips",
+    "log_document_download":
+        "repeats:as audit_list_payslips -- a download log",
+    "open_tax_computation":
+        "unique:tax_computations_org_id_fiscal_year_id_key",
 }
 
 VOLATILE_SQL = """
@@ -154,6 +168,47 @@ GUARD = re.compile(
     re.I)
 
 INSERTS = re.compile(r"\binsert\s+into\b", re.I)
+INSERT_TARGET = re.compile(r"insert\s+into\s+(?:public\.)?([a-z0-9_]+)", re.I)
+
+
+def insert_statements(body: str) -> list[tuple[str, str]]:
+    """Each `insert into T ...`, as (table, the statement up to its `;`).
+
+    Per statement rather than per function. `chat_create_group` inserts a
+    conversation with no guard and then participants `on conflict`, and a
+    check that looked for `on conflict` anywhere in the body would call
+    the whole function safe while the conversation doubles.
+    """
+    out = []
+    for m in INSERT_TARGET.finditer(body):
+        end = body.find(";", m.end())
+        out.append((m.group(1), body[m.start(): end if end > 0 else len(body)]))
+    return out
+
+
+def every_insert_is_covered(body: str) -> bool:
+    """Whether a second call writes no second row, read from the SQL.
+
+    Three shapes count, and all three are in this schema:
+    `on conflict` on the statement, `where not exists` on the statement,
+    and a `delete from` the same table earlier in the body -- the
+    replace-the-lot shape `set_budget_lines` and `upsert_pos_recipe` use.
+    """
+    statements = insert_statements(body)
+    if not statements:
+        # It inserts through something it calls, and this function cannot
+        # see which statement that is. Undecided, not safe.
+        return False
+    for table, statement in statements:
+        if re.search(r"on conflict", statement, re.I):
+            continue
+        if re.search(r"where not exists", statement, re.I):
+            continue
+        if re.search(r"delete\s+from\s+(?:public\.)?" + re.escape(table) + r"\b",
+                     body, re.I):
+            continue
+        return False
+    return True
 
 
 def psql(db: str, sql: str) -> list[str]:
@@ -230,11 +285,12 @@ def run(db: str) -> int:
                 f"'{name}' has verdict kind '{kind}', which is not one of "
                 f"unique, natural, repeats.")
 
-    guarded, decided, inert, undecided = [], [], [], []
+    guarded, decided, inert, replaced, undecided = [], [], [], [], []
     for name in population:
         if name in keyed:
             continue
         text = transitive(defs, name)
+        own = " ".join(defs.get(name, []))
         if name in VERDICTS:
             decided.append(name)
         elif not INSERTS.search(text):
@@ -243,6 +299,8 @@ def run(db: str) -> int:
             inert.append(name)
         elif GUARD.search(text):
             guarded.append(name)
+        elif every_insert_is_covered(own):
+            replaced.append(name)
         else:
             undecided.append(name)
 
@@ -263,6 +321,7 @@ def run(db: str) -> int:
 
     print(f"{len(population)} client-reachable writes: {len(protected)} hold "
           f"an idempotency key, {len(inert)} insert nothing, "
+          f"{len(replaced)} guard or replace every row they insert, "
           f"{len(guarded)} refuse a repeat by name, {len(decided)} carry a "
           f"verdict, {len(undecided)} undecided (backlog {BACKLOG}).")
     if len(undecided) < BACKLOG:
