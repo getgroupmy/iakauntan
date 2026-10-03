@@ -1522,7 +1522,10 @@ class Repo {
     bool autoPost = false,
     bool autoEmail = false,
   }) async {
-    final data = await callRpc(
+    // 0738. A duplicated schedule invoices the customer twice a month
+    // for ever, which is the only duplicate in this schema that goes on
+    // producing wrong documents on a timer.
+    final data = await callRpcOnce(
       'create_recurring_document',
       params: {
         'p_document_id': documentId,
@@ -1530,8 +1533,8 @@ class Repo {
         'p_frequency': frequency,
         'p_start_date': Fmt.iso(startDate),
         'p_interval_count': intervalCount,
-        if (endDate != null) 'p_end_date': Fmt.iso(endDate),
-        if (maxOccurrences != null) 'p_max_occurrences': maxOccurrences,
+        'p_end_date': endDate == null ? null : Fmt.iso(endDate),
+        'p_max_occurrences': maxOccurrences,
         'p_auto_post': autoPost,
         'p_auto_email': autoEmail,
       },
@@ -4220,7 +4223,7 @@ class Repo {
     required String title,
     required List<Map<String, dynamic>> members,
   }) async {
-    final id = await callRpc(
+    final id = await callRpcOnce(
       'chat_create_group',
       params: {
         'p_my_org': orgId,
@@ -4984,7 +4987,7 @@ class Repo {
     String? accountId,
     String? id,
   }) async {
-    final data = await callRpc(
+    final data = await callRpcOnce(
       'upsert_bank_account',
       params: {
         'p_name': name,
@@ -8060,7 +8063,7 @@ extension RepoHr on Repo {
       'ensure_pay_period',
       params: {'p_org_id': orgId, 'p_year': year, 'p_month': month},
     );
-    final runId = await callRpc(
+    final runId = await callRpcOnce(
       'create_payroll_run',
       params: {
         'p_org_id': orgId,
@@ -11156,20 +11159,46 @@ extension RepoPos on Repo {
     ),
   );
 
+  /// 0738. `p_client_uuid` IS this function's idempotency key, and it had
+  /// never been given one.
+  ///
+  /// `app.open_pos_sale_internal` opens with
+  ///
+  ///     if p_client_uuid is not null then
+  ///       select s.id into v_sale from public.pos_sales s
+  ///        where s.org_id = v_org and s.client_uuid = p_client_uuid;
+  ///       if v_sale is not null then return v_sale; end if;
+  ///
+  /// — a complete retry mechanism, and the one caller passed nothing, so
+  /// two taps left two parked bills. Measured. The same shape as `0307`'s
+  /// four wrappers, which nothing called for as long as they existed.
+  ///
+  /// A caller that has its own uuid — the offline till, replaying what it
+  /// took while the line was down — keeps using it. One that has none gets
+  /// a per-attempt uuid from the same [IdempotentAttempt] machinery
+  /// `callRpcOnce` uses: minted once, kept across retries of the same
+  /// request, dropped on success. A second idempotency layer over a
+  /// working one would have been a worse answer than using this one.
   Future<String> openPosSale(
     String registerId, {
     String? contactId,
     String? clientUuid,
-  }) async =>
-      await callRpc(
-            'open_pos_sale',
-            params: {
-              'p_register': registerId,
-              if (contactId != null) 'p_contact': contactId,
-              if (clientUuid != null) 'p_client_uuid': clientUuid,
-            },
-          )
-          as String;
+  }) async {
+    final params = {
+      'p_register': registerId,
+      if (contactId != null) 'p_contact': contactId,
+    };
+    final attempt = _attempts.putIfAbsent('open_pos_sale',
+        IdempotentAttempt.new);
+    // 32 hex characters, which Postgres accepts as a uuid unhyphenated.
+    final uuid = clientUuid ?? attempt.keyFor(params);
+    final sale = await callRpc(
+      'open_pos_sale',
+      params: {...params, 'p_client_uuid': uuid},
+    ) as String;
+    attempt.succeeded();
+    return sale;
+  }
 
   Future<String> addPosSaleLine(
     String saleId,
@@ -12555,7 +12584,10 @@ extension RepoPosControls on Repo {
     String? note,
   }) async {
     final rows = Repo.rows(
-      await callRpc(
+      // 0738. The ticket number is on the customer's slip of paper, so a
+      // retry has to hand back the same one rather than a second number
+      // that gets called to an empty doorway.
+      await callRpcOnce(
         'join_pos_queue',
         params: {
           'p_outlet': outletId,
@@ -12989,7 +13021,7 @@ extension RepoPosControls on Repo {
     bool isActive = true,
   }) async {
     final rows = Repo.rows(
-      await callRpc(
+      await callRpcOnce(
         'upsert_pos_menu_link',
         params: {
           'p_outlet': outletId,
@@ -13318,7 +13350,9 @@ extension RepoStockTransfers on Repo {
     num times = 1,
     String? warehouse,
   }) async {
-    final result = await callRpc(
+    // 0738. Measured: without a key two taps convert the stock twice, so
+    // one box becomes twenty bottles instead of ten.
+    final result = await callRpcOnce(
       'run_item_conversion',
       params: {'p_conversion': id, 'p_times': times, 'p_warehouse': warehouse},
     );
@@ -13598,7 +13632,7 @@ extension RepoLandedCost on Repo {
     required List<String> bills,
     required List<Map<String, dynamic>> charges,
     String? notes,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'upsert_landed_cost_run',
     params: {
       'p_id': id,

@@ -71,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 26
+BACKLOG = 0
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -91,6 +91,58 @@ BACKLOG = 26
 # `natural` and `repeats` are prose and cannot be, so they are few and
 # each names what was read.
 VERDICTS: dict[str, str] = {
+    # 0738. The last eighteen, every one measured by calling twice.
+    #
+    # Six refused by a unique index. `start_membership` and
+    # `cover_line_with_membership` were READ as doubling and are not,
+    # which is the sixth and seventh time in this programme that a body
+    # looked like a defect the database was already refusing.
+    "open_matter":
+        "unique:matters_org_id_matter_no_key",
+    "upsert_item_conversion":
+        "unique:item_conversions_org_id_code_key",
+    "start_membership":
+        "unique:pos_membership_subscriptions_one_live",
+    "cover_line_with_membership":
+        "unique:pos_membership_sessions_line_id_key",
+    # Five hand back what is already there.
+    "chat_start_direct":
+        "existing:Exactly these two people, and no third",
+    "ensure_default_warehouse":
+        "existing:on conflict (org_id, code) do update set is_default = true",
+    "create_item_variants":
+        "existing:if v_id is null then",
+    "create_supplier_from_received_einvoice":
+        "existing:if v_row.contact_id is not null then",
+    "open_pos_sale":
+        "existing:where s.org_id = v_org and s.client_uuid = p_client_uuid",
+    "ingest_offline_sales":
+        "existing:when v_row.landed then 'landed' else 'already' end",
+    # Three state guards.
+    "void_pos_sale":
+        "state:and cannot be voided. Raise a credit note instead",
+    "open_appraisal_cycle":
+        "state:not exists (select 1 from public.appraisals a",
+    "run_recurring_journals_for":
+        "state:next_run_date",
+    # Two natural, one of them the only write in the schema that defends
+    # itself by netting off its own output.
+    "calculate_payroll_run":
+        "natural:deletes and rebuilds the payslips, so recalculating is "
+        "what the button is for",
+    "void_pos_sale_line":
+        "natural:delete from public.pos_sale_lines where id = p_line",
+    "create_po_from_suggestions":
+        "natural:app.forecast_wanted subtracts quantity_on_draft_order, so "
+        "the first call's draft order makes the second want nothing -- "
+        "measured as one order, then still one",
+    # Two repeat on purpose.
+    "next_document_number":
+        "repeats:handing out the next number is the whole function, and "
+        "asking twice is asking twice -- the gap a dropped connection "
+        "leaves is the same gap opening a form and closing it leaves",
+    "run_inventory_forecast":
+        "repeats:a re-run is a new forecast, which is the button's purpose",
     # 0737. Eight measured by calling twice: seven refuse by name and
     # `transition_ticket` returns before it writes anything.
     "clear_pdc":

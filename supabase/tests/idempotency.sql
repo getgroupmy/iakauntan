@@ -1761,4 +1761,881 @@ begin
 end $$;
 
 
+
+
+-- =====================================================================
+-- 0738 :: the last eight, and the key that was already there
+--
+-- The tranche that takes the census to ZERO. Each wrapper block makes the
+-- duplicate happen first, then asserts the key stops it, then varies
+-- EXACTLY ONE field of the payload under the same key -- 0737's lesson,
+-- after a mutant lived because the assertion meant to catch it moved two
+-- fields at once.
+-- =====================================================================
+
+-- Two fixtures, built once and used by several blocks below.
+create or replace function pg_temp.shop_0738(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.test_org(p_name); v_wh uuid; v_c uuid; v_o uuid;
+begin
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos', 'accounting', 'inventory',
+    'memberships']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'W', 'Store', true) returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type,
+    credit_limit, credit_hold)
+  values (v_org, 'REG', 'Encik Zaid', 'customer', 5000, false)
+  returning id into v_c;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'KOPI', 'Kopi', 'service', false, 'C62', 5.00),
+         (v_org, 'GYM', 'Keahlian', 'service', false, 'C62', 100.00);
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'K', 'Kedai', 'retail', v_wh, v_c, false)
+  returning id into v_o;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_o, 'C1', 'Counter');
+  insert into public.pos_settings (org_id, round_cash_to_5sen)
+  values (v_org, false);
+  perform pg_temp.a_till(v_org);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
+     gives_change, opens_drawer)
+  values (v_org, 'TUNAI', 'Tunai', 'cash', '01', true, true, true);
+  perform public.open_pos_shift(
+    (select id from public.pos_registers where org_id = v_org), 100.00);
+  insert into public.pos_memberships
+    (org_id, code, name, item_id, period, sessions_included, is_active)
+  values (v_org, 'M1', 'Bulanan',
+    (select id from public.items where org_id = v_org and code = 'GYM'),
+    'monthly', 10, true);
+  insert into public.pos_tables (org_id, outlet_id, code, name)
+  values (v_org, v_o, 'T1', 'Meja 1');
+  return v_org;
+end $$;
+
+create or replace function pg_temp.a_bill_0738(p_org uuid, p_no text)
+returns uuid language plpgsql as $$
+declare v_sup uuid; v_id uuid;
+begin
+  select id into v_sup from public.contacts
+   where org_id = p_org and contact_type = 'supplier' limit 1;
+  if v_sup is null then
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (p_org, 'S-REC', 'Tuan Rumah', 'supplier') returning id into v_sup;
+  end if;
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (p_org, 'bill', p_no, pg_temp.today(), pg_temp.today(), v_sup,
+          'draft', 'MYR', 1) returning id into v_id;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (p_org, v_id, 1, 'item',
+          (select id from public.items where org_id = p_org limit 1),
+          'Sewa', 1, 1000);
+  perform public.post_purchase_document(v_id);
+  return v_id;
+end $$;
+
+create or replace function pg_temp.inv_0738(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.test_org(p_name,
+  array['inventory', 'purchases', 'accounting', 'forecasting']);
+begin
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'W', 'Store', true);
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+    uom_code, unit_price, cost_price)
+  values (v_org, 'ITM', 'Barang', 'stock', true, 'C62', 50, 20),
+         (v_org, 'OUT', 'Keluaran', 'stock', true, 'C62', 10, 5);
+  return v_org;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- create_recurring_document: a machine that bills twice a month for ever
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_c uuid; v_inv uuid; v_second uuid; v_first uuid;
+  v_again uuid; v_took boolean; v_bill uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Recurring Twice Sdn Bhd',
+    array['sales', 'accounting']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+    unit_price) values (v_org, 'SVC', 'Service', 'service', false, 100);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_c;
+  v_inv := pg_temp.a_posted_invoice(v_org, v_c, 'INV-1', 100);
+
+  perform public.create_recurring_document(v_inv, 'Bulanan', 'monthly',
+    pg_temp.today(), 1, null, null, false, false);
+  perform public.create_recurring_document(v_inv, 'Bulanan', 'monthly',
+    pg_temp.today(), 1, null, null, false, false);
+  perform pg_temp.check_eq(
+    'without a key, one schedule is set up twice',
+    (select count(*)::integer from public.recurring_documents
+      where org_id = v_org), 2);
+  -- Both live, which is what makes this the worst of the thirty: it goes
+  -- on producing a second invoice every month until somebody notices.
+  perform pg_temp.check_eq('and both are active',
+    (select count(*)::integer from public.recurring_documents
+      where org_id = v_org and is_active), 2);
+
+  v_second := pg_temp.a_posted_invoice(v_org, v_c, 'INV-2', 100);
+  v_first := public.create_recurring_document(
+    p_document_id := v_second, p_name := 'Bulanan', p_frequency := 'monthly',
+    p_start_date := pg_temp.today(), p_interval_count := 1,
+    p_end_date := null, p_max_occurrences := null, p_auto_post := false,
+    p_auto_email := false, p_idempotency_key := 'REC-1');
+  v_again := public.create_recurring_document(
+    p_document_id := v_second, p_name := 'Bulanan', p_frequency := 'monthly',
+    p_start_date := pg_temp.today(), p_interval_count := 1,
+    p_end_date := null, p_max_occurrences := null, p_auto_post := false,
+    p_auto_email := false, p_idempotency_key := 'REC-1');
+  perform pg_temp.check_true('a replayed set-up returns the first schedule',
+    v_first is not null and v_again = v_first);
+  -- `recurring_documents` keeps no document_id: the schedule carries a
+  -- `template` snapshotted from the document it was made from. Counted by
+  -- name instead, which is what distinguishes the two set-ups here.
+  perform pg_temp.check_eq('and sets up no second',
+    (select count(*)::integer from public.recurring_documents
+      where org_id = v_org and id = v_first), 1);
+  perform pg_temp.check_eq('leaving three schedules, not four',
+    (select count(*)::integer from public.recurring_documents
+      where org_id = v_org), 3);
+
+  -- One field, and the one that would change what the customer is billed.
+  begin
+    perform public.create_recurring_document(
+      p_document_id := v_second, p_name := 'Bulanan',
+      p_frequency := 'quarterly', p_start_date := pg_temp.today(),
+      p_interval_count := 1, p_end_date := null, p_max_occurrences := null,
+      p_auto_post := false, p_auto_email := false,
+      p_idempotency_key := 'REC-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'the same key for a different frequency is refused', not v_took);
+
+  -- A RECURRING BILL, not an invoice. The wrapper reads the organization
+  -- from sales_documents and then from purchase_documents, in the order
+  -- the inner function tries them, and until this assertion existed the
+  -- mutant that deleted the second lookup SURVIVED: the key was simply
+  -- never claimed for a bill and nothing noticed.
+  perform pg_temp.a_bill_0738(v_org, 'BILL-REC');
+  select d.id into v_bill from public.purchase_documents d
+   where d.org_id = v_org and d.doc_no = 'BILL-REC';
+  v_first := public.create_recurring_document(
+    p_document_id := v_bill, p_name := 'Sewa pejabat',
+    p_frequency := 'monthly', p_start_date := pg_temp.today(),
+    p_interval_count := 1, p_end_date := null, p_max_occurrences := null,
+    p_auto_post := false, p_auto_email := false,
+    p_idempotency_key := 'REC-BILL-1');
+  v_again := public.create_recurring_document(
+    p_document_id := v_bill, p_name := 'Sewa pejabat',
+    p_frequency := 'monthly', p_start_date := pg_temp.today(),
+    p_interval_count := 1, p_end_date := null, p_max_occurrences := null,
+    p_auto_post := false, p_auto_email := false,
+    p_idempotency_key := 'REC-BILL-1');
+  perform pg_temp.check_true(
+    'a replayed recurring BILL returns the first schedule too',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('leaving four schedules, not five',
+    (select count(*)::integer from public.recurring_documents
+      where org_id = v_org), 4);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- run_item_conversion: the first physical quantity to double
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_in uuid; v_out uuid; v_wh uuid; v_conv uuid; v_keyed uuid;
+  v_first numeric; v_again numeric; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.inv_0738('Conversions Twice Sdn Bhd');
+  select id into v_in  from public.items where org_id = v_org and code = 'ITM';
+  select id into v_out from public.items where org_id = v_org and code = 'OUT';
+  select id into v_wh  from public.warehouses where org_id = v_org limit 1;
+  v_conv := public.upsert_item_conversion(null, v_org, 'CV1', 'Pecah', v_in,
+    1, 'C62', jsonb_build_array(jsonb_build_object('item', v_out,
+    'quantity', 5, 'share', 100)), true);
+  insert into public.stock_levels (org_id, item_id, warehouse_id, quantity)
+  values (v_org, v_in, v_wh, 100)
+  on conflict (item_id, warehouse_id) do update set quantity = 100;
+
+  perform public.run_item_conversion(v_conv, 1, v_wh);
+  perform public.run_item_conversion(v_conv, 1, v_wh);
+  -- Two output movements. One box became twenty bottles instead of ten,
+  -- and the shelf now disagrees with the ledger.
+  perform pg_temp.check_eq(
+    'without a key, the stock is converted twice',
+    (select count(*)::integer from public.stock_movements
+      where org_id = v_org and item_id = v_out), 2);
+
+  v_keyed := public.upsert_item_conversion(null, v_org, 'CV2', 'Pecah lagi',
+    v_in, 1, 'C62', jsonb_build_array(jsonb_build_object('item', v_out,
+    'quantity', 5, 'share', 100)), true);
+  v_first := public.run_item_conversion(
+    p_conversion := v_keyed, p_times := 1, p_warehouse := v_wh,
+    p_idempotency_key := 'CONV-1');
+  v_again := public.run_item_conversion(
+    p_conversion := v_keyed, p_times := 1, p_warehouse := v_wh,
+    p_idempotency_key := 'CONV-1');
+  perform pg_temp.check_true('a replayed conversion returns the same value',
+    v_first is not null and v_again = v_first);
+  -- `source_id` is the conversion, so the keyed run's movements are
+  -- countable apart from the unkeyed pair above.
+  perform pg_temp.check_eq('and converts the stock once',
+    (select count(*)::integer from public.stock_movements
+      where org_id = v_org and item_id = v_out and source_id = v_keyed), 1);
+
+  begin
+    perform public.run_item_conversion(
+      p_conversion := v_keyed, p_times := 2, p_warehouse := v_wh,
+      p_idempotency_key := 'CONV-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for twice as many is refused',
+    not v_took);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- create_payroll_run
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_user uuid; v_period uuid; v_second uuid; v_first uuid;
+  v_again uuid; v_took boolean;
+begin
+  v_user := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_user);
+  v_org := pg_temp.test_org('Payroll Twice Sdn Bhd',
+    array['hr', 'payroll', 'accounting']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date, employment_status,
+     basic_salary)
+  values (v_org, 'E1', 'Pekerja', v_user, pg_temp.today() - 400, 'active',
+          3000);
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, 'P1', date_trunc('month', pg_temp.today())::date,
+          (date_trunc('month', pg_temp.today())
+             + interval '1 month -1 day')::date,
+          pg_temp.today()) returning id into v_period;
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, 'P2', (date_trunc('month', pg_temp.today())
+                          + interval '1 month')::date,
+          (date_trunc('month', pg_temp.today())
+             + interval '2 month -1 day')::date,
+          pg_temp.today() + 31) returning id into v_second;
+
+  perform public.create_payroll_run(v_org, v_period, 'Bulan ini');
+  perform public.create_payroll_run(v_org, v_period, 'Bulan ini');
+  perform pg_temp.check_eq(
+    'without a key, one pay period gets two payroll runs',
+    (select count(*)::integer from public.payroll_runs
+      where org_id = v_org and period_id = v_period), 2);
+  perform pg_temp.check_eq('with two run numbers burnt',
+    (select count(distinct run_no)::integer from public.payroll_runs
+      where org_id = v_org), 2);
+
+  v_first := public.create_payroll_run(
+    p_org_id := v_org, p_period_id := v_second, p_description := 'Bulan depan',
+    p_idempotency_key := 'PAYRUN-1');
+  v_again := public.create_payroll_run(
+    p_org_id := v_org, p_period_id := v_second, p_description := 'Bulan depan',
+    p_idempotency_key := 'PAYRUN-1');
+  perform pg_temp.check_true('a replayed run returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and opens no second',
+    (select count(*)::integer from public.payroll_runs
+      where org_id = v_org and period_id = v_second), 1);
+
+  begin
+    perform public.create_payroll_run(
+      p_org_id := v_org, p_period_id := v_period,
+      p_description := 'Bulan depan', p_idempotency_key := 'PAYRUN-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for another period is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- upsert_bank_account
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_first uuid; v_again uuid; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Banks Twice Sdn Bhd', array['accounting']);
+
+  perform public.upsert_bank_account('Akaun Semasa', 'Maybank', 'MBB',
+    '512345678901', 'current', 'MYR', null, null, v_org);
+  perform public.upsert_bank_account('Akaun Semasa', 'Maybank', 'MBB',
+    '512345678901', 'current', 'MYR', null, null, v_org);
+  perform pg_temp.check_eq(
+    'without a key, one bank account is saved twice',
+    (select count(*)::integer from public.bank_accounts where org_id = v_org),
+    2);
+  -- Each got its own GL account too, so the chart carries two.
+  perform pg_temp.check_eq('each with its own ledger account',
+    (select count(distinct account_id)::integer from public.bank_accounts
+      where org_id = v_org), 2);
+
+  v_first := public.upsert_bank_account(
+    p_name := 'Akaun Kedua', p_bank_name := 'CIMB', p_bank_code := 'CIMB',
+    p_account_number := '712345678901', p_account_type := 'current',
+    p_currency := 'MYR', p_account_id := null, p_id := null,
+    p_org_id := v_org, p_idempotency_key := 'BANK-1');
+  v_again := public.upsert_bank_account(
+    p_name := 'Akaun Kedua', p_bank_name := 'CIMB', p_bank_code := 'CIMB',
+    p_account_number := '712345678901', p_account_type := 'current',
+    p_currency := 'MYR', p_account_id := null, p_id := null,
+    p_org_id := v_org, p_idempotency_key := 'BANK-1');
+  perform pg_temp.check_true('a replayed save returns the first account',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and saves no third',
+    (select count(*)::integer from public.bank_accounts where org_id = v_org),
+    3);
+
+  begin
+    perform public.upsert_bank_account(
+      p_name := 'Akaun Kedua', p_bank_name := 'CIMB', p_bank_code := 'CIMB',
+      p_account_number := '799999999999', p_account_type := 'current',
+      p_currency := 'MYR', p_account_id := null, p_id := null,
+      p_org_id := v_org, p_idempotency_key := 'BANK-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'the same key for a different account number is refused', not v_took);
+
+  -- AN AMEND, with p_org_id NULL -- which is what the client sends when
+  -- p_id names a row, so the organization has to come off the ROW. The
+  -- mutant that reads p_org_id instead claimed no key at all here and
+  -- SURVIVED every assertion above, because all of them create.
+  v_again := public.upsert_bank_account(
+    p_name := 'Akaun Kedua, dinamakan semula', p_bank_name := 'CIMB',
+    p_bank_code := 'CIMB', p_account_number := '712345678901',
+    p_account_type := 'current', p_currency := 'MYR', p_account_id := null,
+    p_id := v_first, p_org_id := null, p_idempotency_key := 'BANK-AMEND-1');
+  perform pg_temp.check_true('an amend returns the row it amended',
+    v_again = v_first);
+  perform pg_temp.check_eq('and renames it',
+    (select name from public.bank_accounts where id = v_first),
+    'Akaun Kedua, dinamakan semula');
+  begin
+    perform public.upsert_bank_account(
+      p_name := 'Nama ketiga', p_bank_name := 'CIMB', p_bank_code := 'CIMB',
+      p_account_number := '712345678901', p_account_type := 'current',
+      p_currency := 'MYR', p_account_id := null, p_id := v_first,
+      p_org_id := null, p_idempotency_key := 'BANK-AMEND-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'and the amend key was really claimed, so a different name is refused',
+    not v_took);
+  perform pg_temp.check_eq('leaving the first amend''s name in place',
+    (select name from public.bank_accounts where id = v_first),
+    'Akaun Kedua, dinamakan semula');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- chat_create_group
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_me uuid; v_them uuid; v_members jsonb; v_first uuid;
+  v_again uuid; v_took boolean;
+begin
+  v_me := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_me);
+  v_org := pg_temp.test_org('Chat Twice Sdn Bhd', array['chat']);
+  v_them := pg_temp.another_user('rakan-0738@example.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_them, 'employee', 'active') on conflict do nothing;
+  insert into public.chat_access (org_id, user_id, is_enabled)
+  values (v_org, v_me, true), (v_org, v_them, true) on conflict do nothing;
+  perform pg_temp.sign_in_as(v_me);
+  v_members := jsonb_build_array(
+    jsonb_build_object('user_id', v_them, 'org_id', v_org));
+
+  perform public.chat_create_group(v_org, 'Projek', v_members);
+  perform public.chat_create_group(v_org, 'Projek', v_members);
+  perform pg_temp.check_eq('without a key, one group is created twice',
+    (select count(*)::integer from public.chat_conversations c
+      where not c.is_direct
+        and exists (select 1 from public.chat_participants p
+                     where p.conversation_id = c.id and p.org_id = v_org)), 2);
+
+  v_first := public.chat_create_group(
+    p_my_org := v_org, p_title := 'Projek Dua', p_members := v_members,
+    p_idempotency_key := 'GROUP-1');
+  v_again := public.chat_create_group(
+    p_my_org := v_org, p_title := 'Projek Dua', p_members := v_members,
+    p_idempotency_key := 'GROUP-1');
+  perform pg_temp.check_true('a replayed group returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and creates no third',
+    (select count(*)::integer from public.chat_conversations c
+      where not c.is_direct
+        and exists (select 1 from public.chat_participants p
+                     where p.conversation_id = c.id and p.org_id = v_org)), 3);
+
+  begin
+    perform public.chat_create_group(
+      p_my_org := v_org, p_title := 'Projek Tiga', p_members := v_members,
+      p_idempotency_key := 'GROUP-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different name is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- upsert_landed_cost_run
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_first uuid; v_again uuid; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.inv_0738('Landed Twice Sdn Bhd');
+
+  perform public.upsert_landed_cost_run(null, v_org, pg_temp.today(),
+    '[]'::jsonb, '[]'::jsonb, 'Nota');
+  perform public.upsert_landed_cost_run(null, v_org, pg_temp.today(),
+    '[]'::jsonb, '[]'::jsonb, 'Nota');
+  perform pg_temp.check_eq('without a key, one run is saved twice',
+    (select count(*)::integer from public.landed_cost_runs
+      where org_id = v_org), 2);
+
+  v_first := public.upsert_landed_cost_run(
+    p_id := null, p_org := v_org, p_date := pg_temp.today(),
+    p_bills := '[]'::jsonb, p_charges := '[]'::jsonb, p_notes := 'Keyed',
+    p_idempotency_key := 'LANDED-1');
+  v_again := public.upsert_landed_cost_run(
+    p_id := null, p_org := v_org, p_date := pg_temp.today(),
+    p_bills := '[]'::jsonb, p_charges := '[]'::jsonb, p_notes := 'Keyed',
+    p_idempotency_key := 'LANDED-1');
+  perform pg_temp.check_true('a replayed save returns the first run',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and saves no third',
+    (select count(*)::integer from public.landed_cost_runs
+      where org_id = v_org), 3);
+
+  begin
+    perform public.upsert_landed_cost_run(
+      p_id := null, p_org := v_org, p_date := pg_temp.today() - 1,
+      p_bills := '[]'::jsonb, p_charges := '[]'::jsonb, p_notes := 'Keyed',
+      p_idempotency_key := 'LANDED-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for another date is refused',
+    not v_took);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- join_pos_queue and upsert_pos_menu_link: two TABLE-returning wrappers
+--
+-- The replay has to rebuild every column from the stored result. A
+-- wrapper that returned an empty set would pass any assertion that only
+-- counted rows in the table, which is why the RETURNED values are
+-- asserted here as well.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_outlet uuid; v_table uuid; v_first record; v_again record;
+  v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.shop_0738('Queue Twice Sdn Bhd');
+  select id into v_outlet from public.pos_outlets where org_id = v_org;
+  select id into v_table from public.pos_tables where outlet_id = v_outlet;
+
+  perform public.join_pos_queue(v_outlet, 2, 'Puan Siti', null, null);
+  perform public.join_pos_queue(v_outlet, 2, 'Puan Siti', null, null);
+  perform pg_temp.check_eq(
+    'without a key, one party at the door takes two ticket numbers',
+    (select count(*)::integer from public.pos_queue_entries
+      where outlet_id = v_outlet), 2);
+
+  -- `app.pos_queue_quote` returns NULL until THREE parties have been
+  -- seated, and the first draft of this block asserted
+  -- `v_again.quoted_minutes = v_first.quoted_minutes` while both were
+  -- null -- which is null, not true, and failed. The honest fix is not a
+  -- null-safe comparison but a fixture that produces a real quote, so a
+  -- wrapper that dropped the column from its stored result comes back
+  -- null on the replay and the assertion catches it.
+  insert into public.pos_queue_entries
+    (org_id, outlet_id, ticket_no, queue_date, party_size, status,
+     joined_at, seated_at)
+  select v_org, v_outlet, 100 + g, pg_temp.today(), 4, 'seated',
+         now() - interval '40 minutes', now() - interval '20 minutes'
+    from generate_series(1, 3) g;
+
+  select * into v_first from public.join_pos_queue(
+    p_outlet := v_outlet, p_party := 4, p_name := 'Encik Ali',
+    p_phone := null, p_note := null, p_idempotency_key := 'QUEUE-1');
+  select * into v_again from public.join_pos_queue(
+    p_outlet := v_outlet, p_party := 4, p_name := 'Encik Ali',
+    p_phone := null, p_note := null, p_idempotency_key := 'QUEUE-1');
+  perform pg_temp.check_true('a replayed join returns the same entry',
+    v_first.entry_id is not null and v_again.entry_id = v_first.entry_id);
+  -- The number on the customer's slip of paper, which is the whole point.
+  perform pg_temp.check_eq('and the SAME ticket number',
+    v_again.ticket_no, v_first.ticket_no);
+  perform pg_temp.check_true('and a quote was given at all',
+    v_first.quoted_minutes is not null);
+  perform pg_temp.check_eq('and the replay repeats it',
+    v_again.quoted_minutes, v_first.quoted_minutes);
+  perform pg_temp.check_eq('and takes no third number',
+    (select count(*)::integer from public.pos_queue_entries
+      where outlet_id = v_outlet and status = 'waiting'), 3);
+
+  begin
+    perform public.join_pos_queue(
+      p_outlet := v_outlet, p_party := 6, p_name := 'Encik Ali',
+      p_phone := null, p_note := null, p_idempotency_key := 'QUEUE-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a bigger party is refused',
+    not v_took);
+
+  -- ---- upsert_pos_menu_link ----
+  perform public.upsert_pos_menu_link(v_outlet,
+    'table'::app.pos_menu_link_kind, v_table, null, 'Meja 1', null, false,
+    null, true);
+  perform public.upsert_pos_menu_link(v_outlet,
+    'table'::app.pos_menu_link_kind, v_table, null, 'Meja 1', null, false,
+    null, true);
+  perform pg_temp.check_eq(
+    'without a key, two live links open the same table',
+    (select count(*)::integer from public.pos_menu_links
+      where outlet_id = v_outlet), 2);
+
+  select * into v_first from public.upsert_pos_menu_link(
+    p_outlet := v_outlet, p_kind := 'table'::app.pos_menu_link_kind,
+    p_table := v_table, p_register := null, p_label := 'Meja 1 lagi',
+    p_expires := null, p_single := false, p_id := null, p_active := true,
+    p_idempotency_key := 'LINK-1');
+  select * into v_again from public.upsert_pos_menu_link(
+    p_outlet := v_outlet, p_kind := 'table'::app.pos_menu_link_kind,
+    p_table := v_table, p_register := null, p_label := 'Meja 1 lagi',
+    p_expires := null, p_single := false, p_id := null, p_active := true,
+    p_idempotency_key := 'LINK-1');
+  perform pg_temp.check_true('a replayed link returns the first',
+    v_first.id is not null and v_again.id = v_first.id);
+  -- The token is the half that matters: a second one is a second way in.
+  perform pg_temp.check_true('and the SAME token',
+    v_first.token is not null and v_again.token = v_first.token);
+  perform pg_temp.check_eq('and mints no third link',
+    (select count(*)::integer from public.pos_menu_links
+      where outlet_id = v_outlet), 3);
+
+  begin
+    perform public.upsert_pos_menu_link(
+      p_outlet := v_outlet, p_kind := 'table'::app.pos_menu_link_kind,
+      p_table := v_table, p_register := null, p_label := 'Meja 2',
+      p_expires := null, p_single := false, p_id := null, p_active := true,
+      p_idempotency_key := 'LINK-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different label is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- open_pos_sale: the key that was already there
+--
+-- Not a wrapper. `app.open_pos_sale_internal` resumes the sale whose
+-- `client_uuid` matches, and the till passed none, so two taps left two
+-- parked bills. `check_idempotent_calls.py` now refuses a call site that
+-- drops it; this asserts the server half it depends on.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_reg uuid; v_cu uuid := gen_random_uuid(); a uuid; b uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.shop_0738('Till Twice Sdn Bhd');
+  select id into v_reg from public.pos_registers where org_id = v_org;
+
+  perform public.open_pos_sale(v_reg, null, null);
+  perform public.open_pos_sale(v_reg, null, null);
+  perform pg_temp.check_eq(
+    'with no client_uuid, two taps leave two parked bills',
+    (select count(*)::integer from public.pos_sales where org_id = v_org), 2);
+
+  a := public.open_pos_sale(v_reg, null, v_cu);
+  b := public.open_pos_sale(v_reg, null, v_cu);
+  perform pg_temp.check_true('with one, the second resumes the first',
+    a is not null and b = a);
+  perform pg_temp.check_eq('and opens no third bill',
+    (select count(*)::integer from public.pos_sales where org_id = v_org), 3);
+  -- A different uuid is a different bill, which is what a till needs: a
+  -- cashier really can have two orders open at once.
+  perform pg_temp.check_true('a different client_uuid opens a new bill',
+    public.open_pos_sale(v_reg, null, gen_random_uuid()) <> a);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0738's eighteen verdicts, measured
+--
+-- Six refused by a unique index, five handing back what is there, three
+-- state guards, two natural, two that repeat on purpose. The last five
+-- cannot raise, so they are counted.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_user uuid; v_c uuid; v_item uuid; v_wh uuid; v_sup uuid;
+  v_run uuid; v_line uuid; v_sale uuid; v_mem uuid; v_sub uuid;
+  v_lineid uuid; v_cycle uuid; v_period uuid; v_payrun uuid; v_conv uuid;
+  v_them uuid; v_doc uuid; v_reg uuid; v_tender uuid; v_cu uuid;
+  n integer; a uuid; b uuid; v_dr uuid; v_cr uuid;
+begin
+  v_user := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_user);
+
+  -- ---- unique: open_matter, upsert_item_conversion ----
+  v_org := pg_temp.test_org('Verdicts 0738 Sdn Bhd',
+    array['legal', 'inventory', 'purchases', 'accounting', 'forecasting',
+          'hr', 'payroll', 'einvoice']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Klien', 'customer') returning id into v_c;
+  perform pg_temp.refuses_a_repeat('open_matter', format(
+    'select public.open_matter(%L, %L, %L, %L, null, null, %L, %L, null, 0, '
+    'null)', v_org, 'M-1', 'Fail', v_c, v_user, v_user));
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'W', 'Store', true) returning id into v_wh;
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+    uom_code, unit_price, cost_price)
+  values (v_org, 'ITM', 'Barang', 'stock', true, 'C62', 50, 20)
+  returning id into v_item;
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+    uom_code, unit_price, cost_price)
+  values (v_org, 'OUT', 'Keluaran', 'stock', true, 'C62', 10, 5);
+  perform pg_temp.refuses_a_repeat('upsert_item_conversion', format(
+    'select public.upsert_item_conversion(null, %L, %L, %L, %L, 1, %L, '
+    '%L::jsonb, true)', v_org, 'CV1', 'Pecah', v_item, 'C62',
+    jsonb_build_array(jsonb_build_object('item',
+      (select id from public.items where org_id = v_org and code = 'OUT'),
+      'quantity', 5, 'share', 100))::text));
+
+  -- ---- state: open_appraisal_cycle ----
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date, employment_status,
+     basic_salary)
+  values (v_org, 'E1', 'Pekerja', v_user, pg_temp.today() - 400, 'active',
+          3000);
+  insert into public.appraisal_cycles
+    (org_id, name, period_start, period_end, status)
+  values (v_org, 'FY26', pg_temp.today() - 300, pg_temp.today() - 10, 'draft')
+  returning id into v_cycle;
+  perform pg_temp.check_eq('open_appraisal_cycle appraises everybody once',
+    public.open_appraisal_cycle(v_cycle), 1);
+  perform pg_temp.check_eq('and a retry appraises nobody',
+    public.open_appraisal_cycle(v_cycle), 0);
+
+  -- ---- natural: calculate_payroll_run replaces the payslips ----
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, 'P1', date_trunc('month', pg_temp.today())::date,
+          (date_trunc('month', pg_temp.today())
+             + interval '1 month -1 day')::date,
+          pg_temp.today()) returning id into v_period;
+  v_payrun := public.create_payroll_run(v_org, v_period, 'Bulan');
+  perform public.calculate_payroll_run(v_payrun);
+  perform public.calculate_payroll_run(v_payrun);
+  perform pg_temp.check_eq(
+    'calculate_payroll_run rebuilds the payslips rather than adding to them',
+    (select count(*)::integer from public.payslips where run_id = v_payrun),
+    1);
+
+  -- ---- state: run_recurring_journals_for advances next_run_date ----
+  select id into v_dr from public.accounts where org_id = v_org
+    and account_type = 'asset' and not is_group limit 1;
+  select id into v_cr from public.accounts where org_id = v_org
+    and account_type = 'revenue' and not is_group limit 1;
+  insert into public.recurring_journals
+    (org_id, name, frequency, start_date, next_run_date, template, auto_post,
+     is_active)
+  values (v_org, 'Sewa', 'monthly', pg_temp.today(), pg_temp.today(),
+    jsonb_build_object('lines', jsonb_build_array(
+      jsonb_build_object('account_id', v_dr, 'debit', 100, 'credit', 0),
+      jsonb_build_object('account_id', v_cr, 'debit', 0, 'credit', 100)),
+      'description', 'Sewa bulanan'), true, true);
+  perform pg_temp.check_eq('run_recurring_journals_for posts one journal',
+    public.run_recurring_journals_for(v_org, pg_temp.today()), 1);
+  perform pg_temp.check_eq('and a second sweep posts none',
+    public.run_recurring_journals_for(v_org, pg_temp.today()), 0);
+
+  -- ---- existing: ensure_default_warehouse, create_item_variants ----
+  perform pg_temp.check_true('ensure_default_warehouse returns the same store',
+    public.ensure_default_warehouse(v_org)
+      = public.ensure_default_warehouse(v_org));
+  perform public.create_item_variants(v_item,
+    jsonb_build_object('Saiz', jsonb_build_array('S', 'M')));
+  perform public.create_item_variants(v_item,
+    jsonb_build_object('Saiz', jsonb_build_array('S', 'M')));
+  perform pg_temp.check_eq(
+    'create_item_variants finds the variant it already made',
+    (select count(*)::integer from public.items
+      where org_id = v_org and parent_item_id = v_item), 2);
+
+  -- ---- natural: create_po_from_suggestions nets off its own output ----
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S1', 'Pembekal', 'supplier') returning id into v_sup;
+  update public.items set preferred_supplier_id = v_sup where id = v_item;
+  v_run := public.run_inventory_forecast(v_org, v_wh, pg_temp.today());
+  update public.forecast_lines
+     set suggested_qty = 10, supplier_id = v_sup, state = 'order_now'
+   where run_id = v_run and item_id = v_item returning id into v_line;
+  if v_line is not null then
+    perform public.create_po_from_suggestions(v_org,
+      jsonb_build_array(jsonb_build_object('line_id', v_line,
+        'quantity', 10)), pg_temp.today() + 7, v_wh);
+    select count(*)::integer into n from public.purchase_documents
+     where org_id = v_org and doc_type = 'purchase_order';
+    perform pg_temp.check_eq('create_po_from_suggestions raises one order',
+      n, 1);
+    perform public.create_po_from_suggestions(v_org,
+      jsonb_build_array(jsonb_build_object('line_id', v_line,
+        'quantity', 10)), pg_temp.today() + 7, v_wh);
+    perform pg_temp.check_eq(
+      'and a retry raises none, because the draft order is netted off',
+      (select count(*)::integer from public.purchase_documents
+        where org_id = v_org and doc_type = 'purchase_order'), 1);
+  end if;
+
+  -- ---- existing: create_supplier_from_received_einvoice ----
+  insert into public.received_einvoices
+    (org_id, myinvois_uuid, myinvois_long_id, doc_no, issue_date, type_code,
+     currency, supplier_name, supplier_tin, supplier_id_type,
+     supplier_id_value, payable_amount, raw, payload_hash, status)
+  values (v_org, gen_random_uuid()::text, 'L1', 'INV-X', pg_temp.today(),
+          '01', 'MYR', 'Pembekal Jauh', 'C1234567890', 'BRN',
+          '202601000001', 100, '{}'::jsonb, 'h-0738', 'received')
+  returning id into v_doc;
+  a := public.create_supplier_from_received_einvoice(v_doc);
+  b := public.create_supplier_from_received_einvoice(v_doc);
+  perform pg_temp.check_true(
+    'create_supplier_from_received_einvoice returns the supplier it made',
+    a is not null and b = a);
+
+  -- ---- repeats: next_document_number, run_inventory_forecast ----
+  perform pg_temp.check_true(
+    'next_document_number hands out a different number each time, by design',
+    public.next_document_number(v_org, 'invoice')
+      <> public.next_document_number(v_org, 'invoice'));
+  perform pg_temp.check_true(
+    'and a re-run forecast is a new forecast, also by design',
+    public.run_inventory_forecast(v_org, v_wh, pg_temp.today()) <> v_run);
+
+  -- ---- the POS verdicts, in a shop ----
+  v_org := pg_temp.shop_0738('Verdicts POS 0738 Sdn Bhd');
+  select id into v_reg from public.pos_registers where org_id = v_org;
+  select id into v_item from public.items
+   where org_id = v_org and code = 'KOPI';
+  select id into v_c from public.contacts where org_id = v_org and code = 'REG';
+  select id into v_mem from public.pos_memberships where org_id = v_org;
+  select id into v_tender from public.pos_tender_types where org_id = v_org;
+
+  -- natural: void_pos_sale_line deletes the line it voids.
+  v_sale := public.open_pos_sale(v_reg, null, gen_random_uuid());
+  v_lineid := public.add_pos_sale_line(v_sale, v_item, 1, 5.00);
+  perform pg_temp.refuses_a_repeat('void_pos_sale_line', format(
+    'select public.void_pos_sale_line(%L, %L::app.pos_void_reason, %L)',
+    v_lineid, 'item_issue', 'jatuh'));
+
+  -- state: void_pos_sale refuses a bill that is already voided.
+  v_sale := public.open_pos_sale(v_reg, null, gen_random_uuid());
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 5.00);
+  perform pg_temp.refuses_a_repeat('void_pos_sale', format(
+    'select public.void_pos_sale(%L, %L::app.pos_void_reason, %L)',
+    v_sale, 'item_issue', 'tutup'));
+
+  -- unique: start_membership and cover_line_with_membership. BOTH were
+  -- read as doubling and both are refused by an index -- the sixth and
+  -- seventh time in this programme that reading a body was wrong.
+  v_sale := public.open_pos_sale(v_reg, v_c, gen_random_uuid());
+  perform public.add_pos_sale_line(v_sale,
+    (select id from public.items where org_id = v_org and code = 'GYM'),
+    1, 100);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_tender, 'amount', 100)));
+  perform pg_temp.refuses_a_repeat('start_membership',
+    format('select public.start_membership(%L, %L)', v_sale, v_mem));
+  select id into v_sub from public.pos_membership_subscriptions
+   where org_id = v_org limit 1;
+
+  v_sale := public.open_pos_sale(v_reg, v_c, gen_random_uuid());
+  v_lineid := public.add_pos_sale_line(v_sale, v_item, 1, 5.00);
+  perform pg_temp.refuses_a_repeat('cover_line_with_membership', format(
+    'select public.cover_line_with_membership(%L, %L)', v_lineid, v_sub));
+
+  -- existing: ingest_offline_sales deduplicates on the till's own uuid.
+  v_cu := gen_random_uuid();
+  perform public.ingest_offline_sales(v_reg, jsonb_build_array(
+    jsonb_build_object('client_uuid', v_cu,
+      'lines', jsonb_build_array(jsonb_build_object(
+        'item_id', v_item, 'quantity', 1, 'unit_price', 5)),
+      'tenders', jsonb_build_array(jsonb_build_object(
+        'type', v_tender, 'amount', 5)))));
+  select count(*)::integer into n from public.pos_sales where org_id = v_org;
+  perform public.ingest_offline_sales(v_reg, jsonb_build_array(
+    jsonb_build_object('client_uuid', v_cu,
+      'lines', jsonb_build_array(jsonb_build_object(
+        'item_id', v_item, 'quantity', 1, 'unit_price', 5)),
+      'tenders', jsonb_build_array(jsonb_build_object(
+        'type', v_tender, 'amount', 5)))));
+  perform pg_temp.check_eq(
+    'a replayed offline sync lands the sale once',
+    (select count(*)::integer from public.pos_sales where org_id = v_org), n);
+
+  -- existing: chat_start_direct finds the pair it already has.
+  v_org := pg_temp.test_org('Verdicts Chat 0738 Sdn Bhd', array['chat']);
+  v_them := pg_temp.another_user('rakan-verdict-0738@example.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_them, 'employee', 'active') on conflict do nothing;
+  insert into public.chat_access (org_id, user_id, is_enabled)
+  values (v_org, v_user, true), (v_org, v_them, true) on conflict do nothing;
+  perform pg_temp.sign_in_as(v_user);
+  perform pg_temp.check_true(
+    'chat_start_direct returns the conversation those two already have',
+    public.chat_start_direct(v_org, v_them, v_org)
+      = public.chat_start_direct(v_org, v_them, v_org));
+end $$;
+
 rollback;

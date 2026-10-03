@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `0737`, the seventh tranche of the idempotency census and the sixth migration of 3 October: **a partial refund, two LHDN papers and a leave balance stop doubling**. Before it `383e505d` — the 0735 share-window assertion was mixing a UTC date with a Kuala Lumpur one and was going to go red overnight on the deploy branch; see its own section. Before that, in order: `685a3156` (the call stage laid out to fit the window), `6ad94e5c`, `6d34af57` (**`0733`**), `56337d8b`, `b0682f0b`, `39c4bc0f`, `ecefa7a9` (**`0734`**), `981de134` (**`0735`**), `ff3b4698` (**`0736`**) and `846bd339`. Before 3 October, the 2 October session: `0729` through `0732` |
-| CI | **green through run 2214 (`383e505d`, the clock fix)**. Run **2213 FAILED** and is worth remembering: `846bd339` changed one markdown file and turned the branch red, because `idempotency.sql` carried a UTC-minus-KL date subtraction that goes wrong for eight hours a day and 16:10 UTC was inside them — a red run whose cause was in neither the commit nor any migration. 2204 to 2212 are all green — 2204 (`685a3156`), 2205, 2206 (**`0733` applied**), 2207, 2208, 2209, 2210 (**`0734` applied**), 2211 (**`0735` applied**) and 2212 (**`0736` applied**; its top-level status flipped `in_progress` back to `queued` at 15:44 while the three deploy jobs waited for runners, and `gh api .../jobs` is the cheap way to see that is not a failure). 2194 to 2204 are all green, and `0732` landed in run 2201 (`9e42ebf1`); and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0737` is the highest. `0733` through `0736` are live and VERIFIED; `0737` is on the branch and NOT yet verified in production** — `schema_migrations` holds 0730 through 0736 and **28 keyed overloads exist in production**, which is the census figure exactly. Each tranche's wrappers are present at the right arity (the keyed form has one argument more than the inner one), with execute granted to `authenticated` and **not** to `anon`, and each carrying its own `comment on function` — including `adjust_loyalty_points`, where the 3-arg comment survived the 4-arg one rather than being clobbered by it. Between them these five add 24 overloads and nothing destructive, nothing dropped. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Head at time of writing | `0738`, which takes the write-idempotency census to **ZERO**: eight wrappers, eighteen verdicts, and `BACKLOG = 0` in the gate. It is the eighth tranche and the seventh migration of 3 October. Before it, in order: `685a3156` (the call stage laid out to fit the window), `6ad94e5c`, `6d34af57` (**`0733`**), `56337d8b`, `b0682f0b`, `39c4bc0f`, `ecefa7a9` (**`0734`**), `981de134` (**`0735`**), `ff3b4698` (**`0736`**), `846bd339`, `383e505d` (the UTC-vs-KL clock fix — see its own section), `979c1c3a` (**`0737`**) and `4f8badd1`. Before 3 October, the 2 October session: `0729` through `0732` |
+| CI | **green through run 2214 (`383e505d`, the clock fix)**; runs 2215 (`979c1c3a`, `0737`) and 2216 (`4f8badd1`) were in flight at the time of writing with every completed job green. Run **2213 FAILED** and is worth remembering: `846bd339` changed one markdown file and turned the branch red, because `idempotency.sql` carried a UTC-minus-KL date subtraction that goes wrong for eight hours a day and 16:10 UTC was inside them — a red run whose cause was in neither the commit nor any migration. 2204 to 2212 are all green — 2204 (`685a3156`), 2205, 2206 (**`0733` applied**), 2207, 2208, 2209, 2210 (**`0734` applied**), 2211 (**`0735` applied**) and 2212 (**`0736` applied**; its top-level status flipped `in_progress` back to `queued` at 15:44 while the three deploy jobs waited for runners, and `gh api .../jobs` is the cheap way to see that is not a failure). 2194 to 2204 are all green, and `0732` landed in run 2201 (`9e42ebf1`); and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
+| Migrations | **`0738` is the highest. `0733` through `0736` are live and VERIFIED; `0737` and `0738` are on the branch and NOT yet verified in production** — between them the seven add **36 keyed overloads** and a `comment on function` for each, nothing destructive, nothing dropped. The figure to check in production is the count of `public` functions whose identity arguments contain `p_idempotency_key`: it must equal what the gate reports, and a disagreement means a migration applied halfway. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **383 SQL assertion files, 61 Python gates (+27 gate self-tests, one of which is 28 assertions of its own and one 10), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 834 functions, 367 tables, version `0737`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts, and it fails on a **stale comment** too — a wrapper whose `comment on function` was written against the wrong signature clobbers the inner function's comment and the description then disagrees with the schema |
+| Gates | **383 SQL assertion files (**206 assertions in `idempotency.sql` alone**, up from 103 this morning), 61 Python gates (+27 gate self-tests, one of which is 28 assertions of its own and one 10), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| API description | 842 functions, 367 tables, version `0738`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts, and it fails on a **stale comment** too — a wrapper whose `comment on function` was written against the wrong signature clobbers the inner function's comment and the description then disagrees with the schema |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -217,6 +217,150 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0738`: the last eight, and the key that was already there
+
+26 → **ZERO.** Eight wrappers and eighteen verdicts, all twenty-six
+measured. **Every one of the 340 client-reachable writes in this schema is
+now accounted for**, and `check_write_idempotency.py` has `BACKLOG = 0`,
+so the next unprotected write fails CI by name.
+
+    create_recurring_document  -> 2 live monthly schedules
+    run_item_conversion        -> the stock converted twice
+    create_payroll_run         -> 2 runs, 2 run numbers
+    upsert_bank_account        -> 2 accounts, 2 ledger accounts
+    join_pos_queue             -> 2 ticket numbers for one party
+    upsert_pos_menu_link       -> 2 live links, 2 tokens
+    chat_create_group          -> 2 groups
+    upsert_landed_cost_run     -> 2 runs
+
+**`create_recurring_document` is the worst of the thirty-two wrapped
+across the eight tranches**, worse than `0737`'s `settle_deposit`. Every
+other duplicate in this programme is one wrong thing. A duplicated
+schedule is a **machine that goes on producing wrong invoices on a
+timer** — the customer is billed twice a month for ever — and the second
+schedule looks exactly as legitimate as the first.
+
+**`run_item_conversion` is the first to double a physical quantity.** One
+box became twenty bottles instead of ten: two sets of output movements
+from one press, so the shelf and the ledger both disagree with the room.
+
+### The key that was already there
+
+`open_pos_sale` doubled too, and it is **not wrapped**. It has had a
+complete retry mechanism since it was written — `app.open_pos_sale_internal`
+opens with
+
+    if p_client_uuid is not null then
+      select s.id into v_sale from public.pos_sales s
+       where s.org_id = v_org and s.client_uuid = p_client_uuid;
+      if v_sale is not null then return v_sale; end if;
+
+— and the one caller, `till_screen.dart`'s `sale ??= await
+repo.openPosSale(reg)`, passed nothing. **The mechanism had never been
+given anything to work with**, which is `0307`'s fault exactly: four
+wrappers that shipped complete and went unused until a gate found them.
+
+So the fix is in the client. `openPosSale` now mints a per-attempt uuid
+from the same `IdempotentAttempt` machinery `callRpcOnce` uses (32 hex
+characters, which Postgres accepts as a uuid unhyphenated), and a caller
+with its own uuid — the offline till replaying what it took while the line
+was down — keeps using it. A second idempotency layer over a working one
+would have been a worse answer.
+
+`check_idempotent_calls.py` grew a fourth rule, `BY_OTHER_NAME`, for a
+function whose idempotency key is not called `p_idempotency_key`. Proved
+by mutation: dropping `p_client_uuid` from the call site fails with
+*"does not send p_client_uuid, which IS this function's idempotency
+key"*. The first mutation attempt was caught by the WRONG rule — a
+non-literal params map made the call site invisible to the parser, so the
+staleness check fired instead — and that is not proof, so it was redone
+with a literal map.
+
+### Eighteen verdicts, every one measured
+
+Six refused by a unique index: `open_matter`, `upsert_item_conversion`,
+`start_membership` and `cover_line_with_membership`. **The last two were
+read as doubling and are not** — a session is unique on the line it
+covers, a live subscription unique per member. That is the sixth and
+seventh time in this programme that reading a body found a defect the
+database was already refusing, against one time that reading found a real
+one. The rule has not changed: make the duplicate happen.
+
+Five hand back what is there (`existing:`) — `chat_start_direct`,
+`ensure_default_warehouse`, `create_item_variants` (find-or-create per
+variant code, reporting `created = false`),
+`create_supplier_from_received_einvoice`, and `ingest_offline_sales`,
+which dedupes on the till's own `client_uuid` because an offline sync that
+did not would be useless.
+
+Three state guards: `void_pos_sale`, `open_appraisal_cycle` (`not exists`
+per employee) and `run_recurring_journals_for` (it advances
+`next_run_date`).
+
+Two natural: `calculate_payroll_run` deletes and rebuilds the payslips, so
+recalculating *is* the button; `void_pos_sale_line` deletes the line it
+voids.
+
+**`create_po_from_suggestions` is the one worth remembering.**
+`app.forecast_wanted` subtracts `app.quantity_on_draft_order(...)` from
+what the forecast asks for, so the first call's draft order makes the
+second call want nothing. Measured: one order, then still one. It is the
+only one of the 340 that defends itself by **netting off its own output**,
+and it is a deliberate mechanism rather than an accident.
+
+Two repeat on purpose. `next_document_number` hands out the next number,
+and asking twice is asking twice — a key would hide a gap that opening a
+form and closing it makes anyway. `run_inventory_forecast` re-run is a new
+forecast, which is the button's whole purpose.
+
+### Three fixtures that proved nothing, and what they cost
+
+- **`join_pos_queue`'s quote.** The assertion was
+  `v_again.quoted_minutes = v_first.quoted_minutes` while both were null,
+  because `app.pos_queue_quote` returns NULL until three parties have been
+  seated — and `null = null` is null, not true, so it failed outright. The
+  fix is NOT a null-safe comparison: it is a fixture that seats three
+  parties so the quote is a real 20 minutes, and a wrapper that drops the
+  column now comes back null and is caught. Both of those mutants are in
+  the run.
+- **`upsert_item_conversion` in one exception block.** Both calls were
+  inside one `begin … exception`, so the second call's failure rolled back
+  the FIRST call's insert as well — plpgsql puts a savepoint at the block,
+  not at the statement. The row that was supposed to exist did not, and
+  the next assertion was silently skipped.
+- **`create_recurring_document` and `upsert_bank_account` branches.** Two
+  mutants survived the first round: "only looks at sales documents" and
+  "claims the key against the argument on an amend". Both blocks tested
+  only one branch — an invoice, and a create. A recurring BILL and an
+  amend with `p_org_id` null were added, and both mutants die.
+
+Sixteen mutants, all killed, control surviving.
+
+### The census, finished
+
+| | |
+| --- | --- |
+| client-reachable writes | **340** |
+| hold an idempotency key | **36** |
+| insert nothing at all | **146** |
+| guard or replace every row they insert | **34** |
+| refuse a repeat BY NAME | **37** |
+| carry a checked verdict | **87** |
+| **undecided** | **0** |
+
+137 → 85 → 56 → 48 → 38 → 26 → **0** across seven tranches of 3 October,
+`0733` through `0738`. Thirty-two overloads, eighty-seven verdicts, and a
+ratchet at zero.
+
+**What `BACKLOG = 0` does and does not mean.** It means no
+client-reachable write is unexamined, and that a new one must arrive with
+a key, a guard or a written verdict or CI refuses it. It does not mean
+every retry in this application is safe: a write reached by an edge
+function rather than by `repository.dart` is outside this census
+altogether, and so is anything a future screen calls through
+`client.from(...)` instead of an RPC. Those are different populations and
+would need their own count.
 
 ## `383e505d`: a green suite proved nothing about the eight hours it never ran in
 
@@ -381,7 +525,7 @@ fourth fails in CI **by name**, and a reviewed entry that stops applying
 fails too. Ten self-tests, one of which runs the lists against the
 repository itself.
 
-### Where the census stands after seven tranches
+### Where the census stood after seven tranches
 
 | | |
 | --- | --- |

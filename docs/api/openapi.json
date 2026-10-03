@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0737",
+    "version": "0738",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -24590,8 +24590,8 @@
     "/rpc/chat_create_group": {
       "post": {
         "operationId": "chat_create_group",
-        "summary": "Starts a named group and adds the members given",
-        "description": "Starts a named group and adds the members given. Each member's company is checked against EVERYBODY ALREADY ADDED, which as the list grows means every pair in the room has agreed to a link -- not merely that the person starting it can reach each of them. That is what stops a group being a way to put two companies who have refused each other into one conversation. Everybody needs chat switched on, and a group needs a name and somebody in it.\n\n`public.chat_create_group(p_my_org uuid, p_title text, p_members jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Creates one group conversation per idempotency key",
+        "description": "Creates one group conversation per idempotency key. MEASURED: without one, two taps left two groups of the same name with the same people in them. chat_start_direct needs no key: it looks for the conversation with exactly those two and hands it back. As create_recurring_document for the key and the refusals.\n\n`public.chat_create_group(p_my_org uuid, p_title text, p_members jsonb, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_my_org uuid, p_title text, p_members jsonb, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -24613,12 +24613,16 @@
                   "p_title": {
                     "type": "string"
                   },
-                  "p_members": {}
+                  "p_members": {},
+                  "p_idempotency_key": {
+                    "type": "string"
+                  }
                 },
                 "required": [
                   "p_my_org",
                   "p_title",
-                  "p_members"
+                  "p_members",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -24645,7 +24649,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_my_org uuid, p_title text, p_members jsonb, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/chat_decide_link": {
@@ -31283,8 +31290,8 @@
     "/rpc/create_payroll_run": {
       "post": {
         "operationId": "create_payroll_run",
-        "summary": "Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed",
-        "description": "Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed. Needs `can_run_payroll`, which is its own permission and not `can_write` -- what people are paid is not something everybody who may edit a customer should see.\n\n`public.create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` Writes. Requires a signed-in user.",
+        "summary": "Opens one payroll run per idempotency key",
+        "description": "Opens one payroll run per idempotency key. MEASURED: without one, two taps left two runs against the same pay period and burnt two run numbers. As create_recurring_document for the key and the refusals.\n\n`public.create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org_id uuid, p_period_id uuid, p_description text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -31309,11 +31316,16 @@
                   },
                   "p_description": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_org_id",
-                  "p_period_id"
+                  "p_period_id",
+                  "p_description",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -31340,7 +31352,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_org_id uuid, p_period_id uuid, p_description text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/create_po_from_suggestions": {
@@ -31493,8 +31508,8 @@
     "/rpc/create_recurring_document": {
       "post": {
         "operationId": "create_recurring_document",
-        "summary": "Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and\u2026",
-        "description": "Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended. Due dates come from the terms this customer was actually given last time rather than a number somebody has to remember to type. Only an invoice or a bill can recur. Refuses an end date before the start and a schedule with no name. Needs `can_post`.\n\n`public.create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` Writes. Requires a signed-in user.",
+        "summary": "Sets up one recurring schedule per idempotency key",
+        "description": "Sets up one recurring schedule per idempotency key. MEASURED: without one, two taps left TWO live monthly schedules, so the customer is invoiced twice a month for ever from one press -- the only duplicate in this programme that goes on producing wrong documents on a timer. The organization comes from the document, sales first then purchases. Every parameter must be named. Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of the organization.\n\n`public.create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -31540,13 +31555,22 @@
                   },
                   "p_auto_email": {
                     "type": "boolean"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_document_id",
                   "p_name",
                   "p_frequency",
-                  "p_start_date"
+                  "p_start_date",
+                  "p_interval_count",
+                  "p_end_date",
+                  "p_max_occurrences",
+                  "p_auto_post",
+                  "p_auto_email",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -31573,7 +31597,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/create_supplier_from_received_einvoice": {
@@ -39525,8 +39552,8 @@
     "/rpc/join_pos_queue": {
       "post": {
         "operationId": "join_pos_queue",
-        "summary": "Puts a party in the line and hands back their number, what they were told to expect, and how many are in\u2026",
-        "description": "Puts a party in the line and hands back their number, what they were told to expect, and how many are in front of them. The number is allocated under an advisory lock so two people at the door at once cannot get the same one.\n\n`public.join_pos_queue(p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Puts a party in the queue once per idempotency key, returning the SAME ticket number on a replay -- that\u2026",
+        "description": "Puts a party in the queue once per idempotency key, returning the SAME ticket number on a replay -- that number is on the customer's slip of paper. MEASURED: without one, two taps gave one party two numbers, and the second gets called to an empty doorway. How many are ahead is counted fresh on a replay rather than stored, because a number from five minutes ago is worse than a new one. The organization comes from the outlet. As create_recurring_document for the key and the refusals.\n\n`public.join_pos_queue(p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "pos"
         ],
@@ -39557,10 +39584,18 @@
                   },
                   "p_note": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_outlet"
+                  "p_outlet",
+                  "p_party",
+                  "p_name",
+                  "p_phone",
+                  "p_note",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -39607,7 +39642,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/kiosk_order_board": {
@@ -65908,8 +65946,8 @@
     "/rpc/run_item_conversion": {
       "post": {
         "operationId": "run_item_conversion",
-        "summary": "Cuts one item up into others \u2014 a carcass into cuts, a drum into bottles \u2014 moving stock out of the source and\u2026",
-        "description": "Cuts one item up into others \u2014 a carcass into cuts, a drum into bottles \u2014 moving stock out of the source and into the outputs, with the source's cost split across them by `cost_share`. NOT IDEMPOTENT, and not meant to be: each call is a real conversion that really happened, so calling it twice converts twice. Refuses when there is not enough in the store, unless the company allows negative stock, and refuses when a batch-tracked source has less in traceable lots than the run would consume \u2014 the quantity and the lots can disagree, and the lots are what a recall follows. Needs `can_write_module('inventory')`.\n\n`public.run_item_conversion(p_conversion uuid, p_times numeric, p_warehouse uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Runs one stock conversion per idempotency key",
+        "description": "Runs one stock conversion per idempotency key. MEASURED: without one, two taps produced TWO sets of output movements -- a physical quantity doubled, so the shelf and the ledger both disagree with the room. The organization comes from the conversion. As create_recurring_document for the key and the refusals.\n\n`public.run_item_conversion(p_conversion uuid, p_times numeric, p_warehouse uuid, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_conversion uuid, p_times numeric, p_warehouse uuid, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "inventory"
         ],
@@ -65934,10 +65972,16 @@
                   "p_warehouse": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_conversion"
+                  "p_conversion",
+                  "p_times",
+                  "p_warehouse",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -65963,7 +66007,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_conversion uuid, p_times numeric, p_warehouse uuid, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/run_pos_report": {
@@ -75518,8 +75565,8 @@
     "/rpc/upsert_bank_account": {
       "post": {
         "operationId": "upsert_bank_account",
-        "summary": "Adds or amends a bank account and the GL account behind it, as one act, so the two cannot disagree",
-        "description": "Adds or amends a bank account and the GL account behind it, as one act, so the two cannot disagree.\n\n`public.upsert_bank_account(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Saves one bank account per idempotency key",
+        "description": "Saves one bank account per idempotency key. MEASURED: without one, two taps left two accounts of the same name and number, each with its own GL account. The organization is the EXISTING ROW's on an amend and p_org_id on a create, because the inner function ignores p_org_id when p_id names a row. As create_recurring_document for the key and the refusals.\n\n`public.upsert_bank_account(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -75563,10 +75610,22 @@
                   "p_org_id": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_name"
+                  "p_name",
+                  "p_bank_name",
+                  "p_bank_code",
+                  "p_account_number",
+                  "p_account_type",
+                  "p_currency",
+                  "p_account_id",
+                  "p_id",
+                  "p_org_id",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -75593,7 +75652,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/upsert_budget": {
@@ -76161,8 +76223,8 @@
     "/rpc/upsert_landed_cost_run": {
       "post": {
         "operationId": "upsert_landed_cost_run",
-        "summary": "Creates or edits a draft landed-cost run -- freight, duty and handling to be spread across the items on one\u2026",
-        "description": "Creates or edits a draft landed-cost run -- freight, duty and handling to be spread across the items on one or more bills. REPLACES EVERY TARGET AND CHARGE: both lists are deleted and rewritten from what is sent. DRAFT ONLY, because once applied those costs are inside what each item is carried at and every sale since has taken its cost of sales from that figure. A bill must be posted, partly paid or completed to be a target: only a posted bill has moved any stock, and freight can only go onto stock that is there. Needs the `inventory` module.\n\n`public.upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Saves one landed-cost run per idempotency key",
+        "description": "Saves one landed-cost run per idempotency key. MEASURED: without one, two identical saves left two runs. As create_recurring_document for the key and the refusals.\n\n`public.upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "inventory"
         ],
@@ -76193,6 +76255,9 @@
                   "p_charges": {},
                   "p_notes": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -76200,7 +76265,9 @@
                   "p_org",
                   "p_date",
                   "p_bills",
-                  "p_charges"
+                  "p_charges",
+                  "p_notes",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -76227,7 +76294,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/upsert_loyalty_tier": {
@@ -76565,8 +76635,8 @@
     "/rpc/upsert_pos_menu_link": {
       "post": {
         "operationId": "upsert_pos_menu_link",
-        "summary": "Creates or edits a QR menu link -- the sticker on a table or beside a register",
-        "description": "Creates or edits a QR menu link -- the sticker on a table or beside a register. A table must belong to the outlet the link is for, refused by name. `p_single` makes it single-use and `p_expires` gives it a life; both are what stop a photographed sticker ordering for ever. Needs the `pos` module.\n\n`public.upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Saves one menu link per idempotency key and returns the SAME token on a replay",
+        "description": "Saves one menu link per idempotency key and returns the SAME token on a replay. MEASURED: without one, two taps minted two live links to the same table and revoked neither, doubling the ways into that table's menu -- the shape of 0735's share_document. The organization comes from the outlet. As create_recurring_document for the key and the refusals.\n\n`public.upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "pos"
         ],
@@ -76617,10 +76687,22 @@
                   },
                   "p_active": {
                     "type": "boolean"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_outlet"
+                  "p_outlet",
+                  "p_kind",
+                  "p_table",
+                  "p_register",
+                  "p_label",
+                  "p_expires",
+                  "p_single",
+                  "p_id",
+                  "p_active",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -76658,7 +76740,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/upsert_pos_menu_schedule": {

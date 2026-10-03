@@ -36,6 +36,14 @@ Three things are checked:
 3. No function with a key overload is also reached through plain
    `callRpc`. One path, or the protection is whatever route the caller
    happened to take.
+4. A function whose idempotency key is NOT called `p_idempotency_key`
+   still gets one. `open_pos_sale` has had a complete retry mechanism
+   since it was written — `p_client_uuid`, which
+   `app.open_pos_sale_internal` looks up before inserting anything — and
+   the one caller passed nothing, so two taps left two parked bills.
+   `BY_OTHER_NAME` below says which parameter each such function needs,
+   and a call site that stops sending it fails here. This is the same
+   fault as 0307\'s, in a function nobody would have looked at for it.
 """
 
 from __future__ import annotations
@@ -89,6 +97,12 @@ def wrappers(db: str) -> dict[str, set[str]]:
         name, args = line.split(" ", 1)
         found[name] = set(args.split(","))
     return found
+
+
+# Functions whose idempotency key is a parameter with another name.
+BY_OTHER_NAME: dict[str, str] = {
+    "open_pos_sale": "p_client_uuid",
+}
 
 
 def call_sites(text: str, opener: str) -> list[tuple[str, set[str], int]]:
@@ -156,6 +170,25 @@ def main() -> int:
                 f"{', '.join(missing)}. The wrapper has no defaults, so "
                 f"this resolves to the unprotected overload — silently, "
                 f"and with a plausible answer."
+            )
+
+    # An idempotency key that is not called p_idempotency_key: the
+    # function resumes its own earlier work when given one, and does not
+    # when given null.
+    for fn, keys, line in call_sites(text, "callRpc"):
+        wanted = BY_OTHER_NAME.get(fn)
+        if wanted and wanted not in keys:
+            problems.append(
+                f"{CLIENT.name}:{line}: callRpc('{fn}') does not send "
+                f"{wanted}, which IS this function's idempotency key — it "
+                f"returns the row it already made when given one. Without "
+                f"it a retry makes a second."
+            )
+    for fn in sorted(BY_OTHER_NAME):
+        if not any(name == fn for name, _, _ in call_sites(text, "callRpc")):
+            problems.append(
+                f"'{fn}' is in BY_OTHER_NAME but {CLIENT.name} no longer "
+                f"calls it. Drop the entry."
             )
 
     protected_called_once = {fn for fn, _, _ in once}
