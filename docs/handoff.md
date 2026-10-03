@@ -117,12 +117,12 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | the 2 October session: `0729`, `0730`, `0731` and `0732`, with documentation commits between them. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
+| Head at time of writing | the 3 October change: **the call stage is laid out to fit the window**, front end only, no migration — reported from a handset as a rotated call going dark, and a second defect unrelated to the rotation fix of 1 October. Before it, the 2 October session: `0729`, `0730`, `0731` and `0732`, with documentation commits between them. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
 | CI | **green through run 2201 (`9e42ebf1`, `0732`)**; 2194 to 2201 are all green, and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
 | Migrations | **`0732` is the highest, and `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **383 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,619 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| Gates | **383 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
 | API description | 810 functions, 367 tables, version `0732`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
@@ -217,6 +217,106 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## The 3 October session
+
+One change, front end only, no migration: **the call stage is laid out
+to fit the window rather than to a fixed portrait shape.** Reported as
+"video call is not sideways now but incoming video shows blank dark
+screen when the device is rotated" — and the rotation fix of 1 October
+is not implicated. This is a second, unrelated defect that the first one
+had been hiding.
+
+### A fixed aspect ratio cannot fit both ways up
+
+The stage was a `GridView.count` with `crossAxisCount` from the head
+count and `childAspectRatio: 3 / 4`. Those two numbers fit a portrait
+phone and cannot fit a landscape one, and the arithmetic is worth
+writing down because it was measured rather than reasoned about:
+
+| Window | Stage viewport | Tile laid out | Visible |
+| --- | --- | --- | --- |
+| 412x915, one peer | 396x771 | 396x528 | all of it |
+| **915x412, one peer** | **899x268** | **899x1199** | **the top 22%** |
+| 915x412, two peers | 899x268 | 445x594 | the top 45% |
+
+The other 78% was below the fold of a scrolling list, and nobody scrolls
+during a call. `objectFit: cover` then magnified what was left — the top
+strip of the far end's frame, which is usually a ceiling or a blank
+wall. Hence "blank dark screen" rather than "cropped": the symptom does
+not sound like a layout bug, and that is why it was not one of the six
+calling complaints fixed on 30 September.
+
+**The default widget test surface is 800x600 — landscape, and wrong in
+the same direction.** Every assertion in `call_screen_test.dart` passed
+at that size while the screen was unusable on a turned phone, because
+all of them counted widgets and none measured one. A thirteenth entry
+for `docs/widget-tests.md`, and it is there.
+
+### What it is now
+
+`callStageColumns(tiles, box)` picks the column count from the SHAPE of
+the window, the tile aspect is computed from the space that is actually
+there, and the grid is `NeverScrollableScrollPhysics` — anything that
+does not fit is now a layout error a test can see rather than something
+hidden below a fold.
+
+The rule for columns is to get each tile as near SQUARE as the head
+count allows, because nothing on this side of the call knows the shape
+of what is arriving: the far end may be holding a phone upright, or
+sideways, or be a laptop. Squareness is measured as
+`max(aspect, 1 / aspect)`, and the symmetry is load-bearing — the
+obvious `(aspect - 1).abs()` is unbounded above and capped below, so it
+quietly prefers narrow tiles and on a nearly square window stands two
+people in two slivers instead of stacking them. A mutant swapping one
+for the other is killed by a test at 450x500.
+
+What that produces: one peer gets the whole stage either way up; two
+stand side by side in landscape and stack in portrait; four go in a row
+of four on a landscape phone and 2x2 on an upright one; three on an
+upright iPad fill one row and half of the next.
+
+The remote tiles also moved from `cover` to **`contain`**. With a tile
+shaped by THIS window, cover throws away whichever edges of the far
+end's frame disagree with it — on a landscape window with a portrait
+camera at the other end, most of the person. Letterboxing costs black
+bars against an already black screen. The 108x144 self-view keeps
+`cover`, and a test asserts that it does, so a sweep over the remote
+tiles cannot quietly take it too.
+
+### Eleven mutants, all killed
+
+`python3 scripts/mutate.py lib/src/features/chat/call_screen.dart
+test/call_screen_test.dart <mutants>`, control surviving. Two rounds
+were needed and both corrections were in the TEST, not the code:
+
+- the first `allOnScreen` helper checked each tile against the WINDOW,
+  and the stage clips, so a tile eight pixels past the bottom of the
+  grid is invisible while still four hundred pixels inside the screen.
+  Two arithmetic mutants — forgetting the gap between rows, and between
+  columns — lived in that difference. Checking against the stage box
+  killed the first;
+- the second needed the tiles to FILL the stage and not merely fit in
+  it, because `GridView.count` takes the tile WIDTH from
+  `crossAxisCount` and uses `childAspectRatio` for the height alone —
+  so an error in the computed width shows up only as a few pixels of
+  stage nothing is drawn on;
+- `rows ~/ columns` instead of `.ceil()` survived every size that
+  divides exactly. Three peers on an upright iPad is the one arrangement
+  in the group where it does not, and that test is why the mutant dies.
+
+And one branch was DELETED rather than tested: `if (tiles <= 1) return
+1;` could be removed without a single assertion noticing, because the
+loop below already returns 1 for one tile. A branch that cannot change
+an answer is a branch that can rot unobserved.
+
+### What this does NOT explain
+
+If a rotated call still goes dark on a real handset after this, it is a
+different fault and this one is not it. The geometry above is measured
+and now asserted; a black `Texture` that is correctly positioned would
+be the platform renderer, not the layout, and the thing to capture is a
+console log from a real call rather than another reading of this file.
 
 ## The 2 October session
 

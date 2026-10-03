@@ -137,9 +137,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   /// call IS.
   void _endedElsewhere(String why) {
     if (_leaving || !mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(why)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(why)));
     unawaited(_leave());
   }
 
@@ -190,16 +188,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final go = await confirm(
       context,
       title: 'End the call for everybody?',
-      message: 'Everybody still on it is hung up on. Leaving instead '
+      message:
+          'Everybody still on it is hung up on. Leaving instead '
           'lets the rest carry on without you.',
       confirmLabel: 'End it',
       destructive: true,
     );
     if (!go || !mounted) return;
-    await ref
-        .read(repoProvider)
-        ?.chatEndCall(widget.callId)
-        .catchError((_) {});
+    await ref.read(repoProvider)?.chatEndCall(widget.callId).catchError((_) {});
     if (mounted) await _leave();
   }
 
@@ -418,72 +414,163 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       );
     }
 
-    // One column for one other person, two beyond that. Anything
-    // cleverer needs to know how big the tiles want to be, which needs a
-    // call to look at.
-    final columns = withVideo.length == 1 ? 1 : 2;
-    return GridView.count(
+    // The tiles are laid out to FIT THE WINDOW, both ways up. This used
+    // to be a `GridView.count` with `crossAxisCount: 1` for one other
+    // person and a fixed `childAspectRatio: 3 / 4`, and the two
+    // together could not survive a phone being turned: on a 915x412
+    // landscape window the one tile was drawn 1,199 logical pixels tall
+    // inside a 268-pixel viewport, so 22% of it was on screen and the
+    // other 78% was below the fold of a grid nobody thinks to scroll
+    // during a call. With `cover` on top of that, what was visible was
+    // a hugely magnified strip of the TOP of the far end's frame —
+    // usually their ceiling or a blank wall, which is why the symptom
+    // reported was not "cropped" but "blank dark screen".
+    //
+    // So: the column count is chosen for the shape of the window rather
+    // than from the head count, the tile aspect is computed from the
+    // space that is actually there, and the grid is not scrollable —
+    // anything that does not fit is a layout bug to be seen in a test,
+    // not something to be hidden below a fold.
+    return Padding(
       padding: const EdgeInsets.fromLTRB(Space.sm, 72, Space.sm, Space.xl * 3),
-      crossAxisCount: columns,
-      mainAxisSpacing: Space.sm,
-      crossAxisSpacing: Space.sm,
-      childAspectRatio: 3 / 4,
-      children: [
-        for (final peer in withVideo)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Drawn as it arrives. NOTHING HERE TURNS IT, and the
-                // comment is load-bearing: a remote camera was 90
-                // degrees out for a while and a `RotatedBox` around
-                // this view was the stopgap. The cause was the
-                // mediasoup package dropping every RTP header
-                // extension when it serialised this device's
-                // capabilities, so the rotation never reached the
-                // consumer -- `call_rtp.dart` has it, and
-                // `scripts/check_rtp_capabilities.py` keeps the fix in
-                // place. Turning pixels here as well would put an
-                // already-upright picture 90 degrees out the other way.
-                RTCVideoView(
-                  peer.camera!,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.all(Space.sm),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (peer.micMuted) ...[
-                          const Icon(
-                            Icons.mic_off,
-                            size: 14,
-                            color: Colors.white,
-                            shadows: [Shadow(blurRadius: 4)],
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        Text(
-                          peer.displayName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            shadows: [Shadow(blurRadius: 4)],
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final columns = callStageColumns(withVideo.length, box.biggest);
+          final rows = (withVideo.length / columns).ceil();
+          final tileWidth = (box.maxWidth - Space.sm * (columns - 1)) / columns;
+          final tileHeight = (box.maxHeight - Space.sm * (rows - 1)) / rows;
+          return GridView.count(
+            // Nothing here scrolls. See above: a scrollable stage is how
+            // the picture went missing in the first place.
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: columns,
+            mainAxisSpacing: Space.sm,
+            crossAxisSpacing: Space.sm,
+            childAspectRatio: tileHeight <= 0 ? 1 : tileWidth / tileHeight,
+            children: [
+              for (final peer in withVideo)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Drawn as it arrives. NOTHING HERE TURNS IT, and the
+                      // comment is load-bearing: a remote camera was 90
+                      // degrees out for a while and a `RotatedBox` around
+                      // this view was the stopgap. The cause was the
+                      // mediasoup package dropping every RTP header
+                      // extension when it serialised this device's
+                      // capabilities, so the rotation never reached the
+                      // consumer -- `call_rtp.dart` has it, and
+                      // `scripts/check_rtp_capabilities.py` keeps the fix in
+                      // place. Turning pixels here as well would put an
+                      // already-upright picture 90 degrees out the other way.
+                      // `contain`, not `cover`. Nothing here knows which way
+                      // up the far end is holding their phone, and cover on a
+                      // tile whose shape disagrees with the frame's throws
+                      // away whichever edges do not fit — on a landscape
+                      // window with a portrait camera at the other end that
+                      // is most of the picture. Letterboxing it costs black
+                      // bars against an already black screen, which is the
+                      // cheapest possible price for always being able to see
+                      // the whole of the person you are talking to. The local
+                      // thumbnail further up keeps `cover`: it is 108x144 of
+                      // your own face and cropping is what makes it a
+                      // thumbnail.
+                      RTCVideoView(
+                        peer.camera!,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                      ),
+                      Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.all(Space.sm),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (peer.micMuted) ...[
+                                const Icon(
+                                  Icons.mic_off,
+                                  size: 14,
+                                  color: Colors.white,
+                                  shadows: [Shadow(blurRadius: 4)],
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Text(
+                                peer.displayName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  shadows: [Shadow(blurRadius: 4)],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-      ],
+            ],
+          );
+        },
+      ),
     );
   }
+}
+
+/// How many columns the video tiles want, in a stage this shape.
+///
+/// Chosen rather than fixed. A fixed count cannot fit both ways up:
+/// before this existed the stage used one column for one other person
+/// and two beyond that, with a portrait-shaped 3:4 tile, so turning a
+/// phone sideways drew a tile four times taller than the window it had
+/// to fit in and pushed the picture off the bottom of the screen.
+///
+/// The rule is to get each tile as close to SQUARE as the head count
+/// allows, because nothing on this side of the call knows the shape of
+/// what is arriving — the far end may be holding a phone upright, or
+/// sideways, or be a laptop — and a square tile is the shape that is
+/// furthest from being wrong about any of them.
+///
+/// How far from square a tile is has to be measured SYMMETRICALLY:
+/// `max(aspect, 1 / aspect)`, so that a tile twice as wide as it is
+/// tall and one half as wide score the same. The obvious
+/// `(aspect - 1).abs()` is not symmetrical — too-wide is unbounded
+/// while too-narrow cannot exceed 1 — so it quietly prefers narrow
+/// tiles, and on a nearly square window it stands two people shoulder
+/// to shoulder in two slivers rather than stacking them.
+///
+/// Exported for the tests, which assert the arrangement at real phone
+/// and tablet sizes rather than at the 800x600 a widget test defaults
+/// to — that default is landscape, and a portrait-only bug hides in it.
+int callStageColumns(int tiles, Size box) {
+  // No fast path for one tile. There was one — `if (tiles <= 1) return
+  // 1;` — and the mutation run showed it could be deleted without a
+  // single assertion noticing, because the loop below already returns 1
+  // for one tile: it runs once, with one column. A branch that cannot
+  // change an answer is a branch that can rot without anybody finding
+  // out, so it is gone rather than tested.
+  if (!box.width.isFinite ||
+      !box.height.isFinite ||
+      box.width <= 0 ||
+      box.height <= 0) {
+    return tiles <= 2 ? 1 : 2;
+  }
+  var best = 1;
+  var bestPenalty = double.infinity;
+  for (var columns = 1; columns <= tiles; columns++) {
+    final rows = (tiles / columns).ceil();
+    final aspect = (box.width / columns) / (box.height / rows);
+    final penalty = aspect >= 1 ? aspect : 1 / aspect;
+    if (penalty < bestPenalty - 1e-9) {
+      bestPenalty = penalty;
+      best = columns;
+    }
+  }
+  return best;
 }
 
 class _Banner extends StatelessWidget {

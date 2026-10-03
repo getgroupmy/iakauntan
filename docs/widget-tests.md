@@ -35,7 +35,7 @@ The harness mutates **one file**. Logic that lives in `models.dart` —
 `LeaveBalance.available`, `Todo.isOverdue`, `EinvoiceDocument.canCancel`
 — needs its own run against that file.
 
-## The twelve
+## The thirteen
 
 ### 1. `find.byType` matches the exact runtime type
 
@@ -274,6 +274,56 @@ was compared against the ledger for both, and a control asserting
 exactly two distinct balances became three. **`select ... into` a
 scalar from a query that can return more than one row is a `limit 1`
 nobody wrote.**
+
+### 13. Every test ran at one window size, and it was the wrong one
+
+A widget test's surface is **800x600 unless it is told otherwise** — and
+800x600 is landscape. A screen laid out for a portrait phone can
+therefore be broken at every size a person actually holds and still pass
+a file full of tests, because nothing in the file ever changed the
+window and nothing in it ever measured a widget.
+
+That is the whole of how the call stage shipped unusable in landscape.
+`call_screen_test.dart` had thirty assertions about the stage; all of
+them counted widgets (`findsOneWidget`, `findsNWidgets(2)`,
+`findsNothing`) and the grid itself was a `GridView.count` with
+`childAspectRatio: 3 / 4`. On a 915x412 landscape window that lays the
+one video tile out **1,199 logical pixels tall inside a 268-pixel
+viewport** — 22% of it on screen, the rest below the fold of a list
+nobody scrolls during a call — and every one of those assertions still
+passed, because the widget was *there*. The bug was reported from a
+handset as "incoming video shows blank dark screen when the device is
+rotated".
+
+So, for any screen whose layout can be wrong:
+
+```dart
+tester.view.physicalSize = const Size(915, 412);
+tester.view.devicePixelRatio = 1;
+addTearDown(tester.view.resetPhysicalSize);
+addTearDown(tester.view.resetDevicePixelRatio);
+```
+
+and then **measure**, with `tester.getRect`, at real device sizes both
+ways up. Two refinements that mutation testing forced, and both are
+about where you measure TO:
+
+- **Measure against the box the widget was given, not the screen.** A
+  scrolling or clipping parent swallows the overflow: a tile eight
+  pixels past the bottom of the grid is invisible while still four
+  hundred pixels inside the window, so a check against the window
+  passes. Two arithmetic mutants lived in exactly that difference.
+- **Assert it FILLS the box, not merely that it fits inside it.** A
+  postage stamp in the top corner fits. `GridView.count` makes this
+  concrete: the tile WIDTH comes from `crossAxisCount`, and
+  `childAspectRatio` sets the height alone — so an error in the width
+  you computed the ratio from is visible only as a few pixels of unused
+  space.
+
+And pick the sizes so that one of them does not divide evenly. `rows ~/
+columns` instead of `(rows / columns).ceil()` survives every head count
+that fits its grid exactly; three people on an upright iPad is the
+arrangement that catches it.
 
 ## Before you write the test, read the SQL it has to agree with
 

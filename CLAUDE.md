@@ -24,12 +24,17 @@ Three things to know before you touch the code:
 - **A widget test that passes has not yet proved anything.** Break the screen
   on purpose and watch the test fail: `python3 scripts/mutate.py <source>
   <test> <mutants.py>`, always with a no-op control, because a harness that
-  errors on every run reports a clean sweep. `docs/widget-tests.md` lists twelve
-  ways a green test covers a broken screen — every one of them happened here,
-  and four of them hid a real defect. The twelfth is about SQL, not widgets: a
-  fixture that makes the right value and the fallback value the same row cannot
-  test which one was used, and that is how a 1120 fallback survived in six
-  posting functions with 382 assertion files running.
+  errors on every run reports a clean sweep. `docs/widget-tests.md` lists
+  thirteen ways a green test covers a broken screen — every one of them
+  happened here, and five of them hid a real defect. The twelfth is about SQL,
+  not widgets: a fixture that makes the right value and the fallback value the
+  same row cannot test which one was used, and that is how a 1120 fallback
+  survived in six posting functions with 382 assertion files running. The
+  thirteenth is about the WINDOW: a widget test's surface is 800x600 unless it
+  is told otherwise, which is landscape, so a screen laid out for a portrait
+  phone can be broken at every size a person holds and pass a file full of
+  assertions that only ever counted widgets. Set `tester.view.physicalSize`
+  and measure with `getRect`.
 
 ## After every push: watch CI to green
 

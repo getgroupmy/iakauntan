@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart'
-    show RTCVideoRenderer, RTCVideoView;
+    show RTCVideoRenderer, RTCVideoView, RTCVideoViewObjectFit;
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
@@ -108,8 +108,7 @@ class FakeCallEngine extends ChangeNotifier implements CallEngine {
 final _theCallRow = StateProvider<Map<String, dynamic>?>((ref) => null);
 
 void main() {
-  Widget harness(FakeCallEngine engine, {bool isMine = false}) =>
-      ProviderScope(
+  Widget harness(FakeCallEngine engine, {bool isMine = false}) => ProviderScope(
     // No session, so no repository. Every RPC the screen would make is
     // skipped, which is what makes this a test of the screen rather
     // than of Supabase.
@@ -212,11 +211,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('call-mic')));
     await tester.pumpAndSettle();
 
-    expect(
-      engine.micCalls,
-      [false],
-      reason: 'a button that looks muted without muting is the whole bug',
-    );
+    expect(engine.micCalls, [
+      false,
+    ], reason: 'a button that looks muted without muting is the whole bug');
     expect(find.byIcon(Icons.mic_off), findsOneWidget);
   });
 
@@ -267,9 +264,7 @@ void main() {
     );
   });
 
-  testWidgets('and whoever did is offered it, beside leaving', (
-    tester,
-  ) async {
+  testWidgets('and whoever did is offered it, beside leaving', (tester) async {
     await open(tester, FakeCallEngine(), isMine: true);
     expect(find.byKey(const ValueKey('call-end-all')), findsOneWidget);
     expect(find.byKey(const ValueKey('call-hang-up')), findsOneWidget);
@@ -393,6 +388,280 @@ void main() {
     });
   });
 
+  /// Turning the phone must not take the picture away.
+  ///
+  /// It did. The stage was a `GridView.count` with a fixed
+  /// `childAspectRatio: 3 / 4`, which fits a portrait phone and cannot
+  /// fit a landscape one: at 915x412 the single tile was laid out 1,199
+  /// logical pixels tall in a 268-pixel viewport, so 78% of it sat below
+  /// the fold of a scrolling list nobody scrolls during a call, and
+  /// `cover` magnified the top strip of the far end's frame to fill what
+  /// was left. The symptom was reported as "incoming video shows blank
+  /// dark screen when the device is rotated", because the top strip of
+  /// somebody's frame is usually their ceiling.
+  ///
+  /// Every assertion below is at a REAL device size. The default widget
+  /// test surface is 800x600 — landscape, and wrong in the same
+  /// direction as the bug — so the old code passed every test in this
+  /// file while being unusable the moment a phone was turned.
+  group('the stage fits the window, both ways up', () {
+    /// Opens a call with [peerCount] cameras on a [size] screen.
+    Future<FakeCallEngine> openAt(
+      WidgetTester tester,
+      Size size,
+      int peerCount,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final engine = FakeCallEngine(
+        peers: [
+          for (var i = 0; i < peerCount; i++)
+            CallPeer(id: '$i', displayName: 'Peer $i')
+              ..camera = _StubRenderer(),
+        ],
+      );
+      await open(tester, engine);
+      return engine;
+    }
+
+    /// Every tile, in the order the grid laid them out.
+    List<Rect> tiles(WidgetTester tester) {
+      final views = find.byType(RTCVideoView);
+      return [
+        for (var i = 0; i < tester.widgetList(views).length; i++)
+          tester.getRect(views.at(i)),
+      ];
+    }
+
+    /// Every tile is inside the STAGE, which is the window less the
+    /// banner and the controls: `EdgeInsets.fromLTRB(8, 72, 8, 72)`.
+    ///
+    /// Against the window rather than the stage this check was too kind
+    /// to catch anything: the stage clips, so a tile eight pixels past
+    /// the bottom of the grid is invisible while still being four
+    /// hundred pixels inside the screen. Two arithmetic mutants —
+    /// forgetting the gap between rows, and forgetting it between
+    /// columns — survived exactly that gap in this helper.
+    void allInsideTheStage(List<Rect> rects, Size screen) {
+      expect(rects, isNotEmpty);
+      const edge = Space.sm;
+      const top = 72.0;
+      const bottom = Space.xl * 3;
+      for (final r in rects) {
+        expect(
+          r.top,
+          greaterThanOrEqualTo(top - 0.5),
+          reason: 'a tile starts above the stage',
+        );
+        expect(
+          r.left,
+          greaterThanOrEqualTo(edge - 0.5),
+          reason: 'a tile starts left of the stage',
+        );
+        // The one that failed before: a tile whose bottom is past the
+        // bottom of the stage is a tile somebody cannot see.
+        expect(
+          r.bottom,
+          lessThanOrEqualTo(screen.height - bottom + 0.5),
+          reason: 'a tile runs off the bottom of the stage',
+        );
+        expect(
+          r.right,
+          lessThanOrEqualTo(screen.width - edge + 0.5),
+          reason: 'a tile runs off the side of the stage',
+        );
+        expect(r.height, greaterThan(0));
+        expect(r.width, greaterThan(0));
+      }
+      // And they FILL it rather than merely fitting inside it. A tile
+      // can be well within the stage and still be a postage stamp, and
+      // one mutant — dropping the gap between columns from the width the
+      // aspect ratio is computed from — is visible only here, as a few
+      // pixels of stage nothing is drawn on.
+      final lowest = rects.map((r) => r.bottom).reduce((a, b) => a > b ? a : b);
+      final furthest = rects
+          .map((r) => r.right)
+          .reduce((a, b) => a > b ? a : b);
+      expect(
+        lowest,
+        closeTo(screen.height - bottom, 1),
+        reason: 'the tiles stop short of the bottom of the stage',
+      );
+      expect(
+        furthest,
+        closeTo(screen.width - edge, 1),
+        reason: 'the tiles stop short of the side of the stage',
+      );
+    }
+
+    testWidgets('one other person, phone held sideways', (tester) async {
+      const screen = Size(915, 412);
+      await openAt(tester, screen, 1);
+
+      final rects = tiles(tester);
+      expect(rects, hasLength(1));
+      allInsideTheStage(rects, screen);
+      // And it uses the room it has: the stage is the window less the
+      // banner at the top and the controls at the bottom. A tile that
+      // merely FITS could also be a postage stamp, which would pass the
+      // check above and still look broken.
+      expect(rects.single.height, closeTo(screen.height - 144, 1));
+    });
+
+    testWidgets('one other person, phone held upright', (tester) async {
+      const screen = Size(412, 915);
+      await openAt(tester, screen, 1);
+
+      final rects = tiles(tester);
+      expect(rects, hasLength(1));
+      allInsideTheStage(rects, screen);
+      expect(rects.single.height, closeTo(screen.height - 144, 1));
+    });
+
+    testWidgets('two people sideways stand side by side', (tester) async {
+      const screen = Size(915, 412);
+      await openAt(tester, screen, 2);
+
+      final rects = tiles(tester);
+      expect(rects, hasLength(2));
+      allInsideTheStage(rects, screen);
+      // Same row, different columns.
+      expect(rects[0].top, closeTo(rects[1].top, 0.5));
+      expect(rects[0].right, lessThan(rects[1].left));
+    });
+
+    testWidgets('and upright they stack', (tester) async {
+      const screen = Size(412, 915);
+      await openAt(tester, screen, 2);
+
+      final rects = tiles(tester);
+      expect(rects, hasLength(2));
+      allInsideTheStage(rects, screen);
+      // Same column, different rows — two half-width slivers down a
+      // portrait phone is the arrangement this replaced.
+      expect(rects[0].left, closeTo(rects[1].left, 0.5));
+      expect(rects[0].bottom, lessThan(rects[1].top));
+    });
+
+    testWidgets('four people fit on a sideways phone', (tester) async {
+      const screen = Size(915, 412);
+      await openAt(tester, screen, 4);
+
+      allInsideTheStage(tiles(tester), screen);
+    });
+
+    testWidgets('and on an upright one', (tester) async {
+      const screen = Size(412, 915);
+      await openAt(tester, screen, 4);
+
+      allInsideTheStage(tiles(tester), screen);
+    });
+
+    testWidgets('and three on a tablet', (tester) async {
+      const screen = Size(1280, 800);
+      await openAt(tester, screen, 3);
+
+      allInsideTheStage(tiles(tester), screen);
+    });
+
+    testWidgets('three on an upright tablet, where a row is half empty', (
+      tester,
+    ) async {
+      // 834x1112 is an iPad held upright, and three people there is the
+      // one arrangement where the head count does not divide by the
+      // column count: two columns, two rows, and the second row holding
+      // one person. Rounding the row count DOWN instead of up — `3 ~/ 2`
+      // rather than `(3 / 2).ceil()` — gives every tile the full height
+      // of the stage and puts the third person entirely below it, and
+      // every other size in this group divides exactly, so this is the
+      // only case that can catch it.
+      const screen = Size(834, 1112);
+      await openAt(tester, screen, 3);
+
+      final rects = tiles(tester);
+      expect(rects, hasLength(3));
+      allInsideTheStage(rects, screen);
+      expect(rects[2].top, greaterThan(rects[0].bottom));
+    });
+
+    testWidgets('the stage does not scroll', (tester) async {
+      // The tiles are sized to fit, so nothing CAN be scrolled out of
+      // sight — but a scrollable stage is exactly how the picture went
+      // missing, and a later change to the arithmetic would hide itself
+      // below a fold again rather than failing a test. So the refusal to
+      // scroll is asserted, not left to follow from the arithmetic.
+      await openAt(tester, const Size(915, 412), 4);
+
+      final grid = tester.widget<GridView>(find.byType(GridView));
+      expect(grid.physics, isA<NeverScrollableScrollPhysics>());
+    });
+
+    testWidgets('a remote camera is never cropped to fit its tile', (
+      tester,
+    ) async {
+      // `contain`. Nothing on this side knows which way up the far end
+      // is holding their phone, so cover on a tile shaped by THIS
+      // window throws away whichever edges disagree — on a sideways
+      // phone with an upright camera at the other end, most of the
+      // person.
+      await openAt(tester, const Size(915, 412), 1);
+
+      final view = tester.widget<RTCVideoView>(find.byType(RTCVideoView));
+      expect(
+        view.objectFit,
+        RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+      );
+    });
+
+    testWidgets('but my own thumbnail still is', (tester) async {
+      // The 108x144 corner preview is the one place cropping is right:
+      // it is a thumbnail of your own face and letterboxing it would
+      // waste the little room it has. Asserted so a sweep over the
+      // remote tiles cannot quietly take it too.
+      final engine = FakeCallEngine(
+        peers: [CallPeer(id: 'a', displayName: 'Ahmad')],
+      )..localVideo = _StubRenderer();
+      await open(tester, engine);
+
+      final view = tester.widget<RTCVideoView>(find.byType(RTCVideoView));
+      expect(view.objectFit, RTCVideoViewObjectFit.RTCVideoViewObjectFitCover);
+    });
+  });
+
+  /// The column count, on its own, at sizes a widget test cannot easily
+  /// reach — and including the one case that tells a symmetric measure
+  /// of squareness from an asymmetric one.
+  group('callStageColumns', () {
+    test('one person is one column, whatever the window', () {
+      expect(callStageColumns(1, const Size(915, 412)), 1);
+      expect(callStageColumns(1, const Size(412, 915)), 1);
+    });
+
+    test('a wide window spreads people out, a tall one stacks them', () {
+      expect(callStageColumns(2, const Size(915, 268)), 2);
+      expect(callStageColumns(2, const Size(396, 771)), 1);
+      expect(callStageColumns(4, const Size(899, 268)), 4);
+      expect(callStageColumns(4, const Size(396, 771)), 2);
+    });
+
+    test('a nearly square window stacks two rather than splitting them', () {
+      // 450x500. Stacked, each tile is 1.8 times as wide as it is tall;
+      // side by side, each is 2.2 times as TALL as it is wide. Stacking
+      // is the lesser distortion, and only a symmetric measure says so:
+      // `(aspect - 1).abs()` scores 0.8 against 0.55 and splits them.
+      expect(callStageColumns(2, const Size(450, 500)), 1);
+    });
+
+    test('a window of no size still answers', () {
+      // LayoutBuilder is given finite constraints here, but a zero or
+      // infinite box must not divide by nothing or loop forever.
+      expect(callStageColumns(2, Size.zero), 1);
+      expect(callStageColumns(3, const Size(double.infinity, 400)), 2);
+    });
+  });
+
   testWidgets('somebody else sharing takes the stage, and is named', (
     tester,
   ) async {
@@ -492,10 +761,7 @@ void main() {
       addTearDown(container.dispose);
     });
 
-    Future<void> openWatched(
-      WidgetTester tester,
-      FakeCallEngine engine,
-    ) async {
+    Future<void> openWatched(WidgetTester tester, FakeCallEngine engine) async {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
