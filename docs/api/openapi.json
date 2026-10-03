@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0736",
+    "version": "0737",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -31755,8 +31755,8 @@
     "/rpc/create_withholding": {
       "post": {
         "operationId": "create_withholding",
-        "summary": "Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a\u2026",
-        "description": "Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this. The certificate date is what the remittance is due from.\n\n`public.create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` Writes. Requires a signed-in user.",
+        "summary": "Raises one withholding certificate per idempotency key",
+        "description": "Raises one withholding certificate per idempotency key. MEASURED: without one, two taps left two certificates on the same bill, each with its own number and its own one-month remittance deadline. The organization comes from the bill. As settle_deposit for the key and the refusals.\n\n`public.create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -31787,11 +31787,18 @@
                   "p_cert_date": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_bill_id",
-                  "p_wht_code"
+                  "p_wht_code",
+                  "p_gross_amount",
+                  "p_rate",
+                  "p_cert_date",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -31818,7 +31825,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/credit_purchase_bill": {
@@ -65237,8 +65247,8 @@
     "/rpc/revise_tax_estimate": {
       "post": {
         "operationId": "revise_tax_estimate",
-        "summary": "Replaces an estimate with a revised one, keeping the original and carrying everything about it that is not\u2026",
-        "description": "Replaces an estimate with a revised one, keeping the original and carrying everything about it that is not the figure -- its form, and whether this is a first basis period with the facts that decide its deadline and its exemption. The revision is NOT refused outside the permitted months: whether it is allowed is a question the screen asks and a person answers.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` Writes. Requires a signed-in user.",
+        "summary": "Revises a CP204 estimate once per idempotency key",
+        "description": "Revises a CP204 estimate once per idempotency key. MEASURED: without one, two taps left TWO live revisions of the same estimate -- the original is superseded once and both revisions stay current, each with its own revision month and instalment schedule. The organization comes from the estimate. As settle_deposit for the key and the refusals.\n\n`public.revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_estimate_id uuid, p_estimated_tax numeric, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -65259,11 +65269,15 @@
                   },
                   "p_estimated_tax": {
                     "type": "number"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_estimate_id",
-                  "p_estimated_tax"
+                  "p_estimated_tax",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -65290,7 +65304,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_estimate_id uuid, p_estimated_tax numeric, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/revoke_customer_portal": {
@@ -70257,8 +70274,8 @@
     "/rpc/settle_deposit": {
       "post": {
         "operationId": "settle_deposit",
-        "summary": "Gives a deposit back or keeps it",
-        "description": "Gives a deposit back or keeps it. A customer's forfeited deposit is income; one we paid and lost is an expense. A REFUND has to name the account it is paid out of: one that named none was credited to 1120 Bank Accounts, the heading the real accounts hang under, so no bank balance moved and no reconciliation could match it. A forfeit names none, because no money moved.\n\n`public.settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` Writes. Requires a signed-in user.",
+        "summary": "Settles a deposit once per idempotency key",
+        "description": "Settles a deposit once per idempotency key. MEASURED: without one, two taps of a 300 refund took a 1,000 deposit to 400 -- 600 out of the bank for a 300 refund, and two events on the note. The balance guard the function already has catches only a FULL settlement; a partial one retried is within the balance both times. The organization comes from the deposit note. Every parameter must be named. Refuses a key already used for different arguments (22023), a key still in flight (55006), and a caller who is not a member of the organization.\n\n`public.settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -70293,12 +70310,19 @@
                   "p_date": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_deposit",
                   "p_kind",
-                  "p_amount"
+                  "p_amount",
+                  "p_reason",
+                  "p_bank",
+                  "p_date",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -70325,7 +70349,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/settle_from_client_account": {
@@ -72255,8 +72282,8 @@
     "/rpc/submit_leave_request": {
       "post": {
         "operationId": "submit_leave_request",
-        "summary": "Files a leave request and HOLDS THE DAYS against the balance while it waits \u2014 which is what stops two\u2026",
-        "description": "Files a leave request and HOLDS THE DAYS against the balance while it waits \u2014 which is what stops two requests each passing a check the pair of them would fail. Only HR may file for somebody else, and only for an employee of this company: the composite key held the leave type to the organization but not the employee, so without that check HR in one company could file against another company's staff. Paid leave is refused when it exceeds what is left; unpaid leave has no balance to check. NO BALANCE ROW AT ALL IS NOT A REFUSAL \u2014 it means nobody has set an entitlement for this type and year yet, and refusing until somebody does would stop a company using the module on the day it starts.\n\n`public.submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` Writes. Requires a signed-in user.",
+        "summary": "Files one leave request per idempotency key",
+        "description": "Files one leave request per idempotency key. MEASURED: without one, two taps left two requests AND four pending days for a two-day request, so deleting the duplicate does not put the balance back. p_is_half_day is the one argument whose default is false rather than null and the wrapper coalesces it inward. As settle_deposit for the key and the refusals.\n\n`public.submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -72305,6 +72332,9 @@
                   },
                   "p_contact_while_away": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -72312,7 +72342,13 @@
                   "p_leave_type_id",
                   "p_start_date",
                   "p_end_date",
-                  "p_total_days"
+                  "p_total_days",
+                  "p_reason",
+                  "p_is_half_day",
+                  "p_half_day_period",
+                  "p_employee_id",
+                  "p_contact_while_away",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -72339,7 +72375,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/submit_manager_appraisal": {

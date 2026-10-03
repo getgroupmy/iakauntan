@@ -1455,6 +1455,22 @@ jobs:
           python3 scripts/check_write_idempotency_test.py
           python3 scripts/check_write_idempotency.py "$DB"
 
+      # An overload is invisible to the Dart analyzer and to every gate
+      # above, and NOT to an assertion that reads `pg_proc` by name.
+      # Three files have been broken that way, one tranche at a time,
+      # each found by a red suite twenty minutes after the push:
+      # outbound_email.sql and ai_assistant.sql in 0735, and
+      # leave_requests.sql in 0737 — where the assertion 0395 wrote on
+      # purpose, that there is exactly ONE submit_leave_request, is a
+      # real guard against an ambiguous call and still had to be
+      # rewritten. This crosses the keyed names against the by-name
+      # assertions so the fourth one fails here, by name.
+      - name: Check no by-name assertion was broken by an overload
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_overload_assertions_test.py
+          python3 scripts/check_overload_assertions.py "$DB"
+
       # -----------------------------------------------------------------
       # An edge function holding the service role is outside RLS
       # entirely, so every policy in the schema and the whole of

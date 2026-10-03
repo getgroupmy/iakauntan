@@ -71,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 38
+BACKLOG = 26
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -91,6 +91,24 @@ BACKLOG = 38
 # `natural` and `repeats` are prose and cannot be, so they are few and
 # each names what was read.
 VERDICTS: dict[str, str] = {
+    # 0737. Eight measured by calling twice: seven refuse by name and
+    # `transition_ticket` returns before it writes anything.
+    "clear_pdc":
+        "state:That cheque is",
+    "bounce_pdc":
+        "state:That cheque is",
+    "receive_stock_transfer":
+        "state:so there is nothing on its way to receive",
+    "bill_matter_time":
+        "state:No unbilled chargeable time on this engagement",
+    "bill_project_time":
+        "state:No unbilled chargeable time on this engagement",
+    "recognise_revenue":
+        "state:gl_entry_id is null",
+    "run_depreciation":
+        "state:if v_charge <= 0 then continue",
+    "transition_ticket":
+        "state:if v_t.status = p_to then return",
     "save_payment_method":
         "unique:payment_methods_name_key",
     "create_layout_from_builtin":

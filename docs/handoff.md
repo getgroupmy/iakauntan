@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `ff3b4698`, the sixth tranche of the idempotency census and the fifth migration of 3 October: **the POS back office and the loyalty balance stop doubling**. Before it, in order: `685a3156` (the call stage is laid out to fit the window, front end only — reported from a handset as a rotated call going dark), `6ad94e5c`, `6d34af57` (**`0733`**), `56337d8b`, `b0682f0b`, `39c4bc0f`, `ecefa7a9` (**`0734`**) and `981de134` (**`0735`**). Before 3 October, the 2 October session: `0729`, `0730`, `0731` and `0732`. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
+| Head at time of writing | `0737`, the seventh tranche of the idempotency census and the sixth migration of 3 October: **a partial refund, two LHDN papers and a leave balance stop doubling**. Before it `383e505d` — the 0735 share-window assertion was mixing a UTC date with a Kuala Lumpur one and was going to go red overnight on the deploy branch; see its own section. Before that, in order: `685a3156` (the call stage laid out to fit the window), `6ad94e5c`, `6d34af57` (**`0733`**), `56337d8b`, `b0682f0b`, `39c4bc0f`, `ecefa7a9` (**`0734`**), `981de134` (**`0735`**), `ff3b4698` (**`0736`**) and `846bd339`. Before 3 October, the 2 October session: `0729` through `0732` |
 | CI | **green through run 2212 (`ff3b4698`, `0736`)**; 2204 to 2212 are all green — 2204 (`685a3156`), 2205, 2206 (**`0733` applied**), 2207, 2208, 2209, 2210 (**`0734` applied**), 2211 (**`0735` applied**) and 2212 (**`0736` applied**; its top-level status flipped `in_progress` back to `queued` at 15:44 while the three deploy jobs waited for runners, and `gh api .../jobs` is the cheap way to see that is not a failure). 2194 to 2204 are all green, and `0732` landed in run 2201 (`9e42ebf1`); and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0736` is the highest, and `0733` through `0736` are ALL live and VERIFIED** — `schema_migrations` holds 0730 through 0736; **24 keyed overloads exist in production**, which is the census figure exactly; each of the four tranches' wrappers is present at the right arity (the keyed form has one argument more than the inner one), with execute granted to `authenticated` and **not** to `anon`, and each carrying its own `comment on function` — including `adjust_loyalty_points`, where the 3-arg comment survived the 4-arg one rather than being clobbered by it, which is the trap `0736` paid for locally. Between them these four add 20 overloads and nothing destructive, nothing dropped. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Migrations | **`0737` is the highest. `0733` through `0736` are live and VERIFIED; `0737` is on the branch and NOT yet verified in production** — `schema_migrations` holds 0730 through 0736 and **28 keyed overloads exist in production**, which is the census figure exactly. Each tranche's wrappers are present at the right arity (the keyed form has one argument more than the inner one), with execute granted to `authenticated` and **not** to `anon`, and each carrying its own `comment on function` — including `adjust_loyalty_points`, where the 3-arg comment survived the 4-arg one rather than being clobbered by it. Between them these five add 24 overloads and nothing destructive, nothing dropped. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **383 SQL assertion files, 60 Python gates (+26 gate self-tests, one of which is 25 assertions of its own), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 830 functions, 367 tables, version `0736`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts, and it fails on a **stale comment** too — a wrapper whose `comment on function` was written against the wrong signature clobbers the inner function's comment and the description then disagrees with the schema |
+| Gates | **383 SQL assertion files, 61 Python gates (+27 gate self-tests, one of which is 28 assertions of its own and one 10), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| API description | 834 functions, 367 tables, version `0737`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts, and it fails on a **stale comment** too — a wrapper whose `comment on function` was written against the wrong signature clobbers the inner function's comment and the description then disagrees with the schema |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -218,6 +218,168 @@ extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
+## `383e505d`: a green suite proved nothing about the eight hours it never ran in
+
+    FAIL a null share window takes the function's 30 days:
+         expected 30, got 29
+
+Found by rerunning the suite at 16:31 UTC — **00:31 the next day in Kuala
+Lumpur**. The `0735` assertion was
+
+    expires_at::date - pg_temp.today()
+
+a date in UTC minus a date in KL. `expires_at` comes from `now()` inside
+`app.issue_share_token` and casts in the session's time zone;
+`pg_temp.today()` is deliberately KL, because `idempotency.sql` is held to
+the product's clock. For sixteen hours a day the two name the same day and
+the subtraction is right. For the other eight, KL has rolled over and UTC
+has not, and every window reads one day short.
+
+**Every run of the `0735` and `0736` tranches was inside the sixteen.** It
+was going to go red tonight, on a branch that is the deploy target, and
+the cause would have looked like a migration.
+
+The fix measures the window against the LINK'S OWN `created_at`. Both
+columns are `now()` in the same transaction and cast with the same time
+zone, so their difference is exactly the window at any hour, and there is
+no clock in the assertion at all. Verified both ways at the hour it broke:
+
+| | |
+| --- | --- |
+| `expires_at::date - created_at::date`, 30-day window | **30** |
+| the same, with the null `app.issue_share_token` falls back to | **45** |
+| the old form, right now | **29** |
+
+So it still separates the two values it exists to separate, which is the
+mutant it was written to kill: a wrapper that passes the null share window
+straight through gets 45.
+
+`check_test_clock.py` does **not** catch this. It fails a file that names
+both `current_date` and a KL date, and this file names only the KL one —
+**the second clock was inside the function under test.** That is the gap,
+and it is written down here rather than closed, because a gate that
+followed every call into its callees to find a `now()` would be a type
+checker.
+
+## `0737`: four statutory papers, and a refund paid twice
+
+38 → **26**. Four wrappers and eight verdicts, all twelve measured. This
+is the tranche where the duplicate is **a document somebody else holds**,
+and the first where it is money leaving a bank account.
+
+    settle_deposit       -> a 1,000 deposit at 400 on two 300 refunds
+    create_withholding   -> 2 certificates, 2 numbers, 2 LHDN deadlines
+    revise_tax_estimate  -> 2 live CP204 revisions of one estimate
+    submit_leave_request -> 2 requests AND 4 pending days for a 2-day trip
+
+**`settle_deposit` is the worst of the twenty-two wrapped so far.** It
+has a balance guard — *"Deposit % has % left and this would take %"* —
+and that guard only catches the FULL settlement. A **partial** refund
+retried is inside the balance both times, so 600 left the bank for a 300
+refund and the note shows two events. Reading the body found a guard;
+calling it twice found the hole in the guard.
+
+`revise_tax_estimate` and `create_withholding` are the first statutory
+filings in this programme. Two CP204 revisions of the same estimate are
+both *current* — only the original gets superseded, because the second
+call supersedes the same row the first one did — each with its own
+revision month and its own recomputed instalment schedule. Which one the
+Revenue is holding is not a question this database can answer.
+
+`submit_leave_request` doubles twice over, and the second half is the one
+nobody would see: `leave_balances.pending_days` went to **4** for a
+two-day request. Deleting the duplicate request does not put the two days
+back.
+
+### The eight verdicts
+
+Five refuse by name; three do nothing quietly, and a silent repeat can
+only be caught by counting:
+
+- `clear_pdc` — "That cheque is cleared."
+- `bounce_pdc` — "That cheque is bounced."
+- `receive_stock_transfer` — "That transfer is received…"
+- `bill_matter_time`, `bill_project_time` — "No unbilled chargeable time
+  on this engagement between % and %", and the check runs BEFORE the
+  invoice is inserted, so the second call writes nothing at all.
+- `transition_ticket` — two calls to the same status left ONE
+  `ticket_events` row. `if v_t.status = p_to then return` is the first
+  line of the internal.
+- `recognise_revenue` — first sweep released one period, second released
+  none; it walks `gl_entry_id is null` and fills that column in.
+- `run_depreciation` — first call returned a run id, second returned
+  **null**, one run row survived. The charge is the gap between where the
+  asset should be and where it is, which is zero on a retry; the function
+  then deletes the empty run it opened. The null return is a wart — a
+  client that retries is told nothing happened — but nothing doubles.
+
+### The fixture that proved nothing, and said so
+
+`submit_leave_request`'s first probe was green: the second call was
+refused for want of days. That is not a state guard — there was simply no
+entitlement, so the balance was zero and the first request took it
+negative. **With an entitlement the function doubles.** The assertion
+block now inserts one on purpose and says why in a comment, because the
+green run was the misleading one.
+
+### A survivor that is the same lesson in new clothes
+
+"`submit_leave_request` fingerprints without the number of days" survived
+the first mutation round. The assertion meant to catch it varied the end
+date as well, so `end_date` in the fingerprint killed the mutant on its
+own and `total_days` was never tested. Added: the same two days with
+**1.5** claimed against them — a correction somebody really does make.
+
+That is the second tranche running where a payload differing in two
+fields could not say which field the key covered. `0736`'s was two
+identical payloads; this one is two payloads differing twice. The rule
+worth keeping: **vary exactly one field per fingerprint assertion.**
+
+Seven mutants, all killed, control surviving.
+
+### The third by-name assertion, and a gate so there is no fourth
+
+`leave_requests.sql` asserted
+
+    there is one submit_leave_request, not two
+
+and `0395` wrote that on purpose: two forms of this name, and a call
+giving only the six required arguments matches both, which is **42725 at
+run time and in no test**. It is a real guard, and the overload broke it.
+
+That is the THIRD assertion in this suite broken by a keyed overload, one
+tranche at a time, each found by a red suite rather than before a push —
+after `outbound_email.sql` and `ai_assistant.sql` in `0735`. The `0735`
+section of this file predicted a third would be found the same way. It
+was.
+
+The rewrite asserts what `0395` was actually protecting, which is not the
+count: **no call can be ambiguous, because the keyed overload has no
+defaults at all.** `pronargdefaults = 0` is stronger than the count was —
+a third form added later with a default fails even if somebody remembers
+to bump a number.
+
+And `scripts/check_overload_assertions.py` now crosses the keyed names
+against every `proname = '...'` in `supabase/tests/`. Three overlap today
+and each is named in a reviewed list saying the assertion was read; a
+fourth fails in CI **by name**, and a reviewed entry that stops applying
+fails too. Ten self-tests, one of which runs the lists against the
+repository itself.
+
+### Where the census stands after seven tranches
+
+| | |
+| --- | --- |
+| client-reachable writes | **340** |
+| hold an idempotency key | **28** |
+| insert nothing at all | **146** |
+| guard or replace every row they insert | **34** |
+| refuse a repeat BY NAME | **37** |
+| carry a checked verdict | **69** |
+| **undecided** | **26** |
+
+137 → 85 → 56 → 48 → 38 → **26** across six tranches of 3 October.
+
 ## `0736`: the POS back office, and a double handful of points
 
 48 → **38**. Six wrappers and four more verdicts, all measured:
@@ -279,7 +441,7 @@ that the key covers the payload.** It is the twelfth entry of
 `docs/widget-tests.md` wearing different clothes — a fixture where the
 right value and the wrong value are the same value.
 
-### Where the census stands after six tranches
+### Where the census stood after six tranches
 
 | | |
 | --- | --- |

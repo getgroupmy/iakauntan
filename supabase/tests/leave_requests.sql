@@ -455,16 +455,42 @@ begin
   -- 0395 dropped the nine-argument version rather than letting a
   -- default overload it. Two functions of this name and a call giving
   -- only the six required arguments matches both, which is 42725 at
-  -- run time and in no test -- so the count is the assertion.
-  perform pg_temp.check_eq('there is one submit_leave_request, not two',
+  -- run time and in no test -- so this used to assert that there was
+  -- exactly ONE.
+  --
+  -- 0737 added a second on purpose: the idempotency-key overload. That
+  -- is the THIRD assertion in this suite to be broken by one of those,
+  -- after outbound_email.sql and ai_assistant.sql in 0735, and all three
+  -- had the same shape -- a count or a scalar subquery over `proname`.
+  --
+  -- What 0395 was actually protecting is not the count. It is that NO
+  -- CALL CAN BE AMBIGUOUS, and the reason the keyed overload cannot make
+  -- one is that it has NO DEFAULTS AT ALL: every caller must name all
+  -- eleven parameters, so a six-argument call reaches the ten-argument
+  -- form and nothing else. That is what is asserted now, and it is
+  -- stronger than the count was -- a third form added later with a
+  -- default would fail here even if somebody remembered to bump a
+  -- number.
+  perform pg_temp.check_eq('there are two forms of submit_leave_request',
     (select count(*) from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname = 'submit_leave_request'), 1);
-  perform pg_temp.check_eq('and it takes the contact',
+      where n.nspname = 'public' and p.proname = 'submit_leave_request'), 2);
+  perform pg_temp.check_eq('exactly one of them takes an idempotency key',
     (select count(*) from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = 'submit_leave_request'
-        and 'p_contact_while_away' = any (p.proargnames)), 1);
+        and 'p_idempotency_key' = any (p.proargnames)), 1);
+  perform pg_temp.check_eq('and the keyed one has no defaults, so no call '
+    'can match both',
+    (select p.pronargdefaults from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'submit_leave_request'
+        and 'p_idempotency_key' = any (p.proargnames)), 0);
+  perform pg_temp.check_eq('both forms take the contact',
+    (select count(*) from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'submit_leave_request'
+        and 'p_contact_while_away' = any (p.proargnames)), 2);
 
   perform pg_temp.sign_in_as(v_staff);
   v_away := public.submit_leave_request(

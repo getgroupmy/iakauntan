@@ -1878,14 +1878,18 @@ class Repo {
     double? rate,
     DateTime? certDate,
   }) async {
-    final data = await callRpc(
+    // 0737. Every parameter named, including the three that used to be
+    // omitted when null: each is a `coalesce(p_x, ...)` in the body, so
+    // an explicit null is the same call, and the keyed overload has no
+    // defaults to fall back on.
+    final data = await callRpcOnce(
       'create_withholding',
       params: {
         'p_bill_id': billId,
         'p_wht_code': whtCode,
-        if (grossAmount != null) 'p_gross_amount': grossAmount,
-        if (rate != null) 'p_rate': rate,
-        if (certDate != null) 'p_cert_date': Fmt.iso(certDate),
+        'p_gross_amount': grossAmount,
+        'p_rate': rate,
+        'p_cert_date': certDate == null ? null : Fmt.iso(certDate),
       },
     );
     return data as String;
@@ -2967,7 +2971,7 @@ class Repo {
   /// its own form, and overwriting would lose the figure next year's
   /// floor is measured against. Returns the new one's id.
   Future<String> reviseTaxEstimate(String id, double estimatedTax) async {
-    final newId = await callRpc(
+    final newId = await callRpcOnce(
       'revise_tax_estimate',
       params: {'p_estimate_id': id, 'p_estimated_tax': estimatedTax},
     );
@@ -7793,7 +7797,7 @@ extension RepoHr on Repo {
     String? contactWhileAway,
     bool isHalfDay = false,
     String? halfDayPeriod,
-  }) => callRpc(
+  }) => callRpcOnce(
     'submit_leave_request',
     params: {
       'p_org_id': orgId,
@@ -7801,14 +7805,21 @@ extension RepoHr on Repo {
       'p_start_date': Fmt.iso(start),
       'p_end_date': Fmt.iso(end),
       'p_total_days': days,
-      if (reason != null) 'p_reason': reason,
+      'p_reason': reason,
       // `0027` modelled half days and `0365` wrote the rule about which
       // leave may be taken in them. Nothing ever passed the flag, so
       // `0365` guarded a door nobody could open until `0397`.
-      if (isHalfDay) 'p_is_half_day': true,
-      if (isHalfDay && halfDayPeriod != null)
-        'p_half_day_period': halfDayPeriod,
-      if (contactWhileAway != null) 'p_contact_while_away': contactWhileAway,
+      //
+      // 0737. Sent unconditionally now, false included: the keyed
+      // overload has no defaults, and false is what the omission meant.
+      // The period still goes only with the flag, because a period on a
+      // whole day is not a request anybody made.
+      'p_is_half_day': isHalfDay,
+      'p_half_day_period': isHalfDay ? halfDayPeriod : null,
+      // Null means "me", which is what this screen is for. HR filing for
+      // somebody else goes through the same function with an id.
+      'p_employee_id': null,
+      'p_contact_while_away': contactWhileAway,
     },
   );
 
@@ -13737,7 +13748,7 @@ extension RepoDeposits on Repo {
     required num amount,
     String? reason,
     String? bankAccountId,
-  }) async => await callRpc(
+  }) async => await callRpcOnce(
     'settle_deposit',
     params: {
       'p_deposit': depositId,
@@ -13745,6 +13756,9 @@ extension RepoDeposits on Repo {
       'p_amount': amount,
       'p_reason': reason,
       'p_bank': bankAccountId,
+      // 0737. Never sent; the function coalesces it to today in Kuala
+      // Lumpur. Named because the keyed overload has no defaults.
+      'p_date': null,
     },
   );
 

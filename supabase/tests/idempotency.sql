@@ -1287,4 +1287,478 @@ begin
 end $$;
 
 
+
+
+-- =====================================================================
+-- 0737 :: four statutory papers, and a refund paid twice
+--
+-- The tranche where the duplicate is a document somebody ELSE holds, and
+-- the first where it is money leaving a bank account. Each block makes
+-- the duplicate happen first -- `0733`'s lesson, after two wrappers were
+-- written for functions a unique index was already refusing -- and then
+-- asserts the key stops it and that the key covers the ARGUMENTS, which
+-- is `0736`'s lesson after a mutant lived on two identical calls.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- settle_deposit: 600 out of the bank for a 300 refund
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_c uuid; v_bank uuid; v_dep uuid; v_keyed uuid;
+  v_first uuid; v_again uuid; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Deposits Twice Sdn Bhd',
+    array['sales', 'purchases']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.test_bank_account(v_org, 'Current', 'current', 'MYR',
+    9000, 9000, '7700001');
+  select id into v_bank from public.bank_accounts where org_id = v_org limit 1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_c;
+
+  insert into public.deposit_notes
+    (org_id, deposit_no, deposit_date, kind, status, contact_id, currency,
+     exchange_rate, amount, bank_account_id, balance_amount)
+  values (v_org, 'DEP-1', pg_temp.today(), 'customer', 'open', v_c, 'MYR', 1,
+          1000, v_bank, 1000) returning id into v_dep;
+
+  -- The defect, as measured. A PARTIAL refund: the balance guard the
+  -- function already has catches only a full settlement, and 300 twice
+  -- is inside 1,000 both times.
+  perform public.settle_deposit(v_dep, 'refund', 300, null, v_bank,
+    pg_temp.today());
+  perform public.settle_deposit(v_dep, 'refund', 300, null, v_bank,
+    pg_temp.today());
+  perform pg_temp.check_eq(
+    'without a key, a 300 refund takes 600 off the deposit',
+    (select balance_amount from public.deposit_notes where id = v_dep), 400);
+  perform pg_temp.check_eq('and the note carries two events',
+    (select count(*)::integer from public.deposit_events
+      where deposit_id = v_dep), 2);
+
+  -- With one.
+  insert into public.deposit_notes
+    (org_id, deposit_no, deposit_date, kind, status, contact_id, currency,
+     exchange_rate, amount, bank_account_id, balance_amount)
+  values (v_org, 'DEP-2', pg_temp.today(), 'customer', 'open', v_c, 'MYR', 1,
+          1000, v_bank, 1000) returning id into v_keyed;
+
+  v_first := public.settle_deposit(
+    p_deposit := v_keyed, p_kind := 'refund', p_amount := 300,
+    p_reason := null, p_bank := v_bank, p_date := pg_temp.today(),
+    p_idempotency_key := 'DEP-REFUND-1');
+  v_again := public.settle_deposit(
+    p_deposit := v_keyed, p_kind := 'refund', p_amount := 300,
+    p_reason := null, p_bank := v_bank, p_date := pg_temp.today(),
+    p_idempotency_key := 'DEP-REFUND-1');
+  perform pg_temp.check_true('a replayed refund returns the first entry',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and takes 300 off once',
+    (select balance_amount from public.deposit_notes where id = v_keyed), 700);
+  perform pg_temp.check_eq('and records one event',
+    (select count(*)::integer from public.deposit_events
+      where deposit_id = v_keyed), 1);
+
+  -- The fingerprint covers the AMOUNT, not just the deposit. Two
+  -- identical calls cannot prove that; a different amount under the same
+  -- key is what proves it.
+  begin
+    perform public.settle_deposit(
+      p_deposit := v_keyed, p_kind := 'refund', p_amount := 400,
+      p_reason := null, p_bank := v_bank, p_date := pg_temp.today(),
+      p_idempotency_key := 'DEP-REFUND-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different amount is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- create_withholding: a second certificate with its own LHDN deadline
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_sup uuid; v_bill uuid; v_code text; v_first uuid;
+  v_again uuid; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Withhold Twice Sdn Bhd',
+    array['purchases', 'tax']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'SVC', 'Service', 'service', false, 100);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S1', 'Pembekal', 'supplier') returning id into v_sup;
+  select code into v_code from public.ref_withholding_types
+   where is_active order by code limit 1;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), pg_temp.today(), v_sup,
+          'draft', 'MYR', 1) returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_bill, 1, 'item',
+          (select id from public.items where org_id = v_org and code = 'SVC'),
+          'Royalty', 1, 10000);
+  perform public.post_purchase_document(v_bill);
+
+  -- The defect: the certificate does not touch the bill's balance, so
+  -- the over-withholding guard is as happy the second time as the first.
+  perform public.create_withholding(v_bill, v_code, null, null, null);
+  perform public.create_withholding(v_bill, v_code, null, null, null);
+  perform pg_temp.check_eq('without a key, one bill gets two certificates',
+    (select count(*)::integer from public.withholding_certificates
+      where bill_id = v_bill), 2);
+  perform pg_temp.check_eq('with two different numbers',
+    (select count(distinct certificate_no)::integer
+       from public.withholding_certificates where bill_id = v_bill), 2);
+
+  v_first := public.create_withholding(
+    p_bill_id := v_bill, p_wht_code := v_code, p_gross_amount := 1000,
+    p_rate := null, p_cert_date := null,
+    p_idempotency_key := 'WHT-1');
+  v_again := public.create_withholding(
+    p_bill_id := v_bill, p_wht_code := v_code, p_gross_amount := 1000,
+    p_rate := null, p_cert_date := null,
+    p_idempotency_key := 'WHT-1');
+  perform pg_temp.check_true('a replayed certificate returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and raises no third',
+    (select count(*)::integer from public.withholding_certificates
+      where bill_id = v_bill), 3);
+
+  begin
+    perform public.create_withholding(
+      p_bill_id := v_bill, p_wht_code := v_code, p_gross_amount := 2000,
+      p_rate := null, p_cert_date := null,
+      p_idempotency_key := 'WHT-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'the same key for a different gross amount is refused', not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- revise_tax_estimate: two live CP204 revisions of one estimate
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_fy uuid; v_est uuid; v_keyed uuid; v_first uuid;
+  v_again uuid; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Estimates Twice Sdn Bhd', array['tax']);
+  v_fy := public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  v_est := public.open_tax_estimate(v_org, v_fy, 50000, null);
+
+  perform public.revise_tax_estimate(v_est, 60000);
+  perform public.revise_tax_estimate(v_est, 60000);
+  perform pg_temp.check_eq('without a key, one revision is filed twice',
+    (select count(*)::integer from public.tax_estimates
+      where revises_id = v_est), 2);
+  -- And both are live. Only the ORIGINAL was superseded, because the
+  -- second call superseded the same row the first one did.
+  perform pg_temp.check_eq('and both revisions are current',
+    (select count(*)::integer from public.tax_estimates
+      where revises_id = v_est and status <> 'superseded'), 2);
+
+  v_keyed := public.open_tax_estimate(v_org, v_fy, 70000, null);
+  v_first := public.revise_tax_estimate(
+    p_estimate_id := v_keyed, p_estimated_tax := 80000,
+    p_idempotency_key := 'CP204-REV-1');
+  v_again := public.revise_tax_estimate(
+    p_estimate_id := v_keyed, p_estimated_tax := 80000,
+    p_idempotency_key := 'CP204-REV-1');
+  perform pg_temp.check_true('a replayed revision returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and files no second',
+    (select count(*)::integer from public.tax_estimates
+      where revises_id = v_keyed), 1);
+
+  begin
+    perform public.revise_tax_estimate(
+      p_estimate_id := v_keyed, p_estimated_tax := 90000,
+      p_idempotency_key := 'CP204-REV-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different figure is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- submit_leave_request: two requests, and four days off a balance
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_user uuid; v_emp uuid; v_type uuid; v_first uuid;
+  v_again uuid; v_took boolean;
+begin
+  v_user := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_user);
+  v_org := pg_temp.test_org('Leave Twice Sdn Bhd', array['hr', 'payroll']);
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date, employment_status)
+  values (v_org, 'E1', 'Pekerja', v_user, pg_temp.today() - 400, 'active')
+  returning id into v_emp;
+  insert into public.leave_types (org_id, code, name, is_paid, default_days)
+  values (v_org, 'AL', 'Annual', true, 20) returning id into v_type;
+  -- An entitlement, deliberately. WITHOUT one the balance is zero and the
+  -- second request is refused for want of days -- which would look like
+  -- a state guard and is nothing of the kind. The first probe of this
+  -- function was green for that reason and proved nothing.
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year, entitled_days)
+  values (v_org, v_emp, v_type,
+          extract(year from pg_temp.today())::integer, 20);
+
+  perform public.submit_leave_request(v_org, v_type, pg_temp.today() + 10,
+    pg_temp.today() + 11, 2, 'Trip', false, null, v_emp, null);
+  perform public.submit_leave_request(v_org, v_type, pg_temp.today() + 10,
+    pg_temp.today() + 11, 2, 'Trip', false, null, v_emp, null);
+  perform pg_temp.check_eq('without a key, one request is filed twice',
+    (select count(*)::integer from public.leave_requests
+      where employee_id = v_emp), 2);
+  -- The half nobody would see. Deleting the duplicate request does not
+  -- put these two days back.
+  perform pg_temp.check_eq(
+    'and four days are pending against a two-day request',
+    (select pending_days from public.leave_balances
+      where employee_id = v_emp and leave_type_id = v_type), 4);
+
+  v_first := public.submit_leave_request(
+    p_org_id := v_org, p_leave_type_id := v_type,
+    p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 21,
+    p_total_days := 2, p_reason := 'Again', p_is_half_day := false,
+    p_half_day_period := null, p_employee_id := v_emp,
+    p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
+  v_again := public.submit_leave_request(
+    p_org_id := v_org, p_leave_type_id := v_type,
+    p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 21,
+    p_total_days := 2, p_reason := 'Again', p_is_half_day := false,
+    p_half_day_period := null, p_employee_id := v_emp,
+    p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
+  perform pg_temp.check_true('a replayed request returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and files no third',
+    (select count(*)::integer from public.leave_requests
+      where employee_id = v_emp), 3);
+  perform pg_temp.check_eq('and the balance moves by two, not four',
+    (select pending_days from public.leave_balances
+      where employee_id = v_emp and leave_type_id = v_type), 6);
+
+  begin
+    perform public.submit_leave_request(
+      p_org_id := v_org, p_leave_type_id := v_type,
+      p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 22,
+      p_total_days := 3, p_reason := 'Again', p_is_half_day := false,
+      p_half_day_period := null, p_employee_id := v_emp,
+      p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a longer trip is refused',
+    not v_took);
+
+  -- AND ONE WHERE ONLY `total_days` MOVES. The assertion above varies the
+  -- end date as well, so `end_date` in the fingerprint kills it on its
+  -- own: the mutant that drops `total_days` SURVIVED that assertion and
+  -- is killed by this one. Same two days, half a day claimed against
+  -- them -- which is a correction somebody really does make, and under a
+  -- retried key it would be silently ignored.
+  begin
+    perform public.submit_leave_request(
+      p_org_id := v_org, p_leave_type_id := v_type,
+      p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 21,
+      p_total_days := 1.5, p_reason := 'Again', p_is_half_day := false,
+      p_half_day_period := null, p_employee_id := v_emp,
+      p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'the same key for the same days but a different count is refused',
+    not v_took);
+
+  -- `p_is_half_day` is the one argument whose default is FALSE and not
+  -- null, and `leave_requests.is_half_day` is NOT NULL. A wrapper that
+  -- passed the null straight through would raise 23502 on a caller who
+  -- omitted the flag -- which is every caller before 0737. This is the
+  -- assertion for the `coalesce(p_is_half_day, false)` inside it; without
+  -- it the coalesce could be deleted and nothing here would notice,
+  -- because every other call in this block sends a real boolean.
+  v_first := public.submit_leave_request(
+    p_org_id := v_org, p_leave_type_id := v_type,
+    p_start_date := pg_temp.today() + 30, p_end_date := pg_temp.today() + 30,
+    p_total_days := 1, p_reason := 'Whole day', p_is_half_day := null,
+    p_half_day_period := null, p_employee_id := v_emp,
+    p_contact_while_away := null, p_idempotency_key := 'LEAVE-WHOLE-DAY');
+  perform pg_temp.check_true(
+    'a null half-day flag files a whole day rather than raising',
+    (select not is_half_day from public.leave_requests where id = v_first));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0737's eight verdicts, measured
+--
+-- Five refuse by name, so `refuses_a_repeat` is enough. Three do not
+-- raise at all -- they return early or find nothing left to do -- and a
+-- silent repeat can only be caught by counting, which is what the last
+-- three assertions do.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_c uuid; v_bank uuid; v_pdc uuid; v_user uuid;
+  v_from uuid; v_to uuid; v_item uuid; v_tr uuid; v_m uuid; v_p uuid;
+  v_ticket uuid; v_inv uuid; v_line uuid; v_rev uuid; v_run uuid;
+  v_n integer;
+begin
+  v_user := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_user);
+  v_org := pg_temp.test_org('Verdicts 0737 Sdn Bhd',
+    array['sales', 'purchases', 'inventory', 'legal', 'timesheets',
+          'ticketing', 'crm', 'fixed_assets', 'accounting']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.test_bank_account(v_org, 'Current', 'current', 'MYR',
+    9000, 9000, '7700002');
+  select id into v_bank from public.bank_accounts where org_id = v_org limit 1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_c;
+
+  -- clear_pdc and bounce_pdc: the first call moves `status` out of
+  -- ('held','deposited') and the guard is on that set.
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, status, contact_id, cheque_no, cheque_date,
+     amount, bank_account_id)
+  values (v_org, 'PDC-1', 'incoming', 'held', v_c, '100001',
+          pg_temp.today(), 500, v_bank) returning id into v_pdc;
+  perform pg_temp.refuses_a_repeat('clear_pdc', format(
+    'select public.clear_pdc(%L, %L, %L)', v_pdc, pg_temp.today(), v_bank));
+
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, status, contact_id, cheque_no, cheque_date,
+     amount, bank_account_id)
+  values (v_org, 'PDC-2', 'incoming', 'held', v_c, '100002',
+          pg_temp.today(), 500, v_bank) returning id into v_pdc;
+  perform pg_temp.refuses_a_repeat('bounce_pdc', format(
+    'select public.bounce_pdc(%L, %L, %L)', v_pdc, 'No funds',
+    pg_temp.today()));
+
+  -- receive_stock_transfer: `status <> 'sent'` after the first receipt.
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'WH1', 'Utama', true) returning id into v_from;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'WH2', 'Cawangan') returning id into v_to;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price, cost_price)
+  values (v_org, 'ITM', 'Barang', 'stock', true, 50, 20)
+  returning id into v_item;
+  insert into public.stock_transfers
+    (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id,
+     status)
+  values (v_org, 'TR-1', pg_temp.today(), v_from, v_to, 'sent')
+  returning id into v_tr;
+  insert into public.stock_transfer_lines
+    (org_id, transfer_id, line_no, item_id, quantity, uom_code,
+     sent_quantity, sent_unit_cost)
+  values (v_org, v_tr, 1, v_item, 10, 'C62', 10, 20);
+  perform pg_temp.refuses_a_repeat('receive_stock_transfer', format(
+    'select public.receive_stock_transfer(%L, %L::jsonb)', v_tr, '[]'));
+
+  -- bill_matter_time and bill_project_time: the first call sets
+  -- `is_billed`, and the "no unbilled time" check runs BEFORE the
+  -- invoice is inserted, so the second writes nothing at all.
+  insert into public.matters
+    (org_id, matter_no, name, client_id, hourly_rate,
+     responsible_solicitor, fee_earner)
+  values (v_org, 'M-1', 'Perbicaraan', v_c, 400, v_user, v_user)
+  returning id into v_m;
+  insert into public.time_entries
+    (org_id, matter_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, v_m, v_user, pg_temp.today(), 'Drafting', 120, 400, 800,
+          true, false);
+  perform pg_temp.refuses_a_repeat('bill_matter_time', format(
+    'select public.bill_matter_time(%L, %L, %L, null)', v_m,
+    pg_temp.today() - 1, pg_temp.today()));
+
+  insert into public.projects (org_id, code, name, contact_id)
+  values (v_org, 'P-1', 'Projek', v_c) returning id into v_p;
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, v_p, v_user, pg_temp.today(), 'Build', 120, 300, 600,
+          true, false);
+  perform pg_temp.refuses_a_repeat('bill_project_time', format(
+    'select public.bill_project_time(%L, %L, %L, null)', v_p,
+    pg_temp.today() - 1, pg_temp.today()));
+
+  -- transition_ticket: `if v_t.status = p_to then return` -- no raise, so
+  -- only a count says the second call wrote nothing.
+  v_ticket := public.create_ticket(v_org, 'The printer', null, null, 'p3',
+    'incident', 'web', v_user, null, null);
+  perform public.transition_ticket(v_ticket, 'pending'::app.ticket_status,
+    'note');
+  perform public.transition_ticket(v_ticket, 'pending'::app.ticket_status,
+    'note');
+  select count(*)::integer into v_n from public.ticket_events
+   where ticket_id = v_ticket and event_type = 'status';
+  perform pg_temp.check_eq(
+    'transition_ticket to the status it is already in writes no event',
+    v_n, 1);
+
+  -- recognise_revenue: walks periods WHERE gl_entry_id IS NULL and fills
+  -- that column in, so the second sweep finds nothing.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate)
+  values (v_org, 'invoice', 'INV-R', pg_temp.today(), pg_temp.today(), v_c,
+          'draft', 'MYR', 1) returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Retainer', 1, 1200)
+  returning id into v_line;
+  perform public.post_sales_document(v_inv);
+  select id into v_rev from public.accounts
+   where org_id = v_org and account_type = 'revenue' and not is_group
+   limit 1;
+  insert into public.revenue_schedule_periods
+    (org_id, document_id, line_id, revenue_account_id, period_end, amount)
+  values (v_org, v_inv, v_line, v_rev, pg_temp.today() - 1, 100);
+  perform pg_temp.check_eq('recognise_revenue releases one period',
+    public.recognise_revenue(v_org, pg_temp.today()), 1);
+  perform pg_temp.check_eq('and a second sweep releases none',
+    public.recognise_revenue(v_org, pg_temp.today()), 0);
+
+  -- run_depreciation: the charge is the gap between where the asset
+  -- should be and where it is, which is zero on a retry at the same
+  -- date; the function then deletes the empty run it opened.
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, residual_value,
+     method, useful_life_months, status)
+  values (v_org, 'FA-1', 'Van', pg_temp.today() - 400, 12000, 0,
+          'straight_line', 60, 'active');
+  v_run := public.run_depreciation(v_org, pg_temp.today());
+  perform pg_temp.check_true('run_depreciation posts a run', v_run is not null);
+  perform pg_temp.check_true('and a retry at the same date posts none',
+    public.run_depreciation(v_org, pg_temp.today()) is null);
+  perform pg_temp.check_eq('leaving one run, not two',
+    (select count(*)::integer from public.depreciation_runs
+      where org_id = v_org), 1);
+end $$;
+
+
 rollback;

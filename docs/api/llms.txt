@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0736` (the highest applied migration).
-830 functions and 367 readable tables, of which
+Schema version `0737` (the highest applied migration).
+834 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**689 of 830 functions carry a `comment on
+**693 of 834 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -61,6 +61,7 @@ resolve to the unprotected original and return a plausible id.
 - `create_contra`
 - `create_deposit`
 - `create_ticket`
+- `create_withholding`
 - `email_document`
 - `email_receipt`
 - `escalate_ticket`
@@ -68,8 +69,11 @@ resolve to the unprotected original and return a plausible id.
 - `post_manual_journal`
 - `record_pdc`
 - `report_feedback`
+- `revise_tax_estimate`
+- `settle_deposit`
 - `share_document`
 - `share_ticket`
+- `submit_leave_request`
 - `upsert_cash_forecast_item`
 - `upsert_pos_driver`
 - `upsert_pos_menu_schedule`
@@ -404,7 +408,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — Mints one share link per idempotency key and returns THE SAME URL on a replay.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (606)
+### general (610)
 
 Not gated on any module.
 
@@ -563,6 +567,7 @@ Not gated on any module.
 - `create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` *(writes)* — Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended.
 - `create_supplier_from_received_einvoice(p_id uuid)` *(writes)* — Creates the supplier named by a received document, or links the one already holding that TIN.
 - `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` *(writes)* — Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this.
+- `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date, p_idempotency_key text)` *(writes)* — Raises one withholding certificate per idempotency key.
 - `credit_purchase_bill(p_bill uuid, p_lines jsonb, p_reason text)` *(writes)* — Raises and posts a credit note against a supplier bill, capped at what is left uncredited on each line, and records which bill it credits — which nothing has ever done.
 - `credit_sales_invoice(p_invoice uuid, p_lines jsonb, p_reason text)` *(writes)* — Raises and posts a credit note against an invoice, capped at what is left uncredited on each line, and records which invoice it credits -- which nothing has ever done before.
 - `custom_field_lookup_options(p_org_id uuid, p_target_entity text, p_search text, p_limit integer)`
@@ -893,6 +898,7 @@ Not gated on any module.
 - `revenue_schedule_due(p_org_id uuid)` — Deferred revenue not yet released, one row per period end — the shape recognise_revenue posts in.
 - `reverse_gl_entry(p_entry_id uuid, p_date date)` *(writes)* — Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given, numbered as a new journal and marked `is_reversal` pointing back at the original.
 - `revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric)` *(writes)* — Replaces an estimate with a revised one, keeping the original and carrying everything about it that is not the figure -- its form, and whether this is a first basis period with the facts that decide its deadline and its exemption.
+- `revise_tax_estimate(p_estimate_id uuid, p_estimated_tax numeric, p_idempotency_key text)` *(writes)* — Revises a CP204 estimate once per idempotency key.
 - `revoke_customer_portal(p_contact_id uuid)` *(writes)* — Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a single document.
 - `revoke_document_share(p_document_id uuid)` *(writes)* — Turns off every share link for one sales document at once, and returns how many it turned off.
 - `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)* — Withdraws an employee's approved access to their own payslips, with a note saying why.
@@ -945,6 +951,7 @@ Not gated on any module.
 - `set_scan_target_fields(p_module text, p_action text, p_fields jsonb)` *(writes)* — Replaces which of a target's columns the reader is asked to fill.
 - `set_sst_registration(p_org_id uuid, p_registered boolean, p_from date, p_registration_no text, p_tax_code text)` *(writes)* — The only way to change a company's SST registration.
 - `settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` *(writes)* — Gives a deposit back or keeps it.
+- `settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date, p_idempotency_key text)` *(writes)* — Settles a deposit once per idempotency key.
 - `settle_from_client_account(p_matter uuid, p_invoice uuid, p_amount numeric, p_date date, p_office_bank uuid, p_reference text)` *(writes)* — Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND arrives in the office one, which is what makes it a transfer rather than a disappearance.
 - `settlement_discount_available(p_document uuid, p_as_at date)`
 - `setup_legal_module(p_org_id uuid)` *(writes)* — Creates the client account, client monies liability and disbursement accounts a law firm needs.
@@ -965,6 +972,7 @@ Not gated on any module.
 - `sub_account_refusal(p_parent_id uuid)`
 - `submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` *(writes)* — Opens an approval request over a sales document, a purchase document or a journal, and builds one step per matching rule in the rules' own step order.
 - `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)* — Files a leave request and HOLDS THE DAYS against the balance while it waits — which is what stops two requests each passing a check the pair of them would fail.
+- `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text, p_idempotency_key text)` *(writes)* — Files one leave request per idempotency key.
 - `submit_manager_appraisal(p_appraisal uuid, p_rating numeric, p_comments text, p_increment numeric, p_bonus numeric, p_promotion boolean, p_development_plan text)` *(writes)* — The reviewer's half.
 - `submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` *(writes)* — Writes the employee's own half and moves the appraisal to the manager.
 - `submit_tax_details(p_token text, p_details jsonb)` *(writes)* — Records what a customer filled in on their own tax-details form, and fills the contact's BLANK fields from it.
