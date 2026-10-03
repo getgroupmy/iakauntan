@@ -71,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 93
+BACKLOG = 85
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -149,6 +149,30 @@ VERDICTS: dict[str, str] = {
         "unique:sales_documents_org_id_doc_type_doc_no_key",
     "import_purchase_transactions":
         "unique:purchase_documents_org_id_doc_type_doc_no_key",
+
+    # The create-or-amend family. Each takes an optional id: with one it
+    # amends, without one it creates -- so the question is only ever
+    # whether a second create collides. Every one of these was MEASURED,
+    # not read: `idempotency.sql`'s "the create-or-amend family refuses a
+    # second create" block calls each twice and expects the refusal, so
+    # the verdict below is backed by a running assertion and not only by
+    # the index's name.
+    "upsert_account":
+        "unique:accounts_org_id_code_key",
+    "upsert_pos_tender_type":
+        "unique:pos_tender_types_org_id_code_key",
+    "upsert_pos_stall":
+        "unique:pos_stalls_outlet_id_code_key",
+    "upsert_scale_format":
+        "unique:scale_barcode_formats_org_id_prefix_key",
+    "upsert_pos_modifier_group":
+        "unique:pos_modifier_groups_org_id_code_key",
+    "upsert_kitchen_station":
+        "unique:pos_kitchen_stations_outlet_id_code_key",
+    "upsert_pos_delivery_zone":
+        "unique:pos_delivery_zones_name_uq",
+    "upsert_budget":
+        "unique:budgets_org_id_fiscal_year_id_name_key",
 }
 
 VOLATILE_SQL = """

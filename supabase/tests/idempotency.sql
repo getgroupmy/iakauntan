@@ -603,4 +603,95 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- The create-or-amend family refuses a second create
+--
+-- `scripts/check_write_idempotency.py` excuses these eight with a
+-- `unique:` verdict naming the index that refuses the duplicate. The
+-- gate checks the index still EXISTS; it cannot check that the index
+-- still bites, because whether it does depends on where the value in its
+-- columns comes from. `save_payment_method` and
+-- `create_layout_from_builtin` are excused the same way and
+-- `import_sales_transactions` reaches its index through a required
+-- argument -- while `create_bank_transfer` has an index of exactly the
+-- same shape that does NOT bite, because `next_document_number` mints
+-- the value and the second call gets the next one.
+--
+-- So each verdict is measured here rather than argued: call it twice,
+-- creating both times, and expect the refusal. A verdict whose function
+-- starts generating its own code instead of taking one fails this.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.refuses_a_repeat(p_label text, p_sql text)
+returns void language plpgsql as $$
+begin
+  execute p_sql;
+  begin
+    execute p_sql;
+    raise exception
+      'FAIL: % created a second row where a unique index was supposed to '
+      'refuse it, and check_write_idempotency.py excuses it on that '
+      'basis', p_label;
+  exception
+    when unique_violation then
+      raise notice 'ok   % is refused by its unique index', p_label;
+    when raise_exception then
+      -- Its own refusal, which is just as good and is what
+      -- upsert_pos_tender_type does: "The code CSH2 is already Cash
+      -- two's." Re-raised when it is the FAIL above.
+      if sqlerrm like 'FAIL:%' then raise; end if;
+      raise notice 'ok   % refuses it in its own words: %', p_label,
+        left(sqlerrm, 48);
+  end;
+end $$;
+
+do $$
+declare v_org uuid; v_outlet uuid; v_fy uuid; v_operator uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Upsert Sdn Bhd', array['pos', 'inventory', 'crm']);
+  v_fy := public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  select id into v_outlet from public.pos_outlets where org_id = v_org limit 1;
+  if v_outlet is null then
+    insert into public.pos_outlets (org_id, code, name)
+    values (v_org, 'OUT1', 'Outlet') returning id into v_outlet;
+  end if;
+  insert into public.contacts (org_id, contact_type, code, name)
+  values (v_org, 'supplier', 'OP1', 'Operator Sdn Bhd')
+  returning id into v_operator;
+
+  perform pg_temp.refuses_a_repeat('upsert_account', format(
+    'select public.upsert_account(%L, %L, %L, %L, null, null, false, null, %L)',
+    '4999', 'Sundry', 'expense', 'other_expense', v_org));
+
+  perform pg_temp.refuses_a_repeat('upsert_pos_tender_type', format(
+    'select public.upsert_pos_tender_type(null, %L, %L, %L, %L, null, null, '
+    'true, false, false, 0, true)', v_org, 'CSH2', 'Cash two', 'cash'));
+
+  perform pg_temp.refuses_a_repeat('upsert_pos_stall', format(
+    'select public.upsert_pos_stall(null, %L, %L, %L, %L, 0, true)',
+    v_outlet, 'ST1', 'Stall one', v_operator));
+
+  perform pg_temp.refuses_a_repeat('upsert_scale_format', format(
+    'select public.upsert_scale_format(null, %L, %L, %L, 5, 5, %L, null, true)',
+    v_org, 'Weighed', '21', 'price_sen'));
+
+  perform pg_temp.refuses_a_repeat('upsert_pos_modifier_group', format(
+    'select public.upsert_pos_modifier_group(%L, %L, %L, 0, 1, null, 0, true, '
+    'false)', v_org, 'MG1', 'Sauces'));
+
+  perform pg_temp.refuses_a_repeat('upsert_kitchen_station', format(
+    'select public.upsert_kitchen_station(%L, %L, %L, null, 0, false, true)',
+    v_outlet, 'KS1', 'Grill'));
+
+  perform pg_temp.refuses_a_repeat('upsert_pos_delivery_zone', format(
+    'select public.upsert_pos_delivery_zone(null, %L, %L, null, 0, 0, null, '
+    'null, 0, true)', v_outlet, 'Zone A'));
+
+  perform pg_temp.refuses_a_repeat('upsert_budget', format(
+    'select public.upsert_budget(null, %L, %L, %L, null, null)',
+    v_org, v_fy, 'Budget 1'));
+end $$;
+
+
 rollback;

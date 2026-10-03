@@ -218,6 +218,74 @@ extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
+## The create-or-amend family, measured
+
+93 → **85**. Eight `upsert_*` functions take an optional id — with one
+they amend, without one they create — so the only question is whether a
+second create collides. All eight were called twice against a built
+database and all eight were refused:
+
+    upsert_account             accounts_org_id_code_key
+    upsert_pos_tender_type     pos_tender_types_org_id_code_key
+                               (its own words, in fact: "The code CSH2
+                               is already Cash two's.")
+    upsert_pos_stall           pos_stalls_outlet_id_code_key
+    upsert_scale_format        scale_barcode_formats_org_id_prefix_key
+    upsert_pos_modifier_group  pos_modifier_groups_org_id_code_key
+    upsert_kitchen_station     pos_kitchen_stations_outlet_id_code_key
+    upsert_pos_delivery_zone   pos_delivery_zones_name_uq
+    upsert_budget              budgets_org_id_fiscal_year_id_name_key
+
+The probe is now a permanent block in `supabase/tests/idempotency.sql`
+— "the create-or-amend family refuses a second create" — because the
+gate can check an index EXISTS and cannot check that it BITES. Whether it
+bites depends on where the value in its columns comes from, and
+`create_bank_transfer` has an index of exactly the same shape that does
+not bite at all: `next_document_number` mints the number and the second
+call gets the next one. A verdict whose function starts generating its
+own code instead of taking one now fails an assertion rather than
+quietly becoming untrue.
+
+Three more of that family are NOT excused, and the reason is that their
+fixtures were more work than the verdict was worth today:
+`upsert_item_conversion` wants an output line, `upsert_loyalty_tier` and
+`upsert_pos_modifier` want a loyalty program and a modifier group that
+the probe org has no module for. They have the same shape and are very
+probably safe. They stay in the 85 until somebody measures them, because
+eight measured is worth more than eleven assumed.
+
+### Still undecided, and what they will need
+
+Of the 85, the ones that will need a real wrapper rather than a verdict,
+grouped by why the index cannot save them:
+
+- **a number the function mints** — `create_bank_transfer`,
+  `create_payroll_run`, `create_withholding`, `quote_opportunity`,
+  `create_po_from_suggestions`, `draft_bill_from_received_einvoice`,
+  `accept_intercompany_bill`, `upsert_landed_cost_run`,
+  `open_pos_shift`, `create_ticket`, `open_matter`;
+- **no unique index at all** — `allocate_with_discount`,
+  `allocate_payment_with_discount`, `apply_deposit`, `knock_off`,
+  `adjust_loyalty_points`, `upsert_cash_forecast_item`,
+  `upsert_pos_driver`, `upsert_pos_report`, `upsert_pos_menu_schedule`,
+  `book_appointment`, `cover_line_with_membership`, `start_membership`;
+- **a state it increments** — `escalate_ticket` adds one to
+  `escalation_level`, so a retry escalates twice;
+- **a token it generates** — `share_document`, `share_ticket`,
+  `upsert_pos_menu_link` mint a random token per call;
+- **inserts only through a callee**, so the census cannot see the
+  statement and neither could I without reading each one —
+  `bill_matter_time`, `bill_project_time`, `bounce_pdc`, `clear_pdc`,
+  `close_fiscal_year`, `knock_off`, `post_bank_transaction`,
+  `recognise_revenue`, `remit_withholding`, `reopen_fiscal_year`,
+  `request_einvoice_for_sale`, `ingest_offline_sales`, `open_pos_sale`,
+  `ensure_default_warehouse`, `next_document_number`.
+
+Each of those needs the same two things `0733`'s four needed: the
+organization resolved from an argument where there is no `p_org_id`, and
+a client call site that names every parameter. 38 of the 85 carry an org
+argument; 47 do not.
+
 ## The import family was the loudest hazard, and is the best-protected
 
 A migration `0734` was written, applied locally, and then DELETED. It

@@ -166,10 +166,20 @@ class Verdicts(unittest.TestCase):
             if verdict.startswith('state:'):
                 self.assertGreater(len(verdict.split(':', 1)[1]), 12, name)
 
-    def test_a_unique_verdict_names_an_index_not_a_table(self):
+    def test_a_unique_verdict_names_an_index_by_this_schema_s_conventions(self):
+        """A weak check, deliberately, and it was weaker: it asserted
+        `_key` was in the name, which this schema does not promise --
+        `pos_delivery_zones_name_uq` is an index and has no `_key`. The
+        real check is the one the gate makes at run time against
+        `pg_indexes`, and `test_a_stale_unique_verdict_fails` covers it.
+        This only catches a verdict that names a TABLE by mistake."""
+        suffixes = ('_key', '_uq', '_idx', '_unique')
         for name, verdict in gate.VERDICTS.items():
             if verdict.startswith('unique:'):
-                self.assertIn('_key', verdict.split(':', 1)[1], name)
+                index = verdict.split(':', 1)[1]
+                self.assertTrue(
+                    index.endswith(suffixes) or '_one_' in index,
+                    f'{name}: "{index}" does not look like an index name')
 
 
 class TheRatchet(unittest.TestCase):
