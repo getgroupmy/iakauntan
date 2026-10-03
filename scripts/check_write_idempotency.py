@@ -71,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 48
+BACKLOG = 38
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -246,6 +246,19 @@ VERDICTS: dict[str, str] = {
         "unique:feedback_attachments_storage_path_key",
     "open_tax_estimate":
         "existing:means \"show me it\" rather than \"make a second\"",
+
+    # Measured while `0736` was written. The first two are the
+    # create-or-amend shape WITH the unique index, so they join the eight
+    # `b0682f0b` measured; the other two ran twice and left one row.
+    "upsert_loyalty_tier":
+        "unique:loyalty_tiers_program_id_code_key",
+    "upsert_pos_modifier":
+        "unique:pos_modifiers_group_id_code_key",
+    "enrol_loyalty_member":
+        "existing:A cashier who taps twice enrols one member",
+    "set_module_hidden":
+        "natural:sets a flag -- the second call updates the row the first "
+        "inserted, measured as one row after two calls",
 }
 
 VOLATILE_SQL = """

@@ -1096,4 +1096,180 @@ begin
 end $$;
 
 
+-- =====================================================================
+-- 0736 :: the POS back office, and a double handful of points
+--
+-- Five create-or-amend functions with NO unique index behind them -- a
+-- forecast line, a driver, a saved report, a schedule and a promotion are
+-- all things a company may legitimately have two of with the same name,
+-- so nothing can tell a second create from a dropped connection -- and
+-- `adjust_loyalty_points`, where what doubles is a BALANCE.
+-- =====================================================================
+
+do $$
+declare
+  v_org uuid; v_outlet uuid; v_cust uuid; v_prog uuid; v_acct uuid;
+  v_first uuid; v_again uuid; v_n integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Back Office Sdn Bhd',
+    array['pos', 'inventory', 'crm', 'loyalty', 'cashflow', 'payroll']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  select id into v_outlet from public.pos_outlets where org_id = v_org limit 1;
+  if v_outlet is null then
+    insert into public.pos_outlets (org_id, code, name)
+    values (v_org, 'OUT1', 'Outlet') returning id into v_outlet;
+  end if;
+
+  -- ---- upsert_cash_forecast_item ----
+  perform public.upsert_cash_forecast_item(null, v_org, 'in', 'A grant', 100,
+    pg_temp.today(), 'once', null, null);
+  perform public.upsert_cash_forecast_item(null, v_org, 'in', 'A grant', 100,
+    pg_temp.today(), 'once', null, null);
+  perform pg_temp.check_eq('without a key, the forecast has the line twice',
+    (select count(*)::integer from public.cash_forecast_items
+      where org_id = v_org), 2);
+
+  v_first := public.upsert_cash_forecast_item(null, v_org, 'in', 'A refund',
+    50, pg_temp.today(), 'once', null, null, 'FORECAST-1');
+  v_again := public.upsert_cash_forecast_item(null, v_org, 'in', 'A refund',
+    50, pg_temp.today(), 'once', null, null, 'FORECAST-1');
+  perform pg_temp.check_true('a replayed save returns the first line',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and adds no third',
+    (select count(*)::integer from public.cash_forecast_items
+      where org_id = v_org), 3);
+
+  -- ---- upsert_pos_driver ----
+  perform public.upsert_pos_driver(null, v_org, 'Pak Ali', null, null, null,
+    v_outlet, null, true);
+  perform public.upsert_pos_driver(null, v_org, 'Pak Ali', null, null, null,
+    v_outlet, null, true);
+  perform pg_temp.check_eq('without a key, two drivers of one name',
+    (select count(*)::integer from public.pos_drivers where org_id = v_org), 2);
+
+  v_first := public.upsert_pos_driver(null, v_org, 'Pak Samad', null, null,
+    null, v_outlet, null, true, 'DRIVER-1');
+  v_again := public.upsert_pos_driver(null, v_org, 'Pak Samad', null, null,
+    null, v_outlet, null, true, 'DRIVER-1');
+  perform pg_temp.check_true('a replayed driver returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and hires no third',
+    (select count(*)::integer from public.pos_drivers where org_id = v_org), 3);
+
+  -- The fingerprint, which is what tells a retry from a second driver.
+  -- Without this assertion a wrapper that fingerprinted the id alone --
+  -- null on every create -- passed everything above, because both keyed
+  -- calls here send the same arguments. The mutant that did exactly that
+  -- survived two rounds.
+  declare v_took boolean;
+  begin
+    begin
+      perform public.upsert_pos_driver(null, v_org, 'Pak Hassan', null, null,
+        null, v_outlet, null, true, 'DRIVER-1');
+      v_took := true;
+    exception when sqlstate '22023' then v_took := false;
+    end;
+    perform pg_temp.check_true(
+      'the same key for a different driver is refused', not v_took);
+  end;
+
+  -- ---- upsert_pos_report ----
+  perform public.upsert_pos_report(v_org, 'Daily takings', 'sales',
+    array['outlet'], array['net'], 'today', null, null, null, null, null,
+    false, null, false, null);
+  perform public.upsert_pos_report(v_org, 'Daily takings', 'sales',
+    array['outlet'], array['net'], 'today', null, null, null, null, null,
+    false, null, false, null);
+  perform pg_temp.check_eq('without a key, two saved reports',
+    (select count(*)::integer from public.pos_reports where org_id = v_org), 2);
+
+  v_first := public.upsert_pos_report(v_org, 'By channel', 'sales',
+    array['channel'], array['net'], 'today', null, null, null, null, null,
+    false, null, false, null, 'REPORT-1');
+  v_again := public.upsert_pos_report(v_org, 'By channel', 'sales',
+    array['channel'], array['net'], 'today', null, null, null, null, null,
+    false, null, false, null, 'REPORT-1');
+  perform pg_temp.check_true('a replayed report returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and saves no third',
+    (select count(*)::integer from public.pos_reports where org_id = v_org), 3);
+
+  -- ---- upsert_pos_menu_schedule ----
+  perform public.upsert_pos_menu_schedule(v_org, 'Breakfast', null, null,
+    null, null, null, null, null, true);
+  perform public.upsert_pos_menu_schedule(v_org, 'Breakfast', null, null,
+    null, null, null, null, null, true);
+  perform pg_temp.check_eq('without a key, two live schedules',
+    (select count(*)::integer from public.pos_menu_schedules
+      where org_id = v_org), 2);
+
+  v_first := public.upsert_pos_menu_schedule(v_org, 'Supper', null, null,
+    null, null, null, null, null, true, 'SCHEDULE-1');
+  v_again := public.upsert_pos_menu_schedule(v_org, 'Supper', null, null,
+    null, null, null, null, null, true, 'SCHEDULE-1');
+  perform pg_temp.check_true('a replayed schedule returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and adds no third',
+    (select count(*)::integer from public.pos_menu_schedules
+      where org_id = v_org), 3);
+
+  -- ---- upsert_pos_promotion ----
+  perform public.upsert_pos_promotion(v_org, 'Ten off', 'percent_off', null,
+    10, null, null, null, null, null, null, null, null, null, null, null,
+    null, null, null, null, true);
+  perform public.upsert_pos_promotion(v_org, 'Ten off', 'percent_off', null,
+    10, null, null, null, null, null, null, null, null, null, null, null,
+    null, null, null, null, true);
+  perform pg_temp.check_eq('without a key, two promotions both running',
+    (select count(*)::integer from public.pos_promotions where org_id = v_org),
+    2);
+
+  v_first := public.upsert_pos_promotion(v_org, 'Five off', 'percent_off',
+    null, 5, null, null, null, null, null, null, null, null, null, null,
+    null, null, null, null, null, true, 'PROMO-1');
+  v_again := public.upsert_pos_promotion(v_org, 'Five off', 'percent_off',
+    null, 5, null, null, null, null, null, null, null, null, null, null,
+    null, null, null, null, null, true, 'PROMO-1');
+  perform pg_temp.check_true('a replayed promotion returns the first',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and starts no third',
+    (select count(*)::integer from public.pos_promotions where org_id = v_org),
+    3);
+
+  -- ---- adjust_loyalty_points: a balance, not a row ----
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
+  insert into public.loyalty_programs (org_id, code, name)
+  values (v_org, 'LP1', 'Points') returning id into v_prog;
+  v_acct := public.enrol_loyalty_member(v_cust, null);
+
+  perform public.adjust_loyalty_points(v_acct, 50, 'A goodwill');
+  perform public.adjust_loyalty_points(v_acct, 50, 'A goodwill');
+  perform pg_temp.check_eq('without a key, 50 points credit 100',
+    app.loyalty_balance(v_acct), 100);
+
+  -- It returns the BALANCE, not the adjustment, so the replay must hand
+  -- back the same balance -- which is also the only way to tell a replay
+  -- from a second credit by looking at the return value alone.
+  v_n := public.adjust_loyalty_points(v_acct, 25, 'Another', 'POINTS-1');
+  perform pg_temp.check_eq('a replayed adjustment returns the same balance',
+    public.adjust_loyalty_points(v_acct, 25, 'Another', 'POINTS-1'), v_n);
+  perform pg_temp.check_eq('so the balance is 125, not 150',
+    app.loyalty_balance(v_acct), 125);
+
+  -- And the two that were measured as safe, kept as assertions because a
+  -- verdict the gate checks by TEXT is weaker than one it checks by
+  -- behaviour.
+  perform pg_temp.check_eq('enrol_loyalty_member returns the same account',
+    public.enrol_loyalty_member(v_cust, null), v_acct);
+  perform public.set_module_hidden(v_org, 'payroll', true);
+  perform public.set_module_hidden(v_org, 'payroll', true);
+  perform pg_temp.check_eq('and set_module_hidden leaves one row',
+    (select count(*)::integer from public.org_modules
+      where org_id = v_org and module_code = 'payroll'), 1);
+end $$;
+
+
 rollback;

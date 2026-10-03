@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `685a3156`, the 3 October change: **the call stage is laid out to fit the window**, green in run 2204, front end only, no migration — reported from a handset as a rotated call going dark, and a second defect unrelated to the rotation fix of 1 October. Before it, the 2 October session: `0729`, `0730`, `0731` and `0732`, with documentation commits between them. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
-| CI | **green through run 2204 (`685a3156`, the call stage fitting the window)**; 2194 to 2204 are all green. Earlier in that span, green through run 2201 (`9e42ebf1`, `0732`); 2194 to 2201 are all green, and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0735` is the highest. `0733` is live and VERIFIED; `0734` and `0735` are on the branch and NOT yet verified in production** — it adds four idempotency-key overloads and four `comment on function`s, nothing destructive. `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Head at time of writing | `0736`, the sixth tranche of the idempotency census and the fifth migration of 3 October: **the POS back office and the loyalty balance stop doubling**. Before it, in order: `685a3156` (the call stage is laid out to fit the window, front end only — reported from a handset as a rotated call going dark), `6ad94e5c`, `6d34af57` (**`0733`**), `56337d8b`, `b0682f0b`, `39c4bc0f`, `ecefa7a9` (**`0734`**) and `981de134` (**`0735`**). Before 3 October, the 2 October session: `0729`, `0730`, `0731` and `0732`. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
+| CI | **green through run 2211 (`981de134`, `0735`)**; 2204 to 2211 are all green — 2204 (`685a3156`), 2205, 2206 (**`0733` applied**), 2207, 2208, 2209, 2210 (**`0734` applied**) and 2211 (**`0735` applied**). 2194 to 2204 are all green, and `0732` landed in run 2201 (`9e42ebf1`); and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
+| Migrations | **`0736` is the highest. `0733`, `0734` and `0735` are live and VERIFIED; `0736` is on the branch and NOT yet verified in production** — between them they add 24 idempotency-key overloads and a `comment on function` for each, nothing destructive, nothing dropped. For each of the three verified: `schema_migrations` has it, every overload exists with execute granted to `authenticated` and **not** to `anon`, and each carries its comment. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
 | Gates | **383 SQL assertion files, 60 Python gates (+26 gate self-tests, one of which is 25 assertions of its own), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 824 functions, 367 tables, version `0735`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| API description | 830 functions, 367 tables, version `0736`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts, and it fails on a **stale comment** too — a wrapper whose `comment on function` was written against the wrong signature clobbers the inner function's comment and the description then disagrees with the schema |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -217,6 +217,87 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0736`: the POS back office, and a double handful of points
+
+48 → **38**. Six wrappers and four more verdicts, all measured:
+
+    upsert_cash_forecast_item  -> 2 forecast lines
+    upsert_pos_driver          -> 2 drivers
+    upsert_pos_report          -> 2 saved reports
+    upsert_pos_menu_schedule   -> 2 schedules
+    upsert_pos_promotion       -> 2 promotions
+    adjust_loyalty_points      -> balance 100, from two 50-point taps
+
+**`adjust_loyalty_points` is the second in this programme whose damage is
+not a row**, after `0735`'s `escalate_ticket`. `app.loyalty_balance` came
+back **100** after two identical 50-point adjustments: the ledger has two
+entries, which is correct bookkeeping for two adjustments, and the
+customer has twice the points a cashier granted once. Nothing on the
+account says the grant was one press. That shape — a number, not a row —
+is now two of eighteen, and it is the shape a person cannot find by
+looking at a list and deleting the second one.
+
+The five `upsert_*` are the ordinary shape: each takes no id on a create,
+mints one, and has no unique index on anything the caller sends, so two
+identical calls leave two rows. `upsert_pos_promotion` takes
+**twenty-two** arguments, which is why the wrapper is long and why the
+client call site is the one most likely to drift — the gate that requires
+every parameter to be named is doing real work there.
+
+`adjust_loyalty_points`'s organization comes from
+`public.loyalty_accounts`, not from an argument: the call names an account
+and a delta. Its stored result is keyed `balance`, so a replay returns the
+balance rather than a row id — the same decision as `0734`'s `knock_off`,
+which returns the count it returned the first time rather than zero.
+
+### Four came out, measured
+
+- `upsert_loyalty_tier` → `unique:loyalty_tiers_program_id_code_key`
+- `upsert_pos_modifier` → `unique:pos_modifiers_group_id_code_key`
+- `enrol_loyalty_member` → `existing:A cashier who taps twice enrols one
+  member` — the second `existing:` after `0735`'s `open_tax_estimate`:
+  the function looks for the member and hands them back.
+- `set_module_hidden` → `natural:sets a flag`, which cannot be set twice.
+
+Three of those four were in the "same shape and very probably safe" list
+this file wrote at the 85, and the fourth was not on any list. Measuring
+them was still worth it: `enrol_loyalty_member` is the one that would
+have been wrapped on the strength of its body, and wrapping it would have
+been wrong.
+
+### The mutant that survived
+
+"`upsert_pos_driver` fingerprints without the name" survived, because the
+block's two keyed calls sent **identical arguments**. A wrapper that
+ignored half its input would have passed. The assertion added is a
+same-key-different-name call expecting `22023` — the idempotency layer's
+"this key was used with different arguments" — and it kills the mutant.
+
+**The general form: a block that only ever sends one payload cannot test
+that the key covers the payload.** It is the twelfth entry of
+`docs/widget-tests.md` wearing different clothes — a fixture where the
+right value and the wrong value are the same value.
+
+### Where the census stands after six tranches
+
+| | |
+| --- | --- |
+| client-reachable writes | **340** |
+| hold an idempotency key | **24** (0307's four, then 0733–0736's twenty) |
+| insert nothing at all | **146** |
+| guard or replace every row they insert | **34** |
+| refuse a repeat BY NAME | **37** |
+| carry a checked verdict | **61** |
+| **undecided** | **38** |
+
+`BACKLOG = 38` in the gate. 137 → 85 → 56 → 48 → 38 across the five
+tranches of 3 October. What is left is listed in the section above for
+the 85, minus what each tranche took; the largest remaining group is
+still "inserts only through a callee", which the census cannot see and
+which therefore has to be read one function at a time.
+
+Six mutants, all killed, control surviving.
 
 ## `0735`: a second ticket, a second link, a second transfer
 

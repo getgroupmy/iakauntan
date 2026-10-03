@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0735` (the highest applied migration).
-824 functions and 367 readable tables, of which
+Schema version `0736` (the highest applied migration).
+830 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**683 of 824 functions carry a `comment on
+**689 of 830 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -51,6 +51,7 @@ rather than quietly answered. The key has no default, because a
 call that omits one merely-optional argument would otherwise
 resolve to the unprotected original and return a plausible id.
 
+- `adjust_loyalty_points`
 - `allocate_payment_with_discount`
 - `allocate_with_discount`
 - `apply_deposit`
@@ -69,6 +70,11 @@ resolve to the unprotected original and return a plausible id.
 - `report_feedback`
 - `share_document`
 - `share_ticket`
+- `upsert_cash_forecast_item`
+- `upsert_pos_driver`
+- `upsert_pos_menu_schedule`
+- `upsert_pos_promotion`
+- `upsert_pos_report`
 
 ## Reachable without signing in
 
@@ -99,7 +105,7 @@ needs a user token.
 
 ## The functions, by module
 
-### accounting (12)
+### accounting (13)
 
 Refused unless the company has the `accounting` module switched on and the caller may use it.
 
@@ -115,6 +121,7 @@ Refused unless the company has the `accounting` module switched on and the calle
 - `set_budget_lines(p_budget uuid, p_lines jsonb)` *(writes)* — Replaces a budget's lines wholesale and returns how many were written.
 - `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)* — Creates or renames a budget for a financial year.
 - `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)* — Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or bill has yet recorded -- so the thirteen-week forecast can include it.
+- `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text, p_idempotency_key text)` *(writes)* — Saves one cash forecast line per idempotency key: amends when p_id is given, creates when it is null.
 
 ### contacts (1)
 
@@ -188,11 +195,12 @@ Refused unless the company has the `legal` module switched on and the caller may
 - `check_matter_conflict(p_org uuid, p_client uuid, p_opposing_party text)` — Both directions of a professional conflict: files where the firm acts for the proposed opposing party, and files where it has acted against the proposed client.
 - `report_matters_over_agreed_fee(p_org uuid)` — Fixed-fee matters where billed plus unbilled time has passed the agreed fee.
 
-### loyalty (11)
+### loyalty (12)
 
 Refused unless the company has the `loyalty` module switched on and the caller may use it.
 
 - `adjust_loyalty_points(p_account uuid, p_points integer, p_note text)` *(writes)* — Adds or removes points by hand and returns the new balance.
+- `adjust_loyalty_points(p_account uuid, p_points integer, p_note text, p_idempotency_key text)` *(writes)* — Adjusts a loyalty balance once per idempotency key.
 - `enrol_loyalty_member(p_contact uuid, p_card_no text)` *(writes)* — Puts a customer on the loyalty programme and returns the account.
 - `expire_loyalty_points(p_org uuid)` *(writes)* — Zeroes the balance of every account dormant longer than the programme allows, and returns who lost what so somebody can look before it is believed.
 - `loyalty_account_balance(p_contact uuid)`
@@ -221,7 +229,7 @@ Refused unless the company has the `payroll` module switched on and the caller m
 - `ea_statement(p_employee_id uuid, p_tax_year integer)` — One employee's EA form (C.P.8A) figures for a year of assessment: this employer's payslips only, by the year of the PAY DATE, from posted runs.
 - `ea_statements(p_org_id uuid, p_tax_year integer)` — Who is owed an EA form for a year of assessment and what each one comes to, leavers included.
 
-### pos (126)
+### pos (130)
 
 Refused unless the company has the `pos` module switched on and the caller may use it.
 
@@ -337,14 +345,18 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` *(writes)* — Creates or edits a kitchen counter that orders are routed to.
 - `upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` *(writes)* — Creates or edits a delivery zone for an outlet: the postcodes it covers, the fee, the minimum order, the amount above which delivery is free, and the expected minutes.
 - `upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean)` *(writes)* — Creates or edits a delivery driver, optionally tied to a user account.
+- `upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean, p_idempotency_key text)` *(writes)* — Saves one delivery driver per idempotency key.
 - `upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` *(writes)* — Creates or edits a QR menu link -- the sticker on a table or beside a register.
 - `upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean)` *(writes)* — Creates or edits a menu schedule -- which dishes are orderable on which days and between which hours.
+- `upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean, p_idempotency_key text)` *(writes)* — Saves one menu schedule per idempotency key.
 - `upsert_pos_modifier(p_group uuid, p_code text, p_name text, p_price_delta numeric, p_id uuid, p_is_default boolean, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits one answer to a modifier group.
 - `upsert_pos_modifier_group(p_org uuid, p_code text, p_name text, p_min_select integer, p_max_select integer, p_id uuid, p_sort_order integer, p_is_active boolean, p_allows_free_text boolean)` *(writes)* — Creates or renames a modifier group -- the question a dish comes with -- including whether the till may answer it with something that is not on the list.
 - `upsert_pos_promotion(p_org uuid, p_name text, p_kind app.pos_promo_kind, p_code text, p_percent numeric, p_amount numeric, p_buy integer, p_get integer, p_starts_on date, p_ends_on date, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_min_subtotal numeric, p_max_uses integer, p_max_per_customer integer, p_items uuid[], p_outlets uuid[], p_channels text[], p_id uuid, p_is_active boolean)` *(writes)* — Writes a promotion and its scope.
+- `upsert_pos_promotion(p_org uuid, p_name text, p_kind app.pos_promo_kind, p_code text, p_percent numeric, p_amount numeric, p_buy integer, p_get integer, p_starts_on date, p_ends_on date, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_min_subtotal numeric, p_max_uses integer, p_max_per_customer integer, p_items uuid[], p_outlets uuid[], p_channels text[], p_id uuid, p_is_active boolean, p_idempotency_key text)` *(writes)* — Saves one promotion per idempotency key.
 - `upsert_pos_receipt_settings(p_outlet uuid, p_header text, p_footer text, p_paper_mm smallint, p_copies smallint, p_language text, p_item_codes boolean, p_cashier boolean, p_table boolean, p_channel boolean, p_tax boolean, p_customer boolean, p_points boolean, p_qr boolean)` *(writes)* — Saves what an outlet prints — the header and footer on pos_outlets, the choices on pos_receipt_settings — in one call, so a shop is never left having saved half of it.
 - `upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` *(writes)* — Creates or edits what a dish is made of, so selling one takes the ingredients off the shelf.
 - `upsert_pos_report(p_org uuid, p_name text, p_source app.pos_report_source, p_dimensions text[], p_measures text[], p_period text, p_from date, p_to date, p_outlets uuid[], p_channels text[], p_sort_by text, p_sort_desc boolean, p_limit integer, p_shared boolean, p_id uuid)` *(writes)* — Saves a built report, checking every key through the same allow-list the query uses — so a report that cannot run cannot be saved.
+- `upsert_pos_report(p_org uuid, p_name text, p_source app.pos_report_source, p_dimensions text[], p_measures text[], p_period text, p_from date, p_to date, p_outlets uuid[], p_channels text[], p_sort_by text, p_sort_desc boolean, p_limit integer, p_shared boolean, p_id uuid, p_idempotency_key text)` *(writes)* — Saves one POS report definition per idempotency key.
 - `upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` *(writes)* — Creates or edits a stall in a food court, with the operator who runs it and the commission the court takes.
 - `upsert_pos_tender_type(p_id uuid, p_org uuid, p_code text, p_name text, p_kind app.pos_tender_kind, p_payment_mode text, p_bank_account uuid, p_counts_in_drawer boolean, p_gives_change boolean, p_opens_drawer boolean, p_sort integer, p_active boolean)` *(writes)* — Adds or amends a way of paying at the till: its button name, its short code, its kind, the LHDN payment mode an e-Invoice reports, and WHERE THE MONEY LANDS.
 - `upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` *(writes)* — Describes how a weighing scale's barcodes are laid out, so the till can read a price or a weight out of the label.

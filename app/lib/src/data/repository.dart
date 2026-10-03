@@ -12272,7 +12272,7 @@ extension RepoLoyaltyAdmin on Repo {
     int points,
     String note,
   ) async =>
-      (await callRpc(
+      (await callRpcOnce(
                 'adjust_loyalty_points',
                 params: {
                   'p_account': accountId,
@@ -12484,7 +12484,7 @@ extension RepoPosControls on Repo {
     String? endsAt,
     List<String>? items,
     bool isActive = true,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'upsert_pos_menu_schedule',
     params: {
       'p_org': orgId,
@@ -12492,6 +12492,10 @@ extension RepoPosControls on Repo {
       'p_weekdays': weekdays,
       'p_starts_at': startsAt,
       'p_ends_at': endsAt,
+      // Named for the same reason as `p_user` above; both default to
+      // null, and a schedule with no start or end date runs always.
+      'p_starts_on': null,
+      'p_ends_on': null,
       'p_items': items,
       'p_id': id,
       'p_is_active': isActive,
@@ -12614,7 +12618,7 @@ extension RepoPosControls on Repo {
     List<String>? outlets,
     List<String>? channels,
     bool isActive = true,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'upsert_pos_promotion',
     params: {
       'p_org': orgId,
@@ -12816,7 +12820,7 @@ extension RepoPosControls on Repo {
     String? plateNo,
     String? outletId,
     bool isActive = true,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'upsert_pos_driver',
     params: {
       'p_id': id,
@@ -12826,6 +12830,10 @@ extension RepoPosControls on Repo {
       'p_vehicle': vehicle,
       'p_plate': plateNo,
       'p_outlet': outletId,
+      // Named because the wrapper has no defaults. It has always been
+      // absent here and null is the inner function's own default, so
+      // this is the same call.
+      'p_user': null,
       'p_active': isActive,
     },
   )).toString();
@@ -13028,7 +13036,7 @@ extension RepoPosControls on Repo {
     int rowLimit = 200,
     bool shared = true,
     String? id,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'upsert_pos_report',
     params: {
       'p_org': orgId,
@@ -13955,7 +13963,7 @@ extension RepoCashFlow on Repo {
     String recurrence = 'once',
     DateTime? until,
     String? notes,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'upsert_cash_forecast_item',
     params: {
       'p_id': id,
