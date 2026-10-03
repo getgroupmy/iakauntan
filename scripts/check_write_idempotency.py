@@ -71,7 +71,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 
 # The undecided count as measured. It may fall; it may not rise.
-BACKLOG = 85
+BACKLOG = 60
 
 # Functions whose idempotency has been decided by reading them, with the
 # evidence. Three kinds, and each is re-checked:
@@ -173,6 +173,68 @@ VERDICTS: dict[str, str] = {
         "unique:pos_delivery_zones_name_uq",
     "upsert_budget":
         "unique:budgets_org_id_fiscal_year_id_name_key",
+
+    # Refusals the GUARD vocabulary does not know, found by pulling every
+    # `raise exception` out of each undecided function and reading the
+    # ones that mention something already having happened. Each text is
+    # checked against the body on every run, so a reworded refusal is
+    # still a refusal and a deleted one fails the gate.
+    #
+    # Three of these were also MEASURED -- create_fiscal_year,
+    # close_fiscal_year and reopen_fiscal_year are asserted in
+    # idempotency.sql, which is cheap for them and expensive for the
+    # rest: most of the others want a posted document, a sent transfer or
+    # a hired applicant first.
+    "accept_intercompany_bill":
+        "state:That invoice has already been billed here",
+    "book_appointment":
+        "state:already has somebody at %.",
+    "capitalise_bill_line":
+        "state:That line has already been capitalised.",
+    "chat_request_link":
+        "state:These companies are already linked",
+    "close_fiscal_year":
+        "state:% is already %",
+    "convert_lead":
+        "state:This lead was already converted",
+    "create_contact_as":
+        "state:already has a % record",
+    "create_fiscal_year":
+        "state:A fiscal year already covers % to %",
+    "create_previous_fiscal_year":
+        "state:A fiscal year already covers % to %",
+    "dispose_fixed_asset":
+        "state:has already been disposed of",
+    "draft_bill_from_received_einvoice":
+        "state:This document is already on a bill",
+    "hire_applicant":
+        "state:has already been hired",
+    "open_pos_shift":
+        "state:This till already has a shift open.",
+    "post_bank_transaction":
+        "state:That line is already matched to something.",
+    "post_landed_cost_run":
+        "state:That run is already %.",
+    "quote_opportunity":
+        "state:This deal already has a quotation.",
+    "remit_withholding":
+        "state:was already remitted on",
+    "renew_employee_document":
+        "state:That document has already been renewed.",
+    "reopen_fiscal_year":
+        "state:% is %, not closed",
+    "request_einvoice_for_sale":
+        "state:e-Invoice for % is already %",
+    "request_payslip_access":
+        "state:You already have a request awaiting a decision",
+    "send_stock_transfer":
+        "state:That transfer is already %.",
+    "split_pos_table":
+        "state:is already split into % parts",
+    "start_onboarding":
+        "state:This employee already has an open % checklist",
+    "transfer_document":
+        "state:every line has already been taken forward",
 }
 
 VOLATILE_SQL = """

@@ -634,10 +634,14 @@ begin
   exception
     when unique_violation then
       raise notice 'ok   % is refused by its unique index', p_label;
-    when raise_exception then
+    when others then
       -- Its own refusal, which is just as good and is what
       -- upsert_pos_tender_type does: "The code CSH2 is already Cash
-      -- two's." Re-raised when it is the FAIL above.
+      -- two's." `when others` rather than `when raise_exception`,
+      -- because these refusals pick their own SQLSTATE --
+      -- close_fiscal_year's "2026 is already closed" is not
+      -- raise_exception and went uncaught. The FAIL above is re-raised
+      -- so a function that really does double is not swallowed here.
       if sqlerrm like 'FAIL:%' then raise; end if;
       raise notice 'ok   % refuses it in its own words: %', p_label,
         left(sqlerrm, 48);
@@ -691,6 +695,21 @@ begin
   perform pg_temp.refuses_a_repeat('upsert_budget', format(
     'select public.upsert_budget(null, %L, %L, %L, null, null)',
     v_org, v_fy, 'Budget 1'));
+
+  -- And three of the `state:` verdicts, which are the cheap ones to
+  -- stand up. The rest of that batch wants a posted document, a sent
+  -- transfer or a hired applicant first, and their verdicts rest on the
+  -- gate finding the refusal text in the body rather than on a fixture
+  -- here.
+  -- NEXT year, because this org already has this one -- the block
+  -- created it. `refuses_a_repeat` needs a first call that succeeds.
+  perform pg_temp.refuses_a_repeat('create_fiscal_year', format(
+    'select public.create_fiscal_year(%L, %L)', v_org,
+    (date_trunc('year', pg_temp.today()) + interval '1 year')::date));
+  perform pg_temp.refuses_a_repeat('close_fiscal_year',
+    format('select public.close_fiscal_year(%L)', v_fy));
+  perform pg_temp.refuses_a_repeat('reopen_fiscal_year',
+    format('select public.reopen_fiscal_year(%L)', v_fy));
 end $$;
 
 

@@ -218,6 +218,81 @@ extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
+## Twenty-five refusals the vocabulary did not know
+
+85 → **60**, and the method is worth more than the number. The census's
+automatic `guarded` category matches `already (posted|paid|void|…)` — a
+closed vocabulary of past participles. So it found "Adjustment % is
+already posted" and missed every one of these:
+
+| | |
+| --- | --- |
+| `accept_intercompany_bill` | "That invoice has already been billed here" |
+| `capitalise_bill_line` | "That line has already been capitalised." |
+| `chat_request_link` | "These companies are already linked" |
+| `close_fiscal_year` | "% is already %" |
+| `convert_lead` | "This lead was already converted" |
+| `create_contact_as` | "already has a % record" |
+| `create_fiscal_year`, `create_previous_fiscal_year` | "A fiscal year already covers % to %" |
+| `dispose_fixed_asset` | "has already been disposed of" |
+| `draft_bill_from_received_einvoice` | "This document is already on a bill" |
+| `hire_applicant` | "has already been hired" |
+| `open_pos_shift` | "This till already has a shift open." |
+| `post_bank_transaction` | "That line is already matched to something." |
+| `post_landed_cost_run` | "That run is already %." |
+| `quote_opportunity` | "This deal already has a quotation." |
+| `remit_withholding` | "was already remitted on" |
+| `renew_employee_document` | "That document has already been renewed." |
+| `reopen_fiscal_year` | "% is %, not closed" |
+| `request_einvoice_for_sale` | "e-Invoice for % is already %" |
+| `request_payslip_access` | "You already have a request awaiting a decision" |
+| `send_stock_transfer` | "That transfer is already %." |
+| `split_pos_table` | "is already split into % parts" |
+| `start_onboarding` | "This employee already has an open % checklist" |
+| `transfer_document` | "every line has already been taken forward" |
+| `book_appointment` | "already has somebody at %." |
+
+They were found by pulling every `raise exception` out of each undecided
+function and reading the ones that mention something having already
+happened — not by widening the regex, which would have started matching
+sentences like "the figures already agree with the statement".
+
+Each is a `state:` verdict, so the gate looks for that exact text in the
+body on every run: a reworded refusal is still a refusal, a deleted one
+fails. Every one of the 25 was checked present before being written
+down, which caught nothing but would have caught a typo.
+
+Three are also asserted in `idempotency.sql`, because they are cheap to
+stand up: `create_fiscal_year`, `close_fiscal_year` and
+`reopen_fiscal_year`. The rest want a posted document, a sent transfer or
+a hired applicant first, and their verdicts rest on the text check.
+
+**And the helper that asserts them had to be widened.** It caught
+`unique_violation` and `raise_exception`, which is what the `upsert_*`
+block needed — and `close_fiscal_year`'s "2026 is already closed" is
+neither, so it went uncaught and the block failed on a refusal that was
+working. It is `when others` now, with the deliberate `FAIL:` re-raised
+so a function that really does double is still not swallowed.
+
+### 60 left, and what is in them
+
+The genuine wrapper work, unchanged in shape from `0733`'s four: a number
+the function mints (`create_bank_transfer`, `create_payroll_run`,
+`create_withholding`, `create_po_from_suggestions`, `create_ticket`,
+`open_matter`, `upsert_landed_cost_run`), no unique index at all
+(`allocate_with_discount`, `allocate_payment_with_discount`,
+`apply_deposit`, `knock_off`, `adjust_loyalty_points`,
+`upsert_cash_forecast_item`, `upsert_pos_driver`, `upsert_pos_report`,
+`upsert_pos_menu_schedule`, `cover_line_with_membership`,
+`start_membership`), a state it increments (`escalate_ticket`), a token
+it generates (`share_document`, `share_ticket`, `upsert_pos_menu_link`),
+and the ones that insert only through a callee, where the statement is
+out of the census's sight (`bill_matter_time`, `bill_project_time`,
+`bounce_pdc`, `clear_pdc`, `recognise_revenue`, `ingest_offline_sales`,
+`open_pos_sale`, `ensure_default_warehouse`, `next_document_number`,
+`run_item_conversion`, `run_depreciation`, `run_recurring_journals_for`,
+`settle_deposit`, `receive_stock_transfer`).
+
 ## The create-or-amend family, measured
 
 93 → **85**. Eight `upsert_*` functions take an optional id — with one
