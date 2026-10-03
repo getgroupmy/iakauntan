@@ -5166,7 +5166,7 @@ class Repo {
   Future<List<Map<String, dynamic>>> bulkEmailDocuments(List<String> ids,
           {String template = 'document_new'}) async =>
       Repo._rows(
-        await callRpc('bulk_email_documents',
+        await callRpcOnce('bulk_email_documents',
             params: {'p_ids': ids, 'p_template_code': template}),
       );
 
@@ -9206,16 +9206,27 @@ extension RepoHrSetup on Repo {
     String dispatch = 'queued',
     String? attachmentPath,
     String? attachmentName,
+    int? shareDays,
   }) async {
-    final data = await callRpc(
+    // Every parameter named, and the conditionals gone. `callRpcOnce`
+    // reaches an OVERLOAD with no defaults on anything, so a call that
+    // leaves one out does not fail — it resolves to the unprotected
+    // original and queues a second message on a retry.
+    // `scripts/check_idempotent_calls.py` is what keeps this honest.
+    //
+    // `shareDays` is sent as null on purpose rather than as 30: the
+    // wrapper omits the argument when it is null, so the function's own
+    // default applies and the number stays in one place.
+    final data = await callRpcOnce(
       'email_document',
       params: {
         'p_document_id': documentId,
-        if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
+        'p_to': (to == null || to.trim().isEmpty) ? null : to.trim(),
         'p_template_code': templateCode,
+        'p_share_days': shareDays,
         'p_dispatch': dispatch,
-        if (attachmentPath != null) 'p_attachment_path': attachmentPath,
-        if (attachmentName != null) 'p_attachment_name': attachmentName,
+        'p_attachment_path': attachmentPath,
+        'p_attachment_name': attachmentName,
       },
     );
     return data as String;
@@ -9291,18 +9302,24 @@ extension RepoHrSetup on Repo {
   Future<String> emailReceipt(
     String receiptId, {
     String? to,
+    String templateCode = 'receipt_issued',
     String dispatch = 'queued',
     String? attachmentPath,
     String? attachmentName,
   }) async {
-    final data = await callRpc(
+    // Named in full, for the reason given on [emailDocument]. The
+    // template code was never sent from here and the function's default
+    // was doing the work; the wrapper has no defaults, so it is named
+    // and the same default is passed explicitly.
+    final data = await callRpcOnce(
       'email_receipt',
       params: {
         'p_receipt_id': receiptId,
-        if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
+        'p_to': (to == null || to.trim().isEmpty) ? null : to.trim(),
+        'p_template_code': templateCode,
         'p_dispatch': dispatch,
-        if (attachmentPath != null) 'p_attachment_path': attachmentPath,
-        if (attachmentName != null) 'p_attachment_name': attachmentName,
+        'p_attachment_path': attachmentPath,
+        'p_attachment_name': attachmentName,
       },
     );
     return data as String;
@@ -10484,7 +10501,10 @@ extension RepoTicketing on Repo {
   }
 
   Future<void> assignTicket(String id, String? userId) async {
-    await callRpc('assign_ticket', params: {'p_ticket': id, 'p_user': userId});
+    await callRpcOnce(
+      'assign_ticket',
+      params: {'p_ticket': id, 'p_user': userId},
+    );
   }
 
   Future<void> addTicketComment(

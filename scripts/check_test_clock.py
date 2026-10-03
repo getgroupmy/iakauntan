@@ -56,7 +56,7 @@ REFUSED = ("month", "week", "quarter")
 
 #: `date_trunc('year', current_date)`, which is nearly always a fiscal
 #: year being created for a fixture. It may fall; it may not rise.
-YEAR_BUDGET = 150
+YEAR_BUDGET = 148
 
 #: Files that name BOTH clocks in code -- the Kuala Lumpur expression
 #: somewhere and a bare `current_date` somewhere else.

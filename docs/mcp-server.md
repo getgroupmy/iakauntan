@@ -30,32 +30,76 @@ on that.
 
 ## What is actually true, counted rather than remembered
 
+> **Updated 3 October by `0733`.** The table below was right about the
+> numbers and WRONG about what they meant, and the row that mattered —
+> "4 of 482" — reads as a 478-function backlog. It is not one. The
+> corrected figures are in the section after this, and
+> `scripts/check_write_idempotency.py` now holds them so they cannot go
+> stale again.
+
 | | |
 | --- | --- |
 | Functions `authenticated` may execute | **1,053** |
-| Of those, VOLATILE — i.e. they write | **482** |
-| Of those, accepting an idempotency key | **4** |
+| Of those, VOLATILE — i.e. they write | **482**, now 490 |
+| Of those, accepting an idempotency key | **4**, now **8** |
 | Functions described in `docs/api/` | 787, CI-checked against the schema |
 | Paths in the OpenAPI description | 1,149 |
 | Tables | 366 |
 
-The four are `post_manual_journal`, `create_contra`, `create_deposit`
-and `record_pdc` — `0307`'s overloads, with `0308` sweeping keys daily.
+The first four are `post_manual_journal`, `create_contra`,
+`create_deposit` and `record_pdc` — `0307`'s overloads, with `0308`
+sweeping keys daily. `0733` added `email_document`, `email_receipt`,
+`bulk_email_documents` and `assign_ticket`.
+
+## 478 was the wrong denominator, three times over
+
+A write only needs a key if a CLIENT can retry it, so the population is
+not every volatile function — it is the ones `repository.dart` calls.
+`scripts/check_write_idempotency.py` measures it on every CI run:
+
+| | |
+| --- | --- |
+| client-reachable writes | **340** |
+| hold an idempotency key | **8** |
+| insert nothing at all — `retire_*`, `delete_*`, `mark_*`, `set_*`, where a second call writes the state the first one wrote | **146** |
+| refuse a repeat BY NAME — "Adjustment % is already posted", "That contra is already void." | **37** |
+| carry a written verdict (a unique index, an `on conflict`, or "it is meant to repeat") | **12** |
+| **undecided** | **137** |
+
+So the backlog is 137 and not 478, it is enumerated rather than
+estimated, and the gate fails if it grows. That is the number to watch,
+and `0733`'s header explains each category.
+
+**Two cautions from doing the first four.** The census was first taken
+with a line-based `grep` and found 192 of 577 call sites, because a
+quarter of this client's calls put the function name on the line after
+`await callRpc(`. And two functions that read exactly like
+duplicate-on-retry defects — `save_payment_method`,
+`create_layout_from_builtin` — turned out to be refused by a UNIQUE
+INDEX that is in neither the table definition nor `pg_constraint`. Both
+were in the migration until the assertion that was supposed to
+demonstrate the duplicate raised a unique-violation instead. Read the
+bodies; then make the duplicate happen.
 
 So:
 
 - **Described surface: met.** `scripts/generate_api_description.py`
   regenerates it and CI fails a description that has drifted. This is
   the strong half and it is genuinely unusual to have.
-- **Idempotent writes: 4 of 482.** `0307` built the *mechanism*
+- **Idempotent writes: 8 of 340 client-reachable, with 195 of the rest
+  idempotent already and 137 undecided** — see the corrected table
+  above; "4 of 482" was the figure that made this look hopeless. `0307` built the *mechanism*
   — `app.idempotency_begin` / `app.idempotency_end` and an argument
   fingerprint, with a replayed key returning the first answer and a
-  reused key with different arguments refused. What it did not do is
-  apply it broadly, and nothing since has.
+  reused key with different arguments refused — and applied it to four
+  functions. `0733` applied it to the four writes whose retry sends a
+  second email or writes a second line of history, and built the census
+  that enumerates what is left.
 
-A retry-happy agent calling the other 478 is the exact failure
-`gaps-against-rillet` described. **This is the first thing to fix and
-it is not the server.**
+A retry-happy agent calling the undecided 137 is the failure
+`gaps-against-rillet` described, and it is a far smaller thing than the
+478 this file used to imply. **It is still the first thing to fix, and
+it is still not the server.**
 
 ## The question that decides the design
 
@@ -134,7 +178,7 @@ pointed at this:
   returning the first answer is exactly the kind of thing that passes
   a test written optimistically.
 
-## The first commit
+## The first commit — DONE, 3 October, as `0733`
 
 **Not the server.** Widen `0307`.
 
@@ -144,6 +188,29 @@ replay. When that list is long enough to be useful, the server is a
 thin thing over a surface that is already safe — and if the list turns
 out to be short, that is the answer to how much of shape (2) is worth
 building.
+
+**It turned out to be short, and the reason is the useful part.** Of 340
+client-reachable writes, 195 are already idempotent by construction
+rather than by anybody's intention — a `retire_*` that sets a state, a
+`post_*(p_id uuid)` that refuses an already-posted document, an
+`on conflict do update`. `0733` wrapped the four that were not and that
+cost something irreversible when repeated: three that send a customer a
+second email, and one that writes the ticket's history twice.
+
+So shape (2) — "read plus a named allowlist of writes, each idempotent"
+— is a shorter list than this brief assumed, and the thing standing
+between here and it is no longer the mechanism. It is the 137 undecided
+writes, which are enumerated by
+`scripts/check_write_idempotency.py` and whose count that gate will not
+let rise. Each needs somebody to read it and record one of: a key, a
+state guard it already has, or why repeating it is the feature.
+
+**What `0733` did NOT do**, deliberately: the `post_*(p_id uuid)` family
+still answers a retry with "already posted" rather than with the
+original id. `0307` called that "worth having, not worth conflating with
+a correctness fix", and it is still a separate change — one an agent
+would feel more than a person does, because a person sees the error and
+moves on.
 
 ## What this brief does not settle
 

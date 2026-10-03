@@ -1449,6 +1449,12 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_idempotent_calls.py "$DB"
 
+      - name: Check every client-reachable write is accounted for
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_write_idempotency_test.py
+          python3 scripts/check_write_idempotency.py "$DB"
+
       # -----------------------------------------------------------------
       # An edge function holding the service role is outside RLS
       # entirely, so every policy in the schema and the whole of

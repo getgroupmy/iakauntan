@@ -119,11 +119,11 @@ finish without printing.
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
 | Head at time of writing | `685a3156`, the 3 October change: **the call stage is laid out to fit the window**, green in run 2204, front end only, no migration — reported from a handset as a rotated call going dark, and a second defect unrelated to the rotation fix of 1 October. Before it, the 2 October session: `0729`, `0730`, `0731` and `0732`, with documentation commits between them. `0731` closed the last heading fallback; `0732` is the editor that makes its "or another account where one is defined" half reachable |
 | CI | **green through run 2204 (`685a3156`, the call stage fitting the window)**; 2194 to 2204 are all green. Earlier in that span, green through run 2201 (`9e42ebf1`, `0732`); 2194 to 2201 are all green, and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0732` is the highest, and `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Migrations | **`0733` is the highest. `0733` is on the branch and NOT yet verified in production** — it adds four idempotency-key overloads and four `comment on function`s, nothing destructive. `0729` through `0732` are all applied live and VERIFIED against production** — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
-| Gates | **383 SQL assertion files, 59 Python gates (+25 gate self-tests), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 810 functions, 367 tables, version `0732`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
+| Gates | **383 SQL assertion files, 60 Python gates (+26 gate self-tests), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
+| API description | 814 functions, 367 tables, version `0733`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -217,6 +217,121 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## The 3 October session, second change: idempotency keys
+
+Asked for: "apply idempotency keys to the remaining write functions",
+where `docs/mcp-server.md` said the position was **4 of 482**. Shipped as
+migration `0733` plus `scripts/check_write_idempotency.py`, and the
+useful part of this entry is the three times the measurement was wrong.
+
+### 478 was never the number, and my first correction of it was wrong too
+
+A write only needs a key if a CLIENT can retry it. The population is
+what `repository.dart` calls, not every volatile function — and I took
+that census with
+
+    grep -oE "callRpc\(\s*'([a-z0-9_]+)'" app/lib/src/data/repository.dart
+
+which found **192** functions. grep matches within a line. A quarter of
+this file's call sites put the name on the line AFTER `await callRpc(`.
+The real figure is **577**, and the 385 it missed include
+`email_receipt`, every `import_*`, and most of `create_*`. I had already
+told the user "the real set is far smaller than 478" on the strength of
+the 192 before finding this.
+
+The gate now does the scan multi-line, and
+`check_write_idempotency_test.py` asserts a split call site is found —
+the assertion that would have caught it.
+
+### What the schema actually looks like
+
+| | |
+| --- | --- |
+| client-reachable writes | **340** |
+| hold an idempotency key | **8** (0307's four, 0733's four) |
+| insert nothing at all | **146** |
+| refuse a repeat BY NAME — "Adjustment % is already posted" | **37** |
+| carry a written verdict | **12** |
+| **undecided** | **137** |
+
+`BACKLOG = 137` in the gate. It may fall; it may not rise. Each
+undecided function needs somebody to read it and record one of: a key, a
+state guard it already has, or why repeating it is the feature —
+`add_pos_sale_line` twice is two lines on the bill.
+
+### Two that looked like defects and were not
+
+`save_payment_method` and `create_layout_from_builtin` both end in an
+unconditional `insert` when no id is passed. Both were written into
+`0733` and into `idempotency.sql` as duplicate-on-retry defects. The
+block asserting the duplicate then raised
+
+    duplicate key value violates unique constraint "payment_methods_name_key"
+
+— a UNIQUE INDEX on `(org_id, lower(name)) where deleted_at is null`
+which is in neither the table definition nor `pg_constraint`, so reading
+the function bodies could not have found it. `report_layouts` has the
+same arrangement. Both came out.
+
+**This is the argument for making the first assertion in each block the
+unguarded double itself.** Without it both wrappers would have shipped,
+and every assertion about them would have passed.
+
+### The four that do double
+
+`email_document`, `email_receipt`, `bulk_email_documents` —
+a retry queues a second message to the customer, and that side effect
+leaves the building and cannot be reversed by a journal — and
+`assign_ticket`, where what doubles is the ticket's history.
+
+`bulk_email_documents` is the first wrapper to return a TABLE rather
+than an id: the stored result is `jsonb_agg` of the rows and a replay
+re-emits them, because a replay that returned an empty set would pass
+any test that only counted the outbox.
+
+### Seven mutants, all killed, and the last one took three rounds
+
+Restated into the built database and run against `idempotency.sql`, the
+shape `0475` used. Six died at the assertion aimed at them. The seventh
+— passing `p_share_days` through positionally instead of omitting it —
+survived twice, and both reasons are worth keeping:
+
+1. **`expires_at is not null` is not an assertion about a number.**
+   There are two defaults for this one value: `email_document`'s own
+   `p_share_days default 30` and `app.issue_share_token`'s
+   `greatest(coalesce(p_valid_days, 45), 1)`. Passing the null through
+   does not fail and does not produce a null expiry — it silently gives
+   the customer a link good for 45 days instead of 30.
+2. **`now()` does not move inside a transaction.** The fixed assertion
+   read the keyed call's share link out of three with `order by
+   created_at desc` — and all three rows carry the identical
+   `created_at`, so the order was the planner's choice and it kept
+   returning a link minted by an unkeyed send, which gets 30 whatever
+   the wrapper does. A document sent only with a key has exactly one
+   link. That is entry 12 of `docs/widget-tests.md` in a new costume:
+   a fixture where the right value and the wrong value are the same row.
+
+### Gates this tripped on the way, all of them right
+
+`check_idempotent_calls.py` (a wrapper no caller uses is not
+protection — and its own query had to be fixed: `proargnames` includes
+the OUT columns, so it asked a caller to name `id`, `doc_no`, `sent` and
+`problem`); `outbound_email.sql`'s "there is exactly one
+email_document", which now asserts there are two and that the second is
+the first plus the key and nothing else; `check_undocumented_writes.py`
+(each wrapper needed a `comment on function` naming its refusals);
+`check_test_clock.py` (the new KL-time fixtures made `idempotency.sql` a
+two-clock file, so the whole file is on `pg_temp.today()` now);
+and `generate_api_description.py --check`.
+
+### What this deliberately did NOT do
+
+The `post_*(p_id uuid)` family still answers a retry with "already
+posted" rather than with the original id. `0307` called that "worth
+having, not worth conflating with a correctness fix" and it is still a
+separate change — one an agent would feel more than a person, because a
+person reads the error and moves on.
 
 ## The 3 October session
 

@@ -52,8 +52,22 @@ CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
 # caller has to name to select it. Asked of the database rather than
 # parsed out of the migrations: what matters is the signature that is
 # actually installed, which is what PostgREST resolves against.
+# INPUT parameters only. `proargnames` holds the OUT columns too, and
+# `0733`'s `bulk_email_documents` is the first wrapper to return a table
+# rather than an id -- so this gate asked a caller to name `id`,
+# `doc_no`, `sent` and `problem`, which are the function's result and not
+# anything a body can send. `proargmodes` is null when every parameter is
+# an ordinary IN one, which is the case for all the others.
 WRAPPERS_SQL = """
-select p.proname || ' ' || array_to_string(p.proargnames, ',')
+select p.proname || ' ' || array_to_string(array(
+         select a.name
+           from unnest(p.proargnames,
+                       coalesce(p.proargmodes,
+                                array_fill('i'::"char",
+                                  array[array_length(p.proargnames, 1)])))
+                  as a(name, mode)
+          where a.mode in ('i', 'b', 'v')
+       ), ',')
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public'

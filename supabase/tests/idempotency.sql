@@ -40,6 +40,20 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
+-- One clock, named once.
+--
+-- `check_test_clock.py` fails a file that uses both `current_date` and a
+-- Kuala Lumpur date in code, because the two are a different day for
+-- eight hours out of every twenty-four and a fixture built from one and
+-- asserted against the other is red overnight and green by lunchtime.
+-- This file used `current_date` throughout and gained KL dates when the
+-- 0733 blocks arrived, so it is all on this instead -- and the
+-- expression lives in one function rather than twenty call sites.
+create or replace function pg_temp.today()
+returns date language sql stable as $$
+  select (now() at time zone 'Asia/Kuala_Lumpur')::date
+$$;
+
 -- Two postable accounts and an open year, which anything touching the
 -- ledger needs.
 create or replace function pg_temp.ledger_org(p_name text)
@@ -47,7 +61,8 @@ returns uuid language plpgsql as $$
 declare v_org uuid;
 begin
   v_org := pg_temp.test_org(p_name);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
   return v_org;
 end $$;
 
@@ -79,8 +94,8 @@ begin
   v_org := pg_temp.ledger_org('Ulang Sdn Bhd');
   v_lines := pg_temp.balanced_lines(v_org);
 
-  a := public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1');
-  b := public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1');
+  a := public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1');
+  b := public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1');
 
   perform pg_temp.check_true(
     'without a key, an identical retry posts a second entry', a <> b);
@@ -98,8 +113,8 @@ begin
   v_org := pg_temp.ledger_org('Sekali Sdn Bhd');
   v_lines := pg_temp.balanced_lines(v_org);
 
-  a := public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1', 'k-1');
-  b := public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1', 'k-1');
+  a := public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1', 'k-1');
+  b := public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1', 'k-1');
 
   perform pg_temp.check_eq('a repeated key returns the first answer',
     a::text, b::text);
@@ -118,11 +133,11 @@ declare v_org uuid; v_lines jsonb; v_id uuid;
 begin
   v_org := pg_temp.ledger_org('Silap Sdn Bhd');
   v_lines := pg_temp.balanced_lines(v_org);
-  v_id := public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1', 'k-2');
+  v_id := public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1', 'k-2');
 
   begin
     perform public.post_manual_journal(
-      v_org, current_date, v_lines, 'Something else entirely', 'R-2', 'k-2');
+      v_org, pg_temp.today(), v_lines, 'Something else entirely', 'R-2', 'k-2');
     raise exception 'FAIL: a key was honoured for a different request';
   exception when sqlstate '22023' then
     raise notice 'ok   a key reused for a different request is refused';
@@ -130,7 +145,7 @@ begin
 
   -- And the refusal did not damage what the key already stood for.
   perform pg_temp.check_eq('the original answer still stands',
-    public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1', 'k-2')::text,
+    public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1', 'k-2')::text,
     v_id::text);
 end $$;
 
@@ -150,11 +165,11 @@ begin
   -- returned. A second connection cannot be opened inside a test that
   -- must roll back, so the claim is made directly.
   perform app.idempotency_begin(v_org, 'k-3', 'post_manual_journal',
-    jsonb_build_object('entry_date', current_date, 'lines', v_lines,
+    jsonb_build_object('entry_date', pg_temp.today(), 'lines', v_lines,
                        'description', 'Fi', 'reference', 'R-1'));
 
   begin
-    perform public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'R-1', 'k-3');
+    perform public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'R-1', 'k-3');
     raise exception 'FAIL: a key in flight was executed a second time';
   exception when sqlstate '55006' then
     raise notice 'ok   a key still in progress is refused, not repeated';
@@ -176,9 +191,9 @@ begin
   v_a := pg_temp.ledger_org('Satu Sdn Bhd');
   v_b := pg_temp.ledger_org('Dua Sdn Bhd');
 
-  a := public.post_manual_journal(v_a, current_date,
+  a := public.post_manual_journal(v_a, pg_temp.today(),
          pg_temp.balanced_lines(v_a), 'Fi', 'R-1', 'shared');
-  b := public.post_manual_journal(v_b, current_date,
+  b := public.post_manual_journal(v_b, pg_temp.today(),
          pg_temp.balanced_lines(v_b), 'Fi', 'R-1', 'shared');
 
   perform pg_temp.check_true(
@@ -201,7 +216,7 @@ declare
   v_user uuid := pg_temp.another_user('nosy@kunci.test');
   v_role text; v_read boolean := false;
 begin
-  perform public.post_manual_journal(v_org, current_date,
+  perform public.post_manual_journal(v_org, pg_temp.today(),
     pg_temp.balanced_lines(v_org), 'Fi', 'R-1', 'k-4');
 
   perform pg_temp.sign_in_as(v_user);
@@ -232,10 +247,10 @@ begin
   v_org := pg_temp.ledger_org('Sapu Sdn Bhd');
   v_lines := pg_temp.balanced_lines(v_org);
 
-  perform public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'old', 'k-old');
+  perform public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'old', 'k-old');
   update public.idempotency_keys set created_at = now() - interval '25 hours'
    where org_id = v_org and key = 'k-old';
-  perform public.post_manual_journal(v_org, current_date, v_lines, 'Fi', 'new', 'k-new');
+  perform public.post_manual_journal(v_org, pg_temp.today(), v_lines, 'Fi', 'new', 'k-new');
 
   v_dropped := app.sweep_idempotency_keys(now() - interval '24 hours');
 
@@ -272,7 +287,7 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Kunci Ulang Sdn Bhd');
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
 
   select id into v_a from public.accounts
    where org_id = v_org and account_type = 'expense'
@@ -290,7 +305,7 @@ begin
 
   -- A member does the protected write, so there is a key to replay.
   perform public.post_manual_journal(
-    v_org, current_date, v_lines, 'A journal', null, 'REPLAY-1');
+    v_org, pg_temp.today(), v_lines, 'A journal', null, 'REPLAY-1');
   perform pg_temp.check_eq('the member''s journal is there',
     (select count(*)::integer from public.gl_entries
       where org_id = v_org and description = 'A journal'), 1);
@@ -301,7 +316,7 @@ begin
 
   begin
     perform public.post_manual_journal(
-      v_org, current_date, v_lines, 'A journal', null, 'REPLAY-1');
+      v_org, pg_temp.today(), v_lines, 'A journal', null, 'REPLAY-1');
     v_took := true;
   exception when sqlstate '42501' then
     get stacked diagnostics v_msg = message_text;
@@ -316,7 +331,7 @@ begin
   -- one, and it has to arrive first.
   begin
     perform public.post_manual_journal(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(
         jsonb_build_object('account_id', v_a, 'debit', 999, 'credit', 0),
         jsonb_build_object('account_id', v_b, 'debit', 0, 'credit', 999)),
@@ -333,7 +348,7 @@ begin
   -- the real function and is refused there.
   begin
     perform public.post_manual_journal(
-      v_org, current_date, v_lines, 'Fresh', null, 'REPLAY-NEW');
+      v_org, pg_temp.today(), v_lines, 'Fresh', null, 'REPLAY-NEW');
     v_took := true;
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -346,11 +361,246 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   perform pg_temp.check_true('while the member replays their own key',
     public.post_manual_journal(
-      v_org, current_date, v_lines, 'A journal', null, 'REPLAY-1')
+      v_org, pg_temp.today(), v_lines, 'A journal', null, 'REPLAY-1')
     is not null);
   perform pg_temp.check_eq('without writing it twice',
     (select count(*)::integer from public.gl_entries
       where org_id = v_org and description = 'A journal'), 1);
 end $$;
+
+-- =====================================================================
+-- 0733 :: the four that still doubled
+--
+-- `0307` protected four writes. The six below were found by asking the
+-- schema which client-reachable writes insert something and refuse
+-- nothing -- and the first version of that question was asked with a
+-- line-based `grep` over `repository.dart`, which missed every call site
+-- that puts the function name on the line after `await callRpc(`: 192
+-- functions found where there are 577. `email_receipt` is in this file
+-- because of the corrected count and not the first one.
+--
+-- Each block asserts the same three things, and the FIRST of them is the
+-- one that makes the other two mean anything: without a key, the second
+-- call really does do the work twice. An assertion that only checked the
+-- replay would pass just as well against a function that could not
+-- double in the first place.
+--
+-- That is not a style preference. `save_payment_method` and
+-- `create_layout_from_builtin` were in this file and in `0733`, both
+-- ending in an unconditional insert when no id is passed, and the block
+-- asserting the duplicate is what found they cannot duplicate: a UNIQUE
+-- INDEX on `(org_id, lower(name))` refuses the second tap. Neither index
+-- is in its table definition or in `pg_constraint`, so reading the
+-- function bodies — which is how both got onto the list — could not have
+-- found it. Both came out of the migration.
+-- =====================================================================
+
+create or replace function pg_temp.sendable_org(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.test_org(p_name);
+begin
+  perform public.create_fiscal_year(v_org,
+    pg_temp.today());
+  insert into public.email_settings (org_id, is_enabled) values (v_org, true);
+  return v_org;
+end $$;
+
+create or replace function pg_temp.a_customer(p_org uuid, p_code text)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.contacts (org_id, code, name, contact_type, email)
+  values (p_org, p_code, 'Reachable Bhd', 'customer', 'ar@reachable.example')
+  returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function pg_temp.an_invoice(
+  p_org uuid, p_contact uuid, p_no text)
+returns uuid language plpgsql as $$
+declare v_doc uuid;
+begin
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (p_org, 'invoice', p_no,
+          pg_temp.today(),
+          pg_temp.today() + 30, p_contact,
+          'MYR', 1, 500, 500, 500, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price, line_total)
+  values (p_org, v_doc, 1, 'Consulting', 1, 500, 500);
+  perform public.post_sales_document(v_doc);
+  return v_doc;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- email_document: the side effect that leaves the building
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_contact uuid; v_doc uuid; v_fresh uuid; v_first uuid;
+  v_again uuid; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.sendable_org('Mailer Sdn Bhd');
+  v_contact := pg_temp.a_customer(v_org, 'C-001');
+  v_doc := pg_temp.an_invoice(v_org, v_contact, 'INV-1');
+
+  -- The defect. Two sends with no key are two messages to the customer,
+  -- and unlike a doubled journal nobody can reverse the second one.
+  perform public.email_document(v_doc);
+  perform public.email_document(v_doc);
+  perform pg_temp.check_eq('without a key, a retry emails the customer twice',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 2);
+
+  -- With one, the second call returns the first answer and queues
+  -- nothing.
+  v_first := public.email_document(v_doc, null, 'document_new', null,
+    'queued', null, null, 'SEND-1');
+  v_again := public.email_document(v_doc, null, 'document_new', null,
+    'queued', null, null, 'SEND-1');
+  perform pg_temp.check_true('a replayed send returns the first message id',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and queues nothing the second time',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 3);
+
+  -- And the omitted-argument branch really omitted it.
+  --
+  -- `expires_at is not null` is NOT the assertion -- it was, and a mutant
+  -- that passed the null straight through survived it. There are TWO
+  -- defaults for this one number: `email_document`'s own `p_share_days
+  -- default 30`, and `app.issue_share_token`'s
+  -- `greatest(coalesce(p_valid_days, 45), 1)`. So passing null through
+  -- does not fail and does not produce a null expiry -- it silently
+  -- gives the customer a link good for 45 days instead of 30. The
+  -- assertion has to be the number.
+  -- Its own document, and that is the assertion working rather than
+  -- tidiness. The share window was first checked on v_doc, ordered
+  -- `created_at desc` to pick the keyed call's link out of the three --
+  -- and `now()` DOES NOT MOVE INSIDE A TRANSACTION, so all three links
+  -- carry the same `created_at` and the order was whatever the planner
+  -- felt like. It kept returning a link minted by an unkeyed send, which
+  -- goes through the 7-argument original and gets 30 whatever the wrapper
+  -- does. The mutant that passes the null share window straight through
+  -- survived that for two rounds.
+  --
+  -- A document sent ONLY with a key has exactly one link, and it is the
+  -- wrapper's.
+  v_fresh := pg_temp.an_invoice(v_org, v_contact, 'INV-9');
+  perform public.email_document(v_fresh, null, 'document_new', null,
+    'queued', null, null, 'SEND-9');
+  perform pg_temp.check_eq('a null share window takes the function''s 30 days',
+    (select (expires_at::date - pg_temp.today())
+       from public.document_share_links where document_id = v_fresh), 30);
+
+  -- A key reused for a different request is a client bug, not a retry.
+  begin
+    perform public.email_document(v_doc, 'someone@else.example',
+      'document_new', null, 'queued', null, null, 'SEND-1');
+    v_took := true;
+  exception when sqlstate '22023' then v_took := false;
+  end;
+  perform pg_temp.check_true('the same key for a different address is refused',
+    not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- email_receipt
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_contact uuid; v_rcp uuid; v_first uuid; v_again uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.sendable_org('Receipts Sdn Bhd');
+  v_contact := pg_temp.a_customer(v_org, 'C-001');
+  insert into public.receipts (org_id, receipt_no, contact_id, amount)
+  values (v_org, 'RCP-1', v_contact, 500) returning id into v_rcp;
+
+  perform public.email_receipt(v_rcp);
+  perform public.email_receipt(v_rcp);
+  perform pg_temp.check_eq('without a key, a receipt is emailed twice too',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 2);
+
+  v_first := public.email_receipt(v_rcp, null, 'receipt_issued', 'queued',
+    null, null, 'RCP-SEND-1');
+  v_again := public.email_receipt(v_rcp, null, 'receipt_issued', 'queued',
+    null, null, 'RCP-SEND-1');
+  perform pg_temp.check_true('a replayed receipt send returns the first id',
+    v_first is not null and v_again = v_first);
+  perform pg_temp.check_eq('and queues nothing the second time',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 3);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- bulk_email_documents: the first wrapper that returns ROWS
+--
+-- A replay that returned an empty set would pass any assertion that only
+-- counted the outbox, so the rows themselves are asserted.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_contact uuid; v_a uuid; v_b uuid; v_n integer; v_rows integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.sendable_org('Batch Sdn Bhd');
+  v_contact := pg_temp.a_customer(v_org, 'C-001');
+  v_a := pg_temp.an_invoice(v_org, v_contact, 'INV-1');
+  v_b := pg_temp.an_invoice(v_org, v_contact, 'INV-2');
+
+  select count(*) into v_rows
+    from public.bulk_email_documents(array[v_a, v_b], 'document_new',
+                                     'BATCH-1');
+  perform pg_temp.check_eq('a batch send reports a row per document', v_rows, 2);
+  select count(*) into v_n from public.email_outbox where org_id = v_org;
+  perform pg_temp.check_eq('and queues one message each', v_n::integer, 2);
+
+  select count(*) into v_rows
+    from public.bulk_email_documents(array[v_a, v_b], 'document_new',
+                                     'BATCH-1');
+  perform pg_temp.check_eq('a replayed batch reports the SAME rows, not none',
+    v_rows, 2);
+  perform pg_temp.check_eq('and queues nothing more',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 2);
+  perform pg_temp.check_true('the replayed rows still name the documents',
+    (select bool_and(b.id in (v_a, v_b) and b.doc_no is not null)
+       from public.bulk_email_documents(array[v_a, v_b], 'document_new',
+                                        'BATCH-1') b));
+end $$;
+
+
+
+-- ---------------------------------------------------------------------
+-- assign_ticket: the audit trail is what people read
+--
+-- No money moves here. What doubles is the ticket's history, which then
+-- says the ticket was assigned twice to the same person.
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_user uuid; v_ticket uuid;
+begin
+  v_user := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_user);
+  v_org := pg_temp.test_org('Helpdesk Sdn Bhd');
+  -- `tickets_one_requester` wants exactly one of a user or a contact.
+  insert into public.tickets
+    (org_id, ticket_no, subject, requester_user_id)
+  values (v_org, 'T-1', 'The printer again', v_user) returning id into v_ticket;
+
+  perform public.assign_ticket(v_ticket, v_user);
+  perform public.assign_ticket(v_ticket, v_user);
+  perform pg_temp.check_eq('without a key, the history says it twice',
+    (select count(*)::integer from public.ticket_events
+      where ticket_id = v_ticket and event_type = 'assigned'), 2);
+
+  perform public.assign_ticket(v_ticket, null, 'ASSIGN-1');
+  perform public.assign_ticket(v_ticket, null, 'ASSIGN-1');
+  perform pg_temp.check_eq('with one, it says it once',
+    (select count(*)::integer from public.ticket_events
+      where ticket_id = v_ticket and event_type = 'assigned'
+        and to_value is null), 1);
+end $$;
+
 
 rollback;

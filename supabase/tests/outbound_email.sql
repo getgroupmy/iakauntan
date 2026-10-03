@@ -450,8 +450,21 @@ begin
   -- Both existing would be two functions of the same name, one silently
   -- ignoring `p_dispatch`, with PostgREST choosing between them by the
   -- keys in the request body.
-  perform pg_temp.check_eq('and there is exactly one email_document',
-    (select count(*) from pg_proc where proname = 'email_document'), 1);
+  --
+  -- `0733` added the ONE overload this rule allows: the idempotency-key
+  -- wrapper, which is 0307's pattern and exists so a retried send does
+  -- not queue a second message. So the assertion is no longer a count of
+  -- one -- it is two, and the second must be the first's parameters plus
+  -- `p_idempotency_key` and nothing else. Written that way rather than
+  -- as `= 2` because `= 2` would also pass for the form 0108 removed.
+  perform pg_temp.check_eq('and there are exactly two email_documents',
+    (select count(*) from pg_proc where proname = 'email_document'), 2);
+  perform pg_temp.check_true(
+    'the second is the first plus an idempotency key, and nothing else',
+    (select p8.proargnames from pg_proc p8
+      where p8.proname = 'email_document' and p8.pronargs = 8)
+    = (select p7.proargnames || 'p_idempotency_key'::text from pg_proc p7
+        where p7.proname = 'email_document' and p7.pronargs = 7));
 
   -- Bodies name a customer and an amount owed.
   perform pg_temp.check_true('the outbox is closed to anon',

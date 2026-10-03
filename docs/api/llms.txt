@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0732` (the highest applied migration).
-810 functions and 367 readable tables, of which
+Schema version `0733` (the highest applied migration).
+814 functions and 367 readable tables, of which
 317 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**669 of 810 functions carry a `comment on
+**673 of 814 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -51,8 +51,12 @@ rather than quietly answered. The key has no default, because a
 call that omits one merely-optional argument would otherwise
 resolve to the unprotected original and return a plausible id.
 
+- `assign_ticket`
+- `bulk_email_documents`
 - `create_contra`
 - `create_deposit`
+- `email_document`
+- `email_receipt`
 - `post_manual_journal`
 - `record_pdc`
 
@@ -361,12 +365,13 @@ Refused unless the company has the `sales` module switched on and the caller may
 - `pdc_maturing(p_org uuid, p_from date, p_to date)` — The post-dated cheques falling due between two dates, which is the list somebody works from on a Monday.
 - `void_contra(p_id uuid, p_reason text)` *(writes)* — Reverses a contra note, putting the balance back on both the invoices and the bills it settled.
 
-### ticketing (8)
+### ticketing (9)
 
 Refused unless the company has the `ticketing` module switched on and the caller may use it.
 
 - `add_ticket_comment(p_ticket uuid, p_body text, p_internal boolean, p_channel app.ticket_channel)` *(writes)* — Adds a comment to a ticket and returns it.
 - `assign_ticket(p_ticket uuid, p_user uuid)` *(writes)* — Hands a ticket to somebody.
+- `assign_ticket(p_ticket uuid, p_user uuid, p_idempotency_key text)` *(writes)* — Assigns a ticket, or unassigns it when p_user is null, and writes one line of the ticket's history per idempotency key -- without a key a repeated call says it twice.
 - `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` *(writes)* — Raises a support ticket.
 - `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)* — Raises the escalation level by one and moves the ticket to the team or the person it is going to, filing an event that records both levels and the reason.
 - `module_dashboard(p_org_id uuid)` — One figure set per module for the company's home screen, built in Kuala Lumpur time.
@@ -374,7 +379,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)* — The same for a support ticket, and returns the token once for the same reason.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (596)
+### general (599)
 
 Not gated on any module.
 
@@ -425,6 +430,7 @@ Not gated on any module.
 - `bill_statutory_charge(p_charge uuid, p_supplier uuid, p_doc_date date, p_supplier_doc_no text, p_account uuid)` *(writes)* — Raises a supplier bill for a quit rent, assessment or other statutory property charge, and links the charge to it.
 - `bounce_pdc(p_id uuid, p_reason text, p_on date)` *(writes)* — Returns a cheque: the document it settled goes back into the aged listing and the money leaves the cheques account.
 - `bulk_email_documents(p_ids uuid[], p_template_code text)` *(writes)* — Send many sales documents, one savepoint each, and say per document what happened.
+- `bulk_email_documents(p_ids uuid[], p_template_code text, p_idempotency_key text)` *(writes)* — Queues one message per document and reports a row for each: id, doc_no, whether it was sent, and the problem if it was not.
 - `bulk_post_documents(p_ids uuid[])` *(writes)* — Post many sales documents, one savepoint each, and say per document what happened.
 - `calculate_payroll_run(p_run_id uuid)` *(writes)* — Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the schedules in force on the pay date.
 - `can_add_company()` — Whether this account may add another company, so the app can leave the button out rather than offer one that refuses.
@@ -562,7 +568,9 @@ Not gated on any module.
 - `duplicate_purchase_documents(p_contact_id uuid, p_doc_type text, p_supplier_doc_no text, p_doc_date date, p_total_amount numeric, p_exclude_id uuid)` — Purchase documents already on the books that look like the one being entered -- by the supplier's own number, or by amount and date where there is no number.
 - `einvoice_credential_status(p_org_id uuid)` — What is configured per environment, and never what it is.
 - `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a sales document and returns the outbox row.
+- `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text)` *(writes)* — Queues one message about a sales document, at most once per idempotency key.
 - `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues an email about a receipt and returns the outbox row.
+- `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text)` *(writes)* — Queues one message about a receipt, at most once per idempotency key.
 - `employee_directory(p_org_id uuid)` — Who works here: name, department, role and contact.
 - `end_support_access(p_id uuid)` *(writes)* — Ends a support session.
 - `ensure_default_warehouse(p_org_id uuid)` *(writes)* — Returns the company's default store, creating one if it has none.

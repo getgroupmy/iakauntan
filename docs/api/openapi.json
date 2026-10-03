@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0732",
+    "version": "0733",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -21489,8 +21489,8 @@
     "/rpc/assign_ticket": {
       "post": {
         "operationId": "assign_ticket",
-        "summary": "Hands a ticket to somebody",
-        "description": "Hands a ticket to somebody. They have to be an active member of the company, and \u2014 when the ticket is on a team whose membership has been filled in \u2014 on that team.\n\n`public.assign_ticket(p_ticket uuid, p_user uuid)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Assigns a ticket, or unassigns it when p_user is null, and writes one line of the ticket's history per\u2026",
+        "description": "Assigns a ticket, or unassigns it when p_user is null, and writes one line of the ticket's history per idempotency key -- without a key a repeated call says it twice. Refuses: somebody who is not an active member of the organization; somebody not on the team the ticket is with; a key already used for different arguments (22023).\n\n`public.assign_ticket(p_ticket uuid, p_user uuid, p_idempotency_key text)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_ticket uuid, p_user uuid, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "ticketing"
         ],
@@ -21512,11 +21512,15 @@
                   "p_user": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
                   "p_ticket",
-                  "p_user"
+                  "p_user",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -21542,7 +21546,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_ticket uuid, p_user uuid, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/attach_company_to_firm": {
@@ -23123,8 +23130,8 @@
     "/rpc/bulk_email_documents": {
       "post": {
         "operationId": "bulk_email_documents",
-        "summary": "Send many sales documents, one savepoint each, and say per document what happened",
-        "description": "Send many sales documents, one savepoint each, and say per document what happened. See 0500.\n\n`public.bulk_email_documents(p_ids uuid[], p_template_code text)` Writes. Requires a signed-in user.",
+        "summary": "Queues one message per document and reports a row for each: id, doc_no, whether it was sent, and the problem\u2026",
+        "description": "Queues one message per document and reports a row for each: id, doc_no, whether it was sent, and the problem if it was not. At most once per idempotency key, and a REPLAY RETURNS THE SAME ROWS rather than an empty set. The key is scoped to the organization of the first id; the fingerprint covers the whole array, so the same array replays and a different one under the same key is refused (22023).\n\n`public.bulk_email_documents(p_ids uuid[], p_template_code text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_ids uuid[], p_template_code text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -23148,10 +23155,15 @@
                   },
                   "p_template_code": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_ids"
+                  "p_ids",
+                  "p_template_code",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -23195,7 +23207,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_ids uuid[], p_template_code text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/bulk_post_documents": {
@@ -34817,8 +34832,8 @@
     "/rpc/email_document": {
       "post": {
         "operationId": "email_document",
-        "summary": "Queues an email about a sales document and returns the outbox row",
-        "description": "Queues an email about a sales document and returns the outbox row. ALSO ISSUES A SHARE LINK as a side effect, with the life given by `p_share_days`, and puts it in the template \u2014 so sending an email is also creating a credential, and sending twice replaces the first link. A draft, void or rejected document is emailed WITHOUT a link rather than refused, because the covering note may still be worth sending. The address defaults to the customer's primary contact person and then the contact itself, and is checked for shape before anything is queued. An attachment must live under `<org>/<documents>/<id>/` in storage: a path pointing anywhere else is refused, which is what stops an email being used to post any object in the bucket to an outside address. Refuses when email is switched off for the company. `p_dispatch` is `queued` or `immediate`. Needs `can_write`.\n\n`public.email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` Writes. Requires a signed-in user.",
+        "summary": "Queues one message about a sales document, at most once per idempotency key",
+        "description": "Queues one message about a sales document, at most once per idempotency key. The key is required and has no default: that is what makes PostgREST choose this overload rather than the unprotected one, so a caller must name EVERY parameter. Send p_share_days as null for the ordinary share window -- the argument is then omitted and the inner function's own default applies. Refuses: a key already used for different arguments (22023); a key still in flight (55006); a caller who is not a member of the document's organization. A replay returns the first message id and queues nothing.\n\n`public.email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -34855,10 +34870,20 @@
                   },
                   "p_attachment_name": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_document_id"
+                  "p_document_id",
+                  "p_to",
+                  "p_template_code",
+                  "p_share_days",
+                  "p_dispatch",
+                  "p_attachment_path",
+                  "p_attachment_name",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -34885,14 +34910,17 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/email_receipt": {
       "post": {
         "operationId": "email_receipt",
-        "summary": "Queues an email about a receipt and returns the outbox row",
-        "description": "Queues an email about a receipt and returns the outbox row. Unlike `email_document` it issues NO share link \u2014 a receipt is the acknowledgement, and there is nothing further to show. Same path rule on the attachment (`<org>/receipts/<id>/`, anything else refused), same address fallback, same shape check, same refusal when email is off for the company. Needs `can_write`.\n\n`public.email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` Writes. Requires a signed-in user.",
+        "summary": "Queues one message about a receipt, at most once per idempotency key",
+        "description": "Queues one message about a receipt, at most once per idempotency key. As email_document, except that a receipt carries no share link (see 0110) so there is no share window. Refuses: a key already used for different arguments (22023); a key still in flight (55006); a caller who is not a member of the receipt's organization.\n\n`public.email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -34925,10 +34953,19 @@
                   },
                   "p_attachment_name": {
                     "type": "string"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "p_receipt_id"
+                  "p_receipt_id",
+                  "p_to",
+                  "p_template_code",
+                  "p_dispatch",
+                  "p_attachment_path",
+                  "p_attachment_name",
+                  "p_idempotency_key"
                 ]
               }
             }
@@ -34955,7 +34992,10 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
-        }
+        },
+        "x-overloads": [
+          "p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text, p_idempotency_key text"
+        ]
       }
     },
     "/rpc/employee_directory": {
