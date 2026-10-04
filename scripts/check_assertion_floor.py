@@ -142,6 +142,18 @@ def problems(floor_text: str | None = None, runner: str | None = None,
                 "psql's own status, the way it does now." % STEP)
         if "asserted=0" not in step:
             out.append('"%s" does not initialise its counter.' % STEP)
+        # Reading the floor and COMPARING it are different things, and a
+        # step that reads it to print it is indistinguishable from one
+        # that gates on it unless this is checked. It shipped read-only
+        # on purpose for one run, to measure CI's count before gating on
+        # it; that measurement came back 14330 against a local 14330, so
+        # the comparison is now expected to be there.
+        if not re.search(r'"\$asserted"\s+-lt\s+"\$floor"', step):
+            out.append(
+                '"%s" reads the floor but never compares the count '
+                "against it. Printing a number nobody checks is not a "
+                "floor. The comparison was added once run 2239 measured "
+                "CI at the same 14330 the local runner reports." % STEP)
 
     helpers = ((ROOT / "supabase" / "tests" / "_helpers.sql").read_text()
                if helpers is None else helpers)

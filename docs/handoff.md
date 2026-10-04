@@ -8277,22 +8277,49 @@ or directory` in **lower case**, which `run_locally.sh`'s grep for
 that. Using the exit status covers it with nothing extra, so CI's version
 is stronger than the local one on that point.
 
-### The floor is NOT compared in CI yet, deliberately
+### ~~The floor is NOT compared in CI yet~~ — MEASURED, and now compared
 
-CI runs a real Supabase stack; `run_locally.sh` stubs `auth` and
-`storage`. Their counts are not *known* to be equal, and the branch this
-pushes to is the default branch, where a red build is a failed production
-deploy. Guessing a threshold there is the wrong way to find out. So CI
-prints its count and fails only on **zero** — which means the counting
-itself broke — and the floor gets compared in a follow-up once a green run
-has reported the real number.
+The paragraph here said CI would print its count and gate only on zero,
+because CI runs a real Supabase stack where `run_locally.sh` stubs `auth`
+and `storage`, so the two counts were not *known* to be equal — and
+guessing a threshold on the branch that deploys to production is the
+wrong way to find out. It left an instruction: read the number off the
+next green run and compare before gating.
 
-This is the same two-step the local floor used: `9626249f` counted with
-the floor at 0, `a30af282` set it to the measured 14,257. **Read the
-number off the next green run's "assertions executed in CI:" line and
-compare it with 14,330 before gating on it.** If it differs, that
-difference is itself a finding about auth/storage, not a number to paper
-over.
+**Run 2239 (`2dbaa802`) is green and reported `assertions executed in
+CI: 14330` against a local floor of 14330.** Identical. The stubs make no
+difference to the count, which is worth knowing in itself — it means the
+two runners can keep sharing one number.
+
+So the comparison is in, and it is measured rather than guessed. Left
+marked rather than rewritten, because the two-step was the point: the
+same shape as `9626249f` counting with the floor at 0 and `a30af282`
+setting the measured 14,257.
+
+The step now has three guards, each proved by extracting the step out of
+`ci.yml` and running it against the local cluster:
+
+| case | result |
+|---|---|
+| the real floor | exit 0, "assertions executed in CI: 14330 (floor: 14330)" |
+| floor raised to 99999 | **exit 1**, naming the dip and refusing to lower the floor |
+| floor file with no bare integer | **exit 1**, "no floor to compare against" |
+
+The third needed care. My first attempt at it ran
+`grep -v '^99999$'` over a backup that holds **14330** — so it stripped
+nothing, ran with a valid floor, and would have passed. I would have read
+that pass as a statement about the guard. **Ninth instance this session
+of a pattern that matched nothing being mistaken for a finding.** Tested
+properly by pulling the guard out of the step with the YAML parser and
+running it against a genuinely malformed file: exit 1, and the
+"reached the end" sentinel never printed, so the guard fired rather than
+falling through.
+
+`check_assertion_floor.py` now also asserts that the step **compares**
+the floor and does not merely read it to print it — those two read
+identically from outside, and the step shipped read-only for exactly one
+run. Two mutants on that assertion, both killed: dropping it, and
+weakening it to "mentions the floor somewhere".
 
 ### One definition of the number
 

@@ -1085,20 +1085,43 @@ jobs:
           # The floor is in `supabase/tests/assertion_floor`, read by
           # `run_locally.sh` too so the number has one definition.
           floor="$(grep -Ex '[0-9]+' supabase/tests/assertion_floor || true)"
-          echo "assertions executed in CI: $asserted (local floor: ${floor:-unreadable})"
-          # Zero means the COUNTING broke, not that the suite is empty --
-          # a renamed helper, a changed notice prefix, psql quietened.
-          # That is checked now. The floor itself is NOT compared here
-          # yet: this runner has a real Supabase stack where
-          # `run_locally.sh` stubs `auth` and `storage`, so its count is
-          # not known to equal the local one, and guessing a threshold on
-          # the branch that deploys to production is the wrong way to
-          # find out. Measure from this line's output over one green run,
-          # then compare.
+          echo "assertions executed in CI: $asserted (floor: ${floor:-unreadable})"
+
+          # An unreadable floor must not pass vacuously. `[ 14330 -lt "" ]`
+          # is "integer expression expected", which `bash -e` does fail
+          # on, but it fails as a shell error rather than as a statement
+          # about the suite -- so it is said plainly instead.
+          if ! printf '%s' "$floor" | grep -Exq '[0-9]+'; then
+            echo "::error::supabase/tests/assertion_floor holds no bare" \
+                 "integer, so there is no floor to compare against." >&2
+            exit 1
+          fi
+
+          # Zero first, and with its own message: zero means the COUNTING
+          # broke -- a renamed helper, a changed notice prefix, psql
+          # quietened -- and calling that "the count dipped" would send
+          # the next reader hunting a skipped assertion that is not there.
           if [ "$asserted" -eq 0 ]; then
             echo "::error::the suite printed no 'NOTICE:  ok ' lines at all." \
                  "Either every assertion stopped running, or the counting" \
                  "above no longer matches what the helpers print." >&2
+            exit 1
+          fi
+
+          # And the floor. This runner has a real Supabase stack where
+          # `run_locally.sh` stubs `auth` and `storage`, so the two counts
+          # were not KNOWN to be equal: the comparison went in only after
+          # run 2239 reported 14330 here against a local 14330. Measured,
+          # not guessed, which is what makes it safe on the branch that
+          # deploys to production.
+          if [ "$asserted" -lt "$floor" ]; then
+            echo "::error::$asserted assertions ran and the floor is" \
+                 "$floor. Every file still passing while FEWER assertions" \
+                 "run is the shape of an assertion that stopped being" \
+                 "reached: a fixture moved, or a branch is never entered." \
+                 "Investigate the dip; do not lower the floor to match" \
+                 "it. If the cause is a branch that depends on today's" \
+                 "date, that is a defect in the test." >&2
             exit 1
           fi
 
@@ -1552,7 +1575,8 @@ jobs:
       # status, and this refuses a change back to a pipe. Verified by
       # extracting the step out of this file and running it against a
       # local cluster with a deliberately failing assertion spliced into
-      # the list: exit 1, as it must be.
+      # the list: exit 1, as it must be. The floor comparison went in
+      # after run 2239 measured 14330 in CI against a local 14330.
       - name: Check the assertion floor has one definition
         run: |
           python3 scripts/check_assertion_floor_test.py

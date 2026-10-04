@@ -140,6 +140,29 @@ class APipeIsNotALogicalOr(unittest.TestCase):
         self.assertIn("does not initialise its counter", said(out))
 
 
+class TheFloorIsComparedAndNotJustPrinted(unittest.TestCase):
+    """The step shipped read-only for exactly one run, to measure CI's
+    count before gating on it. A step that prints a number nobody checks
+    reads identically to one that gates on it, so the difference is
+    pinned here."""
+
+    def test_the_real_step_compares(self):
+        self.assertNotIn("never compares the count", said(caf.problems()))
+        self.assertRegex(REAL_STEP, r'"\$asserted"\s+-lt\s+"\$floor"')
+
+    def test_a_step_that_only_prints_the_floor_is_flagged(self):
+        out = caf.problems(workflow=REAL_STEP.replace(
+            'if [ "$asserted" -lt "$floor" ]; then', 'if false; then'))
+        self.assertIn("never compares the count", said(out))
+        self.assertIn("not a floor", said(out))
+
+    def test_the_unreadable_floor_guard_is_in_the_step(self):
+        """`[ 14330 -lt "" ]` fails as a shell error rather than as a
+        statement about the suite, so the step says it plainly."""
+        self.assertIn("holds no bare", REAL_STEP)
+        self.assertIn("grep -Exq", REAL_STEP)
+
+
 class TheHelpersStillPrintIt(unittest.TestCase):
 
     def test_a_renamed_success_notice_is_reported(self):
