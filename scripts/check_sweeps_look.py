@@ -111,12 +111,6 @@ PASSES_OVER_NOTHING: dict[str, str] = {
         "no count; needs a floor on the switcher references examined",
     "check_date_arguments":
         "no count; needs a floor on the date-formatter call sites",
-    "check_dialogs_built":
-        "prints 'All 0 dialog and sheet openers' and exits 0; the number "
-        "is there and nothing compares it",
-    "check_edge_cors":
-        "prints '0 edge functions, all on the shared CORS headers'; needs "
-        "a floor on the functions found",
     "check_initstate_ref":
         "no count; needs a floor on the initState bodies examined",
     "check_loading_spinners":

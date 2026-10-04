@@ -70,6 +70,7 @@ came to be wrong about four of its own entries.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -195,8 +196,30 @@ def opened_by_tests(names: set[str]) -> set[str]:
     return {n for n in names if re.search(rf'\b{re.escape(n)}\b', tests)}
 
 
+#: A floor under how many dialog and sheet openers must have been FOUND.
+#:
+#: This gate printed 'All 0 dialog and sheet openers are called by a
+#: test, or named as a backlog (0).' over an empty app/ and exited 0.
+#: The number was in the sentence and nothing compared it.
+#:
+#: 128 today. Well below that: a floor that tracks the census goes red
+#: every time somebody adds a dialog.
+LEAST_OPENERS = int(os.environ.get('IAK_LEAST_SITES', '80'))
+
+
 def main() -> int:
     found = openers()
+
+    if len(found) < LEAST_OPENERS:
+        print(
+            f'This sweep found {len(found)} dialog or sheet opener(s), '
+            f'and there were {LEAST_OPENERS} or more when it was '
+            f'written. Either it is not reading app/lib or the pattern '
+            f'no longer matches how an opener is declared -- and a sweep '
+            f'with nothing to look at reports exactly what a fully '
+            f'tested set of dialogs reports.',
+            file=sys.stderr)
+        return 2
     opened = opened_by_tests(set(found))
     problems: list[str] = []
 

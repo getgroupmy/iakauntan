@@ -34,6 +34,7 @@ REAL_APP = gate.APP
 
 
 def run_on(lib: dict[str, str], tests: dict[str, str],
+           least: int | None = None,
            exempt: dict[str, str] | None = None):
     """Run `main` over a made-up app, returning (code, output)."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -46,15 +47,29 @@ def run_on(lib: dict[str, str], tests: dict[str, str],
         for name, body in tests.items():
             (root / 'test' / name).write_text(body)
         saved_app, saved_exempt = gate.APP, gate.EXEMPT
+        saved_least = gate.LEAST_OPENERS
         gate.APP = root
         gate.EXEMPT = {} if exempt is None else exempt
+        # The gate holds a floor under how many openers it must have
+        # FOUND, so that an empty app/ cannot report "All 0 dialog and
+        # sheet openers are called by a test". Every fixture here declares
+        # one or two openers, which is below that floor by design: it is a
+        # claim about app/lib, not about a temporary directory.
+        # `TheFloorItself` passes the real floor explicitly.
+        gate.LEAST_OPENERS = 0 if least is None else least
         try:
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
+            # Both streams. The gate's floor message goes to stderr, and a
+            # harness that captures only stdout makes an assertion about
+            # it silently vacuous -- the empty string contains nothing, so
+            # `assertIn` on it fails loudly, but `assertNotIn` would pass
+            # for the wrong reason.
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 code = gate.main()
-            return code, out.getvalue()
+            return code, out.getvalue() + err.getvalue()
         finally:
             gate.APP, gate.EXEMPT = saved_app, saved_exempt
+            gate.LEAST_OPENERS = saved_least
 
 
 BRACED = '''
@@ -223,6 +238,25 @@ class TheRealTree(unittest.TestCase):
 
     def test_and_it_looked_at_more_than_nothing(self):
         self.assertGreater(len(gate.openers()), 100)
+
+
+
+class TheFloorItself(unittest.TestCase):
+    """The gate used to print "All 0 dialog and sheet openers are called by
+    a test, or named as a backlog (0)." over an empty app/ and exit 0. The
+    number was in the sentence and nothing compared it."""
+
+    def test_an_empty_app_is_refused(self):
+        code, said = run_on({}, {}, least=80)
+        self.assertEqual(code, 2, said)
+        self.assertIn("nothing to look at", said)
+
+    def test_the_real_tree_clears_the_shipped_floor(self):
+        self.assertGreaterEqual(len(gate.openers()), gate.LEAST_OPENERS)
+
+    def test_the_floor_is_below_the_census_but_not_zero(self):
+        self.assertGreater(gate.LEAST_OPENERS, 0)
+        self.assertLess(gate.LEAST_OPENERS, len(gate.openers()))
 
 
 if __name__ == '__main__':

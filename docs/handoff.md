@@ -8611,14 +8611,34 @@ assertions that did not exist. A test file that silently runs fewer tests
 than it contains is the same defect class as everything else in this
 section.
 
-### The ten still on the ratchet
+### Then two more, and the ratchet stands at nine
+
+`check_edge_cors` (20 edge functions, floor 12) and
+`check_dialogs_built` (128 openers, floor 80). Both already printed their
+number and neither compared it — `check_edge_cors` said "ok **0** edge
+functions, all on the shared CORS headers" over an empty
+`supabase/functions`, which is a sentence that should be impossible.
+
+`check_dialogs_built`'s harness turned out to capture **stdout only**,
+so the floor message — which goes to stderr, as a failure should — was
+invisible to it. The fix is worth noting beyond this one file: an
+`assertIn` against a stream that was never captured fails loudly, but an
+`assertNotIn` would have **passed for the wrong reason**. The harness now
+captures both.
+
+`check_edge_cors` has no self-test, so its floor is verified by the
+empty-tree run and by `check_sweeps_look` in CI, not by assertions of
+its own.
+
+### The nine still on the ratchet
 
 `check_captcha_tokens`, `check_capture_is_kept`, `check_current_org`,
-`check_date_arguments`, `check_dialogs_built`, `check_edge_cors`,
-`check_initstate_ref`, `check_loading_spinners`, `check_narrow_rows`,
-`check_order_direction`, `check_token_rotators` — eleven, each with a note
-in `check_sweeps_look.py` saying what it would have to count. `check_dialogs_built`
-and `check_edge_cors` are next: both already print the number.
+`check_date_arguments`, `check_initstate_ref`, `check_loading_spinners`,
+`check_narrow_rows`, `check_order_direction`, `check_token_rotators` —
+nine, each with a note in `check_sweeps_look.py` saying what it would
+have to count. None of them prints a number today, so each needs a
+counter added as well as a floor; that is why the three that already
+printed one went first.
 
 ### A note on my own verification, three times over
 

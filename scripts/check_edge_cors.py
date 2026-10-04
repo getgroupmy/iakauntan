@@ -42,6 +42,7 @@ last.
 
 Underscore directories (`_shared`, `_local_check`) are not functions.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -52,6 +53,17 @@ FUNCTIONS = Path(__file__).resolve().parent.parent / 'supabase' / 'functions'
 # the version this check was written for spelled them in lower case
 # while `_shared/cors.ts` spells them in title case.
 OWN_HEADER = re.compile(r'["\']access-control-[a-z-]+["\']', re.IGNORECASE)
+
+#: A floor under how many edge functions the sweep must have FOUND.
+#:
+#: This gate printed 'ok 0 edge functions, all on the shared CORS
+#: headers' over an empty `supabase/functions` and exited 0. The count
+#: was already there; nothing compared it. Printing a number is not
+#: checking one.
+#:
+#: 20 today. Well below that: it guards against the glob going blind,
+#: not against a function being added or retired.
+LEAST_FUNCTIONS = int(os.environ.get('IAK_LEAST_SITES', '12'))
 
 
 def main() -> int:
@@ -87,6 +99,17 @@ def main() -> int:
             'header map.',
             file=sys.stderr)
         return 1
+
+    if checked < LEAST_FUNCTIONS:
+        print(
+            f'This sweep found {checked} edge function(s) under '
+            f'{FUNCTIONS}, and there were {LEAST_FUNCTIONS} or more when '
+            f'it was written. Either the directory moved or the glob no '
+            f'longer matches how a function is laid out -- and a sweep '
+            f'with nothing to look at reports exactly what a compliant '
+            f'set of functions reports.',
+            file=sys.stderr)
+        return 2
 
     print(f'ok   {checked} edge functions, all on the shared CORS headers')
     return 0
